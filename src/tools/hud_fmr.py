@@ -19,7 +19,20 @@ import requests
 BASE_URL = "https://www.huduser.gov/hudapi/public"
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+
+# TODO(security): decide whether to drop the on-disk token fallback and require
+# HUD_FMR_TOKEN. The file itself is gitignored and holds no secret in this repo, but
+# naming the path in a public source file advertises where a credential is kept.
+# Env-var-only is stricter; the file fallback is more convenient for local runs.
+# Same question applies to tools/llm_client.py. Owner's call — not changed unilaterally
+# because it would break a working auth path.
 _TOKEN_FILE = _REPO_ROOT / "ignore" / "fmr_key"
+
+# TODO(U2): _DiskCache is not concurrency-safe — set() rewrites the entire JSON file,
+# so two processes sharing this cache can clobber each other's writes. It went unnoticed
+# until two agents hit the HUD API in parallel during U1 (worked around there by passing
+# a separate cache_path). Fix with atomic write-and-rename plus a lock file, or accept
+# the limitation and document that concurrent callers must pass distinct cache paths.
 _CACHE_FILE = _REPO_ROOT / "data" / "raw" / "hud_fmr_cache.json"
 
 # HUD's cap is 60 requests/minute; 1 call/second stays comfortably under it.

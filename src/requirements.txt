@@ -1,3 +1,25 @@
 requests>=2.31
 python-dotenv>=1.0
 pandas>=2.2
+
+# Orchestration
+langgraph>=0.2
+langgraph-checkpoint-sqlite>=2.0
+langsmith>=0.1
+
+# State schema / validation
+pydantic>=2.7
+
+# LLM access (OpenRouter is OpenAI-API-compatible)
+openai>=1.40
+
+# Retrieval
+chromadb>=0.5
+sentence-transformers>=3.0
+
+# Modeling
+numpy>=1.26
+scikit-learn>=1.5
+
+# Demo UI (local only)
+streamlit>=1.37

@@ -23,21 +23,26 @@ Run: .venv/bin/python scripts/verify_metro_selection.py
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pandas as pd
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-KAGGLE_PATH = REPO_ROOT / "data" / "apartments_for_rent_classified_100K.csv"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import config
+from tools import kaggle_data
+
 REDFIN_PATH = (
-    REPO_ROOT
-    / "data"
+    config.DATA_DIR
     / "redfin_property_types_monthly_all_metros_multi_family_2_4_units_2018_Jan_to_2026_Jun.csv"
 )
 
 # Kaggle has no county/ZIP column (see §2, "Two data gaps"), so metros are assembled
-# from cityname substrings scoped to a state. Substring matching is intentional:
-# "New York" must roll up its boroughs, which appear as separate cityname values.
+# from city-name patterns scoped to a state. Matching is word-boundary, not substring:
+# "New York" must roll up its boroughs (separate cityname values), while "Queens" must
+# not match "Queensbury" and "Bronx" must not match "Bronxville" — both real false
+# positives in this data. See tools/kaggle_data.py.
 CANDIDATE_METROS: dict[tuple[str, str], list[str]] = {
     ("IL", "Chicago"): ["Chicago"],
     ("CA", "Los Angeles"): ["Los Angeles"],
@@ -79,17 +84,19 @@ MIN_REDFIN_SALES = 100
 
 
 def load_kaggle() -> pd.DataFrame:
-    # cp1252, not utf-8: the export contains Windows-encoded bytes in free-text fields.
-    return pd.read_csv(KAGGLE_PATH, sep=";", encoding="cp1252")
+    """Cleaned load: dedupe, drop incomplete rows, trim implausible rents.
+
+    Counts reported here are therefore *usable* listings, not raw rows — which is the
+    figure that matters, since only usable rows can enter the comp index.
+    """
+    return kaggle_data.load_clean()
 
 
 def kaggle_metro_counts(df: pd.DataFrame) -> dict[str, int]:
     counts: dict[str, int] = {}
-    for (state, label), substrings in CANDIDATE_METROS.items():
+    for (state, label), patterns in CANDIDATE_METROS.items():
         in_state = df[df["state"] == state]
-        mask = in_state["cityname"].fillna("").apply(
-            lambda c: any(sub.lower() in c.lower() for sub in substrings)
-        )
+        mask = in_state["cityname"].apply(lambda c: kaggle_data.city_matches(c, patterns))
         counts[label] = int(mask.sum())
     return counts
 
@@ -106,7 +113,9 @@ def redfin_median_sales(df: pd.DataFrame) -> dict[str, float]:
 def main() -> None:
     # ---------- Kaggle ----------
     kaggle = load_kaggle()
-    print(f"Kaggle: loaded {len(kaggle):,} rows from {KAGGLE_PATH.name}\n")
+    print(f"Kaggle: {len(kaggle):,} usable rows from {kaggle_data.KAGGLE_PATH.name} "
+          f"({kaggle.attrs['rows_deduped']} duplicate ids dropped, "
+          f"{kaggle.attrs['rows_dropped']:,} rows removed by cleaning)\n")
 
     print("=== Missing values in fields the pipeline depends on ===")
     print(kaggle[["cityname", "state", "price", "bedrooms", "square_feet", "time"]]
@@ -157,9 +166,11 @@ def main() -> None:
         print(f"{label:<32} {k:>8,} {r:>8,.0f}  {verdict}")
 
     print("\nSelected inference trio (§2): Chicago, Los Angeles, Cleveland.")
-    print("Boston passes both bars but is excluded — HUD defines FMR areas by town")
-    print("rather than county in the six New England states, which would require a")
-    print("regional branch in tools/hud_fmr.py for no analytical gain.")
+    print("Boston also passes both bars and is a viable alternate. It was originally")
+    print("excluded on the assumption that New England's town-based FMR areas would")
+    print("require a regional branch in tools/hud_fmr.py; a live call disproved that")
+    print("(listCounties/MA returns usable town entityids). It is not selected simply")
+    print("because the trio above already covers three structurally different markets.")
 
 
 if __name__ == "__main__":
