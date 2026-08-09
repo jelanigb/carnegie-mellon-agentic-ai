@@ -205,6 +205,12 @@ but so could Chicago or Philadelphia be. That response-shape handling (see §HUD
 notes below) is a general build requirement, not something specific to the New York
 swap.
 
+**Verified Aug 8, 2026 against the live API (see §9):** this hypothesis was backwards.
+**New York County returns the flat (non-SAFMR) shape**; **Cook County (Chicago) and
+Philadelphia County are both SAFMR** (ZIP-keyed `basicdata` list). Doesn't change the
+build requirement — the client still has to handle both shapes for the trio either
+way — but corrects the assumption above for anyone reading this section later.
+
 ### HUD FMR API: Implementation Notes
 
 Concrete details for `tools/hud_fmr.py`, from the API docs
@@ -513,7 +519,26 @@ tasks below).
 
 ## 9. Current Build: HUD FMR API Client (`tools/hud_fmr.py`)
 
-**Status:** planned Aug 8, 2026, not yet built.
+**Status:** built and verified against the live API, Aug 8, 2026. `tools/hud_fmr.py`,
+`scripts/pull_fmr_sample.py`, `requirements.txt`, and a dedicated `.venv/` all exist
+under `src/` as planned below.
+
+**What the real pull found (corrects an assumption in §2):** the smoke test ran
+`get_fmr` for all three candidate counties at both `year=2019` (Kaggle vintage) and
+`year=None` (resolved to 2026, the current FY) —
+
+| County | entityid | SAFMR? | 2BR FMR, 2019 | 2BR FMR, 2026 |
+|---|---|---|---|---|
+| New York County, NY | `3606199999` | **No** — flat shape | $1,831 | $2,910 |
+| Cook County, IL | `1703199999` | **Yes** — SAFMR list shape | $1,212 | $1,781 |
+| Philadelphia County, PA | `4210199999` | **Yes** — SAFMR list shape | $1,200 | $1,810 |
+
+§2 had hypothesized New York was the likely SAFMR metro among the three — reality is
+the opposite: New York is flat, and Chicago/Philadelphia are the SAFMR ones. Both
+correctly fell back to the `"MSA level"` entry (metro-level default, no `zip_code`
+passed), confirming the SAFMR branch is genuinely exercised, not just written
+defensively. Cache verified too: an immediate repeat call returned in 0.000s (cache
+hit, no second HTTP request).
 
 **Scope:** deliberately narrow — just the client and a real smoke-test pull, so a
 working HUD data pull exists as soon as possible. Explicitly **not** included here:
@@ -551,13 +576,19 @@ No `.env` file is required for this to work; the env var is only an override.
 
 **Behavior:**
 
-1. **SAFMR response-shape handling.** `get_fmr` inspects whether the response's
-   `basicdata` is a flat dict (ordinary metro/county) or a list (Small Area FMR —
-   ZIP-keyed entries plus one `"MSA level"` entry), per §2's HUD FMR API notes.
-   Both shapes are normalized into one consistent return shape so callers never need
-   to branch on it. If `zip_code` is passed and a matching entry exists, it's used;
-   otherwise the code falls back to `"MSA level"` and reports `used_msa_fallback=True`
-   in the result.
+1. **SAFMR response-shape handling — metro-level by default.** `get_fmr` inspects
+   whether the response's `basicdata` is a flat dict (ordinary metro/county) or a
+   list (Small Area FMR — ZIP-keyed entries plus one `"MSA level"` entry), per §2's
+   HUD FMR API notes. Both shapes are normalized into one consistent return shape so
+   callers never need to branch on it. **`zip_code` defaults to `None`, so the result
+   is always metro-level**, matching the Kaggle and Redfin data (§2) — for a
+   non-SAFMR county there's only ever one metro-wide record anyway, and for a SAFMR
+   county the client falls back to the `"MSA level"` entry and reports
+   `used_msa_fallback=True`. Passing an explicit `zip_code` (if it matches an entry)
+   is supported so the SAFMR branch doesn't crash or silently misparse, but nothing
+   in this build calls it that way — it's dead code for now, kept for the same reason
+   §2 documents ZIP-level Redfin as deferred-but-real future work rather than built
+   today.
 2. **Bedroom cap.** `get_fmr_for_bedroom` caps at `four_bedroom` for `bedrooms >= 4`
    and returns `bedroom_cap_exceeded=True` in the result rather than raising. Turning
    this into an actual `Flag` (`kind="fmr_bedroom_cap_exceeded"`) is the Valuation &
