@@ -68,20 +68,21 @@ every agent function should be able to append to a shared `flags` list in state,
 should quietly overwrite or drop a flag on its way downstream.
 
 **Data sources (finalized):**
+
 - **Kaggle apartment rental dataset** — unit-level features (beds/baths, sqft, location,
   amenities, rent) for comps retrieval and rent-structure regression training.
-  Candidate: https://www.kaggle.com/datasets/shashanks1202/apartment-rent-data
+  Candidate: <https://www.kaggle.com/datasets/shashanks1202/apartment-rent-data>
   (verify column fit against the comps schema below; confirm/parse the `time` column,
   likely a Unix timestamp — dataset is known to be ~2017–2019 vintage).
 - **HUD Fair Market Rents (FMR)** — free, public, county-level, annual, rent-specific
   time series. Used to anchor the Kaggle-derived rent structure to current dollars.
-  API: https://www.huduser.gov/portal/dataset/fmr-api.html (free account + bearer token
+  API: <https://www.huduser.gov/portal/dataset/fmr-api.html> (free account + bearer token
   required — set this up before Week 4).
 - **Redfin Data Center — Housing Market Tracker, filtered to `property_type =
   Multi-Family (2-4 Unit)`** — free, public, time series (median sale price, days on
   market, inventory) available down to neighborhood/ZIP/city/county/state, filterable
   by property type. This is the sole appreciation source (see §2 — Redfin Home Price
-  Index does not cover multi-family and is not used). https://www.redfin.com/news/data-center/downloads/
+  Index does not cover multi-family and is not used). <https://www.redfin.com/news/data-center/downloads/>
 
 ---
 
@@ -92,12 +93,14 @@ ground every dollar figure in a *dated, purpose-matched* source rather than trus
 single dataset to do more than it can.
 
 ### Problem 1 — the Kaggle rent data has no reliable current date
+
 The Kaggle apartment dataset is a single historical scrape (~2017–2019). Any rent
 estimate trained directly on it is calibrated to that era's price level, not today's.
 Left uncorrected, a "$1,450/month" prediction is a 2018 number in a 2026 costume, and
 every downstream valuation and scenario built on it inherits that bias.
 
 ### Problem 2 — Redfin measures price, not rent
+
 Redfin's data (Housing Market Tracker, RHPI) tracks home *sale* prices. Home price
 appreciation and rent growth diverge meaningfully over multi-year windows — most
 visibly 2020–2022, when price growth far outpaced rent growth as low rates pulled
@@ -107,6 +110,7 @@ interest-rate-driven price dynamics into a quantity they don't actually explain.
 ### Resolution: separate "structure" from "level," and match each quantity to a same-kind source
 
 **Rent-level anchoring (Valuation & Rent agent):**
+
 1. Train the regression on rent *normalized by that row's local HUD FMR at the time it
    was recorded* (rent ÷ FMR-for-that-county-and-year), not raw dollars. The model
    learns a structural relationship — "this bed/bath/sqft/amenity combination rents at
@@ -120,6 +124,7 @@ interest-rate-driven price dynamics into a quantity they don't actually explain.
    the subject county and a coarser (state/national) fallback had to be used.
 
 **Appreciation forecasting (Scenario/Forecast agent):**
+
 - Use the Housing Market Tracker filtered to `property_type = Multi-Family (2-4 Unit)`
   as the appreciation/trend series — this matches the asset class directly rather than
   relying on a blended series dominated by single-family transaction volume. Small
@@ -138,7 +143,7 @@ interest-rate-driven price dynamics into a quantity they don't actually explain.
   stability outweighs the lost granularity. Revised three-tier design, with the tier
   used flagged (`kind="appreciation_source"`, `severity="info"` for tiers 1–2,
   `"warn"` for tier 3):
-  1. **Metro-level, multi-family filtered (default — build this now).** Adequate
+  1. **Metro-level, multi-family filtered (default for the project).** Adequate
      sample for any of the target metros; this is the only tier required for the
      pipeline to work end-to-end.
   2. **ZIP-level, multi-family filtered (deferred / stretch goal).** Would apply only
@@ -284,7 +289,7 @@ in the script: ≥500 Kaggle listings, ≥100 median sales per period. Kaggle co
 (`tools/kaggle_data.py`) — since only usable rows can enter the comp index.
 
 | Metro | Kaggle rent listings | Redfin 2–4 unit sales (median/period) | Verdict |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **Los Angeles** | 2,372 | 302 | ✅ passes both |
 | Newark / Jersey City | 561 | 746 | ✅ passes both — see note |
 | **Chicago** | 631 | 362 | ✅ passes both |
@@ -344,7 +349,7 @@ its low borough-wide count of 271 listings. Measurement disproved it. Comp densi
 radius, 2-bedroom exact match:
 
 | Market | 0.5 mi | 1 mi | 2 mi | 3 mi | 5 mi |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | Los Angeles (Echo Park) | 7 | 50+ | 50+ | 50+ | 50+ |
 | Cleveland (downtown) | 0 | 0 | 50+ | 50+ | 50+ |
 | Chicago (Logan Square) | 3 | 3 | 5 | 22 | 50+ |
@@ -364,7 +369,7 @@ metro assumed to be under-covered on the strength of an aggregate.
 Verified behavior across the three retained cases (`scripts/retrieval_evidence.py`):
 
 | Case | Iterations | Final radius | Comps | Flags |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | Los Angeles — dense | 1 | 2.0 mi | 8 | **none** |
 | Chicago — moderate | 3 | 4.0 mi | 8 | 1 info, 1 warn |
 | Staten Island — thin | 4 (cap) | 8.0 mi | **0** | 3 + `sparse_comps` **critical** |
@@ -428,7 +433,7 @@ county. It is not. HUD expanded ZIP-level publication between 2019 and 2026, so 
 same county returns different response shapes depending on the fiscal year requested:
 
 | County | FY2019 | FY2026 |
-|---|---|---|
+| --- | --- | --- |
 | Cook (Chicago) | SAFMR | SAFMR |
 | Los Angeles | **flat** | **SAFMR** |
 | Cuyahoga (Cleveland) | **flat** | **SAFMR** |
@@ -469,7 +474,7 @@ the §9 smoke test's choice of `year=2019`.
 ### HUD FMR API: Implementation Notes
 
 Concrete details for `tools/hud_fmr.py`, from the API docs
-(https://www.huduser.gov/portal/dataset/fmr-api.html):
+(<https://www.huduser.gov/portal/dataset/fmr-api.html>):
 
 - **`year` is a single fiscal year per call, and must be pulled per (county, year)
   pair, not once overall.** Two distinct kinds of pulls are needed: (1) the Kaggle
@@ -517,7 +522,7 @@ now enforces most of them structurally rather than by discipline.
 ### The stack
 
 | Layer | Choice | Why |
-|---|---|---|
+| --- | --- | --- |
 | Orchestration | **LangGraph** — `StateGraph`, conditional edges, checkpointer | See below |
 | State schema | **Pydantic v2** (not dataclasses) | `ValidationError` text feeds the Extractor's retry prompt; dataclasses give nothing there |
 | LLM calls | OpenRouter (`:free` tier models) via the OpenAI-compatible SDK | Program-endorsed, $0 |
@@ -560,8 +565,7 @@ paid credits are a documented contingency, not the plan.
    Critic → Planner rework cycle is precisely the shape the library exists to express.
 
 **Trade-off accepted:** a framework dependency and its learning curve, on a project
-with a fixed deadline. Mitigated by writing the onboarding material up front
-(`docs/private/lang_graph_onboarding.md`) and by keeping all agent logic in plain
+with a fixed deadline. Mitigated by training on LangGraph up front and by keeping all agent logic in plain
 functions that hold no framework-specific code — if LangGraph became a liability, the
 nodes would port to a hand-rolled loop without touching the reasoning logic.
 
@@ -581,18 +585,11 @@ LangGraph's `recursion_limit`. Hitting the limit raises an opaque exception; a c
 lets the system escalate to human review gracefully, which is the behavior Checkpoint
 2.1 actually specified.
 
-> **Onboarding:** see `docs/private/lang_graph_onboarding.md` — a crash course written
-> for reviewing this code rather than writing it, including a code-review checklist and
-> a text-first reading path. Work through it before reviewing Unit 2.
-
 ---
 
 ## 4. Proposed Repository Structure
 
-**Note (Aug 8, 2026):** the repo already exists with `data/`, `docs/`, and `ignore/`
-(secrets, gitignored) at the top level, so `src/` — not a new `deal-evaluator/`
-wrapper — is the project root for all application code below. Paths in the rest of
-this doc that reference `tools/`, `agents/`, `config.py`, etc. are relative to `src/`.
+**Note:** Paths in the rest of this doc that reference `tools/`, `agents/`, `config.py`, etc. are relative to `src/`.
 
 ```
 carnegie_mellon_agentic_repo/
@@ -600,8 +597,6 @@ carnegie_mellon_agentic_repo/
 │   ├── raw/
 │   └── processed/
 ├── docs/
-│   └── private/                   # gitignored — capstone docs, this implementation plan
-├── ignore/                        # gitignored — secrets (HUD FMR bearer token, etc.)
 └── src/                           # project root for all application code
     ├── README.md
     ├── requirements.txt
@@ -665,32 +660,58 @@ LangGraph reducer. Both changes are load-bearing:
   it, each node returns only the flags it personally raised and accumulation is
   guaranteed by the framework.
 
+**Flag kinds and severities are `StrEnum`, not bare strings** (revised Aug 9, 2026).
+§8's review checklist already required that flag kinds be "drawn from a defined set, not
+ad-hoc strings." As a class of string constants that was a rule a reviewer had to
+remember; as an enum with `Flag.kind` typed against it, Pydantic rejects an unknown kind
+at construction. This is the same reasoning that justified the reducer on `flags` — an
+invariant the design depends on belongs in the type system, not in vigilance. The
+concrete payoff is in U8: `set(FlagKind)` is enumerable, so the eval harness can assert
+*coverage* — that every degradation path the system defines is actually exercised by a
+test case — which turns "flags fire" into a materially stronger claim. `StrEnum` members
+are `str`, so serialization and comparison are unchanged.
+
 ```python
 import operator
+from enum import StrEnum
 from typing import Annotated, Literal, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field
 
+class Severity(StrEnum):
+    INFO = "info"; WARN = "warn"; CRITICAL = "critical"
+
+class FlagKind(StrEnum):
+    UNRESOLVED_FIELD = "unresolved_field"
+    RELAXED_SEARCH_RADIUS = "relaxed_search_radius"
+    SPARSE_COMPS = "sparse_comps"
+    RENT_ANCHORED_TO_FMR = "rent_anchored_to_fmr"
+    FMR_UNAVAILABLE_FOR_COUNTY = "fmr_unavailable_for_county"
+    COUNTY_FROM_PRINCIPAL_COUNTY = "county_from_principal_county"
+    # ... 17 kinds total; see src/state.py for the full set
+
 class Flag(BaseModel):
     source_agent: str          # e.g. "comps_retrieval", "valuation_rent"
-    kind: str                  # e.g. "relaxed_search_radius", "unresolved_field",
-                                # "low_confidence_estimate", "fallback_used",
-                                # "rent_anchored_to_fmr", "fmr_unavailable_for_county",
-                                # "appreciation_source"
+    kind: FlagKind             # closed set — a typo raises rather than silently
+                               # producing a flag that never matches
     detail: str                # human-readable explanation
-    severity: Literal["info", "warn", "critical"]
+    severity: Severity
 
 class DealTerms(BaseModel):
-    address: Optional[str] = None
     price: Optional[float] = None
     unit_count: Optional[int] = None
     unit_rents: list[float] = Field(default_factory=list)
     square_footage: Optional[float] = None
-    city: Optional[str] = None           # crosswalk input (Kaggle has no county/ZIP)
-    state: Optional[str] = None          # crosswalk input
-    zip_code: Optional[str] = None       # optional; enables SAFMR ZIP-level lookup
-    county_fips: Optional[str] = None    # needed to key HUD FMR + Redfin lookups
-    # ... additional fields as extraction schema is finalized
+
+    # Geography, grouped by provenance — see below
+    full_address: Optional[str] = None     # OBSERVED: verbatim from the listing
+    street_address: Optional[str] = None   # PARSED
+    city: Optional[str] = None             # PARSED — crosswalk input
+    state: Optional[str] = None            # PARSED — crosswalk input
+    zip_code: Optional[str] = None         # PARSED — enables SAFMR ZIP-level lookup
+    county_fips: Optional[str] = None      # DERIVED by crosswalk; keys HUD FMR
+    latitude: Optional[float] = None       # DERIVED
+    longitude: Optional[float] = None      # DERIVED
 
 class Comp(BaseModel):
     listing_id: str
@@ -700,6 +721,7 @@ class Comp(BaseModel):
     baths: float
     square_feet: float
     distance_miles: float
+    listing_source: Optional[str] = None   # originating site, for citation
 
 class DealState(BaseModel):
     # inputs
@@ -747,6 +769,48 @@ exactly one node (each retrieval iteration *replaces* the working set rather tha
 appending to it), so a reducer there would be wrong — it would pile up stale
 candidates from relaxed passes alongside the final set.
 
+### Geography fields are grouped by provenance
+
+The address originally sat as a single `address` field beside the deal economics, with
+`city`/`state`/`zip`/`county_fips` in a separate block — an arrangement that left it
+genuinely unclear whether `address` meant a street line or a full address, and whether
+the components duplicated it. Resolved into three tiers, because *how* a value was
+obtained determines how far it can be trusted:
+
+- **Observed** (`full_address`) — copied verbatim from the listing. Cannot be wrong,
+  only absent. Also the human-readable identifier the Summarizer uses, since a full
+  address is what an investor recognizes.
+- **Parsed** (`street_address`, `city`, `state`, `zip_code`) — decomposed from the
+  observed text by the Extractor. Can be wrong, and a misparse is silent unless the
+  original is retained to check against.
+- **Derived** (`county_fips`, `latitude`, `longitude`) — produced by lookup, never read
+  from the listing. These carry known approximation error and are the tier that raises
+  flags: the crosswalk selects a *principal* county for the ten cities spanning several
+  (Chicago, Dallas, Houston among them), so `county_fips` there is a defensible
+  approximation rather than a fact — and every FMR figure keyed on it inherits that
+  approximation. Hence `FlagKind.COUNTY_FROM_PRINCIPAL_COUNTY`.
+
+Keeping `full_address` alongside the parsed components is deliberate redundancy rather
+than an oversight: it preserves the audit trail. If a report cites Cook County for a
+property, the chain from raw string → parsed city → derived FIPS remains inspectable,
+which is what makes a wrong answer diagnosable instead of merely wrong.
+
+### `Comp.listing_source`
+
+Checkpoint 2.1 justifies retrieval partly on the grounds that it "allows the report to
+cite which ones were used." An id alone establishes that a record exists somewhere; an
+id plus its originating site tells a reader where to check it. `listing_source` closes
+that gap.
+
+It carries a second signal that turned out to matter. The corpus is **91%
+RentDigs.com**, and in practice all eight comps returned for the Los Angeles case come
+from that single aggregator. Eight comps from one feed are less independent than eight
+comps from eight sources, and a count alone conceals the difference. Surfacing the
+source lets the Critic detect that concentration and the report disclose it — the same
+principle as every other flag in the system, applied to a dimension that was previously
+invisible. Optional, because the LLM fallback estimator produces no citable origin at
+all, and that absence should be representable rather than filled with a placeholder.
+
 This is a starting point — field names get refined once the Extractor's actual output
 schema is confirmed (Unit 3, §6).
 
@@ -792,7 +856,7 @@ U1 is the *interface* risk and had to come first; U2 is *integration* risk, whic
 safe to defer.
 
 | Unit | Build target | Feeds checkpoint |
-|---|---|---|
+| --- | --- | --- |
 | **Week 4 — Foundation** | | |
 | **U1** ✅ | `state.py` (Pydantic + reducers), `config.py`, `nodes.py`, `llm_client.py` (schema-validated retry), `kaggle_data.py`, `county_crosswalk.py` (29 entries, HUD-verified), `redfin_data.py`; FMR pull for the trio × {2019, latest} | — |
 | **U4** ✅ | Comps/Retrieval: Chroma index (3,880 listings), one document per listing, hybrid metadata-filter + embedding query, top-`Y` results, adaptive relaxation loop, sparse-comps flag, retrieval-off ablation behind a config flag; X/Y/Z tuned against measured density | **3.1** |
@@ -835,7 +899,7 @@ elements, so U4 is specified to produce each one as an artifact rather than leav
 to be written up after the fact:
 
 | Required element | Where U4 produces it |
-|---|---|
+| --- | --- |
 | Architectural decision on whether retrieval is required, with justification | §2 of Checkpoint 2.1 already argues this: the failure mode being defended against is fabricated comps presented at full confidence. Restated with the built system as evidence. |
 | Evidence a semantic retrieval mechanism is integrated against an external source | Chroma index over the Kaggle corpus; index build script + row counts per metro |
 | Demonstration that retrieval meaningfully influences output | **Ablation run — see below** |
@@ -900,7 +964,7 @@ Each of these blocks implementation downstream; they are listed in the order the
 needed. Target: all closed during Week 4.
 
 | # | Decision | Status |
-|---|---|---|
+| --- | --- | --- |
 | 1 | Orchestration framework | ✅ LangGraph, day one |
 | 2 | Inference metro trio | ✅ Chicago, LA, Cleveland |
 | 3 | Demo surface | ✅ Streamlit, local, scheduled U9 |
@@ -922,8 +986,8 @@ U1 and U4 are complete. What remains before U2 can proceed:
 
 1. **LangSmith account** — create it and set `LANGSMITH_TRACING=true` and
    `LANGSMITH_API_KEY`. Required before U2 so traces exist from the first graph run.
-2. **OpenRouter API key** — at `ignore/openrouter_key` (gitignored) or as
-   `OPENROUTER_API_KEY`. Not needed for U4, which is deterministic; required for U3.
+2. **OpenRouter API key** — supplied via the `OPENROUTER_API_KEY` environment variable.
+   Not needed for U4, which is deterministic; required for U3.
 3. **Decision #8** — confirm model IDs against OpenRouter's live free-tier list.
 4. **Decision #4** — finalize the training shortlist from the 29 crosswalk entries.
    Blocks U5, not U2.
@@ -936,8 +1000,8 @@ and `scripts/retrieval_evidence.py`.
 
 ### Prerequisite reading (before U2 review)
 
-`docs/private/lang_graph_onboarding.md` §§1–6, plus the hands-on exercise — roughly
-3 hours. This sits on the critical path: the review standard applied to Weeks 4–6 is
+Ramp up on LangGraph (roughly
+3 hours). This sits on the critical path: the review standard applied to Weeks 4–6 is
 only as good as the reviewer's fluency in the framework, and §6 of that document is the
 checklist applied to every unit.
 
@@ -974,6 +1038,22 @@ in a focused session or across a fragmented week.
 - **Decisions are surfaced, not guessed.** Anything that belongs in the §7 decisions log
   gets raised for a decision rather than resolved by assumption. Such decisions are
   inexpensive to make deliberately and expensive to unwind once code depends on them.
+
+- **Deferred work is recorded as a tagged `TODO` at the site it affects**, not left in
+  conversation. Format is `TODO(<scope>):` where scope is the unit that will address it
+  (`U2`, `U5`) or a category (`security`, `geography`), so `grep -rn "TODO(U5)" src/`
+  returns that unit's backlog directly. Each states what is missing, why it was
+  deferred, and what it would take — a bare `TODO` marks a problem without helping
+  anyone act on it. Current inventory:
+
+  | Tag | Location | Item |
+  |---|---|---|
+  | `TODO(U3)` | `config.py` | Model IDs are unverified placeholders (decision #8) |
+  | `TODO(U5)` | `state.py`, `build_comps_index.py` | Index the `time` column so `Comp.listed_date` allows per-row FMR normalization |
+  | `TODO(U5)` | `county_crosswalk.py` | Nothing yet raises `COUNTY_FROM_PRINCIPAL_COUNTY` for multi-county cities |
+  | `TODO(U2)` | `hud_fmr.py` | `_DiskCache` is not concurrency-safe; whole-file rewrite on every `set()` |
+  | `TODO(security)` | `hud_fmr.py`, `llm_client.py` | Whether to drop on-disk credential fallbacks in favour of env-var-only |
+  | `TODO(geography)` | `county_crosswalk.py` | New England town-based FMR verified for Boston only, not the other five states |
 
 ### Testing
 
@@ -1019,7 +1099,7 @@ under `src/` as planned below.
 `year=None` (resolved to 2026, the current FY) —
 
 | County | entityid | SAFMR? | 2BR FMR, 2019 | 2BR FMR, 2026 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | New York County, NY | `3606199999` | **No** — flat shape | $1,831 | $2,910 |
 | Cook County, IL | `1703199999` | **Yes** — SAFMR list shape | $1,212 | $1,781 |
 | Philadelphia County, PA | `4210199999` | **Yes** — SAFMR list shape | $1,200 | $1,810 |
@@ -1047,6 +1127,7 @@ U1 (§7). Kaggle and Redfin data already sit in `data/` (repo root) and don't de
 any of this.
 
 **Files added:**
+
 ```
 src/
 ├── requirements.txt          # requests, python-dotenv
@@ -1058,17 +1139,16 @@ src/
     └── pull_fmr_sample.py    # runnable smoke test — a real pull, not a mock
 ```
 
-**Auth:** the bearer token already exists at `ignore/fmr_key` (repo root, gitignored,
-confirmed to be a raw JWT with no `KEY=` prefix). `hud_fmr.py` resolves the token as:
-`HUD_FMR_TOKEN` env var if set, else read `ignore/fmr_key` relative to the repo root.
-No `.env` file is required for this to work; the env var is only an override.
+**Auth:** a bearer token from a free HUD User account, supplied via the `HUD_FMR_TOKEN`
+environment variable with an untracked local file as a fallback. Credentials are never
+committed and are not described further here.
 
 **Base URL:** `https://www.huduser.gov/hudapi/public`
 
 **Endpoints wrapped:**
 
 | Function | Endpoint | Purpose |
-|---|---|---|
+| --- | --- | --- |
 | `list_states()` | `GET /fmr/listStates` | state code ↔ name lookup |
 | `list_counties(state_code)` | `GET /fmr/listCounties/{state_code}` | county name → 10-digit FIPS `entityid` lookup |
 | `get_fmr(entityid, year=None)` | `GET /fmr/data/{entityid}?year={year}` | raw FMR record for one county/metro + one fiscal year; omitting `year` returns the latest available and the response's own `year` field is read back rather than assumed |
@@ -1115,8 +1195,9 @@ visible proof the client authenticates correctly and actually exercises both res
 shapes, not just pass a unit test against fixture data.
 
 **Verification before calling this done:**
+
 - Real (not mocked) calls to `list_counties` and `get_fmr` succeed against the live
-  API using the token in `ignore/fmr_key`.
+  API using the configured token.
 - At least one of the three candidate counties returns a SAFMR (list) shape,
   confirming that code path is actually exercised.
 - Running the same query twice hits the on-disk cache on the second call (no second
