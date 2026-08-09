@@ -1,6 +1,38 @@
 # Multi-Family Residential Deal Evaluator — Implementation Plan
-**Handoff doc for Claude Code**
-Author: Jelani Gould-Bailey · Last updated: Aug 4, 2026
+
+**Technical plan of record.**
+Author: Jelani Gould-Bailey · Last updated: Aug 8, 2026
+
+## How this project is built
+
+This is the engineering plan for a capstone system built during CMU's Agentic AI
+executive education program. It is written as a working document: architecture,
+sequencing, data strategy, and the reasoning behind each decision, updated as
+assumptions get tested against real data.
+
+**Working model.** I set the architecture, data strategy, and execution sequence, and
+I review every change. Implementation is executed with Claude Code against the
+specifications in this document. This mirrors how I work as an engineering manager —
+the leverage is in the design decisions, the data reasoning, and the review standard,
+and this document is where that work lives. Sections §2 (data strategy), §3 (stack
+rationale), §5 (state design), and §6 (sequencing) are the substance of the project;
+the code is the expression of them.
+
+Two conventions follow from that and are enforced throughout: every non-obvious
+decision is recorded here *with its reasoning*, and every assumption is labeled as an
+assumption until it has been checked against data. §2 contains a worked example of the
+second — a metro-selection hypothesis I held confidently, tested, and found to be
+wrong.
+
+> **Aug 8, 2026 — major revision.** Three changes. (1) **Sequencing is now driven by
+> dependency and risk rather than the syllabus calendar.** The program's weekly
+> checkpoints assess a written design update alongside a working agent update; they do
+> not require that a given capability be built only in the week its module is taught.
+> Ordering the build by dependency and technical risk is therefore both permitted and
+> better engineering — see §6. (2) **LangGraph is adopted immediately** rather than
+> migrated to later; the earlier staged plan existed only to track the syllabus, and
+> with that constraint gone it would have meant building the orchestration layer twice
+> (§3). (3) §2's metro hypothesis was tested against both datasets and replaced.
 
 ---
 
@@ -98,10 +130,10 @@ interest-rate-driven price dynamics into a quantity they don't actually explain.
   and has no multi-family series, so it can't substitute or supplement here.
 - **Geographic level: metro is the primary tier, not ZIP.** Redfin's `REGION TYPE`
   offers ZIP, metro, and other levels directly (no manual ZIP→county rollup needed).
-  For the target inference metros (New York, Chicago, Philadelphia — all large CBSAs),
-  metro-level `HOMES SOLD` counts are in the dozens to low hundreds per period, versus
-  ZIP-level counts that are frequently single digits with wild YoY swings from small
-  denominators. Metro-level is directionally what the Scenario/Forecast agent needs
+  For the target inference metros (**Chicago, Los Angeles, Cleveland** — see the metro
+  selection subsection below), metro-level `HOMES SOLD` medians are 362 / 302 / 149 per
+  period, versus ZIP-level counts that are frequently single digits with wild YoY swings
+  from small denominators. Metro-level is directionally what the Scenario/Forecast agent needs
   (bands for optimistic/base/pessimistic), not sub-market precision, so the added
   stability outweighs the lost granularity. Revised three-tier design, with the tier
   used flagged (`kind="appreciation_source"`, `severity="info"` for tiers 1–2,
@@ -120,10 +152,12 @@ interest-rate-driven price dynamics into a quantity they don't actually explain.
   3. **Metro-level, all-residential, unfiltered (fallback).** For the rare case where
      even metro-level multi-family volume is too thin — unlikely for the target metros
      but kept for robustness against edge cases or future metro additions.
-- **Use a consistent period frequency — `Rolling 3 Months`, not `Monthly`.** Redfin
-  offers both; rolling 3-month windows smooth out the single-month sample-size noise
-  seen even at metro level for smaller markets, and consistency matters more than
-  granularity here since the pipeline compares periods to each other.
+- **Use a consistent period frequency — rolling 3-month, not single-month.** Rolling
+  3-month windows smooth out the single-month sample-size noise seen even at metro level
+  for smaller markets, and consistency matters more than granularity here since the
+  pipeline compares periods to each other. *(Implementation note, Aug 8: the extract on
+  disk is `Monthly`. Compute the rolling window in `tools/redfin_data.py` rather than
+  re-downloading — see "Two data gaps" below.)*
 - **Apply a minimum-price floor before any sample-size logic runs.** Raw extracts
   contain implausible `MEDIAN SALE PRICE NSA` values ($1, $100, $975) — near-certainly
   non-arm's-length transfers (quitclaim deeds, corrective deeds, nominal-consideration
@@ -177,39 +211,103 @@ Two different scopes are needed, and they shouldn't be the same size:
 - **Before finalizing metro choices:** run a quick `groupby` count on the Kaggle
   dataset by city/metro to confirm actual listing density — the candidates below are
   based on known housing-stock patterns, not on this dataset's specific coverage, and
-  need to be checked against it directly (Week 3 task).
+  need to be checked against it directly. **Done — see the metro selection subsection
+  below; the inference trio is settled and the training shortlist is decision #4 in §7.**
 
-**Candidate metros (why they fit):** small multi-family (2–4 unit) stock is
-concentrated in the Northeast and older Midwest/Rust Belt cities, plus parts of
-California — New York's outer-borough brownstones/rowhouses, Chicago's two-/three-flats,
-and Philadelphia's duplexed rowhomes are the classic examples, alongside Providence,
-Newark/Jersey City, Cleveland, Milwaukee, Buffalo, Detroit, and parts of Los Angeles.
-**New York, Chicago, and Philadelphia** are the working trio: each has a dense,
-well-documented 2-4 unit housing stock (giving Redfin's property-type filter and HUD
-FMR real signal to work with), is a large enough metro to likely have solid Kaggle
-listing volume, and matches the target user persona (an individual investor evaluating
-small multi-family deals) better than a market where 2-4 unit product is rare. New York
-is the largest of the candidates and its multifamily housing stock is especially
-concentrated in the outer boroughs, which also helps the training-shortlist goal.
-Treat this as a starting hypothesis to confirm against the Kaggle groupby check above,
-not a final answer.
+### Metro Selection: hypothesis tested and replaced (Aug 8, 2026)
 
-**Why New York over Boston specifically:** HUD defines FMR areas by *town* rather than
-county in the six New England states (CT, ME, MA, NH, RI, VT) — Boston would have hit
-that exception. New York, Chicago, and Philadelphia are all standard county-based FMR
-states, so `tools/hud_fmr.py` can assume county-keyed lookups throughout without a
-regional branch. One caveat that applies regardless of which three metros are chosen:
-large, high-cost metros are often **Small Area FMR (SAFMR)** areas, where HUD publishes
-ZIP-level figures instead of one metro-wide number — New York is a likely SAFMR metro,
-but so could Chicago or Philadelphia be. That response-shape handling (see §HUD FMR API
-notes below) is a general build requirement, not something specific to the New York
-swap.
+**The original hypothesis was New York, Chicago, Philadelphia**, reasoned from
+housing-stock knowledge: small multi-family (2–4 unit) stock concentrates in the
+Northeast and older Midwest/Rust Belt cities plus parts of California — New York's
+outer-borough brownstones, Chicago's two-/three-flats, Philadelphia's duplexed
+rowhomes, alongside Providence, Cleveland, Milwaukee, Buffalo, Detroit, and Los
+Angeles. That reasoning was sound about *housing stock* but said nothing about
+*whether the two datasets actually cover those markets*.
 
-**Verified Aug 8, 2026 against the live API (see §9):** this hypothesis was backwards.
-**New York County returns the flat (non-SAFMR) shape**; **Cook County (Chicago) and
-Philadelphia County are both SAFMR** (ZIP-keyed `basicdata` list). Doesn't change the
-build requirement — the client still has to handle both shapes for the trio either
-way — but corrects the assumption above for anyone reading this section later.
+The plan called for confirming it with a `groupby` before building. **That check has
+now been run against both datasets, and the hypothesis did not survive it.**
+
+Reproduce with `src/scripts/verify_metro_selection.py`. Bars are provisional and stated
+in the script: ≥500 Kaggle listings, ≥100 median sales per period.
+
+| Metro | Kaggle rent listings | Redfin 2–4 unit sales (median/period) | Verdict |
+|---|---|---|---|
+| **Los Angeles** | 2,433 | 302 | ✅ passes both |
+| Newark / Jersey City | 561 | 746 | ✅ passes both — see note |
+| **Chicago** | 634 | 362 | ✅ passes both |
+| **Cleveland** | 608 | 149 | ✅ passes both |
+| Boston | 600 | 258 | ⚠️ passes both, but town-based FMR |
+| Cincinnati | 798 | 62 | ❌ sales volume too thin |
+| **New York** | 283 (incl. all boroughs) | 746 | ❌ comps too thin |
+| Pittsburgh | 250 | 76 | ❌ weak on both |
+| **Philadelphia** | 230 | 43 | ❌ weak on both |
+| Milwaukee | 99 | 170 | ❌ comps too thin |
+| Detroit | 84 | 66 | ❌ weak on both |
+| Buffalo | 24 | 118 | ❌ comps too thin |
+
+New York has the highest 2–4 unit transaction volume of any metro in the extract, but
+only 283 Kaggle rent listings across all five boroughs — too thin to build a credible
+comp corpus, and comps are the grounding mechanism the whole design depends on.
+Philadelphia is weak on both axes and can support neither half of the pipeline.
+Milwaukee, Buffalo, and Detroit are classic small-multifamily markets that the
+housing-stock reasoning correctly identified but that this particular Kaggle scrape
+barely covers — a reminder that corpus coverage and market characteristics are
+independent questions.
+
+**Documented alternate — Newark / Jersey City.** This pairing clears both bars (561
+listings; it shares the New York CBSA, hence the 746 sales figure) and would offer
+New York metro exposure with an adequate comp corpus. Essex and Hudson counties are
+county-based FMR, so it carries no New England complication. It is not in the selected
+trio because Chicago, LA, and Cleveland already provide three structurally different
+markets, and because the shared CBSA means its appreciation series would duplicate
+New York's rather than add an independent one. Recorded here as a viable substitute if
+one of the three proves problematic later.
+
+**Final trio: Chicago, Los Angeles, Cleveland.** Each is strong on both datasets, each
+is a genuine 2–4 unit market (LA and Cleveland were both already named in the original
+candidate list), and all three sit in standard **county-based FMR states** — Cook
+County IL, Los Angeles County CA, Cuyahoga County OH — so `tools/hud_fmr.py` needs no
+New England town-based branch. Boston remains excluded for exactly that reason: HUD
+defines FMR areas by *town* in the six New England states (CT, ME, MA, NH, RI, VT).
+
+**Why this correction is documented rather than quietly applied.** The original
+hypothesis was reasoned from real domain knowledge and was confidently held — and it
+was wrong in a way that would have degraded every downstream component had it gone
+unchecked. Recording the hypothesis, the test, and the correction is the same
+discipline the system itself implements: the failure worth guarding against is not
+being wrong, but being wrong without disclosing it.
+
+**SAFMR status (verified against the live API, see §9):** Cook County returns the
+Small Area FMR list shape; New York County returns the flat shape. LA County is very
+likely SAFMR (large, high-cost) and Cuyahoga likely flat — **to be confirmed in Unit 1
+with a real call**, not assumed. Either way the client already handles both shapes, so
+this is a verification task rather than a build task.
+
+### Two data gaps found during the same check
+
+**Gap 1 — the Kaggle dataset has no county or ZIP column.** Actual columns are
+`id, category, title, body, amenities, bathrooms, bedrooms, currency, fee, has_photo,
+pets_allowed, price, price_display, price_type, square_feet, address, cityname, state,
+latitude, longitude, source, time`. The entire FMR normalization strategy keys on
+`county_fips`, so this gap sits directly underneath the rent model and was previously
+invisible in this plan.
+
+*Resolution:* since training is scoped to a curated ~5–8 metro shortlist anyway, build
+a hand-verified `(cityname, state) → county_fips` crosswalk for those cities — roughly
+30–50 entries, no new dependencies, about an hour. A lat/lon → FIPS spatial join
+against Census TIGER shapefiles (via `geopandas`) is the scale-up path if the full
+100K rows are ever needed; **not worth the dependency now.**
+
+**Gap 2 — the Redfin extract on disk is `Monthly`, not `Rolling 3 Months`** as §2
+specifies (verified: `FREQUENCY` is uniformly `Monthly`, `REGION TYPE` uniformly
+`Metro`, 943 distinct metros, 102 periods each, Jan 2018 – Jun 2026). Do **not**
+re-download — compute a trailing 3-period rolling median in pandas at load time in
+`tools/redfin_data.py`. Same result, and it keeps the smoothing window as a tunable in
+`config.py` rather than baked into a file.
+
+**Kaggle vintage confirmed:** the `time` column is a Unix timestamp spanning **Dec 2018
+– Dec 2019**. FY2019/FY2020 is therefore the correct FMR normalization year, confirming
+the §9 smoke test's choice of `year=2019`.
 
 ### HUD FMR API: Implementation Notes
 
@@ -230,10 +328,10 @@ Concrete details for `tools/hud_fmr.py`, from the API docs
 - **Handle the Small Area FMR (SAFMR) response shape.** For metros where HUD publishes
   ZIP-level FMRs, `basicdata` comes back as a *list* keyed by `zip_code` (plus one entry
   literally named `"MSA level"` for the metro-wide aggregate) instead of a single flat
-  object. This is likely for at least one of New York, Chicago, or Philadelphia — check
-  early with a real call rather than assuming the flat-dict shape everywhere. Code
-  should: look for an entry matching the subject property's ZIP; fall back to the
-  `"MSA level"` entry if no ZIP-specific match exists.
+  object. Confirmed for Cook County (Chicago); **Los Angeles and Cuyahoga counties are
+  unverified and get a real call in U1** rather than an assumed shape. Code should: look
+  for an entry matching the subject property's ZIP; fall back to the `"MSA level"` entry
+  if no ZIP-specific match exists.
 - **Bedroom sizes cap at Four-Bedroom.** No API field exists beyond 4BR. If the
   Extractor ever produces a 5+ bedroom unit, fall back to the 4BR figure and flag it
   (`kind="fmr_bedroom_cap_exceeded"`, `severity="info"`) rather than erroring.
@@ -244,69 +342,91 @@ Concrete details for `tools/hud_fmr.py`, from the API docs
 
 ---
 
-## 3. Stack Decision: Option A now, Option B (LangGraph) later
+## 3. Stack Decision: LangGraph from day one
 
-### What we're building with (Option A — "Minimal & Explicit")
+**Revised (Aug 8, 2026).** This section previously specified plain Python now with a
+LangGraph migration staged for Week 6. That staging existed to keep the build aligned
+with the order the syllabus introduced concepts. Once sequencing was freed to follow
+dependency and risk instead (see the revision note at the top), the staged approach
+became strictly dominated: it is the only available option that requires building the
+orchestration layer twice, and it spends the scarcest resource on the project —
+review-and-integration time — on a rewrite that produces no new capability.
+
+**Decision: adopt LangGraph immediately; the plain-Python orchestration layer is not
+built at all.** The four design conventions written to make the migration cheap (below)
+were good conventions independent of the migration, so they survive intact — LangGraph
+now enforces most of them structurally rather than by discipline.
+
+### The stack
 
 | Layer | Choice | Why |
 |---|---|---|
-| Orchestration | Plain Python — dataclass/TypedDict state, one function per agent, explicit loop in Planner | See rationale below |
-| LLM calls | OpenRouter (mix of free/cheap models for dev, stronger models for extraction/critic/summarizer) | Keeps token spend near $0 during iteration |
-| Retrieval / RAG | `sentence-transformers` (local embeddings) + `ChromaDB` (local vector store) | Free, local, no infra to manage, fine on 24GB RAM |
-| Regression | `pandas` + `numpy` + `scikit-learn` | Already comfortable with this |
-| State persistence | SQLite or per-run JSON | Single-deal state doesn't need more |
+| Orchestration | **LangGraph** — `StateGraph`, conditional edges, checkpointer | See below |
+| State schema | **Pydantic v2** (not dataclasses) | `ValidationError` text feeds the Extractor's retry prompt; dataclasses give nothing there |
+| LLM calls | OpenRouter (`:free` tier models) via the OpenAI-compatible SDK | Program-endorsed, $0 |
+| Observability | **LangSmith** free Developer tier | Multi-step agent loops are impractical to debug from logs alone; traces also document actual system behavior |
+| Retrieval / RAG | `sentence-transformers` (local) + `ChromaDB`, **hybrid**: metadata filters for hard constraints, embeddings for description/amenity text | Free, local, and a more honest design than pure vector search over structured data |
+| Regression | `pandas` + `numpy` + `scikit-learn` | Existing strength; lowest-surprise component |
+| State persistence | LangGraph checkpointer (SQLite) | Comes with the framework; also enables `interrupt()` |
+| Demo surface | **Streamlit**, run locally | ~50 lines; far better on video than a terminal recording |
 | Dev environment | VS Code + Claude Code | — |
 
-### Rationale for starting with plain Python instead of LangGraph
+**Total cost: $0.** Streamlit is open-source and free to run locally; Community Cloud
+is only relevant for public hosting, which this project does not require — the demo app
+stays local. LangGraph is MIT-licensed. LangSmith's free tier covers a solo developer's
+usage. OpenRouter `:free`
+models, HUD, Redfin, and Kaggle are all free. Against the $100 project budget, the only
+plausible spend is ~$10–20 of OpenRouter credits *if* free-tier rate limits become a
+real time sink — but the capstone brief says *"you are expected to design your capstone
+and test it using freely available model access,"* so free models are the default and
+paid credits are a documented contingency, not the plan.
 
-1. **The course hasn't covered LangGraph yet**, and the checkpoint 2.1 document already
-   frames orchestration in library-agnostic terms — "state machine pattern," not a named
-   library. Plain Python *is* that state machine, just without the abstraction layer. This
-   means nothing conceptual has to be redone when the framework is introduced — only the
-   glue code changes.
-2. **The early checkpoints don't need what LangGraph is good at.** Checkpoints 2–4
-   (reasoning loops, RAG, Tree-of-Thought) are single-agent-scoped: one agent, one loop,
-   one exit condition. A `while` loop with a `retry_count` and a `flags.append(...)` does
-   this with less code and less to debug than a graph library, while making every state
-   transition maximally visible for the checkpoint write-ups (screenshots of code = the
-   graph, essentially).
-3. **LangGraph earns its complexity starting at checkpoint 5** (Multi-Agent Architecture
-   and Coordination): conditional routing between 7 agents, a Critic → Planner rework
-   loop, bounded re-runs before escalation. That's exactly the shape LangGraph's
-   conditional edges and shared state graph are built for. Introducing it *here*, once the
-   course has covered it and once there's a concrete coordination problem to solve, means
-   the framework is doing real work instead of being learned in the abstract.
-4. **Risk management for a 7-week timeline.** Learning agent design and a new
-   orchestration framework in the same week is the likeliest way to lose a week to
-   framework debugging instead of pipeline progress. Sequencing framework adoption after
-   the underlying agent logic already works removes that risk from the critical early
-   weeks.
+> ⚠️ **LangSmith free-tier traces expire after 14 days.** Capture screenshots for the
+> report as you go; do not assume Week 4 traces will still be viewable in Week 7.
 
-### Migration plan to Option B (LangGraph)
+### Rationale
 
-**Target: Week 6, aligned with Checkpoint 5.1 (Multi-Agent Architecture and Coordination
-Plan).**
+1. **Reducers make Transparent Degradation structural rather than disciplinary.**
+   Declaring `flags: Annotated[list[Flag], operator.add]` means a node returning flags
+   *appends* rather than overwrites. Flag loss — the failure that would defeat this
+   project's central design principle — becomes impossible by construction rather than
+   a convention upheld in code review. This is the strongest single argument for the
+   framework on this project: the architecture and the tool agree on what must never
+   happen, and the tool enforces it.
+2. **`interrupt()` is the human-review escalation.** The system needs to pause, surface
+   partial state to a human, and resume from that point. That is a first-class
+   LangGraph primitive and a genuinely error-prone thing to hand-roll correctly.
+3. **The architecture diagram is generated from the graph.**
+   `graph.get_graph().draw_mermaid_png()` renders the real topology from the real code,
+   so documentation cannot silently drift from the system it describes.
+4. **Conditional edges are the Planner.** Routing across seven agents plus a bounded
+   Critic → Planner rework cycle is precisely the shape the library exists to express.
 
-To make that migration cheap, Option A code should follow these conventions from day one:
+**Trade-off accepted:** a framework dependency and its learning curve, on a project
+with a fixed deadline. Mitigated by writing the onboarding material up front
+(`docs/private/lang_graph_onboarding.md`) and by keeping all agent logic in plain
+functions that hold no framework-specific code — if LangGraph became a liability, the
+nodes would port to a hand-rolled loop without touching the reasoning logic.
 
-- Every agent is a **pure-ish function of the shared state**: `def extractor_agent(state: DealState) -> DealState`. This is exactly LangGraph's node signature — porting a node is close to a copy-paste plus a decorator/registration call.
-- **No agent calls another agent directly.** All routing decisions happen in the Planner
-  (or a dedicated `route()` function), never inside a specialist agent. This mirrors
-  LangGraph's separation of nodes from edges and means the routing logic — not just the
-  agent logic — transfers cleanly.
-- **State is a single typed object** (see schema below) passed by reference through every
-  step, never scattered across separate variables. This is a direct stand-in for
-  LangGraph's shared graph state.
-- **Flags and retries are state-encoded, not control-flow-encoded** (i.e., a flag is a
-  list entry in state, not a side effect like a print statement or a raised exception used
-  for control flow). LangGraph conditional edges read state to decide routing, so anything
-  encoded outside state won't be visible to the graph.
+### Design conventions
 
-When Week 6 arrives, the migration should mostly consist of: wrapping each existing agent
-function as a LangGraph node, replacing the Planner's manual `if/elif` routing with
-conditional edges, and replacing the manual retry loop with LangGraph's cycle support. The
-underlying agent logic (prompts, parsing, regression calls, retrieval calls) should not
-need to change.
+- Every agent is a **node function**: state in, **partial state update** out. Note
+  *partial* — returning the whole mutated state object is the most common LangGraph
+  error.
+- **No agent calls another agent directly.** Routing lives in edges and `route_*`
+  functions, never inside a specialist.
+- **State is a single typed object** (§5), never scattered across variables.
+- **Flags and retries are state-encoded, not control-flow-encoded.** Conditional edges
+  read state to route; anything outside state is invisible to the graph.
+
+New addition: **every cycle must be bounded by an explicit counter in state**, not by
+LangGraph's `recursion_limit`. Hitting the limit raises an opaque exception; a counter
+lets the system escalate to human review gracefully, which is the behavior Checkpoint
+2.1 actually specified.
+
+> **Onboarding:** see `docs/private/lang_graph_onboarding.md` — a crash course written
+> for reviewing this code rather than writing it, including a code-review checklist and
+> a text-first reading path. Work through it before reviewing Unit 2.
 
 ---
 
@@ -330,10 +450,12 @@ carnegie_mellon_agentic_repo/
     ├── requirements.txt
     ├── .venv/                     # gitignored — dedicated virtualenv
     ├── config.py                  # X/Y/Z loop parameters, model names, thresholds
-    ├── state.py                   # DealState schema (see §5)
+    ├── state.py                   # DealState / Flag / DealTerms / Comp — Pydantic (see §5)
+    ├── graph.py                   # StateGraph assembly: nodes, edges, routing, compile()
+    ├── nodes.py                   # node-name string constants (avoids silent typo bugs)
     ├── agents/
     │   ├── __init__.py
-    │   ├── planner.py
+    │   ├── planner.py             # route_* functions — the conditional edges
     │   ├── extractor.py
     │   ├── comps_retrieval.py
     │   ├── valuation_rent.py
@@ -343,19 +465,26 @@ carnegie_mellon_agentic_repo/
     ├── tools/
     │   ├── __init__.py
     │   ├── llm_client.py          # thin OpenRouter wrapper, model selection
-    │   ├── vector_store.py        # Chroma setup + embedding + query helpers
+    │   ├── vector_store.py        # Chroma setup + embedding + hybrid query helpers
     │   ├── rent_model.py          # sklearn regression: train/load/predict (FMR-normalized target)
-    │   ├── hud_fmr.py             # HUD FMR API client: fetch by county + fiscal year, cache locally
-    │   └── redfin_data.py         # load + query Housing Market Tracker CSVs + RHPI
+    │   ├── hud_fmr.py             # HUD FMR API client ✅ built (§9)
+    │   ├── county_crosswalk.py    # (cityname, state) → county_fips for the metro shortlist
+    │   └── redfin_data.py         # load + query Housing Market Tracker CSVs (rolling-3 computed here)
     ├── scripts/
-    │   └── pull_fmr_sample.py     # smoke-test script: real HUD pull for a few counties/years
+    │   ├── pull_fmr_sample.py     # ✅ built — real HUD pull smoke test
+    │   ├── verify_metro_selection.py # ✅ built — reproduces the §2 metro evidence
+    │   ├── build_comps_index.py   # one-off: embed + load Chroma
+    │   ├── train_rent_model.py    # one-off: fit + report holdout MAE
+    │   └── export_graph_diagram.py # writes the mermaid architecture diagram for the report
     ├── notebooks/
-    │   └── 01_data_exploration.ipynb # EDA on all three sources before committing to schema
+    │   └── 01_data_exploration.ipynb
+    ├── eval/
+    │   ├── listings/              # synthetic listings, each engineered to trip a known flag
+    │   ├── expected.yaml          # listing → expected flags / status
+    │   └── run_eval.py            # batch runner → results table for the report
     ├── tests/
-    │   ├── test_extractor.py
-    │   ├── test_comps_retrieval.py
-    │   └── fixtures/
-    │       └── sample_listings/   # synthetic test listings (per program data rules)
+    │   └── test_flag_propagation.py  # the one test that must never fail
+    ├── app.py                     # Streamlit demo UI (local only)
     └── main.py                    # entrypoint: run full pipeline on one listing
 ```
 
@@ -363,13 +492,27 @@ carnegie_mellon_agentic_repo/
 
 ## 5. State Schema (design target for `state.py`)
 
-```python
-from dataclasses import dataclass, field
-from typing import Literal, Optional
-from datetime import datetime
+**Changed Aug 8, 2026: Pydantic v2 instead of dataclasses**, and `flags` now carries a
+LangGraph reducer. Both changes are load-bearing:
 
-@dataclass
-class Flag:
+- **Pydantic** because the Extractor's clarification loop (Checkpoint 2.1, Loop 1)
+  needs to observe *how* a parse was malformed and reformulate. A Pydantic
+  `ValidationError` is structured, human-readable text that can be injected directly
+  into the retry prompt. A dataclass just raises `TypeError` or silently accepts
+  garbage.
+- **`Annotated[list[Flag], operator.add]`** because without a reducer, any node
+  returning `{"flags": [...]}` *overwrites* the accumulated list. That would silently
+  destroy Transparent Degradation the first time two agents both raised flags. With
+  it, each node returns only the flags it personally raised and accumulation is
+  guaranteed by the framework.
+
+```python
+import operator
+from typing import Annotated, Literal, Optional
+from datetime import datetime
+from pydantic import BaseModel, Field
+
+class Flag(BaseModel):
     source_agent: str          # e.g. "comps_retrieval", "valuation_rent"
     kind: str                  # e.g. "relaxed_search_radius", "unresolved_field",
                                 # "low_confidence_estimate", "fallback_used",
@@ -378,18 +521,19 @@ class Flag:
     detail: str                # human-readable explanation
     severity: Literal["info", "warn", "critical"]
 
-@dataclass
-class DealTerms:
+class DealTerms(BaseModel):
     address: Optional[str] = None
     price: Optional[float] = None
     unit_count: Optional[int] = None
-    unit_rents: list[float] = field(default_factory=list)
+    unit_rents: list[float] = Field(default_factory=list)
     square_footage: Optional[float] = None
+    city: Optional[str] = None           # crosswalk input (Kaggle has no county/ZIP)
+    state: Optional[str] = None          # crosswalk input
+    zip_code: Optional[str] = None       # optional; enables SAFMR ZIP-level lookup
     county_fips: Optional[str] = None    # needed to key HUD FMR + Redfin lookups
     # ... additional fields as extraction schema is finalized
 
-@dataclass
-class Comp:
+class Comp(BaseModel):
     listing_id: str
     similarity_score: float
     rent: float
@@ -398,17 +542,16 @@ class Comp:
     square_feet: float
     distance_miles: float
 
-@dataclass
-class DealState:
+class DealState(BaseModel):
     # inputs
     raw_listing_text: str
 
     # extraction
-    deal_terms: DealTerms = field(default_factory=DealTerms)
-    clarifying_questions: list[str] = field(default_factory=list)
+    deal_terms: DealTerms = Field(default_factory=DealTerms)
+    clarifying_questions: Annotated[list[str], operator.add] = Field(default_factory=list)
 
     # retrieval
-    comps: list[Comp] = field(default_factory=list)
+    comps: list[Comp] = Field(default_factory=list)
     search_radius_miles: float = 1.0   # X, widened on relaxation
     retrieval_iterations: int = 0
 
@@ -425,95 +568,278 @@ class DealState:
     appreciation_source: Literal[
         "metro_multifamily", "zip_multifamily", "metro_all_residential", None
     ] = None
-    scenarios: dict = field(default_factory=dict)  # optimistic/base/pessimistic branches
+    scenarios: dict = Field(default_factory=dict)  # optimistic/base/pessimistic branches
 
     # review
     confidence_score: Optional[float] = None
     needs_human_review: bool = False
+    critic_rejected: bool = False
+    rework_count: int = 0               # bounds the Critic → Planner cycle (§3)
 
     # cross-cutting
-    flags: list[Flag] = field(default_factory=list)
+    flags: Annotated[list[Flag], operator.add] = Field(default_factory=list)
     status: Literal["in_progress", "needs_review", "complete", "failed"] = "in_progress"
-    created_at: datetime = field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=datetime.now)
 ```
 
-This is a starting point — Claude Code should refine field names once the Extractor's
-actual output schema and each data source's actual columns are confirmed (see Week 3
-tasks below).
+Note which fields do and don't get reducers. `flags` and `clarifying_questions`
+accumulate across multiple nodes, so both need `operator.add`. `comps` is written by
+exactly one node (each retrieval iteration *replaces* the working set rather than
+appending to it), so a reducer there would be wrong — it would pile up stale
+candidates from relaxed passes alongside the final set.
+
+This is a starting point — field names get refined once the Extractor's actual output
+schema is confirmed (Unit 3, §6).
 
 ---
 
-## 6. Phased Plan (mapped to remaining checkpoints)
+## 6. Execution Order
 
-| Week | Checkpoint | Build target |
+Revised Aug 8, 2026, around three principles.
+
+**1. Walking skeleton first.** The previous ordering built the Summarizer last, in the
+final week — meaning the component that produces the system's actual output would have
+been the least exercised and the most schedule-exposed. Inverted: all seven agents are
+stubbed and wired into a running graph in Week 4. From that point there is always a
+working end-to-end system, and every subsequent unit replaces one stub with a real
+implementation — a small, bounded, independently reviewable change. This converts the
+dominant schedule risk from *"will the pieces integrate?"* (discovered late, expensive)
+to *"how good is each piece?"* (discovered continuously, cheap).
+
+**2. Within the build phase, order by technical risk rather than pipeline position.**
+Retrieval is built before the rent regression even though it sits later in the data
+flow, because Chroma and embeddings are the least familiar components in the stack
+while the regression is the most familiar. Unknowns get front-loaded into the weeks
+that still have recovery room.
+
+**3. Work is decomposed into review-sized units, not calendar weeks.** The binding
+constraint on this project is ~5–6 hrs/week of design and review capacity. Each unit
+below is scoped to roughly 2–3 hours of review — two per week, with the buffer week
+absorbing four. A corollary worth stating because ignoring it is expensive: a design
+decision deferred past the unit that needs it blocks implementation *and* consumes
+review capacity on re-establishing context. The decisions log in §7 exists to close
+those out early.
+
+### The units
+
+| Unit | Build target | Feeds checkpoint |
 |---|---|---|
-| **3 (now)** | — (catch-up week) | Repo scaffold, `DealState` schema, EDA on all three data sources, HUD FMR API access set up, Extractor agent + clarification loop working end-to-end on a synthetic listing |
-| 4 | 3.1 RAG and Retrieval Design | Comps/Retrieval agent: embeddings + Chroma index over Kaggle data, adaptive relaxation loop, sparse-comps flag; rent regression trained on FMR-normalized target |
-| 5 | 4.1 Tree-of-Thought Integration | Valuation & Rent agent (FMR-anchored regression + fallback), Scenario/Forecast agent with 2–3 branch ToT reasoning over Housing Market Tracker / RHPI data |
-| 6 | 5.1 Multi-Agent Architecture | **Migrate orchestration from plain Python to LangGraph.** Planner becomes a graph with conditional edges; Critic → Planner rework loop implemented as a cycle |
-| 7 | 6.1 Safety Guardrails | Critic/Reviewer confidence scoring, human-review escalation, logging, eval harness against success criteria from Checkpoint 1.1 |
-| Final | 7.1 Report + Presentation | Summarizer polish, end-to-end runs on several sample properties, report + video |
+| **Week 4 — Foundation & Skeleton** | | |
+| **U1** | `state.py` (Pydantic + reducers), `config.py`, `llm_client.py`, `county_crosswalk.py`; batch FMR pull for Cook/LA/Cuyahoga × {2019, latest}; confirm SAFMR shape for LA + Cuyahoga | — |
+| **U2** | **Walking skeleton.** All 7 nodes stubbed, `graph.py` wired incl. Critic→Planner cycle and `human_review` interrupt; Summarizer emits real markdown; flag propagation proven end-to-end; mermaid diagram exported; LangSmith tracing on | **5.1** (fully) |
+| **Week 5 — Input & Retrieval** | | |
+| **U3** | Extractor: real LLM call, Pydantic validate→retry loop, clarifying questions, assumption flags, bounded escalation; 3 synthetic listings | 2.1 evidence |
+| **U4** | Comps/Retrieval: Chroma index over Chicago/LA/Cleveland, one document per listing, hybrid metadata-filter + embedding query, top-`Y` results, adaptive relaxation loop, sparse-comps flag, **retrieval-off ablation behind a config flag** (see acceptance criteria below) | **3.1** |
+| **Week 6 — Estimation & Forecast** | | |
+| **U5** | Rent model: FMR-normalized regression, holdout MAE, Valuation agent, LLM fallback path + `rent_anchored_to_fmr` / `fmr_unavailable_for_county` flags | — |
+| **U6** | Scenario/Forecast: `redfin_data.py` (rolling-3, min-price floor), ToT branching over optimistic/base/pessimistic, `anomalous_period_included` flag | **4.1** |
+| **Buffer week — Guardrails, Eval, Demo** | | |
+| **U7** | Critic: cross-agent consistency checks, confidence scoring, bounded rework cycle, human-review escalation via `interrupt()` | **6.1** |
+| **U8** | Eval harness: 8–10 synthetic listings each engineered to trip a *specific* flag; batch runner → results table | **6.1** + report |
+| **U9** | Summarizer polish + Streamlit demo app | report + video |
+| **U10** | End-to-end runs across all three metros; capture traces, screenshots, diagrams | report + video |
+| **Week 7 — Deliverables** | | |
+| — | **Code frozen.** Final report + 8–10 min video. | **7.1** |
+
+### Notes on the sequence
+
+**Multi-agent coordination is working by Week 4 rather than Week 6.** This is the
+direct payoff of ordering by dependency: the coordination design gets described from a
+running graph and real traces rather than from a design sketch. Each weekly checkpoint
+asks for a written design update alongside a working agent update, so building the
+capability before writing about it improves both halves of the submission.
+
+**Retrieval design decisions (U4).** Each rental listing is embedded as a **single
+document, not chunked.** Listings are short, self-contained records whose fields are
+mutually dependent — splitting one would separate a rent figure from the bed/bath/sqft
+context that makes it interpretable, and could surface half a comparable as a match.
+Chunking earns its keep on long documents with independent sections; this corpus has
+neither property. Structured fields (beds, baths, sqft, geography) are carried as
+metadata for hard filtering; the embedded text covers description and amenity free-text,
+where semantic similarity adds signal over exact matching. **Result count is `Y` from
+`config.py`** — the retrieval loop's exit condition is "at least Y qualifying comps,"
+which makes the number of retrieved results a tuned parameter rather than an arbitrary
+constant.
+
+**U4 acceptance criteria.** The retrieval checkpoint is assessed against five specific
+elements, so U4 is specified to produce each one as an artifact rather than leaving them
+to be written up after the fact:
+
+| Required element | Where U4 produces it |
+|---|---|
+| Architectural decision on whether retrieval is required, with justification | §2 of Checkpoint 2.1 already argues this: the failure mode being defended against is fabricated comps presented at full confidence. Restated with the built system as evidence. |
+| Evidence a semantic retrieval mechanism is integrated against an external source | Chroma index over the Kaggle corpus; index build script + row counts per metro |
+| Demonstration that retrieval meaningfully influences output | **Ablation run — see below** |
+| Key design decisions: source selection, segmentation/chunking, number of results | The paragraph above: one-document-per-listing, hybrid metadata + embedding, top-`Y` |
+| One retrieval failure mode + how the design manages it | Sparse comps in thin sub-markets → adaptive relaxation loop, bounded by `Z` iterations, with `relaxed_search_radius` and sparse-comps flags disclosed in the report |
+
+**The ablation falls out of the walking skeleton for free.** U2 leaves a stubbed
+retrieval node in place; U4 replaces it. Running the same listing through both versions
+produces a direct before/after comparison — ungrounded estimate versus comp-grounded
+estimate, on identical inputs — which is exactly the "output comparison" the criteria
+ask for. Keep the stub reachable behind a config flag rather than deleting it in U4;
+it costs nothing and it is the cleanest available evidence that retrieval changes
+system behavior. LangSmith traces of both runs supply the same evidence in a second
+form.
+
+**U8 is the highest-leverage unit in the plan.** A set of synthetic listings each
+engineered to trigger a specific named flag — missing price, 5+ bedroom unit (FMR
+bedroom cap), a county with no FMR entry, a location with no qualifying comps, an
+internally inconsistent listing — serves three purposes at once: it is the evaluation
+results section of the final report, the guardrails evidence for the safety checkpoint,
+and the clearest available demonstration that Transparent Degradation works end to end.
+It is protected from the cut list for that reason.
+
+### Cut list, in order
+
+If the schedule slips, shed scope in this order rather than improvising:
+
+1. **ZIP-tier appreciation** (already deferred in §2 — keep it deferred).
+2. **LLM rent fallback path** — document as designed-but-unbuilt; Checkpoint 2.1
+   already anticipated this exact trade.
+3. **Streamlit app** — fall back to a terminal recording plus LangSmith traces.
+4. **Critic rework-loop depth** — reduce to single-pass review with escalation,
+   keeping the cycle in the graph but capping `MAX_REWORKS = 1`.
+
+**Never cut:** the flag propagation test (U2), the eval harness (U8), or the Week 7
+report reserve.
+
+### The hard constraint
+
+**Week 7 is reserved entirely for the report and video, with the code frozen.** The
+realistic failure mode for a fixed-deadline project like this is arriving at the final
+week still integrating, and shipping a rushed write-up of a system nobody has time to
+evaluate. A frozen build a week out guarantees there is something coherent to measure,
+document, and demonstrate. Any unit unfinished at that point ships as-is and is
+documented explicitly as future work — stating a known limitation is better engineering
+communication than concealing it, and it is consistent with the Transparent Degradation
+principle the system itself implements.
 
 ---
 
-## 7. Week 3 Task List (what to hand Claude Code first)
+## 7. Immediate Next Actions
 
-1. Scaffold the repo structure above; set up `venv`, `requirements.txt`
-   (`pandas`, `numpy`, `scikit-learn`, `chromadb`, `sentence-transformers`, `openai`
-   or `requests` for OpenRouter, `python-dotenv`).
-2. Sign up for a free HUD User account and API token; confirm a test call to
-   `fmr/data/<county_fips>` returns data.
-3. Download and do a first-pass EDA on: the Kaggle apartment dataset (confirm/parse the
-   `time` column and its actual vintage), a Redfin Housing Market Tracker pull —
-   `Rolling 3 Months` frequency, `Metro` region type only (ZIP-level is deferred, see
-   §2), `property_type = Multi-Family (2-4 Units)`, filtered to the candidate metros,
-   ~2018–present — and a sample HUD FMR pull for 2–3 counties across different years.
-   Confirm actual columns available, apply the minimum-price floor to the Redfin
-   extract, and adjust `DealTerms` / `Comp` schema fields to match reality rather than
-   assumption.
-3a. Run a `groupby` listing-count check on the Kaggle dataset by city/metro to confirm
-   real data density for the candidate metros in §2 (New York, Chicago, Philadelphia as
-   the working hypothesis); finalize the ~5–8 metro training shortlist and the 2–3
-   metro inference subset before building the comps index in Week 4.
-4. Implement `DealState`, `Flag`, `DealTerms`, `Comp` in `state.py`.
-5. Implement `tools/llm_client.py`: a thin wrapper around the OpenRouter API supporting
-   model selection per call (cheap model for dev-loop testing, stronger model reserved
-   for extraction/critic/summarizer).
-6. Implement `tools/hud_fmr.py`: fetch-and-cache FMR by county + fiscal year, with a
-   documented fallback (state or national average) when a county has no entry.
-   **Detailed build plan for this item: see §9.** Built ahead of the rest of this task
-   list, since Kaggle/Redfin data already exist in `data/` and don't depend on it —
-   getting a real HUD data pull working doesn't need `config.py`/`state.py`/`agents/`
-   to exist first.
-7. Implement `agents/extractor.py`: the Extraction and Clarification loop from Checkpoint
-   2.1 — parse listing → identify missing/ambiguous required fields → retry, ask, or flag
-   an assumption → bounded retries → escalate.
-8. Build 2–3 synthetic test listings (per program data rules: no real proprietary data)
-   and confirm the Extractor produces a complete `DealTerms` object (including
-   `county_fips`) or a well-formed set of clarifying questions + flags for each.
-9. Stub out `agents/planner.py` with the manual routing logic that will later become
-   LangGraph edges — even a simple `if extraction_incomplete: ... elif ready_for_retrieval: ...`
-   is fine for now, as long as it only reads/writes `DealState`.
+### Decisions log
+
+Each of these blocks implementation downstream; they are listed in the order they are
+needed. Target: all closed during Week 4.
+
+| # | Decision | Status |
+|---|---|---|
+| 1 | Orchestration framework | ✅ LangGraph, day one |
+| 2 | Inference metro trio | ✅ Chicago, LA, Cleveland |
+| 3 | Demo surface | ✅ Streamlit, local, scheduled U9 |
+| 4 | Training metro shortlist (~5–8, superset of the trio) | ⬜ ranked density list now available from `verify_metro_selection.py`; selection pending |
+| 5 | X / Y / Z loop parameters (radius, comp threshold, iteration cap) | ⬜ pick provisional values in U1, tune in U4 |
+| 6 | Confidence threshold for human-review escalation | ⬜ U1 provisional, tune in U7 |
+| 7 | Redfin minimum-price floor (§2 suggests $10–20k) | ⬜ set after inspecting the three metros' distributions |
+| 8 | OpenRouter model per role (dev / extraction / critic / summarizer) | ⬜ U1 |
+
+Each weekly checkpoint publishes explicit completion criteria. Where those exist, the
+corresponding unit is specified to produce each required element as a build artifact
+rather than as a write-up authored afterward — see the U4 acceptance criteria in §6 for
+the pattern. Apply the same treatment to 4.1, 5.1, and 6.1 as their criteria are
+published.
+
+### U1 — specification
+
+1. `requirements.txt`: add `langgraph`, `langsmith`, `pydantic`, `numpy`,
+   `scikit-learn`, `chromadb`, `sentence-transformers`, `openai` (as the
+   OpenAI-compatible OpenRouter client), `streamlit`. `requests`, `python-dotenv`, and
+   `pandas` are already present.
+2. `state.py` — `Flag`, `DealTerms`, `Comp`, `DealState` per §5, Pydantic with
+   reducers on `flags` and `clarifying_questions`.
+3. `config.py` — X/Y/Z, confidence threshold, `MAX_REWORKS`, model names per role,
+   Redfin price floor, rolling window. Provisional values are fine; the point is that
+   nothing is hardcoded in an agent.
+4. `nodes.py` — node-name constants.
+5. `tools/llm_client.py` — thin OpenRouter wrapper, model selection per call, plus a
+   `call_with_schema()` helper that validates against a Pydantic model and retries
+   with the `ValidationError` text on failure. This helper is the backbone of U3.
+6. `tools/county_crosswalk.py` — `(cityname, state) → county_fips` for the metro
+   shortlist. Hand-verified against `fmr/listCounties/{state}`.
+7. Finalize decision #4 (training shortlist) from the ranked output of
+   `scripts/verify_metro_selection.py`, constrained to metros whose counties are
+   FMR-mappable via the crosswalk in item 6.
+8. Batch FMR pull for Cook / Los Angeles / Cuyahoga × {2019, latest}; **confirm
+   whether LA and Cuyahoga return SAFMR or flat shapes** rather than assuming.
+9. LangSmith account + `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` env vars.
+
+Already built and verified against real data, requiring no rework: `tools/hud_fmr.py`
+and `scripts/pull_fmr_sample.py` (§9), and `scripts/verify_metro_selection.py`, which
+reproduces the §2 metro evidence.
+
+### Prerequisite reading (before U2 review)
+
+`docs/private/lang_graph_onboarding.md` §§1–6, plus the hands-on exercise — roughly
+3 hours. This sits on the critical path: the review standard applied to Weeks 4–6 is
+only as good as the reviewer's fluency in the framework, and §6 of that document is the
+checklist applied to every unit.
 
 ---
 
-## 8. Notes for Claude Code
+## 8. Engineering Standards
 
-- Follow the four conventions in §3 (pure state-in/state-out agent functions, no
-  agent-to-agent calls, single typed state object, flags encoded in state) from the first
-  line of code — they're what makes the Week 6 LangGraph migration cheap instead of a
-  rewrite.
-- Every agent function should have a docstring stating its Reason/Act/Observe/Decide loop
-  (matching the structure in Checkpoint 2.1), so the eventual code can be dropped directly
-  into the final report as evidence of the reasoning loop design.
-- Keep `config.py` as the single place for tunable parameters (search radius X, comp count
-  threshold Y, iteration cap Z, confidence threshold for human review) — these will need
-  to be tuned during Week 4–7 and should not be hardcoded inside agent functions.
-- Never let Redfin data touch a rent dollar figure, and never let Kaggle's raw (unanchored)
-  dollar figures reach the Summarizer — always pass through FMR normalization first. This
-  is the concrete code-level expression of the rent-level anchoring design in §2.
-- All test/dev data must be synthetic or public per program requirements — do not pull in
-  real scraped listings.
+These are the standards every change set is held to in review. They are recorded here
+rather than left implicit so that the bar is the same whether a given unit is written
+in a focused session or across a fragmented week.
+
+### Architecture
+
+- **Follow the design conventions in §3**: node functions returning *partial* state
+  updates, no agent-to-agent calls, a single typed state object, flags and retries
+  encoded in state, every cycle bounded by an explicit counter. LangGraph enforces
+  several of these structurally; the partial-update rule and the bounded-cycle rule
+  remain a review responsibility.
+- **Never let Redfin data touch a rent dollar figure**, and never let unanchored Kaggle
+  dollar figures reach the Summarizer — every rent number passes through FMR
+  normalization first. This is the code-level expression of the rent-level anchoring
+  design in §2, and it is the kind of invariant that degrades silently if unwatched.
+- **`config.py` is the single home for tunable parameters** — search radius X, comp
+  count threshold Y, iteration cap Z, confidence threshold, `MAX_REWORKS`, Redfin price
+  floor. These are tuned across U4–U7; a value hardcoded inside an agent is a defect,
+  not a shortcut.
+
+### Documentation
+
+- **Every agent function carries a docstring stating its Reason/Act/Observe/Decide
+  loop**, matching the structure specified in the Checkpoint 2.1 design. The reasoning
+  loop is a design commitment, and keeping it stated at the point of implementation is
+  what keeps the code and the design document from diverging.
+- **Decisions are surfaced, not guessed.** Anything that belongs in the §7 decisions log
+  gets raised for a decision rather than resolved by assumption. Such decisions are
+  inexpensive to make deliberately and expensive to unwind once code depends on them.
+
+### Testing
+
+Testing is scoped deliberately rather than exhaustively, and the scope is documented
+here so the choice is legible.
+
+Two things are tested unconditionally, because they are the project's load-bearing
+claims:
+
+1. **`test_flag_propagation.py`** — a flag raised in the Extractor survives every
+   downstream node and appears in the rendered report. Transparent Degradation is the
+   central design principle of this system; a silent flag loss would invalidate every
+   output the system produces while leaving it looking correct. This test never gets cut.
+2. **The `eval/` harness (U8)** — synthetic listings engineered to trigger each named
+   flag, run as a batch with results tabulated. This functions as the system's
+   behavioral test suite and as its evaluation evidence.
+
+Broad unit-test coverage is **deferred, not dismissed.** With a fixed deadline, coverage
+competes directly against the two suites above, and those carry far more information per
+hour invested — they test system-level behavior against the design's actual claims
+rather than restating implementation details. Additional coverage gets added
+retroactively if the buffer week allows. This is a scheduling judgment about sequence,
+and it is recorded as such rather than left as an unexplained gap.
+
+### Change management
+
+- **One unit per change set**, self-contained, accompanied by a summary of what changed
+  and where the reviewer's attention is most warranted. A diff spanning five loosely
+  related files costs more review time than the batching saves.
+- **All test and development data is synthetic or public**, per program requirements.
+  No scraped or proprietary listings enter this repository at any point.
 
 ---
 
@@ -540,11 +866,20 @@ passed), confirming the SAFMR branch is genuinely exercised, not just written
 defensively. Cache verified too: an immediate repeat call returned in 0.000s (cache
 hit, no second HTTP request).
 
+> **Note (Aug 8, 2026, later the same day):** the inference trio subsequently changed
+> to **Chicago, Los Angeles, Cleveland** (see §2 — the NY/Philadelphia hypothesis
+> failed a data-density check). This table is retained as-is because it remains valid
+> evidence that the client works and that both response shapes are handled — Cook
+> County is in the final trio, and the New York/Philadelphia rows still prove the flat
+> and SAFMR branches respectively. **U1 re-runs this smoke test for Los Angeles County,
+> CA and Cuyahoga County, OH** to confirm their shapes; they are currently unverified
+> assumptions (LA likely SAFMR, Cuyahoga likely flat).
+
 **Scope:** deliberately narrow — just the client and a real smoke-test pull, so a
 working HUD data pull exists as soon as possible. Explicitly **not** included here:
-`config.py`, `state.py`, `agents/`, `tests/`, or the rest of the Week 3 Task List
-scaffold (item 1) — those are a separate, later pass. Kaggle and Redfin data already
-sit in `data/` (repo root) and don't depend on any of this.
+`config.py`, `state.py`, `agents/`, `tests/`, or the rest of the scaffold — those are
+U1 (§7). Kaggle and Redfin data already sit in `data/` (repo root) and don't depend on
+any of this.
 
 **Files added:**
 ```
@@ -585,10 +920,10 @@ No `.env` file is required for this to work; the env var is only an override.
    non-SAFMR county there's only ever one metro-wide record anyway, and for a SAFMR
    county the client falls back to the `"MSA level"` entry and reports
    `used_msa_fallback=True`. Passing an explicit `zip_code` (if it matches an entry)
-   is supported so the SAFMR branch doesn't crash or silently misparse, but nothing
-   in this build calls it that way — it's dead code for now, kept for the same reason
-   §2 documents ZIP-level Redfin as deferred-but-real future work rather than built
-   today.
+   is supported so the SAFMR branch neither errors nor silently misparses, though no
+   current caller uses it. It is retained deliberately: ZIP-level lookup is the natural
+   extension point if the deferred ZIP-tier work in §2 is ever taken up, and the branch
+   is cheaper to keep correct now than to reconstruct later.
 2. **Bedroom cap.** `get_fmr_for_bedroom` caps at `four_bedroom` for `bedrooms >= 4`
    and returns `bedroom_cap_exceeded=True` in the result rather than raising. Turning
    this into an actual `Flag` (`kind="fmr_bedroom_cap_exceeded"`) is the Valuation &
