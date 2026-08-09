@@ -1,0 +1,25 @@
+# OS
+.DS_Store
+
+# Secrets
+ignore/
+data/
+
+# Docs
+docs/private/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Environment
+.env
+.env.*
+
+# Editors
+.vscode/
+.idea/
