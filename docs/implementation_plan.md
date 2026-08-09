@@ -159,11 +159,24 @@ interest-rate-driven price dynamics into a quantity they don't actually explain.
   disk is `Monthly`. Compute the rolling window in `tools/redfin_data.py` rather than
   re-downloading — see "Two data gaps" below.)*
 - **Apply a minimum-price floor before any sample-size logic runs.** Raw extracts
-  contain implausible `MEDIAN SALE PRICE NSA` values ($1, $100, $975) — near-certainly
-  non-arm's-length transfers (quitclaim deeds, corrective deeds, nominal-consideration
-  transfers) rather than real market sales. Drop any period below a floor (start around
-  $10,000–$20,000 and adjust after inspecting the target metros' actual distributions)
-  before it can corrupt a median or a YoY calculation.
+  contain implausible `MEDIAN SALE PRICE NSA ($)` values ($1, $101, $500) —
+  near-certainly non-arm's-length transfers (quitclaim deeds, corrective deeds,
+  nominal-consideration transfers) rather than real market sales.
+
+  **Resolved to $10,000, the low end of the range originally proposed** (verified
+  Aug 8, 2026 across 58,863 non-null price rows). Evidence: 63 rows (0.107%) fall below
+  $10k and **90.5% of those report `HOMES SOLD == 1`** — the signature of a single
+  non-market transfer. Raising the floor to $20k would drop 294 rows (0.499%) instead,
+  and in the $10–20k band the single-sale share falls to 72.7% while metros such as
+  Weirton WV show a *sustained* cheap tail across many periods — real distressed
+  activity. A $20k floor would delete observations rather than clean them.
+
+  **Honest scope note: this floor is inert for all three inference metros.** Their
+  minimum median sale prices are Chicago $207,500, LA $695,000, and Cleveland $58,333 —
+  between 6× and 70× any candidate floor, so zero periods are dropped for any of them.
+  The floor is genuine insurance for the tier-3 all-residential fallback and for any
+  future metro addition, but it does not change a single number in the current
+  pipeline, and this section previously implied otherwise.
 - **Pull roughly 2018–present**, not just the last year or two. This window is sized
   for the Scenario/Forecast agent's own needs — real historical variance to ground its
   optimistic/base/pessimistic branches (e.g. base = long-run average growth, optimistic
@@ -178,6 +191,15 @@ interest-rate-driven price dynamics into a quantity they don't actually explain.
   rates pulled price growth well above trend during this stretch; blending it in
   silently risks skewing "base case" toward an unusual few years rather than normal
   market behavior. Flagging it keeps the choice visible and defensible either way.
+
+  **Excluding that window creates a discontinuity, not merely a filter** (found while
+  building `tools/redfin_data.py`). Dropping 2020–2022 leaves a gap in the series, and
+  a naive `.rolling()` splices across it — silently averaging 2019 onto 2023 and
+  reporting the result as a run of consecutive months. The sustained-stretch
+  calculation therefore segments on month adjacency before averaging. This was a live
+  defect rather than a hypothetical: fixing it moved Chicago's excluded pessimistic
+  band from −1.92% to −1.56%. Any future work that filters periods out of these series
+  must handle the resulting gap explicitly.
 - Redfin data is never used to adjust rent dollars — only price/appreciation.
 - Filter to the target metros immediately on load — Redfin data is only used for
   per-deal inference lookups (never for training), so it only ever needs to cover the
@@ -186,6 +208,35 @@ interest-rate-driven price dynamics into a quantity they don't actually explain.
 **Out of scope for now:** Investor Home Purchases and Existing Home Sales datasets —
 no clear role in the current agent design; documented as potential future enrichment
 (e.g., a market-competitiveness signal) rather than built now.
+
+### Training vs. Inference: different data requirements
+
+These two scopes fail for different reasons, and conflating them leads to solving the
+wrong problem. Stated explicitly because the distinction determines how the New York
+coverage gap is handled (below):
+
+- **Training** needs *volume and feature diversity across many markets*, because the
+  regression learns a structural relationship (rent as a ratio to local FMR) that
+  should generalize. It does not care whether any single market is densely covered.
+- **Inference** needs *comp density in the specific subject market*, because comps must
+  be geographically near the subject property to be meaningful. A national corpus does
+  not help price a building in a market the corpus barely covers.
+
+**Verified sufficiency of the training data (Aug 8, 2026).** The Kaggle extract holds
+99,492 rows, of which **99,007 (99.5%) are complete on every core feature** — price,
+bedrooms, bathrooms, square_feet, latitude, longitude, cityname, state. Notably
+`square_feet` has **zero** missing values, which removes the most likely blocker for a
+sqft-aware comp match and regression. A candidate ~10-metro training shortlist yields
+**21,768 complete rows**, which is abundant for a regression on roughly 8–12 features.
+
+Price distribution is sane (median $1,350; IQR $1,014–$1,795) with negligible outlier
+contamination — 8 rows below $300 and 71 above $10,000, removable by the same
+min/max filter pattern §2 already applies to the Redfin extract.
+
+**Conclusion: row count is not a binding constraint on training, and never was.** The
+binding constraint is the county/FIPS mapping and FMR-pull effort per added metro,
+exactly as this section originally predicted. Adding a metro to the training set costs
+crosswalk entries and API calls, not data.
 
 ### Metro Scope: Training vs. Inference
 
@@ -228,27 +279,42 @@ The plan called for confirming it with a `groupby` before building. **That check
 now been run against both datasets, and the hypothesis did not survive it.**
 
 Reproduce with `src/scripts/verify_metro_selection.py`. Bars are provisional and stated
-in the script: ≥500 Kaggle listings, ≥100 median sales per period.
+in the script: ≥500 Kaggle listings, ≥100 median sales per period. Kaggle counts are
+**usable** rows — after de-duplication, completeness filtering, and rent-bound trimming
+(`tools/kaggle_data.py`) — since only usable rows can enter the comp index.
 
 | Metro | Kaggle rent listings | Redfin 2–4 unit sales (median/period) | Verdict |
 |---|---|---|---|
-| **Los Angeles** | 2,433 | 302 | ✅ passes both |
+| **Los Angeles** | 2,372 | 302 | ✅ passes both |
 | Newark / Jersey City | 561 | 746 | ✅ passes both — see note |
-| **Chicago** | 634 | 362 | ✅ passes both |
-| **Cleveland** | 608 | 149 | ✅ passes both |
-| Boston | 600 | 258 | ⚠️ passes both, but town-based FMR |
+| **Chicago** | 631 | 362 | ✅ passes both |
+| **Cleveland** | 606 | 149 | ✅ passes both |
+| Boston | 599 | 258 | ✅ passes both — viable alternate, see note |
 | Cincinnati | 798 | 62 | ❌ sales volume too thin |
-| **New York** | 283 (incl. all boroughs) | 746 | ❌ comps too thin |
-| Pittsburgh | 250 | 76 | ❌ weak on both |
+| **New York** | 271 (incl. all boroughs) | 746 | ❌ comps too thin |
+| Pittsburgh | 248 | 76 | ❌ weak on both |
 | **Philadelphia** | 230 | 43 | ❌ weak on both |
-| Milwaukee | 99 | 170 | ❌ comps too thin |
+| Milwaukee | 98 | 170 | ❌ comps too thin |
 | Detroit | 84 | 66 | ❌ weak on both |
 | Buffalo | 24 | 118 | ❌ comps too thin |
 
+**Two data defects corrected these counts (Aug 8, 2026).** The first pass reported
+slightly higher figures because of two bugs found while building the comp index:
+84 exact duplicate `id` rows, and naive substring city matching that counted
+*Queensbury* (upstate NY, ~200 miles away) as Queens and *Bronxville* (Westchester) as
+the Bronx. Both are fixed in `tools/kaggle_data.py` via de-duplication and
+word-boundary matching — the latter still rolls "Cleveland Heights" into Cleveland,
+which is correct, while rejecting the two false positives. No verdict changed, but the
+episode is why the cleaning logic now lives in one module that every consumer shares
+rather than being re-implemented per script.
+
 New York has the highest 2–4 unit transaction volume of any metro in the extract, but
-only 283 Kaggle rent listings across all five boroughs — too thin to build a credible
-comp corpus, and comps are the grounding mechanism the whole design depends on.
-Philadelphia is weak on both axes and can support neither half of the pipeline.
+only 271 Kaggle rent listings across all five boroughs — too thin to serve as a
+selected inference metro, since comps are the grounding mechanism the whole design
+depends on. (That aggregate turned out to understate what is retrievable in practice;
+see "Sparsity is a property of sub-locations" below, which measures the difference and
+corrects the conclusion originally drawn from this number.) Philadelphia is weak on
+both axes and can support neither half of the pipeline.
 Milwaukee, Buffalo, and Detroit are classic small-multifamily markets that the
 housing-stock reasoning correctly identified but that this particular Kaggle scrape
 barely covers — a reminder that corpus coverage and market characteristics are
@@ -256,19 +322,97 @@ independent questions.
 
 **Documented alternate — Newark / Jersey City.** This pairing clears both bars (561
 listings; it shares the New York CBSA, hence the 746 sales figure) and would offer
-New York metro exposure with an adequate comp corpus. Essex and Hudson counties are
+New York metro exposure with an adequate comp corpus. **Caveat: the 561 is ~90% Jersey
+City** — the actual split is Jersey City 505, Newark 56. If this alternate is ever
+activated it is effectively a Jersey City corpus; Newark cannot carry one alone. Essex and Hudson counties are
 county-based FMR, so it carries no New England complication. It is not in the selected
 trio because Chicago, LA, and Cleveland already provide three structurally different
 markets, and because the shared CBSA means its appreciation series would duplicate
 New York's rather than add an independent one. Recorded here as a viable substitute if
 one of the three proves problematic later.
 
+### Sparsity is a property of sub-locations, not metros
+
+New York's thin coverage is a **retrieval** problem, not a training problem. Per the
+distinction above, the rent regression would serve a New York property perfectly well —
+it learns a structural rent-to-FMR ratio from the national corpus and anchors it with
+New York County's own FMR. Only comp retrieval is affected.
+
+**Correction (Aug 8, 2026, measured in U4).** This section previously asserted that New
+York would therefore serve as the system's sparse-comps demonstration, reasoning from
+its low borough-wide count of 271 listings. Measurement disproved it. Comp density by
+radius, 2-bedroom exact match:
+
+| Market | 0.5 mi | 1 mi | 2 mi | 3 mi | 5 mi |
+|---|---|---|---|---|---|
+| Los Angeles (Echo Park) | 7 | 50+ | 50+ | 50+ | 50+ |
+| Cleveland (downtown) | 0 | 0 | 50+ | 50+ | 50+ |
+| Chicago (Logan Square) | 3 | 3 | 5 | 22 | 50+ |
+| Brooklyn (Bed-Stuy) | 0 | 1 | 4 | **38** | 50+ |
+
+Bedford-Stuyvesant returns 38 comps within three miles. The 271 New York listings are
+not spread thinly across the metro — they **cluster densely in central Brooklyn**, so a
+subject property there retrieves a perfectly adequate comp set. A borough-wide count is
+simply the wrong statistic for a question that is answered locally.
+
+**Sparsity in this corpus is a property of specific sub-locations, not of metros.**
+Staten Island holds 6 listings in the entire borough; a Tottenville subject exhausts
+relaxation and reaches zero qualifying comps. That is the genuine degradation case, and
+it is what U8 carries — a real location that is really under-covered, rather than a
+metro assumed to be under-covered on the strength of an aggregate.
+
+Verified behavior across the three retained cases (`scripts/retrieval_evidence.py`):
+
+| Case | Iterations | Final radius | Comps | Flags |
+|---|---|---|---|---|
+| Los Angeles — dense | 1 | 2.0 mi | 8 | **none** |
+| Chicago — moderate | 3 | 4.0 mi | 8 | 1 info, 1 warn |
+| Staten Island — thin | 4 (cap) | 8.0 mi | **0** | 3 + `sparse_comps` **critical** |
+
+The Los Angeles row matters as much as the Staten Island one: a clean run raising *no*
+flags is what establishes that the flags are informative rather than merely always-on.
+This point generalizes — a degradation signal that fires on every run conveys nothing,
+and the parameter tuning in `config.py` was driven by exactly that consideration.
+
+**Remediation, if production coverage were ever needed.** The Two Sigma Connect /
+RentHop Kaggle dataset (~49k New York listings, ~2016 vintage) is the obvious source.
+It is not adopted here: it would cost roughly a full work unit in loader, schema
+mapping, and re-indexing, and its column set requires verification — square footage in
+particular, which the current corpus has at 100% completeness and which the comp match
+and regression both consume. The 2016 vintage would *not* be a problem, since the
+FMR normalization design handles mixed vintages by construction, normalizing each row
+against its own year's FMR. Documented as a known, scoped remediation rather than an
+unexamined gap.
+
+One caution recorded for anyone extending this: several New York "rental" datasets in
+circulation are Airbnb data. Nightly short-term rates are a different quantity from
+monthly long-term rent and would corrupt both the comp corpus and the FMR-normalized
+regression while appearing superficially valid.
+
 **Final trio: Chicago, Los Angeles, Cleveland.** Each is strong on both datasets, each
 is a genuine 2–4 unit market (LA and Cleveland were both already named in the original
-candidate list), and all three sit in standard **county-based FMR states** — Cook
-County IL, Los Angeles County CA, Cuyahoga County OH — so `tools/hud_fmr.py` needs no
-New England town-based branch. Boston remains excluded for exactly that reason: HUD
-defines FMR areas by *town* in the six New England states (CT, ME, MA, NH, RI, VT).
+candidate list), and all three sit in standard county-based FMR states — Cook County IL
+(`1703199999`), Los Angeles County CA (`0603799999`), Cuyahoga County OH
+(`3903599999`), all three entityids verified against the live API.
+
+**Correction — the stated reason for excluding Boston was wrong.** This section
+previously excluded Boston because HUD defines FMR areas by *town* rather than county
+in the six New England states, and assumed that would force a regional branch in
+`tools/hud_fmr.py`. A live call disproved it: `fmr/listCounties/MA` returns town rows
+carrying fully usable entityids (Boston city is `2502507000` — Suffolk County, with a
+place code in the last five digits instead of the `99999` county placeholder), and
+`get_fmr` consumes it unchanged, returning a flat response shape for the
+Boston-Cambridge-Quincy HUD Metro FMR Area. The town regime is absorbed entirely by the
+crosswalk layer; no client change is required.
+
+Boston is therefore reclassified from *excluded, technically blocked* to **viable but
+not selected**. It is not adopted because the existing trio already spans three
+structurally different markets and is already indexed and parameter-tuned, so swapping
+would cost rework for no capability gained. Two caveats bound the correction: it was
+verified for Boston specifically, not for all six New England states (Providence RI
+remains untested), and the crosswalk would map Boston to a *town* entityid rather than
+a county one — immaterial for FMR, which is all it currently feeds, but relevant if
+anything later keys on county FIPS.
 
 **Why this correction is documented rather than quietly applied.** The original
 hypothesis was reasoned from real domain knowledge and was confidently held — and it
@@ -277,11 +421,24 @@ unchecked. Recording the hypothesis, the test, and the correction is the same
 discipline the system itself implements: the failure worth guarding against is not
 being wrong, but being wrong without disclosing it.
 
-**SAFMR status (verified against the live API, see §9):** Cook County returns the
-Small Area FMR list shape; New York County returns the flat shape. LA County is very
-likely SAFMR (large, high-cost) and Cuyahoga likely flat — **to be confirmed in Unit 1
-with a real call**, not assumed. Either way the client already handles both shapes, so
-this is a verification task rather than a build task.
+**SAFMR is a property of a county-*year*, not of a county (verified Aug 8, 2026).**
+This is the most consequential correction in this section, because every earlier
+version of this document — and §9 below — framed SAFMR as a fixed attribute of a
+county. It is not. HUD expanded ZIP-level publication between 2019 and 2026, so the
+same county returns different response shapes depending on the fiscal year requested:
+
+| County | FY2019 | FY2026 |
+|---|---|---|
+| Cook (Chicago) | SAFMR | SAFMR |
+| Los Angeles | **flat** | **SAFMR** |
+| Cuyahoga (Cleveland) | **flat** | **SAFMR** |
+
+This matters directly to the design in this section. Training normalization queries the
+Kaggle vintage year (2019, flat for two of the three), while inference queries the
+current year (2026, SAFMR for all three) — so the *same county* takes different code
+paths depending on which the caller asks for. `tools/hud_fmr.py` normalizes both shapes
+already, so there is no defect; but any reasoning that treats "is this county SAFMR?"
+as a stable fact is wrong, and code must never cache that answer across years.
 
 ### Two data gaps found during the same check
 
@@ -449,31 +606,33 @@ carnegie_mellon_agentic_repo/
     ├── README.md
     ├── requirements.txt
     ├── .venv/                     # gitignored — dedicated virtualenv
-    ├── config.py                  # X/Y/Z loop parameters, model names, thresholds
-    ├── state.py                   # DealState / Flag / DealTerms / Comp — Pydantic (see §5)
+    ├── config.py                  # ✅ X/Y/Z loop parameters, model names, thresholds
+    ├── state.py                   # ✅ DealState / Flag / DealTerms / Comp — Pydantic (§5)
     ├── graph.py                   # StateGraph assembly: nodes, edges, routing, compile()
-    ├── nodes.py                   # node-name string constants (avoids silent typo bugs)
+    ├── nodes.py                   # ✅ node-name string constants (avoids silent typo bugs)
     ├── agents/
     │   ├── __init__.py
     │   ├── planner.py             # route_* functions — the conditional edges
     │   ├── extractor.py
-    │   ├── comps_retrieval.py
+    │   ├── comps_retrieval.py     # ✅ adaptive relaxation loop
     │   ├── valuation_rent.py
     │   ├── scenario_forecast.py
     │   ├── critic.py
     │   └── summarizer.py
     ├── tools/
     │   ├── __init__.py
-    │   ├── llm_client.py          # thin OpenRouter wrapper, model selection
-    │   ├── vector_store.py        # Chroma setup + embedding + hybrid query helpers
+    │   ├── llm_client.py          # ✅ OpenRouter wrapper + schema-validated retry loop
+    │   ├── vector_store.py        # ✅ Chroma setup + embedding + hybrid query
+    │   ├── kaggle_data.py         # ✅ single cleaning path: dedupe, completeness, city match
     │   ├── rent_model.py          # sklearn regression: train/load/predict (FMR-normalized target)
-    │   ├── hud_fmr.py             # HUD FMR API client ✅ built (§9)
-    │   ├── county_crosswalk.py    # (cityname, state) → county_fips for the metro shortlist
-    │   └── redfin_data.py         # load + query Housing Market Tracker CSVs (rolling-3 computed here)
+    │   ├── hud_fmr.py             # ✅ HUD FMR API client (§9)
+    │   ├── county_crosswalk.py    # ✅ (cityname, state) → county_fips, 29 entries HUD-verified
+    │   └── redfin_data.py         # ✅ load + query, rolling-3 + growth bands computed here
     ├── scripts/
-    │   ├── pull_fmr_sample.py     # ✅ built — real HUD pull smoke test
-    │   ├── verify_metro_selection.py # ✅ built — reproduces the §2 metro evidence
-    │   ├── build_comps_index.py   # one-off: embed + load Chroma
+    │   ├── pull_fmr_sample.py     # ✅ real HUD pull smoke test
+    │   ├── verify_metro_selection.py # ✅ reproduces the §2 metro evidence
+    │   ├── build_comps_index.py   # ✅ one-off: embed + load Chroma (3,880 listings)
+    │   ├── retrieval_evidence.py  # ✅ Checkpoint 3.1 evidence: ablation + degradation cases
     │   ├── train_rent_model.py    # one-off: fit + report holdout MAE
     │   └── export_graph_diagram.py # writes the mermaid architecture diagram for the report
     ├── notebooks/
@@ -622,20 +781,30 @@ those out early.
 
 ### The units
 
+**Resequenced Aug 8, 2026 — U4 pulled ahead of U2/U3.** Checkpoint 3.1 fell due before
+the original Week 5 slot for retrieval. U4 turned out not to depend on either the
+walking skeleton or the Extractor: it needs `state.py` and `config.py` (both U1), a
+subject property can be constructed directly as a `DealTerms` object rather than
+extracted from listing text, and a node function is callable with or without a graph
+around it. This is the payoff of freezing the interface contract in U1 — with schema and
+node signatures fixed, units can land in any order. Note the distinction being relied on:
+U1 is the *interface* risk and had to come first; U2 is *integration* risk, which is
+safe to defer.
+
 | Unit | Build target | Feeds checkpoint |
 |---|---|---|
-| **Week 4 — Foundation & Skeleton** | | |
-| **U1** | `state.py` (Pydantic + reducers), `config.py`, `llm_client.py`, `county_crosswalk.py`; batch FMR pull for Cook/LA/Cuyahoga × {2019, latest}; confirm SAFMR shape for LA + Cuyahoga | — |
+| **Week 4 — Foundation** | | |
+| **U1** ✅ | `state.py` (Pydantic + reducers), `config.py`, `nodes.py`, `llm_client.py` (schema-validated retry), `kaggle_data.py`, `county_crosswalk.py` (29 entries, HUD-verified), `redfin_data.py`; FMR pull for the trio × {2019, latest} | — |
+| **U4** ✅ | Comps/Retrieval: Chroma index (3,880 listings), one document per listing, hybrid metadata-filter + embedding query, top-`Y` results, adaptive relaxation loop, sparse-comps flag, retrieval-off ablation behind a config flag; X/Y/Z tuned against measured density | **3.1** |
 | **U2** | **Walking skeleton.** All 7 nodes stubbed, `graph.py` wired incl. Critic→Planner cycle and `human_review` interrupt; Summarizer emits real markdown; flag propagation proven end-to-end; mermaid diagram exported; LangSmith tracing on | **5.1** (fully) |
-| **Week 5 — Input & Retrieval** | | |
+| **Week 5 — Input** | | |
 | **U3** | Extractor: real LLM call, Pydantic validate→retry loop, clarifying questions, assumption flags, bounded escalation; 3 synthetic listings | 2.1 evidence |
-| **U4** | Comps/Retrieval: Chroma index over Chicago/LA/Cleveland, one document per listing, hybrid metadata-filter + embedding query, top-`Y` results, adaptive relaxation loop, sparse-comps flag, **retrieval-off ablation behind a config flag** (see acceptance criteria below) | **3.1** |
 | **Week 6 — Estimation & Forecast** | | |
 | **U5** | Rent model: FMR-normalized regression, holdout MAE, Valuation agent, LLM fallback path + `rent_anchored_to_fmr` / `fmr_unavailable_for_county` flags | — |
 | **U6** | Scenario/Forecast: `redfin_data.py` (rolling-3, min-price floor), ToT branching over optimistic/base/pessimistic, `anomalous_period_included` flag | **4.1** |
 | **Buffer week — Guardrails, Eval, Demo** | | |
 | **U7** | Critic: cross-agent consistency checks, confidence scoring, bounded rework cycle, human-review escalation via `interrupt()` | **6.1** |
-| **U8** | Eval harness: 8–10 synthetic listings each engineered to trip a *specific* flag; batch runner → results table | **6.1** + report |
+| **U8** | Eval harness: 8–10 synthetic listings each engineered to trip a *specific* flag, **plus the New York sparse-comps case run against real data** (see §2); batch runner → results table | **6.1** + report |
 | **U9** | Summarizer polish + Streamlit demo app | report + video |
 | **U10** | End-to-end runs across all three metros; capture traces, screenshots, diagrams | report + video |
 | **Week 7 — Deliverables** | | |
@@ -690,6 +859,12 @@ results section of the final report, the guardrails evidence for the safety chec
 and the clearest available demonstration that Transparent Degradation works end to end.
 It is protected from the cut list for that reason.
 
+U8 also carries the **New York sparse-comps case** (§2), which is the one degradation
+scenario grounded in real market data rather than a constructed listing. Synthetic
+cases prove the mechanism fires; the New York case proves it fires when reality — not
+the author — supplies the gap. Both forms of evidence are worth having, and the
+distinction between them is worth drawing explicitly in the report.
+
 ### Cut list, in order
 
 If the schedule slips, shed scope in this order rather than improvising:
@@ -729,11 +904,11 @@ needed. Target: all closed during Week 4.
 | 1 | Orchestration framework | ✅ LangGraph, day one |
 | 2 | Inference metro trio | ✅ Chicago, LA, Cleveland |
 | 3 | Demo surface | ✅ Streamlit, local, scheduled U9 |
-| 4 | Training metro shortlist (~5–8, superset of the trio) | ⬜ ranked density list now available from `verify_metro_selection.py`; selection pending |
-| 5 | X / Y / Z loop parameters (radius, comp threshold, iteration cap) | ⬜ pick provisional values in U1, tune in U4 |
-| 6 | Confidence threshold for human-review escalation | ⬜ U1 provisional, tune in U7 |
-| 7 | Redfin minimum-price floor (§2 suggests $10–20k) | ⬜ set after inspecting the three metros' distributions |
-| 8 | OpenRouter model per role (dev / extraction / critic / summarizer) | ⬜ U1 |
+| 4 | Training metro shortlist (~5–8, superset of the trio) | ⬜ `county_crosswalk.py` now covers 29 cities (every ≥500-listing pair); final selection pending |
+| 5 | X / Y / Z loop parameters | ✅ X=2.0 mi, Y=8, Z=4 — tuned in U4 against measured density curves; rationale in `config.py` |
+| 6 | Confidence threshold for human-review escalation | ⬜ provisional 0.60 set; tune in U7 |
+| 7 | Redfin minimum-price floor | ✅ $10,000, with evidence (§2) — note it is inert for all three inference metros |
+| 8 | OpenRouter model per role (dev / extraction / critic / summarizer) | ⬜ placeholders in `config.py`; confirm against OpenRouter's live free-tier list before U3 |
 
 Each weekly checkpoint publishes explicit completion criteria. Where those exist, the
 corresponding unit is specified to produce each required element as a build artifact
@@ -741,33 +916,23 @@ rather than as a write-up authored afterward — see the U4 acceptance criteria 
 the pattern. Apply the same treatment to 4.1, 5.1, and 6.1 as their criteria are
 published.
 
-### U1 — specification
+### Open items
 
-1. `requirements.txt`: add `langgraph`, `langsmith`, `pydantic`, `numpy`,
-   `scikit-learn`, `chromadb`, `sentence-transformers`, `openai` (as the
-   OpenAI-compatible OpenRouter client), `streamlit`. `requests`, `python-dotenv`, and
-   `pandas` are already present.
-2. `state.py` — `Flag`, `DealTerms`, `Comp`, `DealState` per §5, Pydantic with
-   reducers on `flags` and `clarifying_questions`.
-3. `config.py` — X/Y/Z, confidence threshold, `MAX_REWORKS`, model names per role,
-   Redfin price floor, rolling window. Provisional values are fine; the point is that
-   nothing is hardcoded in an agent.
-4. `nodes.py` — node-name constants.
-5. `tools/llm_client.py` — thin OpenRouter wrapper, model selection per call, plus a
-   `call_with_schema()` helper that validates against a Pydantic model and retries
-   with the `ValidationError` text on failure. This helper is the backbone of U3.
-6. `tools/county_crosswalk.py` — `(cityname, state) → county_fips` for the metro
-   shortlist. Hand-verified against `fmr/listCounties/{state}`.
-7. Finalize decision #4 (training shortlist) from the ranked output of
-   `scripts/verify_metro_selection.py`, constrained to metros whose counties are
-   FMR-mappable via the crosswalk in item 6.
-8. Batch FMR pull for Cook / Los Angeles / Cuyahoga × {2019, latest}; **confirm
-   whether LA and Cuyahoga return SAFMR or flat shapes** rather than assuming.
-9. LangSmith account + `LANGSMITH_TRACING` / `LANGSMITH_API_KEY` env vars.
+U1 and U4 are complete. What remains before U2 can proceed:
 
-Already built and verified against real data, requiring no rework: `tools/hud_fmr.py`
-and `scripts/pull_fmr_sample.py` (§9), and `scripts/verify_metro_selection.py`, which
-reproduces the §2 metro evidence.
+1. **LangSmith account** — create it and set `LANGSMITH_TRACING=true` and
+   `LANGSMITH_API_KEY`. Required before U2 so traces exist from the first graph run.
+2. **OpenRouter API key** — at `ignore/openrouter_key` (gitignored) or as
+   `OPENROUTER_API_KEY`. Not needed for U4, which is deterministic; required for U3.
+3. **Decision #8** — confirm model IDs against OpenRouter's live free-tier list.
+4. **Decision #4** — finalize the training shortlist from the 29 crosswalk entries.
+   Blocks U5, not U2.
+
+Built and verified against real data, requiring no rework: `tools/hud_fmr.py`,
+`scripts/pull_fmr_sample.py` (§9), `scripts/verify_metro_selection.py`,
+`tools/kaggle_data.py`, `tools/county_crosswalk.py`, `tools/redfin_data.py`,
+`tools/vector_store.py`, `agents/comps_retrieval.py`, `scripts/build_comps_index.py`,
+and `scripts/retrieval_evidence.py`.
 
 ### Prerequisite reading (before U2 review)
 
@@ -866,14 +1031,14 @@ passed), confirming the SAFMR branch is genuinely exercised, not just written
 defensively. Cache verified too: an immediate repeat call returned in 0.000s (cache
 hit, no second HTTP request).
 
-> **Note (Aug 8, 2026, later the same day):** the inference trio subsequently changed
-> to **Chicago, Los Angeles, Cleveland** (see §2 — the NY/Philadelphia hypothesis
-> failed a data-density check). This table is retained as-is because it remains valid
-> evidence that the client works and that both response shapes are handled — Cook
-> County is in the final trio, and the New York/Philadelphia rows still prove the flat
-> and SAFMR branches respectively. **U1 re-runs this smoke test for Los Angeles County,
-> CA and Cuyahoga County, OH** to confirm their shapes; they are currently unverified
-> assumptions (LA likely SAFMR, Cuyahoga likely flat).
+> **Superseded in part (Aug 8, 2026, later the same day).** Two things changed. The
+> inference trio became **Chicago, Los Angeles, Cleveland** (§2 — the NY/Philadelphia
+> hypothesis failed a data-density check). More importantly, the framing above — "is
+> this county SAFMR?" — is itself wrong: **SAFMR is a property of a county-year**, and
+> the same county returns different shapes for 2019 and 2026. See §2 for the measured
+> table. This section's data remains valid evidence that the client authenticates and
+> handles both response shapes; it should not be read as establishing a fixed SAFMR
+> status for any county. U1 confirmed the trio's entityids and both shapes.
 
 **Scope:** deliberately narrow — just the client and a real smoke-test pull, so a
 working HUD data pull exists as soon as possible. Explicitly **not** included here:
