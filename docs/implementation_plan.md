@@ -1,7 +1,7 @@
 # Multi-Family Residential Deal Evaluator — Implementation Plan
 
 **Technical plan of record.**
-Author: Jelani Gould-Bailey · Last updated: Aug 9, 2026
+Author: Jelani Gould-Bailey · Last updated: Aug 10, 2026
 
 ## How this project is built
 
@@ -597,23 +597,27 @@ carnegie_mellon_agentic_repo/
 │   ├── raw/
 │   └── processed/
 ├── docs/
+│   ├── implementation_plan.md     # this file — the reasoning record
+│   ├── changelog.md               # ✅ the chronological record: what code landed when (§8)
+│   └── diagrams/                  # ✅ generated from the compiled graph, not drawn
 └── src/                           # project root for all application code
     ├── README.md
     ├── requirements.txt
     ├── .venv/                     # gitignored — dedicated virtualenv
     ├── config.py                  # ✅ X/Y/Z loop parameters, model names, thresholds
     ├── state.py                   # ✅ DealState / Flag / DealTerms / Comp — Pydantic (§5)
-    ├── graph.py                   # StateGraph assembly: nodes, edges, routing, compile()
+    ├── graph.py                   # ✅ StateGraph assembly: nodes, edges, routing, compile()
     ├── nodes.py                   # ✅ node-name string constants (avoids silent typo bugs)
     ├── agents/
     │   ├── __init__.py
-    │   ├── planner.py             # route_* functions — the conditional edges
-    │   ├── extractor.py
+    │   ├── planner.py             # ✅ pre-flight plan + every route_* function
+    │   ├── extractor.py           # ⬜ stub (regex parse); real LLM call is U3
     │   ├── comps_retrieval.py     # ✅ adaptive relaxation loop
-    │   ├── valuation_rent.py
-    │   ├── scenario_forecast.py
-    │   ├── critic.py
-    │   └── summarizer.py
+    │   ├── valuation_rent.py      # ⬜ stub; U5
+    │   ├── scenario_forecast.py   # ⬜ stub; U6
+    │   ├── critic.py              # ◐ confidence + escalation built; consistency checks U7
+    │   ├── summarizer.py          # ✅ real markdown, disclosure-first; polish in U9
+    │   └── human_review.py        # ✅ the interrupt() escalation node
     ├── tools/
     │   ├── __init__.py
     │   ├── llm_client.py          # ✅ OpenRouter wrapper + schema-validated retry loop
@@ -622,7 +626,8 @@ carnegie_mellon_agentic_repo/
     │   ├── rent_model.py          # sklearn regression: train/load/predict (FMR-normalized target)
     │   ├── hud_fmr.py             # ✅ HUD FMR API client (§9)
     │   ├── county_crosswalk.py    # ✅ (cityname, state) → county_fips, 29 entries HUD-verified
-    │   └── redfin_data.py         # ✅ load + query, rolling-3 + growth bands computed here
+    │   ├── redfin_data.py         # ✅ load + query, rolling-3 + growth bands computed here
+    │   └── tracing.py             # ✅ LangSmith project wiring; env-driven, never required
     ├── scripts/
     │   ├── pull_fmr_sample.py     # ✅ real HUD pull smoke test
     │   ├── verify_metro_selection.py # ✅ reproduces the §2 metro evidence
@@ -630,7 +635,7 @@ carnegie_mellon_agentic_repo/
     │   ├── retrieval_evidence.py  # ✅ Checkpoint 3.1 evidence: 3 density cases + config-flag ablation
     │   ├── retrieval_ablation_llm.py # ✅ Checkpoint 3.1: ungrounded LLM vs. grounded retrieval
     │   ├── train_rent_model.py    # one-off: fit + report holdout MAE
-    │   └── export_graph_diagram.py # writes the mermaid architecture diagram for the report
+    │   └── export_graph_diagram.py # ✅ generates the diagram AND asserts decision #9's topology
     ├── notebooks/
     │   └── 01_data_exploration.ipynb
     ├── eval/
@@ -638,10 +643,15 @@ carnegie_mellon_agentic_repo/
     │   ├── expected.yaml          # listing → expected flags / status
     │   └── run_eval.py            # batch runner → results table for the report
     ├── tests/
-    │   └── test_flag_propagation.py  # the one test that must never fail
+    │   ├── conftest.py            # ✅ puts src/ on the import path
+    │   └── test_flag_propagation.py  # ✅ the one test that must never fail — 14 cases
     ├── app.py                     # Streamlit demo UI (local only)
-    └── main.py                    # entrypoint: run full pipeline on one listing
+    └── main.py                    # ✅ entrypoint: run full pipeline on one listing
 ```
+
+`agents/human_review.py` was not in the original tree. It is not a specialist — it makes
+no estimate and reaches no conclusion — but it *is* a node function, and putting it in
+`graph.py` would have mixed a behaviour into a module that is otherwise pure wiring.
 
 ---
 
@@ -768,7 +778,35 @@ Note which fields do and don't get reducers. `flags` and `clarifying_questions`
 accumulate across multiple nodes, so both need `operator.add`. `comps` is written by
 exactly one node (each retrieval iteration *replaces* the working set rather than
 appending to it), so a reducer there would be wrong — it would pile up stale
-candidates from relaxed passes alongside the final set.
+candidates from relaxed passes alongside the final set. All three cases are asserted
+directly in `tests/test_flag_propagation.py`, including the negative one: a future edit
+adding a reducer to `comps` would make the comp list look richer than the retrieval was.
+
+### Fields added in U2
+
+Four, each forced by something the walking skeleton had to express:
+
+- **`plan: list[str]`** and **`planner_invocations: int`** — decision #9 has the Planner
+  write a plan into state rather than a router re-deriving it, and §3 requires routing
+  to be state-encoded. `planner_invocations` makes that decision's own stated invariant
+  (`planner_invocations == 1 + rework_count`) assertable in a test instead of only
+  observable in a trace. No reducer on either: one node writes them, and a rework
+  re-entry *replaces* the plan rather than extending it.
+- **`human_review_note: Optional[str]`** — whatever the reviewer supplied on resume,
+  rendered verbatim in the report.
+- **`stub_nodes: Annotated[list[str], operator.add]`** — which nodes ran as placeholders,
+  so the report can say a section is *unbuilt* rather than merely empty.
+
+**Why `stub_nodes` is not a `Flag`.** This was the closest call in U2, and it went
+against the obvious answer. A `FlagKind.STUB_OUTPUT` would have reused existing
+machinery, and it would have been wrong twice over. First, it would corrupt what U8's
+coverage check means: that check compares raised kinds against `set(FlagKind)` to claim
+every *designed* degradation path is exercised, and a build-status marker is not a
+degradation path. Second, it would fire on every run of this build — and §2 already
+settled the principle when tuning X to 2.0 miles, that a signal which is always on
+conveys nothing. A flag describes what the deal or the data did; a stub describes the
+state of the software. Keeping them in separate channels is what lets the report say
+both things without either diluting the other.
 
 ### Geography fields are grouped by provenance
 
@@ -861,7 +899,7 @@ safe to defer.
 | **Week 4 — Foundation** | | |
 | **U1** ✅ | `state.py` (Pydantic + reducers), `config.py`, `nodes.py`, `llm_client.py` (schema-validated retry), `kaggle_data.py`, `county_crosswalk.py` (29 entries, HUD-verified), `redfin_data.py`; FMR pull for the trio × {2019, latest} | — |
 | **U4** ✅ | Comps/Retrieval: Chroma index (3,880 listings), one document per listing, hybrid metadata-filter + embedding query, top-`Y` results, adaptive relaxation loop, sparse-comps flag; **two ablations** — retrieval-off config flag and ungrounded-LLM comparison; X/Y/Z tuned against measured density | **3.1** |
-| **U2** | **Walking skeleton.** All 7 nodes stubbed, `graph.py` wired on the pre-flight Planner topology (decision #9) incl. the single Critic→Planner cycle and `human_review` interrupt; Summarizer emits real markdown; flag propagation proven end-to-end; mermaid diagram exported; LangSmith tracing on | **5.1** (fully) |
+| **U2** ✅ | **Walking skeleton.** 8 nodes wired in `graph.py` on the pre-flight Planner topology (decision #9) incl. the single Critic→Planner back edge and the `human_review` interrupt; Planner and Summarizer built for real; flag propagation proven end-to-end by a 14-case suite; diagram generated from the compiled graph *and* asserting the topology; LangSmith wiring env-driven | **5.1** (fully) |
 | **Week 5 — Input** | | |
 | **U3** | Extractor: real LLM call, Pydantic validate→retry loop, clarifying questions, assumption flags, bounded escalation; 3 synthetic listings | 2.1 evidence |
 | **Week 6 — Estimation & Forecast** | | |
@@ -965,6 +1003,112 @@ of both runs supply the same evidence in a second form.
 >    rent-anchoring design being load-bearing:** once U5 anchors comp-derived rents to
 >    current-dollar FMR, this comparison becomes meaningful and should be revisited.
 
+### U2 — what the walking skeleton found (Aug 10, 2026)
+
+The graph runs end to end on five paths, all reproducible from `main.py`. The three
+density cases are the same subjects `scripts/retrieval_evidence.py` measures, reused so
+skeleton behaviour is comparable against the U4 retrieval evidence rather than against a
+separate set of inputs:
+
+| `main.py --deal` | Comps | Confidence | Disclosures | Outcome |
+| --- | --- | --- | --- | --- |
+| `los-angeles` | 8 | 1.00 | **0** | reports normally |
+| `chicago` | 8 | 0.85 | 2 (1 info, 1 warn) | reports normally |
+| `staten-island` | 0 | 0.30 | 5 (incl. 1 critical) | pauses at `human_review` |
+| `no-coords` | 0 | 0.60 | 2 (incl. 1 critical) | pauses at `human_review` |
+| `chicago --no-retrieval` | 0 | 0.60 | 2 (incl. 1 critical) | pauses at `human_review` |
+
+The Los Angeles row carries the same weight it does in §2: a clean run raising *no*
+flags, escalating nothing, is what establishes that the other four rows mean something.
+
+**Three findings, each of which changed the build.**
+
+**1. A single critical flag did not escalate. Fixed.** One critical flag costs 0.40
+against the provisional weights, putting confidence at exactly 0.60 — and
+`0.60 < 0.60` is false, so the `no-coords` and `--no-retrieval` runs reported a deal
+with zero comparables as an ordinary result. The report defines critical as *"the
+estimate below should not be relied on without addressing this"*, so the system was
+contradicting its own stated meaning. The Critic now escalates on either ground
+independently: below-threshold confidence, **or** any critical flag. Keeping them
+separate is deliberate rather than a stopgap — it makes the guarantee independent of
+weights that U7 is still going to change. Decision #6 should confirm it, not re-derive
+it. Regression test included, and written to assert the guarantee rather than the
+arithmetic that currently produces it.
+
+This is the boundary-condition class of defect that only surfaces by running the thing.
+It was invisible to the tests as first written, because those exercised the two paths
+that were obviously interesting (clean run, floor-collapse run) and not the one sitting
+exactly on the threshold.
+
+**2. "Exactly one cycle" is not a checkable property. "Exactly one back edge" is.** The
+diagram exporter verifies decision #9's topology rather than only illustrating it, and
+its first version failed against a correct graph — reporting two cycles where the design
+permits one. Both were real simple cycles (`planner → extractor → … → critic → planner`
+and `planner → comps → … → critic → planner`), traversing the same single
+`critic → planner` back edge. Simple-cycle count grows combinatorially with every legal
+skip branch, so it was measuring branch count while claiming to measure loop count. One
+back edge is one place the graph can loop, whatever the number of routes into it; the
+check and the onboarding checklist both now say back edge. The wording in the original
+decision was ambiguous rather than wrong, but an ambiguous invariant cannot be asserted,
+and this one is now asserted on every export.
+
+**3. Nothing in this system derives latitude/longitude** — raised as decision #10 rather
+than resolved at implementation time, per §8. §5 lists the coordinates as DERIVED "by
+lookup" and no lookup exists: the crosswalk resolves county only, and the evidence
+scripts hardcode real coordinates for their synthetic subjects. `vector_store.query_comps`
+hard-requires coordinates, so a subject without them retrieves nothing regardless of how
+good the extraction was. `--deal no-coords` runs the dense Los Angeles deal with them
+withheld, so what the gap costs is demonstrated rather than described.
+
+**Decisions taken during the build**, recorded here because each is the kind that is
+cheap to make deliberately and expensive to unwind:
+
+- **The Planner is built, not stubbed.** §6 listed all seven agents as stubs, but the
+  Planner has no later unit assigned — and needs none. Decision #9 established that it
+  never chooses an ordering, so its whole job is deterministic: which optional steps to
+  skip, rework routing, escalation. There is nothing for an LLM to decide, which is also
+  why U2 could land with decision #8 still open.
+- **The Valuation stub deliberately produces no number.** The obvious placeholder —
+  average the comps and call it an estimate — would violate the §8 invariant that no
+  unanchored Kaggle dollar figure reaches the Summarizer. A comps mean over a 2018–19
+  corpus is a 2018 number in a 2026 report wearing no date, which is precisely what §2's
+  anchoring design exists to prevent. A stub is not a license to breach an invariant the
+  rest of the system is built around. The visible consequence — the report saying the
+  valuation is unbuilt — is a true statement, where a placeholder number would have been
+  a false one.
+- **`_consistency_objections()` exists as a real function returning an empty list**,
+  rather than being omitted until U7. It keeps the rework branch present, reachable, and
+  testable at a single substitution point, which is how the cycle is proven bounded now
+  rather than in U7.
+- **The rework counter increments on Planner re-entry, not on Critic rejection.** The two
+  are not equivalent: a rejection that escalates straight to a human is not a rework, and
+  counting it as one would silently shorten the budget.
+- **Confidence excludes the Critic's own derived flags.** A rework pass re-runs the
+  Critic, the reducer appends its previous `low_confidence_estimate` flag, and counting
+  that would let the score drive itself down on each lap of a cycle that exists to
+  improve the deal. Latent today (nothing triggers rework yet) and cheaper to prevent
+  than to diagnose later.
+- **A reviewed deal keeps `status="needs_review"`.** Overwriting it at the Summarizer
+  would erase the difference between "the system was confident" and "a human signed off".
+
+**Two things worth knowing for review.** LangGraph 1.x warns on every custom type it
+deserializes from a checkpoint without an explicit allowlist — *"this will be blocked in
+a future version"* — so the paused-and-resumed path was on a deprecation clock and the
+warnings buried the interrupt payload. `graph.state_serde()` registers the six state
+types that cross that boundary, which is also the safer posture: the default
+deserializes any type a checkpoint file names. Note that the fluent
+`JsonPlusSerializer().with_msgpack_allowlist(...)` silently returns `self` unchanged when
+the base allowlist is the permissive default; the constructor argument is required.
+Separately, the `TODO(U2)` in `hud_fmr.py` is cleared: cache writes are now atomic
+(write-to-temp then rename), and the residual concurrency limitation is documented on the
+class as accepted rather than left as an open item — the loss is one cache miss against a
+60/minute budget.
+
+**Still outstanding for U2's checkpoint evidence:** LangSmith. The wiring is done and
+env-driven (`tools/tracing.py`), and every run prints whether tracing is on, so a run
+believed to be captured and silently not captured is not a failure mode here. Traces
+themselves need the account.
+
 **U8 is the highest-leverage unit in the plan.** A set of synthetic listings each
 engineered to trigger a specific named flag — missing price, 5+ bedroom unit (FMR
 bedroom cap), a county with no FMR entry, a location with no qualifying comps, an
@@ -1020,10 +1164,11 @@ needed. Target: all closed during Week 4.
 | 3 | Demo surface | ✅ Streamlit, local, scheduled U9 |
 | 4 | Training metro shortlist (~5–8, superset of the trio) | ⬜ `county_crosswalk.py` now covers 29 cities (every ≥500-listing pair); final selection pending |
 | 5 | X / Y / Z loop parameters | ✅ X=2.0 mi, Y=8, Z=4 — tuned in U4 against measured density curves; rationale in `config.py` |
-| 6 | Confidence threshold for human-review escalation | ⬜ provisional 0.60 set; tune in U7 |
+| 6 | Confidence threshold for human-review escalation | ⬜ provisional 0.60 set; tune in U7. **U2 added a second, independent escalation ground** — any critical flag escalates regardless of score (see §6, finding 1); confirm rather than re-derive |
 | 7 | Redfin minimum-price floor | ✅ $10,000, with evidence (§2) — note it is inert for all three inference metros |
 | 8 | OpenRouter model per role (dev / extraction / critic / summarizer) | ⬜ **placeholders confirmed dead (Aug 9)** — see below; still deferrable to U3 |
-| 9 | Planner topology — pre-flight vs. supervisor | ✅ **pre-flight + rework re-entry** (Aug 9, 2026) |
+| 9 | Planner topology — pre-flight vs. supervisor | ✅ **pre-flight + rework re-entry** (Aug 9, 2026); built and topology-asserted in U2 |
+| 10 | **Geocoding source** — how `DealTerms.latitude/longitude` get derived | ⬜ **opened Aug 10, 2026 in U2.** Blocks U3 |
 
 **Decision #8 detail (Aug 9, 2026).** The `TODO(U3)` in `config.py` warned that the four
 model IDs were unverified placeholders. Checked against OpenRouter's live catalogue while
@@ -1046,6 +1191,35 @@ as an opaque runtime error mid-U3. Free-tier catalogues churn, so these constant
 not be treated as set-once. U3 should add a startup liveness check that fails loudly at
 launch if a configured model is absent from `/api/v1/models`, rather than discovering it on
 first invocation.
+
+**Decision #10 detail (opened Aug 10, 2026).** §5 lists `latitude`/`longitude` as DERIVED
+"produced by lookup, never read from the listing" — and no lookup produces them. The
+crosswalk resolves county FIPS only; the U4 evidence scripts hardcode real coordinates
+for their synthetic subjects, which is legitimate for a measurement script and is not a
+pipeline. This sat unnoticed because the one agent that needs coordinates was built by a
+script that supplied them.
+
+It matters because `vector_store.query_comps` hard-requires them: without coordinates
+there is no bounding box, no radius filter, and no comps at all, whatever the extraction
+quality. So this gates the entire grounded path for any listing arriving as text, which
+is exactly what U3 produces. Three options, none yet chosen:
+
+1. **A geocoding API call** (Census Geocoder is free and public; Nominatim has usage
+   terms worth reading). Accurate to the parcel, adds a network dependency and a failure
+   mode on the critical path.
+2. **A city-centroid table** extending `county_crosswalk.py`, with a disclosed
+   approximation flag. No new dependency and consistent with how the county gap was
+   resolved in §2 — but a centroid is a poor subject location in a large metro, and the
+   radius search is precisely where that error lands. Los Angeles is the worst case for
+   it.
+3. **Require coordinates on the input**, treating geocoding as out of scope and
+   documenting it. Honest, and it makes the demo depend on hand-supplied data for a field
+   the design calls derived.
+
+Recommendation is (1) with (2) as the fallback path when the call fails, since that
+combination degrades in exactly the way the rest of the system does — flagged, disclosed,
+still producing an answer. Raised rather than resolved per §8, since it is a data-source
+decision and those belong in this log.
 
 **Decision #9 detail.** The pipeline order is fixed by data dependency — Valuation consumes
 `state.comps`, Scenario consumes `rent_estimate`/`value_estimate` — so the sequence
@@ -1089,19 +1263,23 @@ published.
 
 ### Open items
 
-U1 and U4 are complete. What remains before U2 can proceed:
+U1, U4, and U2 are complete. What remains, in the order it is needed:
 
 1. **LangSmith account** — create it and set `LANGSMITH_TRACING=true` and
-   `LANGSMITH_API_KEY`. Required before U2 so traces exist from the first graph run.
-   **This is the only remaining blocker on U2**, decision #9 having been closed and the
-   OpenRouter key having been obtained.
-2. ~~**OpenRouter API key**~~ — ✅ **closed Aug 9, 2026.** Stored at `ignore/openrouter_key`
+   `LANGSMITH_API_KEY`. **No longer a blocker on building**, since U2's wiring is
+   env-driven and the graph runs without it (`tools/tracing.py`, which prints on every
+   run whether tracing is on). It *is* a blocker on the trace evidence Checkpoint 5.1
+   wants, and traces expire after 14 days on the free tier, so it should be set up
+   before U3 rather than before the write-up.
+2. **Decision #8** — model IDs. Placeholders confirmed dead (see the decision #8 detail
+   above); deliberately deferred to U3, which it blocks.
+3. **Decision #10** — geocoding source. Opened in U2 (detail above); blocks U3, since a
+   real extractor producing text-only geography still cannot retrieve comps without it.
+4. **Decision #4** — finalize the training shortlist from the 29 crosswalk entries.
+   Blocks U5.
+5. ~~**OpenRouter API key**~~ — ✅ **closed Aug 9, 2026.** Stored at `ignore/openrouter_key`
    (gitignored); `llm_client._load_token()` reads `OPENROUTER_API_KEY` first and falls back
    to that file. Verified by live calls in `retrieval_ablation_llm.py`.
-3. **Decision #8** — model IDs. Placeholders confirmed dead (see the decision #8 detail
-   above); deliberately deferred to U3, which it blocks.
-4. **Decision #4** — finalize the training shortlist from the 29 crosswalk entries.
-   Blocks U5, not U2.
 
 Built and verified against real data, requiring no rework: `tools/hud_fmr.py`,
 `scripts/pull_fmr_sample.py` (§9), `scripts/verify_metro_selection.py`,
@@ -1109,7 +1287,10 @@ Built and verified against real data, requiring no rework: `tools/hud_fmr.py`,
 `tools/vector_store.py`, `agents/comps_retrieval.py`, `scripts/build_comps_index.py`,
 `scripts/retrieval_evidence.py`, and `scripts/retrieval_ablation_llm.py` (the last also
 being the first live exercise of `tools/llm_client.py` — `call_with_schema`'s retry loop
-fired for real, one model needing two attempts to produce schema-valid output).
+fired for real, one model needing two attempts to produce schema-valid output). Added and
+verified in U2: `graph.py`, `main.py`, `agents/planner.py`, `agents/summarizer.py`,
+`agents/human_review.py`, `tools/tracing.py`, `scripts/export_graph_diagram.py`, and
+`tests/test_flag_propagation.py` (14 cases, all passing).
 
 ### Prerequisite reading (before U2 review)
 
@@ -1152,6 +1333,31 @@ in a focused session or across a fragmented week.
   gets raised for a decision rather than resolved by assumption. Such decisions are
   inexpensive to make deliberately and expensive to unwind once code depends on them.
 
+- **Every unit closes by appending to `docs/progress_tracker.md`** (added Aug 10, 2026).
+  A `##` heading per date, and beneath it a table of `unit | work done | related
+  checkpoint` — one update per row, each naming the checkpoint that row's work feeds.
+
+  This exists because of §6's central sequencing decision. Ordering the build by
+  dependency and technical risk instead of by the syllabus calendar is the right call and
+  is defended at length there, but it has a cost that decision did not account for: once
+  unit order is decoupled from checkpoint order, nothing maps delivered work back to the
+  requirement it satisfies. U4 shipped before U2; work feeding Checkpoint 6.1 exists
+  before 4.1 and 5.1 are due. Reconstructing that mapping from git history at report time
+  is exactly the sort of late, avoidable work the Week 7 freeze exists to prevent.
+
+  **The tracker is a separate file rather than another section here, and the split is by
+  kind rather than by length.** This document is the *reasoning* record — why a decision
+  was made, what was tested, what turned out to be wrong. The tracker is the
+  *chronological* record — what landed, when, and which checkpoint it serves. Two
+  different questions, asked by readers in two different situations. Merging them would
+  also mean this document grows a log section on every unit, and it is already long
+  enough that new material competes with existing material for attention.
+
+  Written as part of finishing the unit, alongside the updates to this document — not as
+  a later reconciliation pass, which is the form of this task that reliably does not
+  happen. Reasoning is not duplicated into the tracker; a row that needs justification
+  cites the section here instead.
+
 - **An evidence artifact must state what its check could have returned had the system
   been behaving well** (added Aug 9, 2026). A verification whose negative result was
   structurally guaranteed proves nothing, however convincing the output looks — and a
@@ -1172,9 +1378,12 @@ in a focused session or across a fragmented week.
   | Tag | Location | Item |
   |---|---|---|
   | `TODO(U3)` | `config.py` | Model IDs **confirmed dead**, not merely unverified (decision #8); add a startup liveness check |
+  | `TODO(U3)` | `extractor.py` | Nothing derives latitude/longitude, and comp retrieval hard-requires them (decision #10) |
   | `TODO(U5)` | `state.py`, `build_comps_index.py` | Index the `time` column so `Comp.listed_date` allows per-row FMR normalization |
   | `TODO(U5)` | `county_crosswalk.py` | Nothing yet raises `COUNTY_FROM_PRINCIPAL_COUNTY` for multi-county cities |
-  | `TODO(U2)` | `hud_fmr.py` | `_DiskCache` is not concurrency-safe; whole-file rewrite on every `set()` |
+  | `TODO(U7)` | `critic.py` | Cross-agent consistency checks — `_consistency_objections()` returns empty until then |
+  | `TODO(U7)` | `critic.py` | Confirm the critical-flag escalation rule when the severity weights are tuned (§6, finding 1) |
+  | ~~`TODO(U2)`~~ | `hud_fmr.py` | ✅ **cleared Aug 10, 2026** — writes are atomic; the residual concurrency limit is documented on `_DiskCache` as accepted |
   | `TODO(security)` | `hud_fmr.py`, `llm_client.py` | Whether to drop on-disk credential fallbacks in favour of env-var-only |
   | `TODO(geography)` | `county_crosswalk.py` | New England town-based FMR verified for Boston only, not the other five states |
 
@@ -1190,6 +1399,21 @@ claims:
    downstream node and appears in the rendered report. Transparent Degradation is the
    central design principle of this system; a silent flag loss would invalidate every
    output the system produces while leaving it looking correct. This test never gets cut.
+
+   **Built in U2: 14 cases**, structured around the ways the guarantee can break rather
+   than around the modules implementing it — first-node flag reaching the last node,
+   flags from two agents coexisting, the reducer annotations still being present
+   (including the negative case: `comps` must *not* have one), every flag rendered in
+   full rather than counted, the rework cycle terminating and disclosing that it did,
+   and the interrupt pausing and resuming with the reviewer's note in the report.
+
+   Two constraints on the suite are deliberate. It **avoids the Chroma corpus** on every
+   case but one: a must-never-fail test should fail only when the thing it tests is
+   broken, and a dependency on a built index and a downloadable embedding model would
+   let it fail for unrelated reasons. A test that cries wolf stops being consulted. The
+   exception is a grounded Los Angeles run that skips cleanly when the index is absent —
+   and its role is the same one §2 gives the LA row in the retrieval evidence: a suite
+   where every case is degraded cannot show that the degradation signals mean anything.
 2. **The `eval/` harness (U8)** — synthetic listings engineered to trigger each named
    flag, run as a batch with results tabulated. This functions as the system's
    behavioral test suite and as its evaluation evidence.

@@ -202,6 +202,18 @@ class DealState(BaseModel):
     # inputs
     raw_listing_text: str
 
+    # planning (written by the Planner; see decision #9 in §7)
+    # The Planner runs pre-flight rather than as a supervisor, so its decision about
+    # which optional steps run is recorded here rather than recomputed inside a router.
+    # §3 requires routing to be state-encoded: a conditional edge reads this list, it
+    # does not re-derive it. No reducer — exactly one node writes it, and a rework
+    # re-entry *replaces* the plan rather than extending it.
+    plan: list[str] = Field(default_factory=list)
+
+    # Makes decision #9's stated invariant — "the Planner runs at most 1 + rework_count
+    # times per deal" — assertable from state rather than only observable in a trace.
+    planner_invocations: int = 0
+
     # extraction
     deal_terms: DealTerms = Field(default_factory=DealTerms)
     clarifying_questions: Annotated[list[str], operator.add] = Field(default_factory=list)
@@ -232,8 +244,33 @@ class DealState(BaseModel):
     critic_rejected: bool = False
     rework_count: int = 0
 
+    # Whatever the reviewer supplied when resuming from the human_review interrupt.
+    # Rendered verbatim in the report: a deal that required human judgement should say
+    # so in the record, alongside the judgement itself.
+    human_review_note: Optional[str] = None
+
     # output
     report_markdown: Optional[str] = None
+
+    # build provenance (walking skeleton, U2)
+    #
+    # Names of nodes that ran as stubs during this run, so the report can disclose that
+    # a section is unbuilt rather than merely empty. Deliberately *not* a Flag, for two
+    # reasons that both matter:
+    #
+    #   1. A flag describes a degradation of the system as designed — something the
+    #      deal or the data did. A stub describes the state of the build. Routing the
+    #      second through FlagKind would corrupt what U8's coverage check means, since
+    #      it compares raised kinds against `set(FlagKind)` to claim every *designed*
+    #      degradation path is exercised.
+    #   2. A stub flag would fire on every run of this build, and §2 already establishes
+    #      the principle: a signal that is always on conveys nothing. That argument
+    #      drove the X=2.0 tuning; it applies here unchanged.
+    #
+    # Carries a reducer because several nodes contribute. A node re-run by the rework
+    # cycle appends its name again; the Summarizer de-duplicates at render time rather
+    # than the reducer suppressing it, so the raw run history stays inspectable.
+    stub_nodes: Annotated[list[str], operator.add] = Field(default_factory=list)
 
     # cross-cutting
     flags: Annotated[list[Flag], operator.add] = Field(default_factory=list)

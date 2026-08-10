@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,11 +29,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 # because it would break a working auth path.
 _TOKEN_FILE = _REPO_ROOT / "ignore" / "fmr_key"
 
-# TODO(U2): _DiskCache is not concurrency-safe — set() rewrites the entire JSON file,
-# so two processes sharing this cache can clobber each other's writes. It went unnoticed
-# until two agents hit the HUD API in parallel during U1 (worked around there by passing
-# a separate cache_path). Fix with atomic write-and-rename plus a lock file, or accept
-# the limitation and document that concurrent callers must pass distinct cache paths.
+# Resolved in U2: writes are now atomic (write-to-temp then rename), and the residual
+# concurrency limitation is documented on _DiskCache rather than left as a TODO.
+# Concurrent callers must still pass distinct cache_path values.
 _CACHE_FILE = _REPO_ROOT / "data" / "raw" / "hud_fmr_cache.json"
 
 # HUD's cap is 60 requests/minute; 1 call/second stays comfortably under it.
@@ -80,6 +79,24 @@ def _load_token() -> str:
 
 
 class _DiskCache:
+    """Whole-file JSON cache with atomic writes.
+
+    Resolved in U2 (the TODO above): `set()` still serializes the entire dictionary,
+    but it now writes to a temporary file in the same directory and `os.replace`s it
+    over the target. On POSIX that rename is atomic, so a reader — or a crash — can no
+    longer catch the cache half-written, which was the failure that could destroy an
+    hour of accumulated HUD pulls rather than merely lose the newest entry.
+
+    **The concurrency limitation is accepted and documented, not fixed.** Two processes
+    interleaving `set()` calls still lose one another's writes: each holds the whole
+    dictionary in memory from load time and its rename replaces the other's file
+    wholesale. A lock file would close that, and it is not worth the complexity here —
+    the loss is a cache miss, which costs one HTTP call against a 60/minute budget, and
+    the only observed case (two agents pulling in parallel during U1) is already handled
+    by passing distinct `cache_path` values. Callers running concurrently should keep
+    doing that.
+    """
+
     def __init__(self, path: Path):
         self._path = path
         self._data: dict = {}
@@ -92,7 +109,16 @@ class _DiskCache:
     def set(self, key: str, value) -> None:
         self._data[key] = value
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(json.dumps(self._data, indent=2))
+        # Same directory as the target, so the replace below is a rename within one
+        # filesystem rather than a copy across two.
+        fd, tmp_name = tempfile.mkstemp(dir=self._path.parent, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w") as handle:
+                json.dump(self._data, handle, indent=2)
+            os.replace(tmp_name, self._path)
+        except BaseException:
+            Path(tmp_name).unlink(missing_ok=True)
+            raise
 
 
 class HudFmrClient:

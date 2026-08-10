@@ -23,3 +23,7 @@ scikit-learn>=1.5
 
 # Demo UI (local only)
 streamlit>=1.37
+
+# Testing. Scoped deliberately (§8): the flag-propagation suite and the U8 eval
+# harness, not broad unit coverage.
+pytest>=8.0
