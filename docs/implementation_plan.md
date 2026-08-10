@@ -1333,30 +1333,44 @@ in a focused session or across a fragmented week.
   gets raised for a decision rather than resolved by assumption. Such decisions are
   inexpensive to make deliberately and expensive to unwind once code depends on them.
 
-- **Every unit closes by appending to `docs/progress_tracker.md`** (added Aug 10, 2026).
-  A `##` heading per date, and beneath it a table of `unit | work done | related
-  checkpoint` — one update per row, each naming the checkpoint that row's work feeds.
+- **Every unit closes by appending to `docs/changelog.md`** (added Aug 10, 2026). A `##`
+  heading per date the work was done, and beneath it a table of
+  `date added | unit | work done | related checkpoint`.
 
   This exists because of §6's central sequencing decision. Ordering the build by
   dependency and technical risk instead of by the syllabus calendar is the right call and
   is defended at length there, but it has a cost that decision did not account for: once
-  unit order is decoupled from checkpoint order, nothing maps delivered work back to the
-  requirement it satisfies. U4 shipped before U2; work feeding Checkpoint 6.1 exists
+  unit order is decoupled from checkpoint order, nothing maps shipped code back to the
+  requirement it satisfies. U4 shipped before U2; code feeding Checkpoint 6.1 exists
   before 4.1 and 5.1 are due. Reconstructing that mapping from git history at report time
   is exactly the sort of late, avoidable work the Week 7 freeze exists to prevent.
 
-  **The tracker is a separate file rather than another section here, and the split is by
-  kind rather than by length.** This document is the *reasoning* record — why a decision
-  was made, what was tested, what turned out to be wrong. The tracker is the
-  *chronological* record — what landed, when, and which checkpoint it serves. Two
+  Three rules keep the file useful as it grows:
+
+  1. **Code changes, not decisions.** Decisions belong in the §7 log and in the per-unit
+     sections above. A decision that has not produced code is not a changelog entry.
+     Logging both would duplicate the decisions log while diluting the one question this
+     file answers — what was built, and for which checkpoint.
+  2. **One conceptual change per row, however many files it touched.** A change spanning
+     an agent, a state field, and a config entry is one row naming all three. A row per
+     file would turn the file into a worse-formatted `git log`.
+  3. **`maintenance` is a valid checkpoint value.** Hygiene and defect repair are real
+     work; forcing a checkpoint onto them would make the column less trustworthy
+     everywhere else.
+
+  **The changelog is a separate file rather than another section here, and the split is
+  by kind rather than by length.** This document is the *reasoning* record — why a
+  decision was made, what was tested, what turned out to be wrong. The changelog is the
+  *chronological* record — what code landed, when, and which checkpoint it serves. Two
   different questions, asked by readers in two different situations. Merging them would
   also mean this document grows a log section on every unit, and it is already long
   enough that new material competes with existing material for attention.
 
   Written as part of finishing the unit, alongside the updates to this document — not as
   a later reconciliation pass, which is the form of this task that reliably does not
-  happen. Reasoning is not duplicated into the tracker; a row that needs justification
-  cites the section here instead.
+  happen. When something is backfilled anyway, the `date added` column records when the
+  row was written, so a retroactive entry is visibly retroactive rather than quietly
+  folded into the original day's record.
 
 - **An evidence artifact must state what its check could have returned had the system
   been behaving well** (added Aug 9, 2026). A verification whose negative result was
