@@ -42,6 +42,12 @@ from state import Comp, DealTerms
 # search radius in miles into a latitude/longitude bounding box.
 _EARTH_RADIUS_MILES = 3958.8
 
+# Chroma's `where` clause only does flat range comparisons — no native radius query —
+# so a radius search is simulated in two passes: `_bounding_box` uses approximate trig
+# to turn the radius into a 2D lat/lon rectangle Chroma can filter on, then
+# `haversine_miles` uses exact spherical trig to trim that rectangle down to the true
+# circle on the Earth's curved (3D) surface.
+
 
 def haversine_miles(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Great-circle distance. Chroma cannot express a radius query, so the bounding box
@@ -137,7 +143,7 @@ def query_comps(
         conditions.append({"square_feet": {"$gte": lo}})
         conditions.append({"square_feet": {"$lte": hi}})
 
-    where = {"$and": conditions}
+    where_clause = {"$and": conditions}
 
     # Over-fetch: the bounding box admits corner points outside the true radius, which
     # the haversine filter below removes. Without headroom, that filter could empty an
@@ -146,7 +152,7 @@ def query_comps(
     raw = collection.query(
         query_texts=[query_text],
         n_results=min(n_results * 5, 200),
-        where=where,
+        where=where_clause,
     )
 
     ids = raw["ids"][0]

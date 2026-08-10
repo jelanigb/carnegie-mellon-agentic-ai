@@ -1,7 +1,7 @@
 # Multi-Family Residential Deal Evaluator — Implementation Plan
 
 **Technical plan of record.**
-Author: Jelani Gould-Bailey · Last updated: Aug 8, 2026
+Author: Jelani Gould-Bailey · Last updated: Aug 9, 2026
 
 ## How this project is built
 
@@ -860,7 +860,7 @@ safe to defer.
 | **Week 4 — Foundation** | | |
 | **U1** ✅ | `state.py` (Pydantic + reducers), `config.py`, `nodes.py`, `llm_client.py` (schema-validated retry), `kaggle_data.py`, `county_crosswalk.py` (29 entries, HUD-verified), `redfin_data.py`; FMR pull for the trio × {2019, latest} | — |
 | **U4** ✅ | Comps/Retrieval: Chroma index (3,880 listings), one document per listing, hybrid metadata-filter + embedding query, top-`Y` results, adaptive relaxation loop, sparse-comps flag, retrieval-off ablation behind a config flag; X/Y/Z tuned against measured density | **3.1** |
-| **U2** | **Walking skeleton.** All 7 nodes stubbed, `graph.py` wired incl. Critic→Planner cycle and `human_review` interrupt; Summarizer emits real markdown; flag propagation proven end-to-end; mermaid diagram exported; LangSmith tracing on | **5.1** (fully) |
+| **U2** | **Walking skeleton.** All 7 nodes stubbed, `graph.py` wired on the pre-flight Planner topology (decision #9) incl. the single Critic→Planner cycle and `human_review` interrupt; Summarizer emits real markdown; flag propagation proven end-to-end; mermaid diagram exported; LangSmith tracing on | **5.1** (fully) |
 | **Week 5 — Input** | | |
 | **U3** | Extractor: real LLM call, Pydantic validate→retry loop, clarifying questions, assumption flags, bounded escalation; 3 synthetic listings | 2.1 evidence |
 | **Week 6 — Estimation & Forecast** | | |
@@ -973,6 +973,41 @@ needed. Target: all closed during Week 4.
 | 6 | Confidence threshold for human-review escalation | ⬜ provisional 0.60 set; tune in U7 |
 | 7 | Redfin minimum-price floor | ✅ $10,000, with evidence (§2) — note it is inert for all three inference metros |
 | 8 | OpenRouter model per role (dev / extraction / critic / summarizer) | ⬜ placeholders in `config.py`; confirm against OpenRouter's live free-tier list before U3 |
+| 9 | Planner topology — pre-flight vs. supervisor | ✅ **pre-flight + rework re-entry** (Aug 9, 2026) |
+
+**Decision #9 detail.** The pipeline order is fixed by data dependency — Valuation consumes
+`state.comps`, Scenario consumes `rent_estimate`/`value_estimate` — so the sequence
+Extractor → Comps → Valuation → Scenario → Critic is not something the Planner chooses. The
+open question was only where the Planner *sits*, and two topologies were considered:
+
+- **A — pre-flight + rework re-entry. Selected.** `START → Planner`; the Planner writes a plan
+  into state (which optional steps run); a mostly static chain follows, with conditional edges
+  only where skipping is legal; `Critic → Planner` is the sole cycle in the graph.
+- **B — supervisor hub-and-spoke.** Every specialist returns to the Planner, which re-decides
+  each hop. Rejected.
+
+B was rejected because it pays six extra Planner invocations per run — LLM calls, latency, and
+non-determinism — to re-derive an ordering that was never in question, and because it puts
+several cycles in the graph, which makes the Checkpoint 5.1 coordination description harder
+rather than easier. Nothing is given up: the Planner's real degrees of freedom under A are
+which optional steps to skip, retry/rework routing, and escalation, all expressed as
+conditional edges. This is what §3 rationale item 4 already asserted — *"conditional edges are
+the Planner"* — so A ratifies the stated design rather than changing it.
+
+**Consequences for U2**, which builds `graph.py` against this:
+
+- Exactly one cycle exists (`Critic → Planner`), bounded by `rework_count`. Any second cycle
+  appearing in the generated diagram is a defect, and that makes the diagram a review
+  instrument rather than only an illustration.
+- The Planner node runs at most `1 + rework_count` times per deal, which is the figure the
+  Checkpoint 5.1 coordination section should quote.
+- Specialists have static outgoing edges except where skipping is legal, so `route_*`
+  functions stay few and small — consistent with §3's "no agent calls another agent directly."
+
+Recorded because the hand-drawn diagram in `lang_graph_onboarding.md` §4 showed B's shape (and
+showed it incoherently — see the correction note there), which is how an unclosed decision
+surfaced as a documentation defect rather than as a question. Per §8, decisions of this kind
+get raised rather than resolved by assumption at implementation time; this one was.
 
 Each weekly checkpoint publishes explicit completion criteria. Where those exist, the
 corresponding unit is specified to produce each required element as a build artifact
@@ -986,6 +1021,7 @@ U1 and U4 are complete. What remains before U2 can proceed:
 
 1. **LangSmith account** — create it and set `LANGSMITH_TRACING=true` and
    `LANGSMITH_API_KEY`. Required before U2 so traces exist from the first graph run.
+   **This is now the only remaining blocker on U2**, decision #9 having been closed.
 2. **OpenRouter API key** — supplied via the `OPENROUTER_API_KEY` environment variable.
    Not needed for U4, which is deterministic; required for U3.
 3. **Decision #8** — confirm model IDs against OpenRouter's live free-tier list.
