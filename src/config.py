@@ -134,11 +134,24 @@ KAGGLE_MAX_RENT = 10_000.0
 # Models (OpenRouter)
 # --------------------------------------------------------------------------
 #
-# TODO(U3): DECISION #8 IN §7 IS STILL OPEN. These four model IDs are unverified
-# placeholders — OpenRouter's free-tier catalogue changes often, so confirm each against
-# https://openrouter.ai/models before the first real agent run. The program advises
-# free-tier access, so any replacement should carry the `:free` suffix. Note the four
-# are currently identical; the split below is structural, not yet a real selection.
+# TODO(U3): DECISION #8 IN §7 IS STILL OPEN, and these four IDs are now known-bad rather
+# than merely unverified. Checked against the live catalogue Aug 9, 2026:
+# `meta-llama/llama-3.3-70b-instruct:free` NO LONGER EXISTS — the model is listed but is
+# paid-only, and there is no free Llama variant at all. Any run reaching an LLM call with
+# these values set will fail.
+#
+# Left in place deliberately rather than repointed: §8 requires decisions of this kind to
+# be raised, not resolved at implementation time, and nothing before U3 makes an LLM call.
+# Verified live and responding on Aug 9 if a replacement is wanted:
+# `openai/gpt-oss-20b:free`, `nvidia/nemotron-3-super-120b-a12b:free`
+# (`google/gemma-4-31b-it:free` returned a provider 429).
+#
+# The durable lesson is staleness, not selection — these were valid when written and
+# invalid six days later. U3 should add a startup liveness check against
+# https://openrouter.ai/api/v1/models that fails loudly at launch rather than mid-run.
+# The program advises free-tier access, so any replacement should carry the `:free`
+# suffix. Note the four are currently identical; the split below is structural, not yet a
+# real selection.
 #
 # The split is deliberate: a cheap model for high-volume dev iteration, and stronger
 # models reserved for the three roles where output quality most affects the result.

@@ -627,7 +627,8 @@ carnegie_mellon_agentic_repo/
     │   ├── pull_fmr_sample.py     # ✅ real HUD pull smoke test
     │   ├── verify_metro_selection.py # ✅ reproduces the §2 metro evidence
     │   ├── build_comps_index.py   # ✅ one-off: embed + load Chroma (3,880 listings)
-    │   ├── retrieval_evidence.py  # ✅ Checkpoint 3.1 evidence: ablation + degradation cases
+    │   ├── retrieval_evidence.py  # ✅ Checkpoint 3.1 evidence: 3 density cases + config-flag ablation
+    │   ├── retrieval_ablation_llm.py # ✅ Checkpoint 3.1: ungrounded LLM vs. grounded retrieval
     │   ├── train_rent_model.py    # one-off: fit + report holdout MAE
     │   └── export_graph_diagram.py # writes the mermaid architecture diagram for the report
     ├── notebooks/
@@ -859,7 +860,7 @@ safe to defer.
 | --- | --- | --- |
 | **Week 4 — Foundation** | | |
 | **U1** ✅ | `state.py` (Pydantic + reducers), `config.py`, `nodes.py`, `llm_client.py` (schema-validated retry), `kaggle_data.py`, `county_crosswalk.py` (29 entries, HUD-verified), `redfin_data.py`; FMR pull for the trio × {2019, latest} | — |
-| **U4** ✅ | Comps/Retrieval: Chroma index (3,880 listings), one document per listing, hybrid metadata-filter + embedding query, top-`Y` results, adaptive relaxation loop, sparse-comps flag, retrieval-off ablation behind a config flag; X/Y/Z tuned against measured density | **3.1** |
+| **U4** ✅ | Comps/Retrieval: Chroma index (3,880 listings), one document per listing, hybrid metadata-filter + embedding query, top-`Y` results, adaptive relaxation loop, sparse-comps flag; **two ablations** — retrieval-off config flag and ungrounded-LLM comparison; X/Y/Z tuned against measured density | **3.1** |
 | **U2** | **Walking skeleton.** All 7 nodes stubbed, `graph.py` wired on the pre-flight Planner topology (decision #9) incl. the single Critic→Planner cycle and `human_review` interrupt; Summarizer emits real markdown; flag propagation proven end-to-end; mermaid diagram exported; LangSmith tracing on | **5.1** (fully) |
 | **Week 5 — Input** | | |
 | **U3** | Extractor: real LLM call, Pydantic validate→retry loop, clarifying questions, assumption flags, bounded escalation; 3 synthetic listings | 2.1 evidence |
@@ -902,18 +903,67 @@ to be written up after the fact:
 | --- | --- |
 | Architectural decision on whether retrieval is required, with justification | §2 of Checkpoint 2.1 already argues this: the failure mode being defended against is fabricated comps presented at full confidence. Restated with the built system as evidence. |
 | Evidence a semantic retrieval mechanism is integrated against an external source | Chroma index over the Kaggle corpus; index build script + row counts per metro |
-| Demonstration that retrieval meaningfully influences output | **Ablation run — see below** |
+| Demonstration that retrieval meaningfully influences output | **Two ablations — see below.** `retrieval_ablation_llm.py` (ungrounded LLM vs. grounded, primary) and the `RETRIEVAL_ENABLED` config flag in `retrieval_evidence.py` (secondary) |
 | Key design decisions: source selection, segmentation/chunking, number of results | The paragraph above: one-document-per-listing, hybrid metadata + embedding, top-`Y` |
 | One retrieval failure mode + how the design manages it | Sparse comps in thin sub-markets → adaptive relaxation loop, bounded by `Z` iterations, with `relaxed_search_radius` and sparse-comps flags disclosed in the report |
 
 **The ablation falls out of the walking skeleton for free.** U2 leaves a stubbed
 retrieval node in place; U4 replaces it. Running the same listing through both versions
-produces a direct before/after comparison — ungrounded estimate versus comp-grounded
-estimate, on identical inputs — which is exactly the "output comparison" the criteria
-ask for. Keep the stub reachable behind a config flag rather than deleting it in U4;
-it costs nothing and it is the cleanest available evidence that retrieval changes
-system behavior. LangSmith traces of both runs supply the same evidence in a second
-form.
+produces a direct before/after comparison on identical inputs, which is the "output
+comparison" the criteria ask for. Keep the stub reachable behind a config flag
+(`RETRIEVAL_ENABLED`) rather than deleting it in U4; it costs nothing. LangSmith traces
+of both runs supply the same evidence in a second form.
+
+> **Revised Aug 9, 2026 — the config-flag ablation is necessary but not sufficient, and
+> a second one was built.** The paragraph above called it "the cleanest available
+> evidence that retrieval changes system behavior." That claim was too strong, and the
+> gap is worth recording because it is the same class of error this system exists to
+> prevent.
+>
+> Setting `RETRIEVAL_ENABLED=False` makes the retrieval node return zero comps and raise
+> a CRITICAL flag, so the pipeline degrades to *no estimate available*. That is an
+> **absence**, not the failure Checkpoint 2.1 actually named — "fabricated grounding
+> presented at full confidence." It cannot produce a fabrication, because there is no LLM
+> anywhere in the retrieval path: `comps_retrieval.py` is Chroma plus arithmetic. So the
+> flag ablation proves retrieval is load-bearing while leaving 2.1's central claim as an
+> inherited argument rather than an observation.
+>
+> `scripts/retrieval_ablation_llm.py` closes that. Two free-tier models of different
+> sizes are asked for comps for the Case A subject with no corpus access, filling a schema
+> mirroring `state.Comp`'s citable fields. Results: **0 of 16 returned comps exist in the
+> evidence base**, one address (`5678 Echo Park Ave`) was disproved against public mapping
+> data — not a vacant lot but an invalid *range*, since that street tops out in the
+> 2300s–2400s — and rent dispersion collapsed from CV 19.7% (retrieved) to 3.1% / 4.3%
+> (invented).
+> The larger model was the only one reporting *high* confidence, on an evidentiary basis
+> identical to the smaller one's — zero checkable comps either way.
+>
+> **Two methodological corrections came out of building it, both worth carrying forward.**
+>
+> 1. **A verification that cannot fail is not a verification.** The corpus lookup was
+>    initially presented as proof of fabrication. It is not: corpus ids are uniformly
+>    10-digit numerals while the models returned `LA001` and `ECHO12345`, so *zero of
+>    sixteen could have matched on format alone*. The null result was structural rather
+>    than earned. The script now reports `id_format_matches_corpus` alongside the lookup
+>    so the limitation is visible in the output. Address cross-checking is no substitute —
+>    the corpus `address` column is ~95% null for Los Angeles. What actually establishes
+>    invention is convergent, and the strongest strand came from a *manual* check no code
+>    in this repo could have performed: the disproved address is invalid by range, and
+>    5678 is the second element of the `1234 / 5678 / 9101` sequence both models emitted —
+>    so the street number came from a counting template rather than from the street.
+>    Alongside that: no resolvable citation (brand names, no URLs), identically templated
+>    ids, and the dispersion collapse. **Any future evidence artifact must state what its
+>    check could have returned had the system been behaving well** — and note that the
+>    decisive check here was external, which is an argument for keeping a human
+>    verification step in the U8 harness rather than automating it away.
+> 2. **Point estimates across grounded and ungrounded runs are not comparable, and the
+>    reason is a U5 dependency.** The prompt specifies no time period, so model estimates
+>    are undated, while the grounded figure is a raw similarity-weighted mean over the
+>    2018–19 corpus with no FMR anchoring. Any percentage gap conflates fabrication error
+>    with vintage mismatch. Coefficient of variation is used instead, being a within-set
+>    measure and therefore vintage-independent. **This is a concrete instance of the §2
+>    rent-anchoring design being load-bearing:** once U5 anchors comp-derived rents to
+>    current-dollar FMR, this comparison becomes meaningful and should be revisited.
 
 **U8 is the highest-leverage unit in the plan.** A set of synthetic listings each
 engineered to trigger a specific named flag — missing price, 5+ bedroom unit (FMR
@@ -972,8 +1022,30 @@ needed. Target: all closed during Week 4.
 | 5 | X / Y / Z loop parameters | ✅ X=2.0 mi, Y=8, Z=4 — tuned in U4 against measured density curves; rationale in `config.py` |
 | 6 | Confidence threshold for human-review escalation | ⬜ provisional 0.60 set; tune in U7 |
 | 7 | Redfin minimum-price floor | ✅ $10,000, with evidence (§2) — note it is inert for all three inference metros |
-| 8 | OpenRouter model per role (dev / extraction / critic / summarizer) | ⬜ placeholders in `config.py`; confirm against OpenRouter's live free-tier list before U3 |
+| 8 | OpenRouter model per role (dev / extraction / critic / summarizer) | ⬜ **placeholders confirmed dead (Aug 9)** — see below; still deferrable to U3 |
 | 9 | Planner topology — pre-flight vs. supervisor | ✅ **pre-flight + rework re-entry** (Aug 9, 2026) |
+
+**Decision #8 detail (Aug 9, 2026).** The `TODO(U3)` in `config.py` warned that the four
+model IDs were unverified placeholders. Checked against OpenRouter's live catalogue while
+building `retrieval_ablation_llm.py`: **`meta-llama/llama-3.3-70b-instruct:free` no longer
+exists.** The model is still listed but is paid-only, and there is now *no* free Llama
+variant at all. All four placeholders are therefore dead, and U3 cannot run until this is
+set.
+
+The decision remains **deferrable to U3** and is deliberately left open. Nothing before U3
+makes an LLM call — the retrieval path contains none, and `retrieval_ablation_llm.py` names
+its models locally rather than reading `config.MODEL_*`. Choosing well needs real extraction
+output to judge against, which does not exist yet. Verified live and responding as of
+Aug 9: `openai/gpt-oss-20b:free` and `nvidia/nemotron-3-super-120b-a12b:free`;
+`google/gemma-4-31b-it:free` returned a provider 429. Note the current four-way split is
+structural, not a real selection — all four constants are identical.
+
+**The durable lesson is about staleness, not selection.** A model ID that was valid when
+this document was written was invalid six days later, and the failure would have surfaced
+as an opaque runtime error mid-U3. Free-tier catalogues churn, so these constants should
+not be treated as set-once. U3 should add a startup liveness check that fails loudly at
+launch if a configured model is absent from `/api/v1/models`, rather than discovering it on
+first invocation.
 
 **Decision #9 detail.** The pipeline order is fixed by data dependency — Valuation consumes
 `state.comps`, Scenario consumes `rent_estimate`/`value_estimate` — so the sequence
@@ -1021,10 +1093,13 @@ U1 and U4 are complete. What remains before U2 can proceed:
 
 1. **LangSmith account** — create it and set `LANGSMITH_TRACING=true` and
    `LANGSMITH_API_KEY`. Required before U2 so traces exist from the first graph run.
-   **This is now the only remaining blocker on U2**, decision #9 having been closed.
-2. **OpenRouter API key** — supplied via the `OPENROUTER_API_KEY` environment variable.
-   Not needed for U4, which is deterministic; required for U3.
-3. **Decision #8** — confirm model IDs against OpenRouter's live free-tier list.
+   **This is the only remaining blocker on U2**, decision #9 having been closed and the
+   OpenRouter key having been obtained.
+2. ~~**OpenRouter API key**~~ — ✅ **closed Aug 9, 2026.** Stored at `ignore/openrouter_key`
+   (gitignored); `llm_client._load_token()` reads `OPENROUTER_API_KEY` first and falls back
+   to that file. Verified by live calls in `retrieval_ablation_llm.py`.
+3. **Decision #8** — model IDs. Placeholders confirmed dead (see the decision #8 detail
+   above); deliberately deferred to U3, which it blocks.
 4. **Decision #4** — finalize the training shortlist from the 29 crosswalk entries.
    Blocks U5, not U2.
 
@@ -1032,7 +1107,9 @@ Built and verified against real data, requiring no rework: `tools/hud_fmr.py`,
 `scripts/pull_fmr_sample.py` (§9), `scripts/verify_metro_selection.py`,
 `tools/kaggle_data.py`, `tools/county_crosswalk.py`, `tools/redfin_data.py`,
 `tools/vector_store.py`, `agents/comps_retrieval.py`, `scripts/build_comps_index.py`,
-and `scripts/retrieval_evidence.py`.
+`scripts/retrieval_evidence.py`, and `scripts/retrieval_ablation_llm.py` (the last also
+being the first live exercise of `tools/llm_client.py` — `call_with_schema`'s retry loop
+fired for real, one model needing two attempts to produce schema-valid output).
 
 ### Prerequisite reading (before U2 review)
 
@@ -1075,6 +1152,16 @@ in a focused session or across a fragmented week.
   gets raised for a decision rather than resolved by assumption. Such decisions are
   inexpensive to make deliberately and expensive to unwind once code depends on them.
 
+- **An evidence artifact must state what its check could have returned had the system
+  been behaving well** (added Aug 9, 2026). A verification whose negative result was
+  structurally guaranteed proves nothing, however convincing the output looks — and a
+  document that overstates its own verification commits exactly the error Transparent
+  Degradation exists to prevent, one level up. The corpus-membership check in
+  `retrieval_ablation_llm.py` is the worked example: it could never have matched, because
+  the id formats are disjoint, and it now prints that fact next to its own result. This
+  standard applies to every artifact feeding a checkpoint or the final report, including
+  the U8 eval harness.
+
 - **Deferred work is recorded as a tagged `TODO` at the site it affects**, not left in
   conversation. Format is `TODO(<scope>):` where scope is the unit that will address it
   (`U2`, `U5`) or a category (`security`, `geography`), so `grep -rn "TODO(U5)" src/`
@@ -1084,7 +1171,7 @@ in a focused session or across a fragmented week.
 
   | Tag | Location | Item |
   |---|---|---|
-  | `TODO(U3)` | `config.py` | Model IDs are unverified placeholders (decision #8) |
+  | `TODO(U3)` | `config.py` | Model IDs **confirmed dead**, not merely unverified (decision #8); add a startup liveness check |
   | `TODO(U5)` | `state.py`, `build_comps_index.py` | Index the `time` column so `Comp.listed_date` allows per-row FMR normalization |
   | `TODO(U5)` | `county_crosswalk.py` | Nothing yet raises `COUNTY_FROM_PRINCIPAL_COUNTY` for multi-county cities |
   | `TODO(U2)` | `hud_fmr.py` | `_DiskCache` is not concurrency-safe; whole-file rewrite on every `set()` |
