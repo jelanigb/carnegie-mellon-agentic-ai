@@ -1,216 +1,100 @@
-"""(cityname, state) -> county FIPS `entityid` crosswalk for the metro shortlist.
+"""Resolves `DealTerms.county_fips` from a subject property's coordinates.
 
-Why this module exists
-----------------------
-The Kaggle rental corpus carries `cityname`, `state`, `latitude`, and `longitude`, but
-no county or ZIP column (docs/implementation_plan.md §2, "Two data gaps" — Gap 1). The
-entire rent-level anchoring strategy keys on a county FIPS code: HUD FMR lookups are
-addressed by a 10-digit `entityid` obtained from `fmr/listCounties/{state}`, and
-`DealTerms.county_fips` is meant to hold exactly that value. Without a bridge from city
-to county, no training row can be normalized by its local FMR and no subject property
-can be anchored to current dollars.
+Replaced Aug 15, 2026 — from a hand-maintained table to a spatial join
+------------------------------------------------------------------------
+This module originally hand-maintained a `(cityname, state) -> county FIPS` table for a
+29-city shortlist, each entry verified against a live HUD `listCounties` response (see
+git history / docs/changelog.md for that version). Once `tools/geocoding.py` existed to
+put a subject property at a real coordinate (decision #10), that table became strictly
+dominated by a geometric point-in-polygon join against the same coordinate:
 
-§2 resolves the gap by hand-verifying a crosswalk for the curated training shortlist
-rather than taking on a spatial dependency. A `latitude`/`longitude` -> FIPS join against
-Census TIGER shapefiles would be exact and would generalize to the full 100K rows, but it
-requires `geopandas` plus shapefile management for a lookup that, at this scope, is a
-few dozen constants. The spatial join is documented in §2 as the scale-up path; it is not
-worth the dependency now.
+- It needs no per-city curation and covers every US county, not a hand-picked shortlist —
+  it resolved Miami-Dade County correctly for a Miami-area point the old table had no
+  entry for at all.
+- It resolves the *exact* county for a point rather than the old table's "principal
+  county" approximation for cities spanning several (Chicago, Dallas, Houston, ...).
+- It reproduces the old table exactly everywhere both apply: verified directly against
+  all three inference-trio metros (entityids matched digit-for-digit) and against the old
+  table's two hand-special-cased hard cases — Richmond, VA's independent-city status and
+  Denver's consolidated city-county — both resolve correctly via geometry with no special
+  code, because Census's own county-equivalent boundaries already represent them that way.
 
-Accuracy caveat (read before extending this table)
---------------------------------------------------
-Several large cities span more than one county. This table records the *principal*
-county — the one containing the bulk of the city's population and housing stock — and
-marks the entry `multi_county=True`. That is an approximation, and it is acceptable here
-for a specific reason: the FMR figure it retrieves is a **metro-level anchor, not a
-parcel-level assessment**. HUD publishes FMRs by FMR area, which for these cities is a
-metro-wide (HUD Metro FMR Area) figure that the neighboring counties in the same CBSA
-typically share. A Houston listing mapped to Harris rather than Fort Bend resolves to
-the same Houston-area FMR schedule in the overwhelming majority of cases. The residual
-error is second-order against a model whose target is a *ratio* to local FMR, and it is
-bounded by the fact that the ratio is applied against a same-metro anchor at prediction
-time. A parcel-accurate mapping would matter for a tax or entitlement calculation; it
-does not change this system's estimates materially.
+Trade-off: this only runs once a subject has coordinates, so a listing with a known city
+but no resolvable geocode now gets no `county_fips` either, where the old table could
+resolve one from the city string alone. Given `vector_store.query_comps` already
+hard-requires coordinates for comp retrieval, a coordinate-less subject was already the
+system's worst case; this removes one of the two things it can still get from geometry
+disconnected from geocoding, not one of the two paths that mattered independently.
 
-Coverage
---------
-Every `(cityname, state)` pair with at least 500 listings in the Kaggle corpus (28
-pairs, ~26% of all rows), plus Newark, NJ. The 500-listing bar is the same one
-`scripts/verify_metro_selection.py` uses for metro viability, so coverage here and metro
-selection there are driven by one threshold rather than two unrelated ones. Newark is
-included below the bar (56 listings) because §2 names "Newark / Jersey City" as the
-documented alternate metro; carrying only Jersey City would leave that alternate half
-mapped. The inference trio (Chicago/Cook, Los Angeles/Los Angeles, Cleveland/Cuyahoga)
-is a subset, as §2 requires.
+`normalize_city`/`normalize_state` are kept as-is — `tools/geocoding.py`'s corpus-centroid
+fallback still keys on (city, state) strings from the Kaggle corpus and needs to fold them
+identically, which has nothing to do with how county resolution works.
 
-Verification
-------------
-Every `entityid` below was read from a live `fmr/listCounties/{state}` response, not
-written from memory. `verify_against_hud()` re-runs that check — it re-fetches each
-state's county list and confirms both that the entityid exists and that the county name
-matches what this table claims. `main()` prints the full crosswalk with HUD's own county
-names alongside, so the table can be checked visually rather than trusted.
+New England — explicitly out of scope, not silently wrong
+------------------------------------------------------------
+HUD defines FMR areas by *town*, not county, in six New England states (CT, ME, MA, NH,
+RI, VT); Boston's own entityid is a place FIPS (`2502507000`, town regime) rather than the
+county-level `<state><county>99999` pattern every other state uses. A plain county polygon
+join can name the correct *county* there (verified: a Boston point resolves to Suffolk
+County) but cannot produce the entityid HUD actually expects. `lookup_county_fips` detects
+a resolved point landing in one of those six states and returns `None` rather than a wrong
+entityid — the same "decline rather than guess" discipline `tools/geocoding.py` applies to
+an uncovered city.
 
-Run: .venv/bin/python tools/county_crosswalk.py
+TODO(geography): building the town/place-level boundary layer this would need is future
+work, not started. Same status the old table already carried for New England (verified for
+Boston only, by a live HUD call rather than geometry — see git history). Whoever picks this
+up should use Census's *county subdivision* (New England towns are county subdivisions,
+not places) boundary file, keyed the same way as `_counties()` below, and branch on the
+six-state set already named in `_NEW_ENGLAND_STATEFP`.
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
-try:  # Support both `python tools/county_crosswalk.py` and `import tools.county_crosswalk`.
-    from tools.hud_fmr import HudFmrClient
-except ImportError:  # pragma: no cover - import-path convenience only
-    from hud_fmr import HudFmrClient
-
-
-@dataclass(frozen=True)
-class CountyRef:
-    """One resolved county, as HUD identifies it.
-
-    `entityid` is the 10-digit FIPS-style code HUD's FMR endpoints are addressed by;
-    `county_name` and `town_name` are carried so the mapping can be verified against a
-    live `listCounties` response instead of being trusted on sight.
-    """
-
-    entityid: str
-    county_name: str
-    state: str
-    town_name: str = ""
-    multi_county: bool = False
-
-
-# The city-to-county mapping. Keys are (cityname, state) exactly as the Kaggle corpus
-# spells them; lookup() normalizes both sides, so the literal spelling here is for
-# readability rather than matching.
-#
-# `multi_county=True` marks a city whose boundaries cross county lines. The county
-# chosen is the principal one, with the rationale on the same line. See the module
-# docstring for why a principal-county approximation is acceptable against a
-# metro-level FMR anchor.
-#
-# TODO(geography): New England entries need verification before use. HUD defines FMR
-# areas by *town* rather than county in CT, ME, MA, NH, RI, and VT. Boston was tested
-# and works — listCounties/MA returns a usable town entityid (2502507000, place code in
-# the last five digits instead of the 99999 county placeholder) and get_fmr handles it
-# unchanged. That was verified for Boston only; Providence RI and the other five states
-# are untested. Do not assume the town regime behaves identically across all of them.
-#
-# TODO(U5): every entry marked multi_county=True should cause the Valuation agent to
-# raise FlagKind.COUNTY_FROM_PRINCIPAL_COUNTY, so the FMR figure derived from it is
-# disclosed as resting on a principal-county approximation rather than an exact match.
-# The flag kind exists in state.py; nothing raises it yet.
-CROSSWALK: dict[tuple[str, str], CountyRef] = {
-    # --- Inference trio (§2) ---------------------------------------------------
-    # Chicago crosses into DuPage County only at the O'Hare airport annexation strip,
-    # which contains effectively no residential stock.
-    ("Chicago", "IL"): CountyRef("1703199999", "Cook County", "IL", multi_county=True),
-    # The City of Los Angeles lies wholly within Los Angeles County; the surrounding
-    # CBSA extends into Orange County, but the city itself does not.
-    ("Los Angeles", "CA"): CountyRef("0603799999", "Los Angeles County", "CA"),
-    ("Cleveland", "OH"): CountyRef("3903599999", "Cuyahoga County", "OH"),
-
-    # --- Texas -----------------------------------------------------------------
-    # Dallas extends into Collin, Denton, Kaufman, and Rockwall; Dallas County holds
-    # the large majority of the city's population and nearly all of its older
-    # multi-family stock.
-    ("Dallas", "TX"): CountyRef("4811399999", "Dallas County", "TX", multi_county=True),
-    # Houston extends into Fort Bend and Montgomery; Harris County contains roughly
-    # nine-tenths of the city.
-    ("Houston", "TX"): CountyRef("4820199999", "Harris County", "TX", multi_county=True),
-    # San Antonio extends slightly into Comal and Medina; Bexar County is effectively
-    # coextensive with the city.
-    ("San Antonio", "TX"): CountyRef("4802999999", "Bexar County", "TX", multi_county=True),
-    # Austin extends into Williamson and Hays; Travis County holds the urban core.
-    ("Austin", "TX"): CountyRef("4845399999", "Travis County", "TX", multi_county=True),
-    # Arlington, TX sits entirely within Tarrant County. Note the collision with
-    # Arlington County, VA below — this is precisely why the key is (city, state).
-    ("Arlington", "TX"): CountyRef("4843999999", "Tarrant County", "TX"),
-
-    # --- Colorado ---------------------------------------------------------------
-    # Denver is a consolidated city-county; the city and the county are the same entity.
-    ("Denver", "CO"): CountyRef("0803199999", "Denver County", "CO"),
-    ("Colorado Springs", "CO"): CountyRef("0804199999", "El Paso County", "CO"),
-
-    # --- California -------------------------------------------------------------
-    ("San Diego", "CA"): CountyRef("0607399999", "San Diego County", "CA"),
-
-    # --- Nevada / Arizona / Nebraska --------------------------------------------
-    # The City of Las Vegas is wholly within Clark County (as is unincorporated
-    # "Las Vegas" in the Strip corridor, which many listings actually describe).
-    ("Las Vegas", "NV"): CountyRef("3200399999", "Clark County", "NV"),
-    ("Tucson", "AZ"): CountyRef("0401999999", "Pima County", "AZ"),
-    # Omaha has annexed a strip into Sarpy County; Douglas County remains the core.
-    ("Omaha", "NE"): CountyRef("3105599999", "Douglas County", "NE", multi_county=True),
-
-    # --- Georgia ----------------------------------------------------------------
-    # Atlanta straddles Fulton and DeKalb. Fulton holds roughly 90% of the city's
-    # population and is the county HUD's Atlanta FMR area is anchored on.
-    ("Atlanta", "GA"): CountyRef("1312199999", "Fulton County", "GA", multi_county=True),
-
-    # --- North Carolina ---------------------------------------------------------
-    ("Charlotte", "NC"): CountyRef("3711999999", "Mecklenburg County", "NC"),
-    # Raleigh extends marginally into Durham County; Wake County is the city proper.
-    ("Raleigh", "NC"): CountyRef("3718399999", "Wake County", "NC", multi_county=True),
-    ("Greensboro", "NC"): CountyRef("3708199999", "Guilford County", "NC"),
-
-    # --- Ohio -------------------------------------------------------------------
-    ("Cincinnati", "OH"): CountyRef("3906199999", "Hamilton County", "OH"),
-    # Columbus extends into Delaware and Fairfield; Franklin County is the core.
-    ("Columbus", "OH"): CountyRef("3904999999", "Franklin County", "OH", multi_county=True),
-
-    # --- Florida ----------------------------------------------------------------
-    ("Tampa", "FL"): CountyRef("1205799999", "Hillsborough County", "FL"),
-
-    # --- Illinois (see inference trio above for Chicago) ------------------------
-
-    # --- Virginia ---------------------------------------------------------------
-    # Virginia's independent cities are not part of any county and carry their own
-    # FIPS codes. HUD lists them under `county_name` with a lowercase "city" suffix.
-    # Richmond is the ambiguity worth naming: VA has both "Richmond city" (the
-    # independent city, FIPS 5176099999) and "Richmond County" (a rural county in the
-    # Northern Neck, FIPS 5115999999). Kaggle's "Richmond, VA" listings are the city.
-    ("Richmond", "VA"): CountyRef("5176099999", "Richmond city", "VA"),
-    ("Norfolk", "VA"): CountyRef("5171099999", "Norfolk city", "VA"),
-    ("Alexandria", "VA"): CountyRef("5151099999", "Alexandria city", "VA"),
-    # Arlington, VA is a county with no incorporated municipality inside it, so the
-    # "city" in a listing address and the county are the same jurisdiction.
-    ("Arlington", "VA"): CountyRef("5101399999", "Arlington County", "VA"),
-
-    # --- Massachusetts ----------------------------------------------------------
-    # New England exception. HUD defines FMR areas by *town* in the six New England
-    # states, so `listCounties/MA` returns town-level rows: county_name "Suffolk
-    # County", town_name "Boston city", and an entityid whose last five digits are the
-    # place code (07000) rather than the 99999 county placeholder. That entityid works
-    # against fmr/data unchanged — verified, see the module notes — so the town-based
-    # regime is absorbed here in the crosswalk rather than needing a branch in
-    # tools/hud_fmr.py.
-    ("Boston", "MA"): CountyRef("2502507000", "Suffolk County", "MA", town_name="Boston city"),
-
-    # --- Missouri ---------------------------------------------------------------
-    # Kansas City spans Jackson, Clay, Platte, and Cass. Jackson County holds the
-    # downtown core and the bulk of the pre-war multi-family stock.
-    ("Kansas City", "MO"): CountyRef("2909599999", "Jackson County", "MO", multi_county=True),
-
-    # --- New Jersey (§2's documented alternate metro) ---------------------------
-    ("Jersey City", "NJ"): CountyRef("3401799999", "Hudson County", "NJ"),
-    ("Newark", "NJ"): CountyRef("3401399999", "Essex County", "NJ"),
-}
-
-# The §2 inference trio, kept as a named constant so downstream code can assert
-# coverage rather than restating the three cities.
-INFERENCE_TRIO: tuple[tuple[str, str], ...] = (
-    ("Chicago", "IL"),
-    ("Los Angeles", "CA"),
-    ("Cleveland", "OH"),
-)
+import geopandas as gpd
+import requests
+from shapely.geometry import Point
 
 _WHITESPACE = re.compile(r"\s+")
 
+CENSUS_COUNTY_BOUNDARIES_URL = (
+    "https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_us_county_500k.zip"
+)
+# Computed directly rather than via `import config`, matching tools/hud_fmr.py: this
+# module is meant to be runnable standalone (`python tools/county_crosswalk.py`), and
+# from that entry point `tools/` is on sys.path but `src/` is not, so `import config`
+# fails there even though it works fine when imported as `tools.county_crosswalk`.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
-def _normalize_city(cityname: str) -> str:
+# Cartographic boundary file (1:500,000, generalized) rather than full-resolution
+# TIGER/Line — "which county contains this point" doesn't need parcel-level boundary
+# precision, and the generalized file is a fraction of the size (~12 MB vs. ~1.7 GB).
+_CACHE_PATH = _REPO_ROOT / "data" / "raw" / "census_county_boundaries.zip"
+
+# HUD defines FMR areas by *town*, not county, in these six states — see the module
+# docstring. STATEFP values: CT 09, ME 23, MA 25, NH 33, RI 44, VT 50.
+_NEW_ENGLAND_STATEFP = {"09", "23", "25", "33", "44", "50"}
+
+# A geocoded point can fall just outside a county polygon at this file's 1:500,000
+# generalization — typically a coastline drawn slightly inland of the true edge. A real
+# estate address is on land by construction, so snapping to the nearest county within a
+# small tolerance is safe; beyond it, something is actually wrong (bad coordinates) and
+# this should surface as a miss rather than a guess. Not observed to trigger in testing
+# (Staten Island and Miami Beach shoreline points both resolved on an exact match), kept
+# as a documented safety net rather than removed, since it costs one `.distance()` call
+# only on the rare path where the exact match already failed.
+_NEAREST_COUNTY_MAX_MILES = 5.0
+# Degrees-to-miles is a rough conversion (ignores the longitude/latitude compression
+# `tools/vector_store.py`'s haversine handles exactly), which is fine here: this number
+# only gates whether a near-miss is trusted, not a distance reported to a user.
+_APPROX_MILES_PER_DEGREE = 69.0
+
+
+def normalize_city(cityname: str) -> str:
     """Fold a city name to a comparison key.
 
     Kaggle's `cityname` values are free text from listing feeds, so casing and
@@ -218,172 +102,115 @@ def _normalize_city(cityname: str) -> str:
     repeated whitespace are the two variations actually observed; both are removed
     rather than attempting broader fuzzy matching, which would risk false positives
     between genuinely different cities.
+
+    Public (not prefixed) because `tools/geocoding.py`'s corpus-centroid fallback keys
+    into the same corpus and must fold names identically — a drift between two
+    independent normalizers would show up as silent lookup misses, not an error.
     """
     folded = cityname.strip().lower().replace(".", "")
     return _WHITESPACE.sub(" ", folded)
 
 
-def _normalize_state(state: str) -> str:
+def normalize_state(state: str) -> str:
     return state.strip().upper()
 
 
-# Normalized lookup index, built once at import. This is a derived constant, not
-# mutable state: nothing rebinds or mutates it after module load.
-_INDEX: dict[tuple[str, str], CountyRef] = {
-    (_normalize_city(city), _normalize_state(state)): ref
-    for (city, state), ref in CROSSWALK.items()
-}
+_counties_cache: Optional[gpd.GeoDataFrame] = None
 
 
-def lookup_county(cityname: Optional[str], state: Optional[str]) -> Optional[CountyRef]:
-    """Resolve (cityname, state) to a `CountyRef`, or None if uncovered.
+def _counties() -> gpd.GeoDataFrame:
+    """Lazy-loaded, cached county boundary GeoDataFrame.
 
-    Returns None rather than raising: an uncovered city is an expected, routine
-    outcome for a crosswalk that deliberately covers a shortlist, and the caller
-    (the Valuation & Rent agent) needs to turn it into an
-    `fmr_unavailable_for_county` flag rather than an exception. Missing inputs are
-    treated the same way, since `DealTerms.city` and `.state` are both Optional.
+    Downloaded once to `data/raw/` (gitignored, same as every other pulled dataset in
+    this project) and read from disk on every call after that — county boundaries don't
+    change mid-project, so there is nothing to invalidate the cache against. Without
+    this, every subject property would re-download an ~12 MB file from Census, which
+    is real added latency and a real network dependency on the comp-retrieval critical
+    path for no benefit over reading a local file.
     """
-    if not cityname or not state:
+    global _counties_cache
+    if _counties_cache is not None:
+        return _counties_cache
+
+    if not _CACHE_PATH.exists():
+        _CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        response = requests.get(CENSUS_COUNTY_BOUNDARIES_URL, timeout=60)
+        response.raise_for_status()
+        _CACHE_PATH.write_bytes(response.content)
+
+    _counties_cache = gpd.read_file(_CACHE_PATH)
+    return _counties_cache
+
+
+def _entityid_from_geoid(geoid: str) -> str:
+    """HUD's county-level `entityid` is state FIPS + county FIPS + a "99999" county
+    placeholder. Verified against all three inference-trio counties, plus Richmond VA's
+    independent-city GEOID and Denver's consolidated city-county GEOID, before this
+    module was rewritten to rely on it — see the module docstring.
+    """
+    return f"{geoid}99999"
+
+
+def county_fips_from_point(latitude: float, longitude: float) -> Optional[str]:
+    """Resolve a coordinate to a HUD county `entityid` via exact point-in-polygon
+    geometry against Census's county boundaries.
+
+    Returns `None` for a New England point (module docstring — the entityid pattern
+    this function produces is wrong there, not merely approximate) or a point that
+    doesn't resolve to any US county, including one outside every polygon by more than
+    `_NEAREST_COUNTY_MAX_MILES`.
+    """
+    counties = _counties()
+    point = Point(longitude, latitude)
+
+    match = counties[counties.contains(point)]
+    if match.empty:
+        distances = counties.geometry.distance(point)
+        nearest_idx = distances.idxmin()
+        nearest_miles = distances[nearest_idx] * _APPROX_MILES_PER_DEGREE
+        if nearest_miles > _NEAREST_COUNTY_MAX_MILES:
+            return None
+        match = counties.loc[[nearest_idx]]
+
+    row = match.iloc[0]
+    if row["STATEFP"] in _NEW_ENGLAND_STATEFP:
         return None
-    return _INDEX.get((_normalize_city(cityname), _normalize_state(state)))
+    return _entityid_from_geoid(row["GEOID"])
 
 
-def lookup_county_fips(cityname: Optional[str], state: Optional[str]) -> Optional[str]:
-    """Resolve (cityname, state) to a 10-digit HUD `entityid`, or None if uncovered.
-
-    This is the value `DealTerms.county_fips` holds and the value
-    `hud_fmr.get_fmr()` is addressed by; no reformatting sits between them.
+def lookup_county_fips(
+    latitude: Optional[float], longitude: Optional[float]
+) -> Optional[str]:
+    """Resolve a subject property's coordinates to a HUD county `entityid`, or `None`
+    if unresolved — missing coordinates, a point outside every county, or a New England
+    point. `agents/extractor.py` is the caller; a `None` here is what eventually raises
+    `FlagKind.FMR_UNAVAILABLE_FOR_COUNTY` downstream in the Valuation agent.
     """
-    ref = lookup_county(cityname, state)
-    return ref.entityid if ref is not None else None
-
-
-def covered_cities() -> tuple[tuple[str, str], ...]:
-    """Every (cityname, state) pair this crosswalk resolves, in table order."""
-    return tuple(CROSSWALK.keys())
-
-
-def covered_states() -> tuple[str, ...]:
-    """Distinct state codes in the crosswalk, sorted — one HUD call per state."""
-    return tuple(sorted({state for _, state in CROSSWALK.keys()}))
-
-
-@dataclass(frozen=True)
-class VerificationResult:
-    """Outcome of checking one crosswalk row against a live `listCounties` response."""
-
-    cityname: str
-    state: str
-    entityid: str
-    claimed_county: str
-    hud_county: Optional[str]  # None when the entityid is absent from HUD's list
-    hud_town: Optional[str]
-    matches: bool
-
-
-def verify_against_hud(
-    client: Optional[HudFmrClient] = None,
-) -> list[VerificationResult]:
-    """Re-check every entityid against `fmr/listCounties/{state}`.
-
-    This is the point of the module: FIPS codes written from memory are wrong often
-    enough, and silently enough, that the crosswalk is only trustworthy if the check
-    is executable. One HUD call per distinct state (14 as of this writing), served
-    from `hud_fmr`'s on-disk cache after the first run.
-    """
-    client = client or HudFmrClient()
-
-    hud_by_state: dict[str, dict[str, dict]] = {}
-    for state in covered_states():
-        hud_by_state[state] = {
-            row["fips_code"]: row for row in client.list_counties(state)
-        }
-
-    results: list[VerificationResult] = []
-    for (cityname, state), ref in CROSSWALK.items():
-        row = hud_by_state[state].get(ref.entityid)
-        hud_county = row.get("county_name") if row else None
-        hud_town = row.get("town_name") if row else None
-        matches = (
-            row is not None
-            and hud_county == ref.county_name
-            and (hud_town or "") == ref.town_name
-        )
-        results.append(
-            VerificationResult(
-                cityname=cityname,
-                state=state,
-                entityid=ref.entityid,
-                claimed_county=ref.county_name,
-                hud_county=hud_county,
-                hud_town=hud_town,
-                matches=matches,
-            )
-        )
-    return results
+    if latitude is None or longitude is None:
+        return None
+    return county_fips_from_point(latitude, longitude)
 
 
 def main() -> None:
-    """Print the crosswalk with HUD's own county names for visual verification."""
-    print("=== (cityname, state) -> county FIPS crosswalk ===")
-    print(f"{len(CROSSWALK)} cities across {len(covered_states())} states: "
-          f"{', '.join(covered_states())}\n")
-
-    print("Verifying every entityid against live fmr/listCounties/{state} ...\n")
-    results = verify_against_hud()
-
-    header = (
-        f"{'city':<18} {'st':<3} {'entityid':<12} {'HUD county (live)':<24} "
-        f"{'town':<14} {'multi':<6} ok"
-    )
-    print(header)
-    print("-" * len(header))
-    for result in results:
-        ref = CROSSWALK[(result.cityname, result.state)]
-        print(
-            f"{result.cityname:<18} {result.state:<3} {result.entityid:<12} "
-            f"{(result.hud_county or 'NOT FOUND'):<24} "
-            f"{(result.hud_town or '-'):<14} "
-            f"{('yes' if ref.multi_county else '-'):<6} "
-            f"{'OK' if result.matches else 'MISMATCH'}"
-        )
-
-    mismatches = [r for r in results if not r.matches]
-    print(f"\nVerified {len(results) - len(mismatches)}/{len(results)} rows against "
-          f"the live HUD county list.")
-    if mismatches:
-        print("\nUNRESOLVED / MISMATCHED — these must be corrected before use:")
-        for result in mismatches:
-            print(
-                f"  {result.cityname}, {result.state}: crosswalk claims "
-                f"'{result.claimed_county}' for {result.entityid}; "
-                f"HUD returns '{result.hud_county or 'no such entityid'}'"
-            )
-
-    print("\n=== Cities spanning multiple counties (principal county used) ===")
-    for (cityname, state), ref in CROSSWALK.items():
-        if ref.multi_county:
-            print(f"  {cityname}, {state} -> {ref.county_name}")
-    print("  Approximation is acceptable here: the FMR retrieved is a metro-level")
-    print("  anchor, and adjacent counties in the same CBSA generally share it.")
-
-    print("\n=== Inference trio (§2) resolution check ===")
-    for cityname, state in INFERENCE_TRIO:
-        ref = lookup_county(cityname, state)
-        status = f"{ref.entityid}  {ref.county_name}" if ref else "UNRESOLVED"
-        print(f"  {cityname}, {state:<3} -> {status}")
-
-    print("\n=== Lookup behavior ===")
-    for cityname, state in [
-        ("  chicago ", "il"),      # normalization: case + whitespace
-        ("Arlington", "VA"),        # (city, state) key disambiguates ...
-        ("Arlington", "TX"),        # ... two different Arlingtons
-        ("Peoria", "IL"),           # outside the shortlist
-        (None, "IL"),               # missing input from an incomplete extraction
-    ]:
-        label = f"({cityname!r}, {state!r})"
-        print(f"  {label:<28} -> {lookup_county_fips(cityname, state)}")
+    """Resolve a handful of known points, for eyeballing rather than automated
+    verification — `scripts/verify_county_geometry.py` is the real check, including a
+    live HUD cross-check of every entityid this prints.
+    """
+    samples = {
+        "Chicago, IL": (41.8781, -87.6298),
+        "Los Angeles, CA": (34.0522, -118.2437),
+        "Cleveland, OH": (41.4993, -81.6944),
+        "Miami, FL (no hand-maintained entry ever existed for this)": (25.8023, -80.2012),
+        "Richmond city, VA (independent city, formerly special-cased)": (37.5407, -77.4360),
+        "Denver, CO (consolidated city-county, formerly special-cased)": (39.7392, -104.9903),
+        "Boston, MA (New England — should resolve to None)": (42.3601, -71.0589),
+        "Missing coordinates": (None, None),
+    }
+    print(f"{'label':<62} {'entityid':<14}")
+    print("-" * 76)
+    for label, (lat, lon) in samples.items():
+        result = lookup_county_fips(lat, lon)
+        print(f"{label:<62} {result or 'None'}")
 
 
 if __name__ == "__main__":

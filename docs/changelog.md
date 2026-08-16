@@ -1,7 +1,7 @@
 # Changelog
 
 **Chronological record of code changes.**
-Author: Jelani Gould-Bailey · Last updated: Aug 10, 2026
+Author: Jelani Gould-Bailey · Last updated: Aug 15, 2026
 
 ## Why this file exists
 
@@ -39,6 +39,29 @@ rows. The unit of a row is the change, not the file.
 - Work predating the unit numbering is labelled by the `implementation_plan.md` section
   that specifies it (`§2`, `§9`), so it stays findable by the same identifier the plan
   uses.
+
+---
+
+## Aug 15, 2026 — decision #10 follow-on, county resolution rewrite
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Aug 15, 2026 | U3 (partial) | **County crosswalk replaced with a spatial join.** `tools/county_crosswalk.py` — `lookup_county_fips` now takes `(latitude, longitude)` and resolves the county via point-in-polygon geometry against Census's county boundaries (cached locally), replacing the hand-maintained 29-city `(cityname, state)` table. Prompted by reviewing a neighborhood-vs-city naming gap in decision #10 ("Wynwood" vs. "Miami"); the geometric fix turned out to strictly dominate a string-based one — see decision #10's follow-on detail, §7 | 2.1, 4.1 |
+| Aug 15, 2026 | U3 (partial) | **Cost measured before committing.** `geopandas` installs in ~3.3s from prebuilt wheels (~31MB); the Census county boundary file loads in ~3.3s and is cached after the first pull. Corrects §2's original "not worth the dependency" judgment, which was never actually tested — see `data_strategy.md`'s Gap 1 | — |
+| Aug 15, 2026 | U3 (partial) | **Live verification.** `scripts/verify_county_geometry.py` — reproduces all three inference-trio entityids exactly, resolves Miami-Dade County where the old table had no entry at all, and resolves the old table's two hand-special-cased cases (Richmond VA's independent-city status, Denver's consolidated city-county) correctly with no special code, each cross-checked against a live HUD `listCounties` call | 2.1 |
+| Aug 15, 2026 | U3 (partial) | **New England flagged as future work, not solved.** A resolved point in one of the six New England states now returns `None` (HUD prices FMRs by town there, not county, and a county join can't produce that entityid) rather than a wrong value. `TODO(geography)` — same status the old table already carried for the region | — |
+| Aug 15, 2026 | maintenance | **Retired flag kind.** `state.py` — `FlagKind.COUNTY_FROM_PRINCIPAL_COUNTY` removed rather than left permanently unraisable; the principal-county approximation it described no longer exists now that county resolution is exact. `requirements.txt` gains `geopandas` | 6.1 |
+
+---
+
+## Aug 11, 2026 — decision #10, geocoding
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Aug 11, 2026 | U3 (partial) | **Geocoding client.** `tools/geocoding.py` — Census Geocoder primary (free, no key, parcel-accurate), corpus-derived city-centroid fallback computed from `kaggle_data.load_clean()` rather than a hand-maintained table. Closes decision #10 (§7); not yet called from `agents/extractor.py` — see that file's `TODO(U3)` | 2.1 |
+| Aug 11, 2026 | U3 (partial) | **Live verification.** `scripts/pull_geocode_sample.py` — real calls proving all three paths: a complete address resolves via Census, a city/state-only input falls through to the centroid, and a corpus-uncovered city correctly resolves to neither | 2.1 |
+| Aug 11, 2026 | U3 (partial) | **Two new flag kinds.** `state.py` — `COORDINATES_FROM_CITY_CENTROID` (warn) and `GEOCODING_UNAVAILABLE` (critical), added ahead of the code that raises them, same precedent as `COUNTY_FROM_PRINCIPAL_COUNTY` in U1 | 6.1 |
+| Aug 11, 2026 | maintenance | **Shared normalization.** `tools/county_crosswalk.py` — `_normalize_city`/`_normalize_state` promoted to public `normalize_city`/`normalize_state` so `tools/geocoding.py`'s centroid fallback folds city names identically to the county crosswalk instead of risking two normalizers drifting apart | — |
 
 ---
 

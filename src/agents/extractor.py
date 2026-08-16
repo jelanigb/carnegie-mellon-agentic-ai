@@ -116,18 +116,29 @@ def extractor_agent(state: DealState) -> dict:
     flags = []
     questions = []
 
-    # TODO(U3): nothing in this system derives latitude/longitude, and
-    # `vector_store.query_comps` hard-requires them — a subject property without
-    # coordinates cannot be compared to anything, so the pipeline degrades to zero comps
-    # regardless of how good the extraction was. §5 lists them as DERIVED "by lookup",
-    # but no lookup exists: the crosswalk resolves county only, and the evidence scripts
-    # hardcode real coordinates for their synthetic subjects. This is decision #10 in §7
-    # (geocoding source), raised rather than resolved here per §8. Options are a
-    # geocoding API call, a city-centroid table with a disclosed-approximation flag, or
-    # requiring coordinates on the input.
+    # TODO(U3): decision #10 (§7) is closed and `tools/geocoding.py` is built and
+    # verified (scripts/pull_geocode_sample.py) — Census Geocoder primary, corpus
+    # city-centroid fallback, `FlagKind.COORDINATES_FROM_CITY_CENTROID` /
+    # `GEOCODING_UNAVAILABLE` ready for whichever path fires. Not called here on
+    # purpose: this stub still backs `test_flag_propagation.py`'s must-never-fail suite,
+    # and that suite's `LISTING_MISSING_PRICE` case deliberately parses a *complete*
+    # street address while withholding coordinates, so Comps short-circuits on missing
+    # coordinates without ever touching the vector store (§8 — that suite must fail only
+    # when flag propagation is broken, never on a Chroma/network dependency). Calling
+    # `geocoding.geocode()` here would resolve that address for real, silently changing
+    # what the test exercises. U3's real extractor should call it as a normal step
+    # rather than a merge-affordance special case, and the fixture above should move to
+    # an address with no resolvable geography (mirroring `GEOCODING_UNAVAILABLE`) so the
+    # suite keeps proving the same thing on purpose instead of by accident.
 
+    # Geometric lookup (Aug 15, 2026 — see tools/county_crosswalk.py's module docstring),
+    # keyed on coordinates rather than the parsed city/state string. This only resolves
+    # once terms.latitude/longitude are set, which nothing in this stub does yet — see
+    # the geocoding TODO below. A deal with no coordinates now also gets no county_fips,
+    # where the old city-string crosswalk could still resolve one; that's an accepted
+    # narrowing, not an oversight (module docstring has the reasoning).
     if terms.county_fips is None:
-        terms.county_fips = county_crosswalk.lookup_county_fips(terms.city, terms.state)
+        terms.county_fips = county_crosswalk.lookup_county_fips(terms.latitude, terms.longitude)
 
     for field_name in config.REQUIRED_DEAL_FIELDS:
         if getattr(terms, field_name) is not None:

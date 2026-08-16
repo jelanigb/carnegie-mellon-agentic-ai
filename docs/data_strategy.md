@@ -153,9 +153,19 @@ contamination — 8 rows below $300 and 71 above $10,000, removable by the same
 min/max filter pattern §2 already applies to the Redfin extract.
 
 **Conclusion: row count is not a binding constraint on training, and never was.** The
-binding constraint is the county/FIPS mapping and FMR-pull effort per added metro,
-exactly as this section originally predicted. Adding a metro to the training set costs
+binding constraint was the county/FIPS mapping and FMR-pull effort per added metro,
+exactly as this section originally predicted. Adding a metro to the training set cost
 crosswalk entries and API calls, not data.
+
+**Partly superseded Aug 15, 2026.** The county/FIPS half of that constraint is gone —
+`tools/county_crosswalk.py`'s rewrite (decision #10 follow-on, §7) resolves county from
+a row's own coordinates via geometry, not a hand-maintained per-city table, so adding a
+metro no longer costs crosswalk entries at all. FMR-pull effort per distinct county is
+still real (still bounded by county count, not row count, and still cached by
+`tools/hud_fmr.py`), so it isn't zero — but the *cleaning* effort called out in the next
+section (word-boundary city-name matching per metro in `tools/kaggle_data.py`) is now
+the larger of the two remaining costs, where it used to be roughly comparable to the
+crosswalk-curation cost.
 
 ### Metro Scope: Training vs. Inference
 
@@ -172,12 +182,16 @@ Two different scopes are needed, and they shouldn't be the same size:
   At the same time, because the Kaggle dataset is a single-vintage scrape, the HUD FMR
   pull needed to normalize the training target is bounded by *the number of distinct
   counties represented*, not by the number of training rows — so widening the training
-  set doesn't meaningfully raise the FMR API cost. The practical constraint is data
-  cleaning and county/FIPS mapping effort, not FMR access. A curated shortlist of
-  roughly 5–8 metros (rather than the full dataset) keeps that cleanup bounded while
-  still giving the regression meaningfully more diversity than 2–3 metros alone. The
-  2–3 inference metros should be a subset of this training shortlist, so they're
-  guaranteed adequate comp density and a validated data pipeline.
+  set doesn't meaningfully raise the FMR API cost. The practical constraint was data
+  cleaning and county/FIPS mapping effort, not FMR access — as of the Aug 15, 2026
+  crosswalk rewrite (§7, decision #10 follow-on), county/FIPS mapping is no longer part
+  of that cost at all, since it now resolves from a row's own coordinates rather than a
+  hand-curated per-city table; data cleaning (word-boundary city-name matching per
+  metro, `tools/kaggle_data.py`) is what remains. A curated shortlist of roughly 5–8
+  metros (rather than the full dataset) keeps that cleanup bounded while still giving
+  the regression meaningfully more diversity than 2–3 metros alone. The 2–3 inference
+  metros should be a subset of this training shortlist, so they're guaranteed adequate
+  comp density and a validated data pipeline.
 - **Before finalizing metro choices:** run a quick `groupby` count on the Kaggle
   dataset by city/metro to confirm actual listing density — the candidates below are
   based on known housing-stock patterns, not on this dataset's specific coverage, and
@@ -321,17 +335,30 @@ in the six New England states, and assumed that would force a regional branch in
 carrying fully usable entityids (Boston city is `2502507000` — Suffolk County, with a
 place code in the last five digits instead of the `99999` county placeholder), and
 `get_fmr` consumes it unchanged, returning a flat response shape for the
-Boston-Cambridge-Quincy HUD Metro FMR Area. The town regime is absorbed entirely by the
-crosswalk layer; no client change is required.
+Boston-Cambridge-Quincy HUD Metro FMR Area. The town regime was absorbed entirely by the
+crosswalk layer; no client change was required.
 
 Boston is therefore reclassified from *excluded, technically blocked* to **viable but
 not selected**. It is not adopted because the existing trio already spans three
 structurally different markets and is already indexed and parameter-tuned, so swapping
 would cost rework for no capability gained. Two caveats bound the correction: it was
 verified for Boston specifically, not for all six New England states (Providence RI
-remains untested), and the crosswalk would map Boston to a *town* entityid rather than
+remains untested), and the crosswalk mapped Boston to a *town* entityid rather than
 a county one — immaterial for FMR, which is all it currently feeds, but relevant if
 anything later keys on county FIPS.
+
+**No longer true as written, Aug 15, 2026.** "Absorbed entirely by the crosswalk layer"
+described the *old* hand-maintained table, which was just a lookup and didn't care
+whether a stored value was a county-level or town-level entityid — Boston's town
+entityid sat in the table like any other row. The rewritten `county_crosswalk.py` (§7,
+decision #10 follow-on) resolves county from geometry, and a county polygon join
+structurally cannot produce a town-level entityid — so it does not absorb the New
+England regime, it explicitly declines it (a resolved point in one of the six states
+returns `None`, `TODO(geography)`). Boston's live-verified entityid above is still
+correct and still proves `tools/hud_fmr.py`'s client handles the shape; what's no longer
+true is that a caller reaches it through the crosswalk. Building that back — a Census
+*county subdivision* boundary layer, since New England towns are county subdivisions,
+not places — is exactly the future work `county_crosswalk.py`'s own docstring names.
 
 **Why this correction is documented rather than quietly applied.** The original
 hypothesis was reasoned from real domain knowledge and was confidently held — and it
@@ -368,11 +395,30 @@ latitude, longitude, source, time`. The entire FMR normalization strategy keys o
 `county_fips`, so this gap sits directly underneath the rent model and was previously
 invisible in this plan.
 
-*Resolution:* since training is scoped to a curated ~5–8 metro shortlist anyway, build
-a hand-verified `(cityname, state) → county_fips` crosswalk for those cities — roughly
-30–50 entries, no new dependencies, about an hour. A lat/lon → FIPS spatial join
-against Census TIGER shapefiles (via `geopandas`) is the scale-up path if the full
-100K rows are ever needed; **not worth the dependency now.**
+*Resolution (original, Aug 8, 2026):* since training is scoped to a curated ~5–8 metro
+shortlist anyway, build a hand-verified `(cityname, state) → county_fips` crosswalk for
+those cities — roughly 30–50 entries, no new dependencies, about an hour. A lat/lon →
+FIPS spatial join against Census TIGER shapefiles (via `geopandas`) is the scale-up path
+if the full 100K rows are ever needed; **not worth the dependency now.**
+
+**Superseded Aug 15, 2026 — the scale-up path turned out to be the right call from the
+start, and the "not worth it" judgment was made without testing it.** Once
+`tools/geocoding.py` existed to put a *subject* property at a real coordinate (decision
+#10, §7), the geometric join stopped being a training-only scale-up option and became a
+strict improvement on the hand-maintained table for every consumer, subject-side
+included: no per-city curation, coverage of any US county rather than a hand-picked
+shortlist, and the *exact* county for a point rather than the table's principal-county
+approximation for cities spanning several. Measured before switching: `pip install
+geopandas` — 3.3s, prebuilt wheels, no GDAL compilation, ~31MB; the Census county
+boundary file loads in another ~3.3s and is cached locally after the first pull. Every
+Kaggle row already carries real `latitude`/`longitude` from the original scrape (this
+gap was always about the *county* column, never about coordinates), so the same join
+now resolves training-row counties too, for any city in the corpus — not just the
+curated shortlist this resolution originally scoped itself to. `county_crosswalk.py`
+was rewritten in place rather than left as a separate scale-up module; see its own
+docstring and decision #10's closing detail in §7 for the full accounting, including the
+one gap carried forward rather than solved: HUD's town-based (not county-based) FMR
+areas in the six New England states, tracked as `TODO(geography)`.
 
 **Gap 2 — the Redfin extract on disk is `Monthly`, not `Rolling 3 Months`** as §2
 specifies (verified: `FREQUENCY` is uniformly `Monthly`, `REGION TYPE` uniformly

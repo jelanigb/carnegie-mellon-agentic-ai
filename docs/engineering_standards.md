@@ -91,9 +91,9 @@ in a focused session or across a fragmented week.
   | Tag | Location | Item |
   |---|---|---|
   | `TODO(U3)` | `config.py` | Model IDs **confirmed dead**, not merely unverified (decision #8); add a startup liveness check |
-  | `TODO(U3)` | `extractor.py` | Nothing derives latitude/longitude, and comp retrieval hard-requires them (decision #10) |
+  | `TODO(U3)` | `extractor.py` | Decision #10 closed and `tools/geocoding.py` built/verified, but not called here yet — wiring it in would resolve real addresses inside `test_flag_propagation.py`'s no-coordinates fixture, so the call and the fixture update are deferred together to U3 |
   | `TODO(U5)` | `state.py`, `build_comps_index.py` | Index the `time` column so `Comp.listed_date` allows per-row FMR normalization |
-  | `TODO(U5)` | `county_crosswalk.py` | Nothing yet raises `COUNTY_FROM_PRINCIPAL_COUNTY` for multi-county cities |
+  | ~~`TODO(U5)`~~ | `county_crosswalk.py` | ✅ **moot as of Aug 15, 2026** — the principal-county approximation this described is gone; `county_fips` now resolves the exact county from the subject's coordinates. `FlagKind.COUNTY_FROM_PRINCIPAL_COUNTY` removed rather than left unraisable |
   | `TODO(U7)` | `critic.py` | Cross-agent consistency checks — `_consistency_objections()` returns empty until then |
   | `TODO(U7)` | `critic.py` | Confirm the critical-flag escalation rule when the severity weights are tuned (§6, finding 1) |
   | ~~`TODO(U2)`~~ | `hud_fmr.py` | ✅ **cleared Aug 10, 2026** — writes are atomic; the residual concurrency limit is documented on `_DiskCache` as accepted |

@@ -75,7 +75,17 @@ class FlagKind(StrEnum):
     RETRIEVAL_DISABLED = "retrieval_disabled"  # U4 ablation path
 
     # Geography resolution
-    COUNTY_FROM_PRINCIPAL_COUNTY = "county_from_principal_county"
+    #
+    # COUNTY_FROM_PRINCIPAL_COUNTY existed here through Aug 15, 2026, for the old
+    # county_crosswalk.py's "principal county" approximation for multi-county cities.
+    # Retired along with that table: the crosswalk's replacement resolves the exact
+    # county for a subject's actual coordinates rather than approximating one from its
+    # city name, so there is no longer an approximation on this path to disclose. Not
+    # kept as a permanently-unraisable member — U8's coverage check compares raised
+    # kinds against the full enum, and a kind nothing can ever raise would corrupt that
+    # comparison rather than merely go unexercised.
+    COORDINATES_FROM_CITY_CENTROID = "coordinates_from_city_centroid"
+    GEOCODING_UNAVAILABLE = "geocoding_unavailable"
 
     # Valuation
     RENT_ANCHORED_TO_FMR = "rent_anchored_to_fmr"
@@ -117,10 +127,16 @@ class DealTerms(BaseModel):
       a misparse is a silent error unless the observed original is retained to check
       against, which is why `full_address` is kept rather than reconstructed.
     - **Derived** — produced by a lookup rather than read from the listing at all.
-      These carry known approximation error and are the ones that raise flags: the
-      county crosswalk picks a *principal* county for the ten cities that span several
-      (Chicago, Dallas, Houston and others), so `county_fips` for those is a defensible
-      approximation rather than a fact, and every FMR figure keyed on it inherits that.
+      `latitude`/`longitude` (decision #10, `tools/geocoding.py`) carry known
+      approximation error and raise a flag when it's material: a parcel-accurate geocode
+      raises nothing, but the city-centroid fallback is a coarser approximation and is
+      disclosed as one. `county_fips` (`tools/county_crosswalk.py`, rewritten Aug 15,
+      2026 to a point-in-polygon join against the subject's own coordinates rather than
+      a hand-maintained city-name table) is now exact rather than approximate — it no
+      longer picks a "principal" county for a multi-county city, it resolves the one the
+      point actually falls in — so it raises nothing on success; it only fails outright
+      (`FlagKind.FMR_UNAVAILABLE_FOR_COUNTY`) for a New England point or a subject with
+      no coordinates to begin with.
 
     Keeping `full_address` alongside the parsed components is deliberate redundancy, not
     an oversight. It preserves the audit trail — if a report cites Cook County for a

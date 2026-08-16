@@ -1,7 +1,7 @@
 # Multi-Family Residential Deal Evaluator — Implementation Plan
 
 **Technical plan of record.**
-Author: Jelani Gould-Bailey · Last updated: Aug 10, 2026
+Author: Jelani Gould-Bailey · Last updated: Aug 15, 2026
 
 ## How this project is built
 
@@ -417,13 +417,13 @@ needed. Target: all closed during Week 4.
 | 1 | Orchestration framework | ✅ LangGraph, day one |
 | 2 | Inference metro trio | ✅ Chicago, LA, Cleveland |
 | 3 | Demo surface | ✅ Streamlit, local, scheduled U9 |
-| 4 | Training metro shortlist (~5–8, superset of the trio) | ⬜ `county_crosswalk.py` now covers 29 cities (every ≥500-listing pair); final selection pending |
+| 4 | Training metro shortlist (~5–8, superset of the trio) | ⬜ final selection pending. `county_crosswalk.py`'s coverage is no longer a constraint on this (Aug 15, 2026 rewrite resolves any US county from coordinates, not a hand-picked city list) — the decision now turns purely on comp density, per §2 |
 | 5 | X / Y / Z loop parameters | ✅ X=2.0 mi, Y=8, Z=4 — tuned in U4 against measured density curves; rationale in `config.py` |
 | 6 | Confidence threshold for human-review escalation | ⬜ provisional 0.60 set; tune in U7. **U2 added a second, independent escalation ground** — any critical flag escalates regardless of score (see §6, finding 1); confirm rather than re-derive |
 | 7 | Redfin minimum-price floor | ✅ $10,000, with evidence (§2) — note it is inert for all three inference metros |
 | 8 | OpenRouter model per role (dev / extraction / critic / summarizer) | ⬜ **placeholders confirmed dead (Aug 9)** — see below; still deferrable to U3 |
 | 9 | Planner topology — pre-flight vs. supervisor | ✅ **pre-flight + rework re-entry** (Aug 9, 2026); built and topology-asserted in U2 |
-| 10 | **Geocoding source** — how `DealTerms.latitude/longitude` get derived | ⬜ **opened Aug 10, 2026 in U2.** Blocks U3 |
+| 10 | **Geocoding source** — how `DealTerms.latitude/longitude` get derived | ✅ **Census Geocoder + corpus-centroid fallback** (Aug 11, 2026); `tools/geocoding.py` built and verified live. Wiring into the real Extractor remains U3 — see below |
 
 **Decision #8 detail (Aug 9, 2026).** The `TODO(U3)` in `config.py` warned that the four
 model IDs were unverified placeholders. Checked against OpenRouter's live catalogue while
@@ -475,6 +475,93 @@ Recommendation is (1) with (2) as the fallback path when the call fails, since t
 combination degrades in exactly the way the rest of the system does — flagged, disclosed,
 still producing an answer. Raised rather than resolved per §8, since it is a data-source
 decision and those belong in this log.
+
+**Closed Aug 11, 2026 — option (1)+(2) as recommended, with one change from the original
+sketch.** Option 2 as written proposed "a city-centroid table extending
+`county_crosswalk.py`" — a hand-curated table, mirroring how the county gap was closed.
+Built instead: `city_centroid()` in `tools/geocoding.py` computes the mean lat/lon of a
+city's own listings directly from the Kaggle corpus (`tools/kaggle_data.load_clean()`),
+rather than a maintained constant. Two reasons this is better than the sketch, not just
+different from it: it needs no hand-curation or per-city verification the way the FIPS
+table does, and it is a tighter-fitted centroid than an arbitrary city-hall point — it
+sits where the corpus's own comp density actually is, which is what the radius search
+downstream cares about. It also covers every city the corpus has listings for rather
+than only the 29-city crosswalk shortlist. `geocode_census()` (primary) and
+`city_centroid()` (fallback) share one normalization path with the county crosswalk —
+`county_crosswalk.normalize_city/normalize_state`, promoted from private to public for
+exactly this reuse — so the two lookups can't drift apart on how they fold the same
+corpus's city names.
+
+Verified live (`scripts/pull_geocode_sample.py`, real calls, not mocked): a complete
+street address in each inference-trio metro resolves via the Census Geocoder; a
+city/state pair with no street number correctly finds no Census match and falls through
+to the corpus centroid; a city genuinely outside the corpus's coverage correctly resolves
+to neither and returns `None` rather than inventing a coordinate. Two new flag kinds
+carry the disclosure — `COORDINATES_FROM_CITY_CENTROID` (warn) and
+`GEOCODING_UNAVAILABLE` (critical) — added to `state.py` alongside
+`COUNTY_FROM_PRINCIPAL_COUNTY` on the same precedent: the enum member exists ahead of the
+code that raises it, same as that one did in U1.
+
+**What's still open, and it's deliberately not closed here.** The tool is built and
+verified in isolation; it is not yet called from `agents/extractor.py`. Wiring it in
+would resolve real addresses for `test_flag_propagation.py`'s `LISTING_MISSING_PRICE`
+fixture, which currently relies on a *complete* address plus *withheld* coordinates to
+exercise the Comps agent's no-coordinates short-circuit without touching Chroma. That
+suite is the one thing in this project that must never fail for the wrong reason (§8), so
+wiring geocoding into the stub extractor now would silently change what it tests rather
+than extend it. That wiring — plus updating the fixture to a genuinely ungeocodable
+address so the suite keeps testing the same guarantee on purpose — is U3 work, tracked as
+the `TODO(U3)` in `extractor.py`.
+
+**Follow-on, Aug 15, 2026 — the county crosswalk (§2, "Two data gaps," Gap 1) is
+replaced by a consequence of decision #10.** Reviewing decision #10 surfaced that a
+listing's `city` field is sometimes a neighborhood rather than the postal city ("Wynwood"
+for Miami) — real estate marketing convention, not a parsing bug. Testing it directly
+(`tools/geocoding.py`'s primary path) showed comp retrieval is unaffected — it's
+coordinate-based, and Census resolves the correct point off street + ZIP regardless of
+the city token supplied — but `county_crosswalk.py`'s old (city, state) string lookup
+would still miss, and Census's own response carries a canonical city
+(`addressComponents.city`) that was never being read back. Comparing two fixes — correct
+the string before the crosswalk lookup, versus resolve county directly from the subject's
+already-derived coordinates — showed the second strictly dominates the first: it doesn't
+depend on the crosswalk table's coverage at all (Miami resolved correctly despite never
+having a table entry), it's immune to the city-string question entirely, and it works
+regardless of which geocoding tier produced the coordinate. It's also a strict accuracy
+improvement even for the cities the old table did cover, since it resolves the *exact*
+county for a point rather than the table's principal-county approximation for the ten
+cities spanning several.
+
+**Built.** `tools/county_crosswalk.py` is rewritten in place: `lookup_county_fips` now
+takes `(latitude, longitude)` and does a point-in-polygon join against Census's county
+boundary file (cached locally after the first pull) instead of a hand-maintained
+29-city table. `normalize_city`/`normalize_state` are unchanged and still serve
+`tools/geocoding.py`'s corpus-centroid fallback. Cost was measured, not assumed — the
+original §2 text called the spatial-join scale-up path "not worth the dependency"
+without testing it; `geopandas` installs in ~3.3s from prebuilt wheels at ~31MB, and the
+county boundary file loads in ~3.3s and is cached after that (see `data_strategy.md`'s
+Gap 1 for the full accounting). Verified live in `scripts/verify_county_geometry.py`:
+reproduces all three inference-trio entityids exactly, resolves Miami-Dade correctly
+where the old table had nothing, and resolves the old table's two hand-special-cased
+hard cases (Richmond VA's independent-city status, Denver's consolidated city-county)
+correctly with no special-case code — each cross-checked against a live HUD
+`listCounties` response, not just against the geometry's own claim.
+
+**Carried forward as future work, not solved:** HUD prices FMRs by *town*, not county,
+in the six New England states, and a county polygon join cannot produce the town-level
+entityid that regime needs. A resolved point landing in one of those six states now
+returns `None` — declining rather than guessing, the same discipline `geocoding.py`
+applies to an uncovered city — rather than emitting a plausible-looking wrong entityid.
+Tagged `TODO(geography)` at the site, same status the old table already carried for New
+England (verified for Boston only). Doesn't block the inference trio (none are New
+England).
+
+**One accepted narrowing, stated because it's a real behavior change, not a pure
+refactor:** county resolution now runs on coordinates, so a subject with a known city but
+no resolvable geocode gets no `county_fips` either, where the old table could still
+resolve one from the city string alone. Given `vector_store.query_comps` already
+hard-requires coordinates for comp retrieval, a coordinate-less subject was already this
+system's worst case; this removes one of the two things such a subject could still get
+independently, not one of the two paths that mattered independently of each other.
 
 **Decision #9 detail.** The pipeline order is fixed by data dependency — Valuation consumes
 `state.comps`, Scenario consumes `rent_estimate`/`value_estimate` — so the sequence
@@ -528,8 +615,9 @@ U1, U4, and U2 are complete. What remains, in the order it is needed:
    before U3 rather than before the write-up.
 2. **Decision #8** — model IDs. Placeholders confirmed dead (see the decision #8 detail
    above); deliberately deferred to U3, which it blocks.
-3. **Decision #10** — geocoding source. Opened in U2 (detail above); blocks U3, since a
-   real extractor producing text-only geography still cannot retrieve comps without it.
+3. ~~**Decision #10**~~ — ✅ **closed Aug 11, 2026.** Geocoding source chosen and built
+   (`tools/geocoding.py`, detail above); wiring into the real Extractor and updating the
+   flag-propagation fixture remain U3 work.
 4. **Decision #4** — finalize the training shortlist from the 29 crosswalk entries.
    Blocks U5.
 5. ~~**OpenRouter API key**~~ — ✅ **closed Aug 9, 2026.** Stored at `ignore/openrouter_key`
@@ -545,7 +633,13 @@ being the first live exercise of `tools/llm_client.py` — `call_with_schema`'s 
 fired for real, one model needing two attempts to produce schema-valid output). Added and
 verified in U2: `graph.py`, `main.py`, `agents/planner.py`, `agents/summarizer.py`,
 `agents/human_review.py`, `tools/tracing.py`, `scripts/export_graph_diagram.py`, and
-`tests/test_flag_propagation.py` (14 cases, all passing).
+`tests/test_flag_propagation.py` (14 cases, all passing). Added and verified Aug 11,
+2026 (decision #10): `tools/geocoding.py` and `scripts/pull_geocode_sample.py` — not yet
+called from the pipeline; see decision #10's closing detail above. Rewritten and
+verified Aug 15, 2026 (decision #10 follow-on): `tools/county_crosswalk.py` (now a
+point-in-polygon join, replacing the hand-maintained table) and
+`scripts/verify_county_geometry.py` — this one *is* called from the pipeline
+(`agents/extractor.py`), unlike geocoding itself.
 
 ### Prerequisite reading (before U2 review)
 

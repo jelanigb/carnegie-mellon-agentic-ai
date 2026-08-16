@@ -11,12 +11,15 @@ The four built-in deals are the same density cases `scripts/retrieval_evidence.p
 measures, reused here so the skeleton's end-to-end behaviour can be compared against
 the retrieval evidence directly rather than against a separate set of inputs.
 
-**Coordinates are supplied alongside the listing text, not extracted from it.** Nothing
-in this system geocodes an address yet — see the `TODO(U3)` in `agents/extractor.py`
-and decision #10 in §7. `--deal no-coords` runs the same Los Angeles deal with them
-withheld, which is the honest demonstration of what that gap costs: retrieval cannot
-run at all, a critical flag is raised, confidence collapses, and the deal escalates.
-That path is worth having in the demo set rather than hidden behind a fixture.
+**Coordinates are supplied alongside the listing text, not extracted from it.**
+`tools/geocoding.py` exists and is verified (decision #10, §7 — closed), but it is
+deliberately not wired into this stub extractor yet; see the `TODO(U3)` in
+`agents/extractor.py` for why. `--deal no-coords` therefore still demonstrates the
+pre-geocoding failure mode as it existed when the gap was open: retrieval cannot run at
+all, a critical flag is raised, confidence collapses, and the deal escalates. Once U3
+wires geocoding into the real Extractor, this deal's coordinates would resolve from its
+address instead — the case is kept here as a fixture for that transition, not as a
+live demonstration of an unclosed gap.
 
 **Interrupt handling.** A deal that escalates pauses at `human_review` and `invoke`
 returns an `__interrupt__` payload instead of a finished state. This script prints what

@@ -2,6 +2,12 @@ requests>=2.31
 python-dotenv>=1.0
 pandas>=2.2
 
+# County resolution (tools/county_crosswalk.py): point-in-polygon join against Census
+# county boundaries. Pulls in shapely/pyproj/pyogrio; all ship as prebuilt wheels on
+# macOS/Linux, no system GDAL install needed (measured install: ~3s, ~31MB, ~103MB on
+# disk — cheaper than this project's original docstring assumed before it was tested).
+geopandas>=1.1
+
 # Orchestration
 langgraph>=0.2
 langgraph-checkpoint-sqlite>=2.0

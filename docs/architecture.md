@@ -122,7 +122,7 @@ carnegie_mellon_agentic_repo/
     │   ├── kaggle_data.py         # ✅ single cleaning path: dedupe, completeness, city match
     │   ├── rent_model.py          # sklearn regression: train/load/predict (FMR-normalized target)
     │   ├── hud_fmr.py             # ✅ HUD FMR API client (§9)
-    │   ├── county_crosswalk.py    # ✅ (cityname, state) → county_fips, 29 entries HUD-verified
+    │   ├── county_crosswalk.py    # ✅ lat/lon → county_fips via point-in-polygon join (rewritten Aug 15, 2026)
     │   ├── redfin_data.py         # ✅ load + query, rolling-3 + growth bands computed here
     │   └── tracing.py             # ✅ LangSmith project wiring; env-driven, never required
     ├── scripts/

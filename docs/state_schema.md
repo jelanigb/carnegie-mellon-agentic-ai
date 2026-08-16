@@ -43,8 +43,10 @@ class FlagKind(StrEnum):
     SPARSE_COMPS = "sparse_comps"
     RENT_ANCHORED_TO_FMR = "rent_anchored_to_fmr"
     FMR_UNAVAILABLE_FOR_COUNTY = "fmr_unavailable_for_county"
-    COUNTY_FROM_PRINCIPAL_COUNTY = "county_from_principal_county"
-    # ... 17 kinds total; see src/state.py for the full set
+    COORDINATES_FROM_CITY_CENTROID = "coordinates_from_city_centroid"
+    # ... 18 kinds total; see src/state.py for the full set. (COUNTY_FROM_PRINCIPAL_COUNTY
+    # was here through Aug 15, 2026 — retired along with the crosswalk table it described;
+    # see the "Geography fields are grouped by provenance" section below.)
 
 class Flag(BaseModel):
     source_agent: str          # e.g. "comps_retrieval", "valuation_rent"
@@ -168,11 +170,21 @@ obtained determines how far it can be trusted:
   observed text by the Extractor. Can be wrong, and a misparse is silent unless the
   original is retained to check against.
 - **Derived** (`county_fips`, `latitude`, `longitude`) — produced by lookup, never read
-  from the listing. These carry known approximation error and are the tier that raises
-  flags: the crosswalk selects a *principal* county for the ten cities spanning several
-  (Chicago, Dallas, Houston among them), so `county_fips` there is a defensible
-  approximation rather than a fact — and every FMR figure keyed on it inherits that
-  approximation. Hence `FlagKind.COUNTY_FROM_PRINCIPAL_COUNTY`.
+  from the listing.
+
+  **Superseded Aug 15, 2026.** This originally described the hand-maintained
+  `county_crosswalk.py` table, which picked a *principal* county for the ten cities
+  spanning several (Chicago, Dallas, Houston among them) — a defensible but genuine
+  approximation, hence `FlagKind.COUNTY_FROM_PRINCIPAL_COUNTY`. That table is retired:
+  `county_fips` now resolves via a point-in-polygon join against the subject's own
+  coordinates (`tools/geocoding.py`, decision #10), which returns the *exact* county a
+  point falls in rather than approximating one from a city name — verified to reproduce
+  the old table's hand-checked entityids exactly, plus resolve cities the table never
+  covered at all (e.g. Miami). `COUNTY_FROM_PRINCIPAL_COUNTY` is removed from the enum
+  rather than kept unraisable — see `state.py`. `latitude`/`longitude` remain the tier
+  that can raise a flag on approximation (the city-centroid fallback); `county_fips` no
+  longer can on success, only on outright failure (`FMR_UNAVAILABLE_FOR_COUNTY` — no
+  coordinates, or a New England point, flagged as future work rather than solved).
 
 Keeping `full_address` alongside the parsed components is deliberate redundancy rather
 than an oversight: it preserves the audit trail. If a report cites Cook County for a
