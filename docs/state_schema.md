@@ -2,6 +2,18 @@
 
 ## 5. State Schema (design target for `state.py`)
 
+### Section Links
+
+- [§1](implementation_plan.md#1-project-summary)
+- [§2](implementation_plan.md#2-data-strategy-reconciling-kaggleredfin-vintage-and-category-mismatch)
+- [§3](implementation_plan.md#3-stack-decision-langgraph-from-day-one)
+- [§4](implementation_plan.md#4-proposed-repository-structure)
+- [§5](implementation_plan.md#5-state-schema-design-target-for-statepy)
+- [§6](implementation_plan.md#6-execution-order)
+- [§7](implementation_plan.md#7-immediate-next-actions)
+- [§8](implementation_plan.md#8-engineering-standards)
+- [§9](implementation_plan.md#9-current-build-hud-fmr-api-client-toolshud_fmrpy)
+
 **Changed Aug 8, 2026: Pydantic v2 instead of dataclasses**, and `flags` now carries a
 LangGraph reducer. Both changes are load-bearing:
 
