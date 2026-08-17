@@ -60,6 +60,7 @@ from typing import Literal, Optional
 
 import requests
 
+from tools import diagnostics
 from tools.county_crosswalk import normalize_city, normalize_state
 
 CENSUS_GEOCODER_URL = "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
@@ -209,7 +210,17 @@ def geocode(
     """
     try:
         result = geocode_census(street_address, city, state, zip_code)
-    except GeocodingError:
+    except GeocodingError as exc:
+        # Previously silent, and it was the worst place in the system to be silent: the
+        # caller sees only "no parcel match", which is indistinguishable from the
+        # geocoder having run fine and found nothing. Those call for opposite responses
+        # — one is an outage to retry, the other is an address to correct — and the
+        # resulting flag says the same thing either way.
+        diagnostics.log_exception(
+            "geocoding.geocode: the Census request failed (as distinct from running "
+            "and finding no match); falling through to the corpus city centroid",
+            exc,
+        )
         result = None
 
     if result is not None:

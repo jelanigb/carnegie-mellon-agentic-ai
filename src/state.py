@@ -67,6 +67,12 @@ class FlagKind(StrEnum):
     UNRESOLVED_FIELD = "unresolved_field"
     ASSUMED_FIELD_VALUE = "assumed_field_value"
     EXTRACTION_RETRY_EXHAUSTED = "extraction_retry_exhausted"
+    # Distinct from EXTRACTION_RETRY_EXHAUSTED, and the distinction is the reader's,
+    # not the implementation's: "the model answered three times and never produced
+    # usable output" and "no model was reached at all" call for different responses
+    # from whoever reads the report. Collapsing them into one kind would save an enum
+    # member and cost the reader the only thing they needed from it.
+    EXTRACTION_UNAVAILABLE = "extraction_unavailable"
 
     # Retrieval
     RELAXED_SEARCH_RADIUS = "relaxed_search_radius"
@@ -86,6 +92,12 @@ class FlagKind(StrEnum):
     # comparison rather than merely go unexercised.
     COORDINATES_FROM_CITY_CENTROID = "coordinates_from_city_centroid"
     GEOCODING_UNAVAILABLE = "geocoding_unavailable"
+    # A caller supplied coordinates that disagree with the geocode of the listing's own
+    # address. Raised rather than resolved: the system cannot tell whether the caller
+    # meant the address (and mistyped the coordinates) or the coordinates (and mistyped
+    # the address), and those are different properties. See the Extractor for which of
+    # the two the pipeline carries while a human decides.
+    SUPPLIED_COORDINATES_CONFLICT = "supplied_coordinates_conflict"
 
     # Valuation
     RENT_ANCHORED_TO_FMR = "rent_anchored_to_fmr"

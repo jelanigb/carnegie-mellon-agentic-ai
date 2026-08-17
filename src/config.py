@@ -89,6 +89,31 @@ MAX_EXTRACTION_RETRIES = 3
 # Names must match DealTerms attributes exactly — these are looked up by getattr.
 REQUIRED_DEAL_FIELDS = ("full_address", "price", "unit_count")
 
+# How far a caller-supplied coordinate may sit from the geocode of the listing's own
+# address before the two are treated as describing different places (U3).
+#
+# The conflict is escalated rather than resolved, because the system cannot tell which
+# input the caller meant: the address with its correct coordinates, or the coordinates
+# with a mistyped address. What it *can* do is refuse to pick one silently. The
+# geocoded point is what the pipeline carries — the report prints the address, so comp
+# retrieval is anchored to the same place the report names rather than to a location the
+# reader never sees.
+#
+# 0.5 mi is set against what the error costs downstream rather than against geocoding
+# precision: INITIAL_SEARCH_RADIUS_MILES is 2.0, so a half-mile displacement moves a
+# meaningful share of the comp set.
+#
+# One measurement exists, and it argues the line is tight rather than loose. U2's Chicago
+# demo carried hand-picked "Logan Square" coordinates that sit 0.54 mi from the Census
+# parcel geocode of the address in its own listing text — i.e. a neighbourhood-level
+# coordinate chosen by a careful person trips this. Read either way: the threshold
+# catches a real discrepancy, or it fires on inputs nobody would call wrong. Left at 0.5
+# because the flag escalates rather than blocks, and because a threshold wide enough to
+# never fire is the failure mode §2 warns about in the search-radius tuning.
+#
+# PROVISIONAL — one data point is not a tuning. U8 has the volume to settle it.
+COORDINATE_CONFLICT_THRESHOLD_MILES = 0.5
+
 
 # --------------------------------------------------------------------------
 # Data layer
@@ -134,36 +159,82 @@ KAGGLE_MAX_RENT = 10_000.0
 # Models (OpenRouter)
 # --------------------------------------------------------------------------
 #
-# TODO(U3): DECISION #8 IN §7 IS STILL OPEN, and these four IDs are now known-bad rather
-# than merely unverified. Checked against the live catalogue Aug 9, 2026:
-# `meta-llama/llama-3.3-70b-instruct:free` NO LONGER EXISTS — the model is listed but is
-# paid-only, and there is no free Llama variant at all. Any run reaching an LLM call with
-# these values set will fail.
+# Decision #8, closed Aug 16, 2026 — see §7 for the full table.
 #
-# Left in place deliberately rather than repointed: §8 requires decisions of this kind to
-# be raised, not resolved at implementation time, and nothing before U3 makes an LLM call.
-# Verified live and responding on Aug 9 if a replacement is wanted:
-# `openai/gpt-oss-20b:free`, `nvidia/nemotron-3-super-120b-a12b:free`
-# (`google/gemma-4-31b-it:free` returned a provider 429).
+# **Paid variants, not `:free`.** The project constraint is to prefer free tools *where
+# their quality is good*, and on this axis the free tier failed a different test: its
+# `:free` variants are served from provider-shared pools, so two bake-off passes measured
+# availability rather than capability — models lost whole listings to 429s, and which
+# ones failed moved between passes. On paid variants, across two further passes, all
+# seven candidates returned 3/3 schema-valid, 23/23 hand-checked fields, correct
+# assumption verdicts, and **zero 429s**. The comparison only became a comparison once it
+# was paid for.
 #
-# The durable lesson is staleness, not selection — these were valid when written and
-# invalid six days later. U3 should add a startup liveness check against
-# https://openrouter.ai/api/v1/models that fails loudly at launch rather than mid-run.
-# The program advises free-tier access, so any replacement should carry the `:free`
-# suffix. Note the four are currently identical; the split below is structural, not yet a
-# real selection.
+# Cost is why that trade is easy rather than a compromise: one extraction is ~1.8K input
+# and ~300 output tokens, so the model below runs about **$0.00015 per call** — roughly
+# 6,700 extractions per dollar, against a $100 project ceiling. The free tier was costing
+# more in evidence quality than paid inference costs in money.
 #
-# The split is deliberate: a cheap model for high-volume dev iteration, and stronger
-# models reserved for the three roles where output quality most affects the result.
+# **Why this model.** With correctness tied across all seven, the remaining signals were
+# latency and price. `nemotron-3-nano-30b-a3b` was the balance pick: perfect on every
+# pass (including both free-tier passes, where it was the only family that never
+# 429'd), the cheapest of the nemotron family, and second-fastest overall at 18.0s/11.3s
+# for three listings. Two alternatives, recorded so the choice stays reviewable rather
+# than looking inevitable: `google/gemma-4-26b-a4b-it` was fastest on both passes
+# (8.2s/6.5s) at 2.3x the price, and `openai/gpt-oss-20b` was cheapest at $0.00009 but
+# slower. Note gemma-4-26b scored a *spurious assumption* on both free-tier passes and
+# neither paid pass — free and paid variants of one model name are not always the same
+# deployment, which is worth knowing before trusting a free-tier measurement of anything.
+#
+# **Staleness is the durable risk, not selection.** The four IDs these replace were valid
+# when written and dead six days later: `meta-llama/llama-3.3-70b-instruct:free` stopped
+# being free, with no free Llama variant left. That would have surfaced as an opaque
+# error mid-extraction. `tools/llm_client.verify_models_live()` now checks these against
+# the live catalogue and `main.py` calls it before building the graph, so a dead ID fails
+# loudly at launch instead.
+#
+# The four-way split remains structural. Only MODEL_EXTRACTION is exercised by a built
+# agent; the Critic and Summarizer make no LLM calls yet, so there is still nothing to
+# choose them against — the same reasoning §7 used to defer this decision originally,
+# now scoped to three roles instead of four. Revisit at U7 and U9.
 
-MODEL_DEV = "meta-llama/llama-3.3-70b-instruct:free"
-MODEL_EXTRACTION = "meta-llama/llama-3.3-70b-instruct:free"
-MODEL_CRITIC = "meta-llama/llama-3.3-70b-instruct:free"
-MODEL_SUMMARIZER = "meta-llama/llama-3.3-70b-instruct:free"
+MODEL_DEV = "nvidia/nemotron-3-nano-30b-a3b"
+MODEL_EXTRACTION = "nvidia/nemotron-3-nano-30b-a3b"
+MODEL_CRITIC = "nvidia/nemotron-3-nano-30b-a3b"
+MODEL_SUMMARIZER = "nvidia/nemotron-3-nano-30b-a3b"
 
 LLM_TIMEOUT_SECONDS = 90
 LLM_MAX_RETRIES = 3
 LLM_TEMPERATURE = 0.0  # deterministic by default; ToT overrides
+
+
+# --------------------------------------------------------------------------
+# Model response cache (tools/llm_cache.py)
+# --------------------------------------------------------------------------
+
+# "off" | "read_write" | "replay". Env-driven so a run can switch without an edit —
+# `LLM_CACHE_MODE=replay .venv/bin/python ...` is how an evaluation run pins itself to
+# recorded responses.
+#
+# Measured justification: a live call ran 9.9-23s per listing across the U3 bake-off,
+# against milliseconds for a local read. The cache is a latency and reproducibility
+# mechanism first; the free tier's 50/day cap is what prompted it, but paid inference
+# removes that pressure without removing either of the other two reasons.
+LLM_CACHE_MODE = os.environ.get("LLM_CACHE_MODE", "read_write")
+
+# Two stores, one mechanism, split by whether the contents belong in git.
+#
+# The default is under `data/` (gitignored) because a development loop iterating on a
+# prompt generates a recording per revision, and committing that churn would spend review
+# attention — the project's scarcest resource — on files nobody needs to read.
+#
+# `src/eval/data/` is the committed counterpart: the recordings an evaluation replays
+# have to travel with the repo, or a fresh clone cannot reproduce the results the report
+# quotes. U8 points at it explicitly; nothing writes there by accident.
+LLM_CACHE_DIR = DATA_DIR / "processed" / "llm_cache"
+EVAL_DATA_DIR = SRC_DIR / "eval" / "data"
+EVAL_RESULTS_DIR = SRC_DIR / "eval" / "results"
+EVAL_RECORDINGS_DIR = EVAL_DATA_DIR / "llm_recordings"
 
 
 # --------------------------------------------------------------------------

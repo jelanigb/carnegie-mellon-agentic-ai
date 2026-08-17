@@ -56,9 +56,15 @@ class FlagKind(StrEnum):
     RENT_ANCHORED_TO_FMR = "rent_anchored_to_fmr"
     FMR_UNAVAILABLE_FOR_COUNTY = "fmr_unavailable_for_county"
     COORDINATES_FROM_CITY_CENTROID = "coordinates_from_city_centroid"
-    # ... 18 kinds total; see src/state.py for the full set. (COUNTY_FROM_PRINCIPAL_COUNTY
+    SUPPLIED_COORDINATES_CONFLICT = "supplied_coordinates_conflict"
+    EXTRACTION_UNAVAILABLE = "extraction_unavailable"
+    # ... 20 kinds total; see src/state.py for the full set. (COUNTY_FROM_PRINCIPAL_COUNTY
     # was here through Aug 15, 2026 — retired along with the crosswalk table it described;
-    # see the "Geography fields are grouped by provenance" section below.)
+    # see the "Geography fields are grouped by provenance" section below. The last two
+    # above were added in U3: a caller-supplied coordinate that disagrees with the
+    # geocode of the listing's own address, and a model that could not be reached at all
+    # — the latter kept distinct from EXTRACTION_RETRY_EXHAUSTED because "never reached"
+    # and "answered badly three times" ask different things of the reader.)
 
 class Flag(BaseModel):
     source_agent: str          # e.g. "comps_retrieval", "valuation_rent"

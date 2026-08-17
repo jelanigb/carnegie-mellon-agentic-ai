@@ -20,7 +20,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import config
-from tools import kaggle_data, vector_store
+from tools import diagnostics, kaggle_data, vector_store
 
 # state code -> city name patterns. New York rolls up its boroughs, which appear as
 # separate cityname values. Matching is word-boundary (see tools/kaggle_data.py):
@@ -60,8 +60,16 @@ def main() -> None:
     try:
         client.delete_collection(config.CHROMA_COLLECTION)
         print(f"\nDropped existing collection '{config.CHROMA_COLLECTION}'.")
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001 — a first run has nothing to drop
+        # Expected on a first run and ignorable, but not worth being silent about: if
+        # the drop fails for any *other* reason, the rebuild below appends to a
+        # collection it believes is empty, and the duplicate ids are discovered much
+        # later as inflated comp counts.
+        diagnostics.log_exception(
+            f"build_comps_index: could not drop '{config.CHROMA_COLLECTION}' "
+            f"(expected if this is a first run); continuing to build",
+            exc,
+        )
 
     collection = vector_store.get_collection(create=True)
     print(f"Embedding with {config.EMBEDDING_MODEL} (first run downloads the model)...\n")

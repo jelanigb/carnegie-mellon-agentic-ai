@@ -156,7 +156,7 @@ safe to defer.
 | **U4** ✅ | Comps/Retrieval: Chroma index (3,880 listings), one document per listing, hybrid metadata-filter + embedding query, top-`Y` results, adaptive relaxation loop, sparse-comps flag; **two ablations** — retrieval-off config flag and ungrounded-LLM comparison; X/Y/Z tuned against measured density | **3.1** |
 | **U2** ✅ | **Walking skeleton.** 8 nodes wired in `graph.py` on the pre-flight Planner topology (decision #9) incl. the single Critic→Planner back edge and the `human_review` interrupt; Planner and Summarizer built for real; flag propagation proven end-to-end by a 14-case suite; diagram generated from the compiled graph *and* asserting the topology; LangSmith wiring env-driven | **5.1** (fully) |
 | **Week 5 — Input** | | |
-| **U3** | Extractor: real LLM call, Pydantic validate→retry loop, clarifying questions, assumption flags, bounded escalation; 3 synthetic listings | 2.1 evidence |
+| **U3** ✅ | Extractor: real LLM call, Pydantic validate→retry loop, clarifying questions, assumption flags, bounded escalation; 3 synthetic listings. Also wires geocoding into the pipeline (decision #10's remaining half), adds the model liveness check, and takes the flag-propagation suite to 24 hermetic cases | 2.1 evidence |
 | **Week 6 — Estimation & Forecast** | | |
 | **U5** | Rent model: FMR-normalized regression, holdout MAE, Valuation agent, LLM fallback path + `rent_anchored_to_fmr` / `fmr_unavailable_for_county` flags | — |
 | **U6** | Scenario/Forecast: `redfin_data.py` (rolling-3, min-price floor), ToT branching over optimistic/base/pessimistic, `anomalous_period_included` flag | **4.1** |
@@ -276,6 +276,38 @@ separate set of inputs:
 The Los Angeles row carries the same weight it does in §2: a clean run raising *no*
 flags, escalating nothing, is what establishes that the other four rows mean something.
 
+**Re-measured Aug 16, 2026, with the real Extractor (U3).** The stub is gone, coordinates
+are geocoded from each listing's own address rather than supplied, and every run makes a
+live model call:
+
+| `main.py --deal` | Comps | Confidence | Disclosures | Outcome |
+| --- | --- | --- | --- | --- |
+| `los-angeles` | 8 | 1.00 | **0** | reports normally |
+| `chicago` | 8 | 0.85 | 2 | reports normally |
+| `staten-island` | 0 | 0.30 | 5 (incl. 1 critical) | pauses at `human_review` |
+| `no-geography` | 0 | 0.20 | 3 (incl. 2 critical) | pauses at `human_review` |
+| `coord-conflict` | 8 | 0.60 | 2 (incl. 1 critical) | pauses at `human_review` |
+| `chicago --no-retrieval` | 0 | 0.60 | 2 (incl. 1 critical) | pauses at `human_review` |
+
+Three things in this table are worth more than the numbers.
+
+**The clean Los Angeles run survived the transition**, which was not a given: U3 nearly
+lost it. An invented street address resolves to no parcel, falls back to the city
+centroid, and raises a warn flag — so every demo run would have carried a disclosure and
+this row would have stopped being a baseline. Moving the demo listings onto real
+addresses (invented deal terms, real streets) is what preserved it.
+
+**Staten Island still finds zero comps**, for the reason it always did. That was the
+other transition risk: the corpus centroid for Staten Island sits 7.55 mi from
+Tottenville, in a denser part of the island, so a centroid fallback would have quietly
+turned the thin-market case into a different market. The real address keeps the case
+measuring what §2 says it measures.
+
+**`coord-conflict` escalates at confidence 0.60 — exactly the boundary** where U2's
+escalation defect lived. It escalates on the critical-flag rule rather than on the score,
+which is the independent guarantee finding 1 established, now exercised by a case that
+arrives at that number honestly instead of by construction.
+
 **Three findings, each of which changed the build.**
 
 **1. A single critical flag did not escalate. Fixed.** One critical flag costs 0.40
@@ -383,10 +415,16 @@ distinction between them is worth drawing explicitly in the report.
 If the schedule slips, shed scope in this order rather than improvising:
 
 1. **ZIP-tier appreciation** (already deferred in §2 — keep it deferred).
-2. **LLM rent fallback path** — document as designed-but-unbuilt; Checkpoint 2.1
+2. **Public-record for-sale ground truth** (decision #11) — the county-assessor dataset
+   that would let the *value* estimate be scored rather than only demonstrated. Cut
+   before the LLM fallback because it is a new data source arriving late, attached to the
+   one unit that must not slip. Cutting it costs a validated value estimate, not a
+   working one: demo deals stay calibrated against Redfin and FMR, and the rent model
+   keeps real ground truth from the held-out corpus slice. Document the gap explicitly.
+3. **LLM rent fallback path** — document as designed-but-unbuilt; Checkpoint 2.1
    already anticipated this exact trade.
-3. **Streamlit app** — fall back to a terminal recording plus LangSmith traces.
-4. **Critic rework-loop depth** — reduce to single-pass review with escalation,
+4. **Streamlit app** — fall back to a terminal recording plus LangSmith traces.
+5. **Critic rework-loop depth** — reduce to single-pass review with escalation,
    keeping the cycle in the graph but capping `MAX_REWORKS = 1`.
 
 **Never cut:** the flag propagation test (U2), the eval harness (U8), or the Week 7
@@ -421,9 +459,10 @@ needed. Target: all closed during Week 4.
 | 5 | X / Y / Z loop parameters | ✅ X=2.0 mi, Y=8, Z=4 — tuned in U4 against measured density curves; rationale in `config.py` |
 | 6 | Confidence threshold for human-review escalation | ⬜ provisional 0.60 set; tune in U7. **U2 added a second, independent escalation ground** — any critical flag escalates regardless of score (see §6, finding 1); confirm rather than re-derive |
 | 7 | Redfin minimum-price floor | ✅ $10,000, with evidence (§2) — note it is inert for all three inference metros |
-| 8 | OpenRouter model per role (dev / extraction / critic / summarizer) | ⬜ **placeholders confirmed dead (Aug 9)** — see below; still deferrable to U3 |
+| 8 | OpenRouter model per role (dev / extraction / critic / summarizer) | ✅ **`nvidia/nemotron-3-nano-30b-a3b`, paid variant** (Aug 16, 2026) — measured over four bake-off passes; see below. Liveness now checked at launch by `verify_models_live()`. Critic and Summarizer roles hold the same value and are revisited at U7/U9, since neither makes an LLM call yet |
 | 9 | Planner topology — pre-flight vs. supervisor | ✅ **pre-flight + rework re-entry** (Aug 9, 2026); built and topology-asserted in U2 |
 | 10 | **Geocoding source** — how `DealTerms.latitude/longitude` get derived | ✅ **Census Geocoder + corpus-centroid fallback** (Aug 11, 2026); `tools/geocoding.py` built and verified live. Wiring into the real Extractor remains U3 — see below |
+| 11 | **Grounding for demo and evaluation deal terms** | 🟨 **Half taken (Aug 16, 2026).** Demo listings are now calibrated against Redfin metro medians and HUD FMR, with `scripts/verify_demo_calibration.py` re-deriving every figure. Real for-sale ground truth via county public records is **planned, scheduled at U8, and on the cut list** — see below |
 
 **Decision #8 detail (Aug 9, 2026).** The `TODO(U3)` in `config.py` warned that the four
 model IDs were unverified placeholders. Checked against OpenRouter's live catalogue while
@@ -446,6 +485,88 @@ as an opaque runtime error mid-U3. Free-tier catalogues churn, so these constant
 not be treated as set-once. U3 should add a startup liveness check that fails loudly at
 launch if a configured model is absent from `/api/v1/models`, rather than discovering it on
 first invocation.
+
+**Closed Aug 16, 2026 (U3) — `nvidia/nemotron-3-nano-30b-a3b`, on the paid variant.**
+The route to that answer is worth more than the answer, because the first two passes
+measured the wrong thing.
+
+**Pass 3 and 4, paid variants — the comparison only became a comparison once it was paid
+for.** Every candidate returned 3/3 schema-valid extractions, 23/23 hand-checked fields,
+correct assumption verdicts on all three listings, and **zero 429s**, with no model ever
+needing a schema retry. Correctness ties completely, so the remaining signals are latency
+and price:
+
+| model | pass 3 | pass 4 | $/extraction |
+| --- | --- | --- | --- |
+| `google/gemma-4-26b-a4b-it` | 8.2s | 6.5s | 0.00034 |
+| `nvidia/nemotron-3-ultra-550b-a55b` | 13.7s | 9.3s | 0.00216 |
+| **`nvidia/nemotron-3-nano-30b-a3b`** | **18.0s** | **11.3s** | **0.00015** |
+| `openai/gpt-oss-20b` | 24.6s | 19.2s | 0.00009 |
+| `nvidia/nemotron-3-super-120b-a12b` | 35.0s | 19.9s | 0.00027 |
+| `google/gemma-4-31b-it` | 35.7s | 12.4s | 0.00028 |
+| `nvidia/nemotron-3.5-lightning` | 44.7s | 32.9s | 0.00020 |
+
+Selected on balance rather than on any single column: perfect on all four passes, the
+cheapest of its family, and second-fastest overall. Two alternatives are recorded so the
+choice stays reviewable rather than looking inevitable — gemma-4-26b was fastest on both
+passes at 2.3× the price, and gpt-oss-20b was cheapest but slower. At $0.00015 per
+extraction, roughly 6,700 extractions to the dollar, price is not the deciding axis at
+this project's volume; it is recorded because a cost table nobody wrote is a cost nobody
+notices later.
+
+**One finding that outlives this decision: a free variant and a paid variant of the same
+model name are not necessarily the same deployment.** `gemma-4-26b` scored a spurious
+assumption on *both* free passes and on *neither* paid pass, with an identical prompt.
+Whatever the cause — quantization, a different serving provider — it means a free-tier
+measurement is not automatically evidence about the paid variant of the same name, and
+neither is the reverse.
+
+**This is a documented departure from the project's "prefer free tools" constraint**,
+taken because the constraint's own qualifier — *where their quality is good* — is what
+failed. See open item 0 below for the accounting.
+
+**Passes 1 and 2, free variants — kept because the failure is the evidence.**
+`--tier free` still reproduces them. These passes are what established that the free
+tier's `:free` variants are served from provider-shared pools, so what they measured was
+availability, not capability: models lost whole listings to 429s and *which* models
+failed moved between passes. `openai/gpt-oss-20b:free` scored 3/3 on the first pass and
+1/3 on the second; `google/gemma-4-31b-it:free` scored 0/3 then 1/3. The four
+`nvidia/nemotron-3*` variants completed both passes, which is the only signal that
+survived into the paid comparison.
+
+| model | pass 1 | pass 2 | fields | assumptions | secs |
+| --- | --- | --- | --- | --- | --- |
+| `nvidia/nemotron-3-nano-30b-a3b:free` | 3/3 | 3/3 | 23/23 | all correct | 29.6 |
+| `nvidia/nemotron-3-super-120b-a12b:free` | 3/3 | 3/3 | 23/23 | all correct | 34.6 |
+| `nvidia/nemotron-3-ultra-550b-a55b:free` | 3/3 | 3/3 | 23/23 | all correct | 66.0 |
+| `nvidia/nemotron-3.5-lightning:free` | 3/3 | 3/3 | 23/23 | all correct | 69.8 |
+| `openai/gpt-oss-20b:free` | 3/3 | **1/3 (429)** | 23/23 | all correct | 31.9 |
+| `google/gemma-4-26b-a4b-it:free` | 3/3 | 3/3 | 23/23 | **1 wrong** | 54.1 |
+| `google/gemma-4-31b-it:free` | **0/3 (429)** | **1/3 (429)** | — | — | — |
+
+**Every model that completed a listing scored 23/23 on hand-checked field accuracy, at
+one attempt per listing — the retry loop never fired.** So accuracy discriminates almost
+nothing here, and saying so is the honest reading: per §8, a check where everything
+passes is evidence about the check, not a verdict on the candidates. These listings
+separate a working extractor from a broken one, not a good one from a better one. That
+held on the paid passes too, which is why the decision came down to latency and price.
+
+**Two method corrections came out of these passes**, and the bake-off carries both now.
+The free-tier table confounded availability with capability — a 429 scored identically to
+a malformed extraction, so `gemma-4-31b` looked incapable when it was merely queued.
+`run_case` now backs off `(5, 15, 30)` seconds on rate limits only, and counts them in a
+separate column, so the two are measured independently. And the bake-off runs with the
+response cache **off**: it measures a provider's live behaviour, and a replayed response
+would report the recording's latency as if it were today's.
+
+The single assumption error is worth recording because of what it was. `gemma-4-26b`
+flagged a *stated* unit count as an inference. The same failure appeared in the
+configured model's first run and was fixed in the prompt rather than in the scoring: a
+phrase carrying the number ("three-unit", "three-family", "2-flat") states it, while a
+numberless type word ("duplex", "triplex") is an inference. Over-flagging is a real
+defect rather than harmless caution — every assumption costs confidence and reaches the
+reader as a caveat, so a system that flags everything is indistinguishable to them from
+one that flags nothing, which is §2's always-on-signal argument applied to extraction.
 
 **Decision #10 detail (opened Aug 10, 2026).** §5 lists `latitude`/`longitude` as DERIVED
 "produced by lookup, never read from the listing" — and no lookup produces them. The
@@ -563,6 +684,63 @@ hard-requires coordinates for comp retrieval, a coordinate-less subject was alre
 system's worst case; this removes one of the two things such a subject could still get
 independently, not one of the two paths that mattered independently of each other.
 
+**Decision #11 detail (opened and half-taken Aug 16, 2026).** Raised in review of U3's
+demo listings, whose deal terms — price, rents, unit mix — were invented. The literal
+program requirement was satisfied (nothing scraped, nothing proprietary), but the
+objection was sharper than compliance: *even synthetic examples should have some basis in
+reality*, and these numbers had none recorded.
+
+The concern is not cosmetic, because these terms are load-bearing. `bedrooms` and
+`square_footage` are hard filters on comp retrieval; `price` and `unit_rents` are what U5
+will value the deal from. An implausible subject produces a confident-looking report about
+a property that could not exist — uncomfortably adjacent to the fabrication failure this
+system exists to prevent, with the difference that the *grounding* (comps, FMR, Redfin)
+stays real and only the subject is hypothetical.
+
+**Taken now: calibrate against sources already in the repo.** Each demo figure names its
+basis in `demo_deals.py`, and `scripts/verify_demo_calibration.py` re-derives it live —
+asking price against Redfin's median sale price for Multi-Family (2-4 unit) in that
+metro, stated rents against HUD's FY2026 FMR for the county *the listing's own address
+geocodes to*, so the check exercises the real geocoding path rather than a county written
+into the fixture. Behaviour across all five demo deals was unchanged by the recalibration,
+which is the expected result: the figures were already roughly right, and what they
+lacked was provenance rather than accuracy.
+
+**One correction worth recording, because it is the mistake this project is about.** The
+review initially appeared to show the Chicago demo's rents sitting 27% above market. It
+did not: that gap was measured against the *2018-19* Kaggle corpus median while the rents
+were current-dollar figures. Against FY2026 FMR for Cook County they sit within 4%. The
+error was comparing two vintages — precisely what §2's FMR-anchoring design exists to
+prevent — committed while arguing for better data discipline. It is also why demo rents
+are anchored to FMR rather than to the corpus: the corpus is seven years stale, and
+calibrating current listings against it would build the vintage gap into the demo.
+
+**Two limits of this, stated rather than left to be discovered.** FMR is a 40th-percentile
+rent, not a market median, so calibrated listings sit at the affordable end of their
+market by construction — acceptable for a demo, not acceptable for an accuracy benchmark.
+And there is still **no ground truth for the value estimate**: a demo deal has a defensible
+asking price but no known correct answer, so U5's valuation cannot be scored the way its
+rent model can.
+
+**Planned, not taken: real for-sale deals from county public records.** Rejected
+alternatives first. *Scraped listings* carry ToS exposure, go stale, and would place real
+current offers in a public repository. *Real listings copied by hand* share the staleness
+problem and still supply no known-correct value. **County assessor open data** (Cook, LA
+County, NYC) dominates both: legally unambiguous, free, stable, and richer in exactly the
+fields needed — address, sale price, unit count, square footage, year built.
+
+Scheduled at **U8**, where evaluation evidence lands, and placed on §6's cut list at
+position 2. That placement is deliberate: U8 is the one unit protected from cutting, and
+attaching a new data source with its own cleaning and coverage work to it would put the
+protected unit at risk. If it is cut, the rent model still has real ground truth from a
+held-out slice of the Kaggle corpus — real listing text, real rents, which is also what
+the Checkpoint 1.1 feedback asked for ("lock one metro and a small held-out test set
+early") — and the value estimate is documented as unvalidated.
+
+Note this would relax the standing rule that no real listing data enters the repository.
+Assessor records are public records rather than listings, so the rule may not need
+changing at all; that is worth settling before the work starts rather than during it.
+
 **Decision #9 detail.** The pipeline order is fixed by data dependency — Valuation consumes
 `state.comps`, Scenario consumes `rent_estimate`/`value_estimate` — so the sequence
 Extractor → Comps → Valuation → Scenario → Critic is not something the Planner chooses. The
@@ -605,7 +783,57 @@ published.
 
 ### Open items
 
-U1, U4, and U2 are complete. What remains, in the order it is needed:
+U1, U4, U2, and U3 are complete. What remains, in the order it is needed:
+
+0. ~~**Free-tier request cap**~~ — ✅ **closed Aug 16, 2026. $10 of credits purchased;
+   the build now runs on paid model variants.** Kept in full because the reasoning is a
+   budget decision the project constraints speak to directly.
+
+   The free tier is 50 model requests per day, account-wide. Measured, not read off a
+   docs page: three bake-off passes plus development exhausted it, and the header
+   confirms it (`X-RateLimit-Limit: 50`, `limit_source: openrouter_free_tier_daily`).
+   OpenRouter raises this to 1,000/day for $10 in credits — 10% of the project's $100
+   ceiling.
+
+   It bites hardest on **U8**, whose whole design is a batch of 8–10 listings run
+   repeatedly until the flag coverage is right, and on the Week 7 demo, which must
+   produce output on demand.
+
+   **Resolved: move to paid inference, and build the cache anyway.** Two findings
+   settled it. First, the daily cap is only one of *two* rate limits — the errors
+   distinguish `openrouter_free_tier_daily` (the account's 50/day, which credits raise to
+   1,000) from `upstream_provider_shared_pool` (a provider-side pool shared across all
+   free users of a `:free` variant, which credits do not address). Only paid variants
+   clear both, which is what made the model bake-off a fair comparison rather than a
+   measurement of who was queued behind whom — **passes 3 and 4 recorded zero 429s across
+   all seven candidates, against repeated losses on the free tier.** Second, the cost is
+   not close to material: at $0.00015 per extraction on the selected model, the entire
+   remaining build — development, eval batches, demo runs — is measured in dimes.
+
+   **On the "prefer free tools" constraint**, which this departs from: the constraint's
+   qualifier is *where their quality is good*, and the free tier failed exactly there.
+   Not on model quality — the same models are available either way — but on the
+   reproducibility of any measurement taken through it. Two passes could not agree on
+   which models worked, and one model behaved differently on its free and paid variants
+   with an identical prompt. A tier that cannot support a repeatable measurement is not
+   a cheaper version of the same thing.
+
+   The cache landed regardless, because its justification was never really quota.
+   Measured: **0.06 ms for a cache hit against 9.9–23 s for a live call.** It is a
+   development-latency mechanism first and a reproducibility mechanism second — an
+   evaluation whose inputs are re-sampled from a stochastic endpoint on each run cannot
+   show that a change in results came from a change in this system. See
+   `src/eval/README.md` for the two-tier case design that follows from it.
+
+   Worth noting what already worked: the cap was hit accidentally, and the system
+   degraded correctly rather than crashing (critical flag, escalation, full report). That
+   was not free — it took the `LlmError` conversion in `tools/llm_client.py`, which the
+   accidental outage is what exposed.
+
+   Worth noting what already works: the cap was hit accidentally, and the system degraded
+   correctly rather than crashing (critical flag, escalation, full report). That was not
+   free — it took the `LlmError` conversion in `tools/llm_client.py`, which the
+   accidental outage is what exposed.
 
 1. **LangSmith account** — create it and set `LANGSMITH_TRACING=true` and
    `LANGSMITH_API_KEY`. **No longer a blocker on building**, since U2's wiring is
@@ -613,11 +841,15 @@ U1, U4, and U2 are complete. What remains, in the order it is needed:
    run whether tracing is on). It *is* a blocker on the trace evidence Checkpoint 5.1
    wants, and traces expire after 14 days on the free tier, so it should be set up
    before U3 rather than before the write-up.
-2. **Decision #8** — model IDs. Placeholders confirmed dead (see the decision #8 detail
-   above); deliberately deferred to U3, which it blocks.
-3. ~~**Decision #10**~~ — ✅ **closed Aug 11, 2026.** Geocoding source chosen and built
-   (`tools/geocoding.py`, detail above); wiring into the real Extractor and updating the
-   flag-propagation fixture remain U3 work.
+2. ~~**Decision #8**~~ — ✅ **closed Aug 16, 2026.** `nvidia/nemotron-3-nano-30b-a3b`
+   on the paid variant, measured across four bake-off passes; detail above. Revisit the
+   Critic and Summarizer roles at U7/U9, when they first make calls of their own.
+3. ~~**Decision #10**~~ — ✅ **fully closed Aug 16, 2026.** Source chosen and built
+   Aug 11 (`tools/geocoding.py`); wired into the Extractor in U3. The paired fixture
+   update was resolved differently than specified: stubbing the Extractor's outbound
+   calls makes the fixture's address text inert, so moving it to an ungeocodable address
+   became unnecessary rather than done. Recorded because a plan item closed by being
+   obviated is easy to mistake later for one quietly skipped.
 4. **Decision #4** — finalize the training shortlist from the 29 crosswalk entries.
    Blocks U5.
 5. ~~**OpenRouter API key**~~ — ✅ **closed Aug 9, 2026.** Stored at `ignore/openrouter_key`
@@ -639,7 +871,12 @@ called from the pipeline; see decision #10's closing detail above. Rewritten and
 verified Aug 15, 2026 (decision #10 follow-on): `tools/county_crosswalk.py` (now a
 point-in-polygon join, replacing the hand-maintained table) and
 `scripts/verify_county_geometry.py` — this one *is* called from the pipeline
-(`agents/extractor.py`), unlike geocoding itself.
+(`agents/extractor.py`), unlike geocoding itself. Added and verified in U3:
+`agents/extractor.py` (real, no longer a stub — `tools/geocoding.py` is now called from
+the pipeline too), `scripts/extraction_evidence.py`, `verify_models_live()` in
+`tools/llm_client.py`, and `tests/test_flag_propagation.py` at 24 cases. Verified against
+live services throughout — including, unplanned, the whole pipeline under a real provider
+outage.
 
 ### Prerequisite reading (before U2 review)
 

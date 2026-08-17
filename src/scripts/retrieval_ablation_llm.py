@@ -49,11 +49,24 @@ from pydantic import BaseModel, Field
 import config
 from scripts.retrieval_evidence import SUBJECTS, comp_rent_estimate, run
 from state import DealTerms
-from tools import vector_store
+from tools import diagnostics, vector_store
 from tools.llm_client import LlmClient, LlmError, SchemaValidationExhausted
 
 # Verified live against https://openrouter.ai/api/v1/models on Aug 9, 2026. Both
 # responded to a smoke call. Sized differently on purpose (see module docstring).
+#
+# **Deliberately still `:free`, and deliberately not repointed** when decision #8 moved
+# the rest of the build to paid variants on Aug 16, 2026. The Checkpoint 3.1 result this
+# script produced — 0 of 16 returned comps existing in the corpus, rent dispersion
+# collapsing from CV 19.7% to 3.1%/4.3% — is quoted in the plan and the report as a
+# measurement of *these two models*. Swapping them would leave a documented figure that
+# no runnable code reproduces, which is a worse outcome than an ablation that is
+# occasionally rate-limited.
+#
+# Consequence worth knowing before re-running: `:free` variants are served from
+# provider-shared pools, so a re-run can 429 where the original did not. That is an
+# availability property of the tier, not a change in the finding (see decision #8's
+# detail in §7). Re-run rather than repoint.
 MODELS = [
     ("openai/gpt-oss-20b:free", "20B"),
     ("nvidia/nemotron-3-super-120b-a12b:free", "120B"),
@@ -145,7 +158,16 @@ def verify_against_corpus(comps: list[LlmComp], collection) -> dict[str, bool]:
         try:
             hit = collection.get(ids=[str(c.listing_id)])
             found[c.listing_id] = bool(hit["ids"])
-        except Exception:
+        except Exception as exc:  # noqa: BLE001 — a malformed id is a result, not a bug
+            # Recorded rather than swallowed for the reason §8 added the
+            # "state what the check could have returned" standard, and this is the exact
+            # artifact that prompted it: a lookup failing for a *mechanical* reason
+            # would otherwise be counted as evidence of fabrication.
+            diagnostics.log_exception(
+                f"retrieval_ablation_llm: corpus lookup for id {c.listing_id!r} raised; "
+                f"scoring it as not-found",
+                exc,
+            )
             found[c.listing_id] = False
     return found
 

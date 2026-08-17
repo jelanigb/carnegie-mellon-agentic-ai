@@ -102,20 +102,42 @@ in a focused session or across a fragmented week.
 
   | Tag | Location | Item |
   |---|---|---|
-  | `TODO(U3)` | `config.py` | Model IDs **confirmed dead**, not merely unverified (decision #8); add a startup liveness check |
-  | `TODO(U3)` | `extractor.py` | Decision #10 closed and `tools/geocoding.py` built/verified, but not called here yet — wiring it in would resolve real addresses inside `test_flag_propagation.py`'s no-coordinates fixture, so the call and the fixture update are deferred together to U3 |
+  | ~~`TODO(U3)`~~ | `config.py` | ✅ **closed Aug 16, 2026** — decision #8 settled on `nvidia/nemotron-3-nano-30b-a3b` (paid) across four bake-off passes, and `verify_models_live()` guards the IDs at launch |
+  | ~~`TODO(U3)`~~ | `extractor.py` | ✅ **closed Aug 16, 2026** — geocoding is called as an ordinary extraction step. The paired fixture update was resolved differently than planned: stubbing the Extractor's outbound calls makes the fixture's address inert, so the "move it to an ungeocodable address" half was unnecessary rather than done |
   | `TODO(U5)` | `state.py`, `build_comps_index.py` | Index the `time` column so `Comp.listed_date` allows per-row FMR normalization |
   | ~~`TODO(U5)`~~ | `county_crosswalk.py` | ✅ **moot as of Aug 15, 2026** — the principal-county approximation this described is gone; `county_fips` now resolves the exact county from the subject's coordinates. `FlagKind.COUNTY_FROM_PRINCIPAL_COUNTY` removed rather than left unraisable |
   | `TODO(U7)` | `critic.py` | Cross-agent consistency checks — `_consistency_objections()` returns empty until then |
   | `TODO(U7)` | `critic.py` | Confirm the critical-flag escalation rule when the severity weights are tuned (§6, finding 1) |
   | ~~`TODO(U2)`~~ | `hud_fmr.py` | ✅ **cleared Aug 10, 2026** — writes are atomic; the residual concurrency limit is documented on `_DiskCache` as accepted |
   | `TODO(security)` | `hud_fmr.py`, `llm_client.py` | Whether to drop on-disk credential fallbacks in favour of env-var-only |
+  | `TODO(security)` | `diagnostics.py` | Full error text to stdout deliberately includes the account identifier the report strips. Correct for a terminal, wrong for a recording — and Week 7's deliverable is a terminal capture. Redact that one field, or gate verbosity behind an env var defaulting quiet before recording |
   | `TODO(geography)` | `county_crosswalk.py` | New England town-based FMR verified for Boston only, not the other five states |
 
 ### Testing
 
 Testing is scoped deliberately rather than exhaustively, and the scope is documented
 here so the choice is legible.
+
+**Tests are hermetic; live verification lives in `scripts/`** (added Aug 16, 2026). The
+repo already worked this way and had never said so: `pull_fmr_sample.py`,
+`pull_geocode_sample.py`, and `verify_county_geometry.py` all make real, unmocked calls
+and are deliberately not part of `tests/`. U3 made the rule worth stating, because the
+Extractor became the first agent with outbound dependencies on the pipeline's critical
+path — a model call, a geocoder, and a 12 MB boundary file.
+
+The split follows from what each artifact is for. A test answers "is our logic correct",
+so an external service failing must not change its answer; every outbound call is
+stubbed at the boundary, and the node under test runs for real inside them. A
+verification script answers "does the integration actually work", where a failure *is*
+the finding and must not be hidden behind a mock. Confusing the two produces the worst of
+both: a suite that cries wolf when a provider is busy, and integrations nobody has
+checked against reality.
+
+Two consequences worth naming. Stubs are not a weaker test here but a sharper one — the
+U2 fixture obtained its flags as a side effect of a listing that happened to omit a price
+and coordinates that happened to be withheld, whereas each U3 case forces the exact
+degradation it names. And the stubbing is autouse rather than opt-in, so a case added
+later cannot reach the network by forgetting to ask not to.
 
 Two things are tested unconditionally, because they are the project's load-bearing
 claims:
@@ -131,6 +153,14 @@ claims:
    (including the negative case: `comps` must *not* have one), every flag rendered in
    full rather than counted, the rework cycle terminating and disclosing that it did,
    and the interrupt pausing and resuming with the reviewer's note in the report.
+
+   **Extended in U3 to 24 cases.** Every degradation path the real Extractor can take is
+   now forced and asserted to reach the report: an inferred field disclosed as an
+   assumption, retry exhaustion writing no deal terms at all, an unreachable model, each
+   of the four geography resolution tiers, the coordinate-conflict threshold *and its
+   negative case* — a tolerance that fired on every supplied coordinate would be
+   indistinguishable from a tolerance of zero — and the conversion of a transport failure
+   into an error the agent can flag rather than an exception that kills the graph.
 
    Two constraints on the suite are deliberate. It **avoids the Chroma corpus** on every
    case but one: a must-never-fail test should fail only when the thing it tests is

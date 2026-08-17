@@ -1,144 +1,403 @@
-"""Extractor agent — **U2 STUB**. The real implementation is U3.
+"""Extractor agent — Loop 1 from Checkpoint 2.1, built for real in U3.
 
-What is real here and what is not, stated plainly because a stub that looks finished is
-worse than no stub at all:
+This replaces the U2 stub's regex parse with a schema-validated LLM call. The regex is
+**deleted rather than kept as a fallback**, and that is a decision rather than an
+omission: a second parser that only runs when the first one fails is a second parser
+nobody reviews, and it would quietly become the primary path the moment a free-tier
+model went down. The system now either extracts with the model or discloses that it
+could not — which is the same discipline `tools/geocoding.py` applies when it declines
+to invent a coordinate. The offline path the old regex incidentally provided belongs to
+the test suite, and `tests/test_flag_propagation.py` gets it by stubbing this module's
+two outbound calls rather than by keeping a parser in production for its benefit.
 
-- **Real:** the clarifying-question and `unresolved_field` flag behaviour for missing
-  required fields, and the county derivation via `tools/county_crosswalk.py`. Both are
-  ordinary Python and both are load-bearing for the walking skeleton's flag-propagation
-  proof, so building them now costs nothing and U3 keeps them.
-- **Stubbed:** the parse itself. U3 replaces the regex below with a real LLM call
-  through `llm_client.call_with_schema`, with the Pydantic validate-then-retry loop
-  described in Checkpoint 2.1 Loop 1. This stub cannot run that call — decision #8 (§7)
-  is open and all four configured model IDs are confirmed dead — and U2 does not need
-  it to. The skeleton's job is to prove the graph carries state and flags correctly,
-  which a deterministic parse demonstrates *better* than a stochastic one.
+Reason/Act/Observe/Decide:
 
-The regex parse is deliberately shallow: it recognizes a small set of unambiguous
-patterns and gives up rather than guessing. Guessing is precisely what U3 is for, and a
-stub that half-guesses would generate assumption flags this build cannot justify.
+- **Reason.** Decide which of the required deal terms the listing plausibly contains,
+  which are absent, and which are stated ambiguously enough that a number read off them
+  would be a guess wearing a fact's clothing.
+- **Act.** Call the model for a `ListingExtraction`, then derive the two geography
+  fields the listing never states: coordinates via `tools/geocoding.py`, and the county
+  entityid via `tools/county_crosswalk.py` from those coordinates.
+- **Observe.** Three things, each of which is an observation rather than an error: did
+  the model produce schema-valid output within its retry budget; did the address resolve
+  to a parcel, to a city-level approximation, or to nothing; and is every field in
+  `config.REQUIRED_DEAL_FIELDS` populated.
+- **Decide.** Emit a clarifying question and an `unresolved_field` flag per missing
+  required field, an `assumed_field_value` flag per value the model inferred rather than
+  read, and a geography flag matching whichever resolution tier actually fired. On retry
+  exhaustion, write no deal terms at all and raise a critical flag — an empty extraction
+  that says so is worth more than a half-parsed one that doesn't.
 
-Reason/Act/Observe/Decide (the loop U3 inherits):
+**Two outbound calls, and both are the test suite's seams.** `_extract_terms` wraps the
+model call and `geocode` is imported by name, so `tests/test_flag_propagation.py`
+monkeypatches those two names to run this node hermetically. The real versions are
+exercised by `scripts/extraction_evidence.py` against live services, per §8's split
+between hermetic tests and live verification scripts.
 
-- **Reason.** Decide which deal terms the listing text plausibly contains, and which
-  required fields are at risk of being absent.
-- **Act.** Parse the text into a `DealTerms` object, then derive county FIPS from the
-  parsed city/state via the crosswalk.
-- **Observe.** Check the result against `config.REQUIRED_DEAL_FIELDS`. A missing field
-  is an observation, not a failure.
-- **Decide.** Emit a clarifying question and an `unresolved_field` flag for each
-  missing required field, so the gap travels downstream attached to the estimate it
-  weakens rather than being resolved silently. U3 adds the retry branch: on a schema
-  validation failure, re-prompt with the `ValidationError` text, bounded by
-  `config.MAX_EXTRACTION_RETRIES`, escalating with `extraction_retry_exhausted`.
+**On assumptions.** The model is asked to fill a field it inferred *and* to name the
+inference in `assumptions`, rather than to choose between reporting and inferring. A
+term of art like "2-flat" genuinely does mean two units, and refusing to read it would
+throw away information the listing really carries; recording that it was read rather
+than stated is what keeps the downstream estimate qualifiable. This is the mechanism
+Checkpoint 2.1 describes as "proceed with a flagged assumption when it is not
+[material and unrecoverable]".
 """
 
 from __future__ import annotations
 
-import re
-from typing import Optional
+from typing import Literal, Optional, get_args
+
+from pydantic import BaseModel, Field
 
 import config
-from state import DealState, DealTerms, FlagKind, Severity, flag
-from tools import county_crosswalk
+from state import DealState, DealTerms, Flag, FlagKind, Severity, flag
+from tools import county_crosswalk, diagnostics
+from tools.geocoding import GeocodeResult, geocode
+from tools.llm_client import LlmClient, LlmError, SchemaValidationExhausted
+
+# Imported rather than reimplemented: a second haversine would be a second thing to keep
+# correct, and this one is already the exact-distance filter behind every comp radius.
+from tools.vector_store import haversine_miles
 
 AGENT = "extractor"
 
-# Patterns chosen for being unambiguous in isolation. Anything requiring context to
-# disambiguate is left to U3's LLM call rather than approximated here.
-_PRICE = re.compile(r"\$\s?([\d,]+(?:\.\d{2})?)")
-_UNITS = re.compile(r"(\d+)[\s-]*(?:unit|family|flat|plex)\b", re.IGNORECASE)
-_BEDS = re.compile(r"(\d+)\s*(?:bed|bd|br)\b", re.IGNORECASE)
-_BATHS = re.compile(r"(\d+(?:\.\d)?)\s*(?:bath|ba)\b", re.IGNORECASE)
-_SQFT = re.compile(r"([\d,]+)\s*(?:sq\.?\s?ft|sqft|square feet)", re.IGNORECASE)
-# "123 Main St, Chicago, IL 60647" — street / city / two-letter state / optional ZIP.
-_ADDRESS = re.compile(
-    r"(?P<street>\d+[^,\n]{3,60}?),\s*"
-    r"(?P<city>[A-Za-z][A-Za-z .'-]{1,40}?),\s*"
-    r"(?P<state>[A-Z]{2})"
-    r"(?:\s+(?P<zip>\d{5}))?"
-)
+
+# --------------------------------------------------------------------------
+# The schema the model fills
+# --------------------------------------------------------------------------
+
+# Fields the model may name in an assumption. Written as a `Literal` rather than a
+# runtime check so the permitted vocabulary appears *inside* the JSON schema the model
+# receives — a model told which names are legal produces fewer illegal ones than a model
+# corrected after the fact, and an illegal one still costs only a retry rather than
+# reaching state.
+AssumableField = Literal[
+    "price",
+    "unit_count",
+    "unit_rents",
+    "square_footage",
+    "bedrooms",
+    "bathrooms",
+    "full_address",
+    "street_address",
+    "city",
+    "state",
+    "zip_code",
+]
+
+# Same reasoning as `graph._checked_mapping`: a name here that is not a real `DealTerms`
+# field would produce a flag about a field that does not exist, and it would do so
+# silently. Checked at import, when the traceback still names this line.
+_UNKNOWN_ASSUMABLE = set(get_args(AssumableField)) - set(DealTerms.model_fields)
+if _UNKNOWN_ASSUMABLE:
+    raise ValueError(
+        f"AssumableField names fields absent from DealTerms: {sorted(_UNKNOWN_ASSUMABLE)}"
+    )
 
 
-def _to_float(raw: Optional[str]) -> Optional[float]:
-    return float(raw.replace(",", "")) if raw else None
+class FieldAssumption(BaseModel):
+    """One value the model inferred rather than read, with the basis for the inference.
+
+    `basis` is required and free-text on purpose. It is rendered verbatim into the
+    report, so an assumption a reader cannot evaluate ("assumed 2 units") is worth
+    materially less than one they can ("'2-flat' is a Chicago term for a two-unit
+    building"), and requiring the field is what makes the difference non-optional.
+    """
+
+    field: AssumableField
+    basis: str
 
 
-def _parse_listing(text: str) -> DealTerms:
-    """Deterministic best-effort parse. Returns whatever it is sure of, nothing more."""
-    terms = DealTerms()
+class ListingExtraction(BaseModel):
+    """What the model returns. Deliberately *not* `DealTerms`.
 
-    price = _PRICE.search(text)
-    if price:
-        terms.price = _to_float(price.group(1))
+    Two reasons for the separate schema rather than reusing the state model directly:
 
-    units = _UNITS.search(text)
-    if units:
-        terms.unit_count = int(units.group(1))
+    1. `DealTerms` carries derived geography — `latitude`, `longitude`, `county_fips` —
+       that this system resolves by lookup and must never accept from a model. Handing
+       the model a schema containing those fields is an invitation to fill them, and a
+       hallucinated coordinate is indistinguishable from a real one downstream.
+    2. The assumption and clarifying-question lists are extraction *process* output, not
+       deal terms. They belong to this call, not to the property.
+    """
 
-    beds = _BEDS.search(text)
-    if beds:
-        terms.bedrooms = int(beds.group(1))
+    price: Optional[float] = None
+    unit_count: Optional[int] = None
+    unit_rents: list[float] = Field(default_factory=list)
+    square_footage: Optional[float] = None
+    bedrooms: Optional[int] = None
+    bathrooms: Optional[float] = None
 
-    baths = _BATHS.search(text)
-    if baths:
-        terms.bathrooms = float(baths.group(1))
+    full_address: Optional[str] = None
+    street_address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
 
-    sqft = _SQFT.search(text)
-    if sqft:
-        terms.square_footage = _to_float(sqft.group(1))
+    assumptions: list[FieldAssumption] = Field(default_factory=list)
+    clarifying_questions: list[str] = Field(default_factory=list)
 
-    address = _ADDRESS.search(text)
-    if address:
-        terms.full_address = address.group(0).strip()
-        terms.street_address = address.group("street").strip()
-        terms.city = address.group("city").strip()
-        terms.state = address.group("state").strip()
-        terms.zip_code = address.group("zip")
 
-    return terms
+_EXTRACTION_SYSTEM = """You extract structured deal terms from listings for small \
+multi-family residential properties (2-4 units) on behalf of an investment analyst.
+
+Rules, in priority order:
+
+1. Report what the listing states. Use null for anything it does not state. A missing \
+field is a normal, expected outcome and is handled downstream; an invented one is not \
+recoverable, because nothing later in the pipeline can tell it apart from a real value.
+2. Never invent an address, a price, or a rent. If the listing gives a partial address, \
+report the parts it gives and leave the rest null.
+3. You may resolve a term of art into a value — "duplex" means two units, "triplex" \
+means three. When you do, fill the field AND add an entry to `assumptions` naming the \
+field and the basis.
+3a. An assumption is ONLY for a value you worked out, never for one the listing states. \
+The test is whether the number itself appears in the phrase. Any phrase of the form \
+"N-unit", "N-family", "N-flat" or "N units" — where N is a digit OR a spelled-out \
+number such as two, three, or four — STATES the count. "Three-unit building", \
+"three-family home", "3-family", and "2-flat" are all stated: record the value and add \
+NO assumption. Only a building-type word carrying no number at all — "duplex", \
+"triplex", "fourplex" — is an inference, and only those get an assumption. Flagging a stated value is a real error, not a harmless \
+excess of caution: every assumption lowers the confidence score attached to this deal \
+and is shown to the reader as a caveat, so flagging everything may artificially lower \
+confidence in the deal.
+4. `bedrooms` and `bathrooms` are PER UNIT, not totals for the building. "3-unit \
+building, 2 bed / 1 bath units" means bedrooms=2, bathrooms=1. If the listing gives a \
+building total and no per-unit figure, leave them null and ask a clarifying question.
+5. `square_footage` is also per unit, on the same reasoning.
+6. `unit_rents` is the list of per-unit monthly rents the listing states, in dollars. \
+Empty list if it states none. Do not estimate them.
+7. `price` is the asking or list price in dollars, as a number without formatting.
+8. Raise a clarifying question only where a field is material to valuing the property \
+AND the listing is genuinely ambiguous rather than merely silent. Silence is already \
+detected without your help.
+9. `full_address` is the address exactly as the listing writes it. `street_address`, \
+`city`, `state`, and `zip_code` are that same address decomposed. `state` is the \
+two-letter postal abbreviation."""
+
+
+_EXTRACTION_PROMPT = """Extract the deal terms from this property listing.
+
+--- LISTING ---
+{listing_text}
+--- END LISTING ---"""
+
+
+def _extract_terms(listing_text: str) -> tuple[ListingExtraction, int]:
+    """The model call, isolated so tests can substitute it (see the module docstring).
+
+    Returns the validated extraction and the number of attempts it consumed. The retry
+    loop itself lives in `llm_client.call_with_schema`, which re-prompts with the
+    Pydantic `ValidationError` text so the model is told precisely what was wrong —
+    Checkpoint 2.1's "malformed tool output is itself an observation" applied to
+    parsing.
+    """
+    client = LlmClient()
+    return client.call_with_schema(
+        prompt=_EXTRACTION_PROMPT.format(listing_text=listing_text),
+        schema=ListingExtraction,
+        model=config.MODEL_EXTRACTION,
+        system=_EXTRACTION_SYSTEM,
+    )
+
+
+# --------------------------------------------------------------------------
+# Geography resolution
+# --------------------------------------------------------------------------
+
+
+def _supplied_coordinates(terms: DealTerms) -> Optional[tuple[float, float]]:
+    """Coordinates the caller put in state before this node ran, if any.
+
+    The U2 stub merged *every* pre-existing field over its own parse, as an affordance
+    for callers supplying coordinates the pipeline had no way to derive. That merge is
+    gone — a real extractor's output should not depend on what happened to be in state
+    beforehand — but coordinates remain readable here for one narrow purpose: checking
+    them against the address, not deferring to them.
+    """
+    if terms.latitude is None or terms.longitude is None:
+        return None
+    return terms.latitude, terms.longitude
+
+
+def _resolve_geography(
+    terms: DealTerms, supplied: Optional[tuple[float, float]]
+) -> list[Flag]:
+    """Fill `terms.latitude/longitude/county_fips` in place; return what to disclose.
+
+    Four outcomes, ordered by how much the resulting coordinate can be trusted:
+
+    1. **The address resolved to a parcel.** Census's point wins, including over
+       caller-supplied coordinates — the report prints the address, so anchoring comp
+       retrieval anywhere else would make the output internally inconsistent about which
+       property it describes. If supplied coordinates disagree by more than
+       `config.COORDINATE_CONFLICT_THRESHOLD_MILES`, that disagreement escalates rather
+       than being resolved here: the system cannot tell whether the caller meant this
+       address or those coordinates, and guessing would silently pick a property.
+    2. **The address did not resolve, but the caller supplied coordinates.** Those are
+       used, and disclosed as unverified — a city centroid would be strictly worse than
+       a point someone chose deliberately. Note this is the one branch where no conflict
+       check is possible, because there is nothing to check against.
+    3. **The address resolved only to a city centroid.** Used and disclosed as the
+       city-level approximation it is. The conflict check deliberately does *not* run
+       against a centroid: a centroid is an admission that the address could not be
+       placed, not a competing claim about where it is, so comparing one to supplied
+       coordinates would manufacture conflicts out of ordinary metro-scale distance.
+    4. **Nothing resolved.** No coordinates, critical flag, and comp retrieval
+       short-circuits downstream.
+    """
+    flags: list[Flag] = []
+    resolved: Optional[GeocodeResult] = geocode(
+        terms.street_address, terms.city, terms.state, terms.zip_code
+    )
+    parcel = resolved if resolved is not None and resolved.source == "census_geocoder" else None
+
+    if parcel is not None:
+        terms.latitude, terms.longitude = parcel.latitude, parcel.longitude
+        if supplied is not None:
+            miles = haversine_miles(supplied[0], supplied[1], parcel.latitude, parcel.longitude)
+            if miles > config.COORDINATE_CONFLICT_THRESHOLD_MILES:
+                flags.append(
+                    flag(
+                        AGENT,
+                        FlagKind.SUPPLIED_COORDINATES_CONFLICT,
+                        f"Caller-supplied coordinates ({supplied[0]:.5f}, "
+                        f"{supplied[1]:.5f}) sit {miles:.2f} mi from the geocode of the "
+                        f"listing's own address, {parcel.matched_address} "
+                        f"({parcel.latitude:.5f}, {parcel.longitude:.5f}) — beyond the "
+                        f"{config.COORDINATE_CONFLICT_THRESHOLD_MILES:.2f} mi tolerance. "
+                        f"These describe different locations, and which one was intended "
+                        f"cannot be determined from the inputs. The address was used, so "
+                        f"comparables below are drawn from around it; if the coordinates "
+                        f"were the intended location, this analysis is of the wrong "
+                        f"property.",
+                        Severity.CRITICAL,
+                    )
+                )
+    elif supplied is not None:
+        terms.latitude, terms.longitude = supplied
+        flags.append(
+            flag(
+                AGENT,
+                FlagKind.GEOCODING_UNAVAILABLE,
+                "The listing's address could not be resolved to a parcel, so the "
+                "caller-supplied coordinates were used as given and could not be "
+                "checked against it. If the address is wrong, nothing here would "
+                "detect that.",
+                Severity.WARN,
+            )
+        )
+    elif resolved is not None:
+        terms.latitude, terms.longitude = resolved.latitude, resolved.longitude
+        flags.append(
+            flag(
+                AGENT,
+                FlagKind.COORDINATES_FROM_CITY_CENTROID,
+                f"The address could not be resolved to a parcel; coordinates fall back "
+                f"to {resolved.matched_address}. Comparables are drawn from a radius "
+                f"around the city's centre of listing density rather than around this "
+                f"property, which costs the most accuracy in large metros.",
+                Severity.WARN,
+            )
+        )
+    else:
+        flags.append(
+            flag(
+                AGENT,
+                FlagKind.GEOCODING_UNAVAILABLE,
+                "The listing's address could not be resolved to coordinates by either "
+                "the Census geocoder or the corpus city centroid, and none were "
+                "supplied. Comparable retrieval requires coordinates and cannot run.",
+                Severity.CRITICAL,
+            )
+        )
+
+    # Geometric county lookup, keyed on whichever coordinate survived above. `None` here
+    # is not flagged at this node: the Valuation agent raises
+    # FMR_UNAVAILABLE_FOR_COUNTY where the gap actually bites, and flagging it twice
+    # would double-count the same problem against the confidence score.
+    terms.county_fips = county_crosswalk.lookup_county_fips(terms.latitude, terms.longitude)
+    return flags
+
+
+# --------------------------------------------------------------------------
+# The node
+# --------------------------------------------------------------------------
+
+
+def _extraction_failed(
+    state: DealState, kind: FlagKind, detail: str, attempts: int
+) -> dict:
+    """Partial update for a run that produced no usable extraction.
+
+    `deal_terms` is deliberately absent from the returned dict rather than set to an
+    empty object: omitting the key leaves whatever state already held, which is the
+    correct behaviour for a rework pass re-running extraction after a partial success.
+    Overwriting it with a blank would destroy a previous pass's work to record a
+    failure, which is a worse outcome than the failure itself.
+    """
+    return {
+        "extraction_attempts": state.extraction_attempts + attempts,
+        "flags": [flag(AGENT, kind, detail, Severity.CRITICAL)],
+    }
 
 
 def extractor_agent(state: DealState) -> dict:
     """Node function: returns a partial state update, never the whole state."""
-    parsed = _parse_listing(state.raw_listing_text)
+    try:
+        extraction, attempts = _extract_terms(state.raw_listing_text)
+    except SchemaValidationExhausted as exc:
+        # The flag below carries a truncated version, since it is rendered into the
+        # report. The unabridged error and the model's last raw response go to stdout,
+        # because "what did it actually return" is the first question anyone debugging
+        # this asks. See tools/diagnostics.py.
+        diagnostics.log_exception(
+            f"extractor: {exc.attempts} attempts produced no schema-valid extraction; "
+            f"raising a critical flag and writing no deal terms",
+            exc,
+        )
+        diagnostics.log_note("  last raw response was:", exc.last_raw.strip() or "(empty)")
+        return _extraction_failed(
+            state,
+            FlagKind.EXTRACTION_RETRY_EXHAUSTED,
+            f"The extraction model returned output failing schema validation on all "
+            f"{exc.attempts} attempts; the last error was: {exc.last_error} No deal "
+            f"terms were extracted, so every estimate below is unsupported.",
+            attempts=exc.attempts,
+        )
+    except LlmError as exc:
+        # `llm_client.complete` has already logged the unsanitized provider body; this
+        # records what the pipeline did about it, which that layer cannot know.
+        diagnostics.log_exception(
+            "extractor: the model was unreachable; raising a critical flag and "
+            "continuing without deal terms",
+            exc,
+        )
+        return _extraction_failed(
+            state,
+            FlagKind.EXTRACTION_UNAVAILABLE,
+            f"The extraction model could not be reached, so the listing was never "
+            f"parsed: {exc}",
+            attempts=0,
+        )
 
-    # Stub affordance, and the one place this node deviates from what U3 will do: a
-    # field already present in state is left alone rather than overwritten. It exists
-    # because the corpus has no geocoder (see the TODO below) and the walking skeleton
-    # still needs one path that reaches real retrieval, so a caller can supply known
-    # coordinates the way `scripts/retrieval_evidence.py` already does. U3 removes this
-    # merge — a real extractor's output should not depend on what was in state before
-    # it ran.
-    existing = state.deal_terms.model_dump(exclude_none=True)
-    terms = DealTerms(**{**parsed.model_dump(exclude_none=True), **existing})
+    terms = DealTerms(
+        **extraction.model_dump(exclude={"assumptions", "clarifying_questions"})
+    )
 
-    flags = []
-    questions = []
+    flags = _resolve_geography(terms, _supplied_coordinates(state.deal_terms))
+    questions: list[str] = []
 
-    # TODO(U3): decision #10 (§7) is closed and `tools/geocoding.py` is built and
-    # verified (scripts/pull_geocode_sample.py) — Census Geocoder primary, corpus
-    # city-centroid fallback, `FlagKind.COORDINATES_FROM_CITY_CENTROID` /
-    # `GEOCODING_UNAVAILABLE` ready for whichever path fires. Not called here on
-    # purpose: this stub still backs `test_flag_propagation.py`'s must-never-fail suite,
-    # and that suite's `LISTING_MISSING_PRICE` case deliberately parses a *complete*
-    # street address while withholding coordinates, so Comps short-circuits on missing
-    # coordinates without ever touching the vector store (§8 — that suite must fail only
-    # when flag propagation is broken, never on a Chroma/network dependency). Calling
-    # `geocoding.geocode()` here would resolve that address for real, silently changing
-    # what the test exercises. U3's real extractor should call it as a normal step
-    # rather than a merge-affordance special case, and the fixture above should move to
-    # an address with no resolvable geography (mirroring `GEOCODING_UNAVAILABLE`) so the
-    # suite keeps proving the same thing on purpose instead of by accident.
-
-    # Geometric lookup (Aug 15, 2026 — see tools/county_crosswalk.py's module docstring),
-    # keyed on coordinates rather than the parsed city/state string. This only resolves
-    # once terms.latitude/longitude are set, which nothing in this stub does yet — see
-    # the geocoding TODO below. A deal with no coordinates now also gets no county_fips,
-    # where the old city-string crosswalk could still resolve one; that's an accepted
-    # narrowing, not an oversight (module docstring has the reasoning).
-    if terms.county_fips is None:
-        terms.county_fips = county_crosswalk.lookup_county_fips(terms.latitude, terms.longitude)
+    for assumption in extraction.assumptions:
+        flags.append(
+            flag(
+                AGENT,
+                FlagKind.ASSUMED_FIELD_VALUE,
+                f"'{assumption.field}' was inferred rather than read from the listing: "
+                f"{assumption.basis} Downstream estimates treat it as given.",
+                Severity.WARN,
+            )
+        )
 
     for field_name in config.REQUIRED_DEAL_FIELDS:
         if getattr(terms, field_name) is not None:
@@ -155,10 +414,23 @@ def extractor_agent(state: DealState) -> dict:
             )
         )
 
+    # The model's questions come second and are de-duplicated against the deterministic
+    # ones above, which are the load-bearing set: a required field is missing or it is
+    # not, and that determination should not vary run to run. The model contributes only
+    # what a fixed check cannot see — ambiguity, as opposed to absence.
+    seen = {q.strip().lower() for q in questions}
+    for question in extraction.clarifying_questions:
+        key = question.strip().lower()
+        if key and key not in seen:
+            seen.add(key)
+            questions.append(question.strip())
+
     return {
         "deal_terms": terms,
         "clarifying_questions": questions,
-        "extraction_attempts": state.extraction_attempts + 1,
+        # Counts model attempts consumed, not node invocations — a rework pass that
+        # needed three tries cost three, and the distinction matters for reading a
+        # trace against the retry budget.
+        "extraction_attempts": state.extraction_attempts + attempts,
         "flags": flags,
-        "stub_nodes": [AGENT],
     }

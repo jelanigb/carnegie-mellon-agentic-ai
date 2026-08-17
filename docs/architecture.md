@@ -33,7 +33,7 @@ now enforces most of them structurally rather than by discipline.
 | --- | --- | --- |
 | Orchestration | **LangGraph** — `StateGraph`, conditional edges, checkpointer | See below |
 | State schema | **Pydantic v2** (not dataclasses) | `ValidationError` text feeds the Extractor's retry prompt; dataclasses give nothing there |
-| LLM calls | OpenRouter (`:free` tier models) via the OpenAI-compatible SDK | Program-endorsed, $0 |
+| LLM calls | OpenRouter via the OpenAI-compatible SDK — **paid variants since Aug 16, 2026** (decision #8) | Free variants proved unmeasurable, not merely slow; see the cost note below |
 | Observability | **LangSmith** free Developer tier | Multi-step agent loops are impractical to debug from logs alone; traces also document actual system behavior |
 | Retrieval / RAG | `sentence-transformers` (local) + `ChromaDB`, **hybrid**: metadata filters for hard constraints, embeddings for description/amenity text | Free, local, and a more honest design than pure vector search over structured data |
 | Regression | `pandas` + `numpy` + `scikit-learn` | Existing strength; lowest-surprise component |
@@ -41,15 +41,27 @@ now enforces most of them structurally rather than by discipline.
 | Demo surface | **Streamlit**, run locally | ~50 lines; far better on video than a terminal recording |
 | Dev environment | VS Code + Claude Code | — |
 
-**Total cost: $0.** Streamlit is open-source and free to run locally; Community Cloud
-is only relevant for public hosting, which this project does not require — the demo app
-stays local. LangGraph is MIT-licensed. LangSmith's free tier covers a solo developer's
-usage. OpenRouter `:free`
-models, HUD, Redfin, and Kaggle are all free. Against the $100 project budget, the only
-plausible spend is ~$10–20 of OpenRouter credits *if* free-tier rate limits become a
-real time sink — but the capstone brief says *"you are expected to design your capstone
-and test it using freely available model access,"* so free models are the default and
-paid credits are a documented contingency, not the plan.
+**Total cost: $10, and the contingency became the plan (Aug 16, 2026).** Streamlit is
+open-source and free to run locally; Community Cloud is only relevant for public hosting,
+which this project does not require — the demo app stays local. LangGraph is MIT-licensed.
+LangSmith's free tier covers a solo developer's usage. HUD, Redfin, Kaggle, and the Census
+geocoder are all free and remain so.
+
+The one exception is model access. This section originally called ~$10–20 of OpenRouter
+credits a contingency *"if free-tier rate limits become a real time sink."* They did, and
+for a sharper reason than time: the free tier's `:free` variants are served from
+provider-shared pools, so measurements taken through it were not reproducible. Two
+bake-off passes disagreed about which models worked, a third was blocked entirely by an
+account-wide 50-requests-per-day cap, and one model behaved differently on its free and
+paid variants given an identical prompt. The capstone brief's *"freely available model
+access"* is satisfiable on quality — the same models are available either way — but not
+on the ability to measure anything about them.
+
+**$10 spent of the $100 budget**, which buys 1,000 free-model requests per day and access
+to paid variants at roughly **$0.00015 per extraction** — about 6,700 extractions to the
+dollar. The full remaining build is expected to cost cents, not dollars. Decision #8 in
+§7 carries the measurements; `tools/llm_cache.py` reduces repeat spend and, more usefully,
+makes evaluation runs reproducible.
 
 > ⚠️ **LangSmith free-tier traces expire after 14 days.** Capture screenshots for the
 > report as you go; do not assume Week 4 traces will still be viewable in Week 7.
@@ -120,7 +132,7 @@ carnegie_mellon_agentic_repo/
     ├── agents/
     │   ├── __init__.py
     │   ├── planner.py             # ✅ pre-flight plan + every route_* function
-    │   ├── extractor.py           # ⬜ stub (regex parse); real LLM call is U3
+    │   ├── extractor.py           # ✅ schema-validated LLM call + geocoding + county
     │   ├── comps_retrieval.py     # ✅ adaptive relaxation loop
     │   ├── valuation_rent.py      # ⬜ stub; U5
     │   ├── scenario_forecast.py   # ⬜ stub; U6
@@ -129,17 +141,25 @@ carnegie_mellon_agentic_repo/
     │   └── human_review.py        # ✅ the interrupt() escalation node
     ├── tools/
     │   ├── __init__.py
-    │   ├── llm_client.py          # ✅ OpenRouter wrapper + schema-validated retry loop
+    │   ├── llm_client.py          # ✅ OpenRouter wrapper + schema-validated retry loop + cache
+    │   ├── llm_cache.py           # ✅ on-disk response cache; off / read_write / replay
+    │   ├── diagnostics.py         # ✅ full error detail to stdout, kept out of the report
     │   ├── vector_store.py        # ✅ Chroma setup + embedding + hybrid query
     │   ├── kaggle_data.py         # ✅ single cleaning path: dedupe, completeness, city match
     │   ├── rent_model.py          # sklearn regression: train/load/predict (FMR-normalized target)
     │   ├── hud_fmr.py             # ✅ HUD FMR API client (§9)
     │   ├── county_crosswalk.py    # ✅ lat/lon → county_fips via point-in-polygon join (rewritten Aug 15, 2026)
+    │   ├── geocoding.py           # ✅ address → lat/lon: Census primary, corpus centroid fallback
     │   ├── redfin_data.py         # ✅ load + query, rolling-3 + growth bands computed here
     │   └── tracing.py             # ✅ LangSmith project wiring; env-driven, never required
+    ├── demo_deals.py              # ✅ the synthetic listings + provenance for every figure
     ├── scripts/
     │   ├── pull_fmr_sample.py     # ✅ real HUD pull smoke test
+    │   ├── pull_geocode_sample.py # ✅ real Census geocoder calls: all three tiers
+    │   ├── verify_county_geometry.py # ✅ point-in-polygon results cross-checked against live HUD
     │   ├── verify_metro_selection.py # ✅ reproduces the §2 metro evidence
+    │   ├── extraction_evidence.py # ✅ Loop 1 behaviour + the decision #8 model bake-off
+    │   ├── verify_demo_calibration.py # ✅ re-derives each demo figure from Redfin + HUD
     │   ├── build_comps_index.py   # ✅ one-off: embed + load Chroma (3,880 listings)
     │   ├── retrieval_evidence.py  # ✅ Checkpoint 3.1 evidence: 3 density cases + config-flag ablation
     │   ├── retrieval_ablation_llm.py # ✅ Checkpoint 3.1: ungrounded LLM vs. grounded retrieval
@@ -147,13 +167,16 @@ carnegie_mellon_agentic_repo/
     │   └── export_graph_diagram.py # ✅ generates the diagram AND asserts decision #9's topology
     ├── notebooks/
     │   └── 01_data_exploration.ipynb
-    ├── eval/
-    │   ├── listings/              # synthetic listings, each engineered to trip a known flag
+    ├── eval/                      # ◐ scaffolding + README landed U3; harness itself is U8
+    │   ├── README.md              # ✅ layout, the two case tiers, record/replay usage
+    │   ├── data/                  # golden DealTerms fixtures + the listings they came from
+    │   │   └── llm_recordings/    # recorded model responses, replayed by llm_cache
+    │   ├── results/               # generated result tables (committed — the report cites them)
     │   ├── expected.yaml          # listing → expected flags / status
     │   └── run_eval.py            # batch runner → results table for the report
     ├── tests/
     │   ├── conftest.py            # ✅ puts src/ on the import path
-    │   └── test_flag_propagation.py  # ✅ the one test that must never fail — 14 cases
+    │   └── test_flag_propagation.py  # ✅ the one test that must never fail — 24 hermetic cases
     ├── app.py                     # Streamlit demo UI (local only)
     └── main.py                    # ✅ entrypoint: run full pipeline on one listing
 ```

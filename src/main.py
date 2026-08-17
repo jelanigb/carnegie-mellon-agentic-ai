@@ -1,25 +1,37 @@
 """Entrypoint — run the full pipeline on one listing.
 
-    .venv/bin/python main.py                      # dense market, clean run
-    .venv/bin/python main.py --deal chicago       # moderate: retrieval relaxes once
-    .venv/bin/python main.py --deal staten-island # thin: escalates to human review
-    .venv/bin/python main.py --deal no-coords     # the geocoding gap, end to end
+    .venv/bin/python main.py                       # dense market, clean run
+    .venv/bin/python main.py --deal chicago        # moderate: retrieval relaxes once
+    .venv/bin/python main.py --deal staten-island  # thin: escalates to human review
+    .venv/bin/python main.py --deal no-geography   # unresolvable address, end to end
+    .venv/bin/python main.py --deal coord-conflict # supplied coords vs. the address
     .venv/bin/python main.py --file listing.txt --coords 34.0522,-118.2437
     .venv/bin/python main.py --deal chicago --no-retrieval   # the U4 ablation
 
-The four built-in deals are the same density cases `scripts/retrieval_evidence.py`
-measures, reused here so the skeleton's end-to-end behaviour can be compared against
-the retrieval evidence directly rather than against a separate set of inputs.
+The three market deals are the same density cases `scripts/retrieval_evidence.py`
+measures, reused here so end-to-end behaviour can be compared against the retrieval
+evidence directly rather than against a separate set of inputs.
 
-**Coordinates are supplied alongside the listing text, not extracted from it.**
-`tools/geocoding.py` exists and is verified (decision #10, §7 — closed), but it is
-deliberately not wired into this stub extractor yet; see the `TODO(U3)` in
-`agents/extractor.py` for why. `--deal no-coords` therefore still demonstrates the
-pre-geocoding failure mode as it existed when the gap was open: retrieval cannot run at
-all, a critical flag is raised, confidence collapses, and the deal escalates. Once U3
-wires geocoding into the real Extractor, this deal's coordinates would resolve from its
-address instead — the case is kept here as a fixture for that transition, not as a
-live demonstration of an unclosed gap.
+**Coordinates are derived from the listing, not supplied alongside it (U3).** The
+Extractor calls `tools/geocoding.py` as an ordinary step, so a listing arriving as text
+now reaches comp retrieval on its own — which was the point of closing decision #10.
+Two consequences visible here:
+
+- The demo listings carry **real street addresses**, because an invented one resolves to
+  no parcel and falls back to the city centroid, raising a geography flag on every run.
+  Deal terms — price, rents, unit mix — remain entirely invented, as does the premise
+  that any of these properties is for sale. Only the address is real, and only so that
+  the geocoder has something to resolve.
+- `--deal no-coords` is retired and replaced by `--deal no-geography`, which reaches the
+  same degraded state through a real failure rather than a withheld input: an address
+  neither the Census geocoder nor the corpus centroid can place. Verified to resolve to
+  nothing through both tiers. That is a stronger demonstration than withholding
+  coordinates was, because nothing about it depends on the caller cooperating.
+
+`--coords` still exists, and now means something different: supplied coordinates are
+checked against the geocode of the listing's own address rather than trusted. `--deal
+coord-conflict` demonstrates that path — see `agents/extractor.py._resolve_geography`
+for why the disagreement escalates instead of being resolved.
 
 **Interrupt handling.** A deal that escalates pauses at `human_review` and `invoke`
 returns an `__interrupt__` payload instead of a finished state. This script prints what
@@ -45,41 +57,19 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
 import config
+from demo_deals import DEMO_DEALS
 from graph import build_graph, state_serde
 from state import DealState, DealTerms
+from tools.llm_client import LlmError, verify_models_live
 from tools.tracing import configure_tracing
 
 CHECKPOINT_DB = config.DATA_DIR / "processed" / "checkpoints.sqlite"
 
-# Synthetic listings, per the program's requirement that no real listing data enter this
-# repository. The coordinates are real locations; the deals are invented.
-DEMO_DEALS: dict[str, tuple[str, tuple[float, float] | None]] = {
-    "los-angeles": (
-        "For sale: 1234 Sunset Ridge Ave, Los Angeles, CA 90026. Charming 2-unit "
-        "duplex in Echo Park, each unit 2 bed / 1 bath, approx 950 sq ft per unit. "
-        "Renovated kitchens, in-unit laundry, off-street parking. Asking $1,150,000.",
-        (34.0522, -118.2437),
-    ),
-    "chicago": (
-        "For sale: 2500 N Kedzie Blvd, Chicago, IL 60647. Classic Logan Square 2-flat, "
-        "2 bed / 1 bath per unit, approx 950 sq ft each. Original woodwork, full "
-        "basement, two-car garage. Asking $525,000.",
-        (41.9227, -87.6982),
-    ),
-    "staten-island": (
-        "For sale: 100 Amboy Rd, Staten Island, NY 10307. Tottenville 3-unit building, "
-        "2 bed / 1 bath units, approx 900 sq ft each. Deep lot, needs updating. "
-        "Asking $875,000.",
-        (40.5083, -74.2500),
-    ),
-    # Same deal as los-angeles, coordinates withheld — see the module docstring.
-    "no-coords": (
-        "For sale: 1234 Sunset Ridge Ave, Los Angeles, CA 90026. Charming 2-unit "
-        "duplex in Echo Park, each unit 2 bed / 1 bath, approx 950 sq ft per unit. "
-        "Asking $1,150,000.",
-        None,
-    ),
-}
+# The synthetic listings, their supplied coordinates, and the provenance of every figure
+# in them, all live in `demo_deals.py` — see that module for what is real (addresses, and
+# the market data each price and rent is anchored to) and what is invented (everything
+# else, including the premise that any of these properties is for sale).
+# `scripts/verify_demo_calibration.py` re-derives each figure from its live source.
 
 
 def _initial_state(listing_text: str, coords: tuple[float, float] | None) -> DealState:
@@ -107,9 +97,28 @@ def _print_interrupt(payload) -> None:
     print("=" * 78)
 
 
+def _check_models() -> None:
+    """Fail at launch on a dead model ID rather than partway through a run.
+
+    Decision #8's durable lesson: the previous four model IDs were valid when written and
+    dead six days later. Discovering that after a geocode and a Chroma query have already
+    run wastes the work and reports the failure at the wrong layer. Raised as `SystemExit`
+    rather than a traceback because the message is the whole point — it names the missing
+    model and lists the free ones currently available.
+    """
+    try:
+        verified = verify_models_live()
+    except LlmError as exc:
+        # `available_models` has already logged the underlying cause in full; this keeps
+        # the exit message short and actionable rather than making it carry both jobs.
+        raise SystemExit(f"Model check failed: {exc}")
+    print(f"Model check OK — {', '.join(sorted(verified))}")
+
+
 def run(listing_text: str, coords: tuple[float, float] | None, thread_id: str) -> str:
     """Run one deal end to end and return the rendered report."""
     configure_tracing()
+    _check_models()
 
     invoke_config = {"configurable": {"thread_id": thread_id}}
 
@@ -148,7 +157,14 @@ def main() -> None:
         help="which built-in synthetic deal to run (default: los-angeles)",
     )
     parser.add_argument("--file", type=Path, help="run a listing from a text file instead")
-    parser.add_argument("--coords", help="'LAT,LON' for --file; see the geocoding note")
+    parser.add_argument(
+        "--coords",
+        help=(
+            "'LAT,LON' to supply coordinates for --file. Checked against the geocode of "
+            "the listing's own address rather than trusted; a disagreement beyond "
+            "config.COORDINATE_CONFLICT_THRESHOLD_MILES escalates to human review."
+        ),
+    )
     parser.add_argument(
         "--no-retrieval",
         action="store_true",
@@ -174,7 +190,8 @@ def main() -> None:
         coords = _parse_coords(args.coords)
         label = args.file.name
     else:
-        listing_text, coords = DEMO_DEALS[args.deal]
+        deal = DEMO_DEALS[args.deal]
+        listing_text, coords = deal.listing, deal.supplied_coords
         label = args.deal
 
     thread_id = args.thread_id or f"{label}-{uuid4().hex[:8]}"

@@ -22,41 +22,115 @@ break, rather than around the modules that implement it:
      "3 warnings" satisfies propagation while defeating its purpose.
   5. The rework cycle terminates and discloses that it did. An unbounded cycle would
      hang; a bounded one that escalated silently would lose the reason.
+  6. Each of U3's extraction and geography degradation paths reaches the report — added
+     when the Extractor became real, since every one of them is a *new* way for a flag
+     to be raised and therefore a new way for one to be lost.
 
-**Why these tests avoid the Chroma corpus.** The must-never-fail suite should fail only
-when flag propagation is broken. Depending on a built index and a downloadable
-embedding model would let it fail for reasons that have nothing to do with what it
-tests, and a test that cries wolf stops being consulted. The `no coordinates` path
-traverses all eight nodes without touching the vector store, so it exercises the whole
-graph on ordinary Python. The grounded path is covered separately below and skips
-cleanly when the index is absent.
+**Why these tests make no network calls, and how (U3).** A must-never-fail test should
+fail only when the thing it tests is broken. The real Extractor has three outbound
+dependencies — an OpenRouter call, the Census geocoder, and a 12 MB county boundary file
+— and the real Comps agent needs a built Chroma index and a downloadable embedding
+model. Any of those could make this suite red for reasons having nothing to do with flag
+propagation, and a test that cries wolf stops being consulted.
+
+So `offline_extractor` below stubs the Extractor's three boundaries for *every* test in
+this file, and individual cases override the stubs to force the specific degradation
+they are about. This is the §8 split between hermetic tests and live verification: the
+real extraction path is exercised against live services by
+`scripts/extraction_evidence.py`, where a failure means the service is down and that is
+the finding. Note what is *not* stubbed — `extractor_agent` itself, every flag it
+constructs, the graph, the reducers, the routers, and the Summarizer. Only the edges
+leaving the process are faked.
+
+The one exception is a grounded Los Angeles run that uses the real Chroma corpus and
+skips cleanly when the index is absent. Its role is the same one §2 gives the LA row in
+the retrieval evidence: a suite where every case is degraded cannot show that the
+degradation signals mean anything.
 """
 
 from __future__ import annotations
 
 import operator
-from typing import get_args, get_origin
 from uuid import uuid4
 
+import httpx
 import pytest
 from langgraph.types import Command
+from openai import APIError
 
 import config
 import graph as graph_module
 import nodes
 from agents import critic as critic_module
+from agents import extractor as extractor_module
 from agents.critic import critic_agent
+from agents.extractor import FieldAssumption, ListingExtraction
 from agents.planner import route_after_critic
 from graph import build_graph
 from state import DealState, DealTerms, Flag, FlagKind, Severity
+from tools.geocoding import GeocodeResult
+from tools.llm_client import LlmClient, LlmError, SchemaValidationExhausted
 
-# Complete on address and units, missing a price — so the Extractor raises a real
-# `unresolved_field` flag rather than one manufactured for the test. Coordinates are
-# withheld, so Comps raises a second flag from a second agent without a corpus lookup.
+# The listing text is now inert — the stubbed model call decides what comes back, so the
+# text is here for readability rather than for parsing. That is a deliberate improvement
+# over the U2 fixture, where the tested behaviour depended on a regex happening to miss
+# the price and on coordinates happening to be withheld: each flag below is now forced
+# on purpose rather than obtained as a side effect.
 LISTING_MISSING_PRICE = (
     "For sale: 1234 Sunset Ridge Ave, Los Angeles, CA 90026. Charming 2-unit duplex "
     "in Echo Park, 2 bed / 1 bath, approx 950 sq ft. Price on application."
 )
+
+# Complete on address and units, missing a price — so the Extractor raises a real
+# `unresolved_field` flag rather than one manufactured for the test.
+EXTRACTION_MISSING_PRICE = ListingExtraction(
+    unit_count=2,
+    bedrooms=2,
+    bathrooms=1.0,
+    square_footage=950.0,
+    full_address="1234 Sunset Ridge Ave, Los Angeles, CA 90026",
+    street_address="1234 Sunset Ridge Ave",
+    city="Los Angeles",
+    state="CA",
+    zip_code="90026",
+)
+
+LOS_ANGELES = (34.0522, -118.2437)
+
+
+def parcel_at(latitude: float, longitude: float) -> GeocodeResult:
+    """A Census-tier geocode result — the tier that outranks supplied coordinates."""
+    return GeocodeResult(
+        latitude=latitude,
+        longitude=longitude,
+        matched_address="1234 SUNSET RIDGE AVE, LOS ANGELES, CA, 90026",
+        source="census_geocoder",
+    )
+
+
+@pytest.fixture(autouse=True)
+def offline_extractor(monkeypatch):
+    """Stub the Extractor's three outbound calls for every test in this file.
+
+    Autouse rather than opt-in, so a case added later cannot reach the network by
+    forgetting to ask not to. The defaults produce the U2 fixture's shape — a listing
+    missing its price, and no resolvable coordinates — which keeps the propagation and
+    accumulation tests below testing exactly what they always did: a flag from the first
+    node, plus a flag from Comps short-circuiting on missing coordinates, with no Chroma
+    query in between.
+    """
+    monkeypatch.setattr(
+        extractor_module,
+        "_extract_terms",
+        lambda text: (EXTRACTION_MISSING_PRICE.model_copy(deep=True), 1),
+    )
+    monkeypatch.setattr(extractor_module, "geocode", lambda *args, **kwargs: None)
+    # The county lookup reads a 12 MB Census boundary file, downloading it on a cache
+    # miss. Stubbed for the same reason as the other two: it is an integration point,
+    # and this suite tests flag propagation.
+    monkeypatch.setattr(
+        extractor_module.county_crosswalk, "lookup_county_fips", lambda lat, lon: None
+    )
 
 
 def run_deal(listing: str = LISTING_MISSING_PRICE, terms: DealTerms | None = None) -> dict:
@@ -71,6 +145,22 @@ def run_deal(listing: str = LISTING_MISSING_PRICE, terms: DealTerms | None = Non
     if "__interrupt__" in result:
         result = graph.invoke(Command(resume="[test] released"), invoke_config)
     return result
+
+
+def flags_of_kind(result: dict, kind: FlagKind) -> list[Flag]:
+    return [f for f in result["flags"] if f.kind == kind]
+
+
+def assert_reaches_report(result: dict, kind: FlagKind) -> Flag:
+    """The claim this whole file exists to defend, as a reusable assertion."""
+    raised = flags_of_kind(result, kind)
+    assert raised, f"Expected a {kind} flag; got {sorted({f.kind for f in result['flags']})}."
+    for f in raised:
+        assert f.detail in result["report_markdown"], (
+            f"Flag {kind} was raised but its detail never reached the report. "
+            f"This is the flag-loss failure the whole design guards against."
+        )
+    return raised[0]
 
 
 # --------------------------------------------------------------------------
@@ -169,6 +259,17 @@ def test_report_discloses_stubbed_agents():
     assert result["stub_nodes"], "Stubbed nodes should record themselves in state."
 
 
+def test_the_extractor_no_longer_reports_itself_as_a_stub():
+    """U3's completion, asserted rather than assumed.
+
+    The build-status disclosure is only informative while it is accurate. An agent that
+    kept announcing itself as a stub after being built would erode the one signal a
+    reader has for telling an unbuilt section from an empty one.
+    """
+    result = run_deal()
+    assert nodes.EXTRACTOR not in result["stub_nodes"]
+
+
 def test_critical_flags_appear_before_the_findings():
     """Disclosure-first ordering (§1: flags surfaced prominently, not as a footnote)."""
     report = run_deal()["report_markdown"]
@@ -200,16 +301,18 @@ def test_rework_cycle_terminates_and_discloses_that_it_did(monkeypatch):
     objection is injected at that one seam — which is why `_consistency_objections`
     exists as a real function rather than being omitted until U7.
 
-    Two escalation routes are disabled for the duration so they cannot pre-empt the
-    rework path, which is the only thing under test here — each has its own test above.
-    The threshold goes to zero, and the retrieval node is swapped for a no-op so the
-    run raises no critical flag. Substituting a node is what `graph.NODE_FUNCTIONS`
-    exists as a mapping for; `build_graph` reads it at call time.
+    Every escalation route is disabled for the duration so none can pre-empt the rework
+    path, which is the only thing under test here — each has its own test above. The
+    threshold goes to zero, the retrieval node is swapped for a no-op, and the geocode
+    resolves cleanly so the Extractor raises no critical flag of its own. Substituting a
+    node is what `graph.NODE_FUNCTIONS` exists as a mapping for; `build_graph` reads it
+    at call time.
     """
     monkeypatch.setattr(
         critic_module, "_consistency_objections", lambda state: ["injected objection"]
     )
     monkeypatch.setattr(config, "HUMAN_REVIEW_CONFIDENCE_THRESHOLD", 0.0)
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
     monkeypatch.setitem(
         graph_module.NODE_FUNCTIONS, nodes.COMPS_RETRIEVAL, lambda state: {"comps": []}
     )
@@ -306,6 +409,214 @@ def test_human_review_pauses_and_surfaces_the_grounds_for_escalation():
 
 
 # --------------------------------------------------------------------------
+# 6. U3 — the Extractor's own degradation paths
+#
+# Each case forces one path and asserts the flag survives to the report. Together they
+# are also the coverage U8 will assert against `set(FlagKind)` for this agent, built
+# here rather than there because these are propagation claims first.
+# --------------------------------------------------------------------------
+
+
+def test_an_inferred_field_is_disclosed_as_an_assumption(monkeypatch):
+    """A value read from a term of art rather than stated must say so.
+
+    This is the flag Checkpoint 2.1 calls "proceed with a flagged assumption": the
+    extraction is *better* for resolving "2-flat" into two units, and the report is only
+    trustworthy if it distinguishes that from a listing that said "2 units" outright.
+    """
+    extraction = EXTRACTION_MISSING_PRICE.model_copy(
+        deep=True,
+        update={
+            "price": 525_000.0,
+            "assumptions": [
+                FieldAssumption(
+                    field="unit_count",
+                    basis="The listing calls the property a '2-flat', a Chicago term "
+                    "for a two-unit building.",
+                )
+            ],
+        },
+    )
+    monkeypatch.setattr(extractor_module, "_extract_terms", lambda text: (extraction, 1))
+
+    result = run_deal()
+    raised = assert_reaches_report(result, FlagKind.ASSUMED_FIELD_VALUE)
+    assert "2-flat" in raised.detail, (
+        "The basis for the inference must reach the reader. An assumption they cannot "
+        "evaluate is worth little more than an unflagged one."
+    )
+
+
+def test_retry_exhaustion_escalates_and_writes_no_deal_terms(monkeypatch):
+    """The bounded-retry branch of Loop 1.
+
+    Two claims, and the second is the one worth protecting: the failure is disclosed at
+    critical severity, and no partial or invented deal terms are written. A schema the
+    model never satisfied must not leave a half-built `DealTerms` behind for the
+    Valuation agent to price.
+    """
+    def exhausted(text):
+        raise SchemaValidationExhausted(
+            attempts=config.MAX_EXTRACTION_RETRIES,
+            last_error="price: Input should be a valid number",
+            last_raw='{"price": "on application"}',
+        )
+
+    monkeypatch.setattr(extractor_module, "_extract_terms", exhausted)
+
+    result = run_deal()
+    assert_reaches_report(result, FlagKind.EXTRACTION_RETRY_EXHAUSTED)
+    assert result["status"] == "needs_review", "A failed extraction must not report as normal."
+    assert result["deal_terms"].price is None
+    assert result["deal_terms"].full_address is None
+    assert result["extraction_attempts"] == config.MAX_EXTRACTION_RETRIES
+
+
+def test_an_unreachable_model_is_disclosed_distinctly(monkeypatch):
+    """'No model was reached' is a different finding from 'the model kept failing'.
+
+    Asserted as a distinct kind rather than folded into retry exhaustion because the two
+    call for different responses from whoever reads the report — one is a service
+    outage, the other is a model that cannot handle the listing.
+    """
+    def unreachable(text):
+        raise LlmError("No OpenRouter token found.")
+
+    monkeypatch.setattr(extractor_module, "_extract_terms", unreachable)
+
+    result = run_deal()
+    assert_reaches_report(result, FlagKind.EXTRACTION_UNAVAILABLE)
+    assert not flags_of_kind(result, FlagKind.EXTRACTION_RETRY_EXHAUSTED)
+    assert result["extraction_attempts"] == 0, (
+        "No attempt was made against the retry budget, so none should be recorded."
+    )
+
+
+def test_a_transport_failure_becomes_an_error_the_agent_can_flag(monkeypatch):
+    """Closes the chain the test above starts from its other end.
+
+    That test asserts the Extractor turns an `LlmError` into a flag. This one asserts
+    the client actually *produces* an `LlmError` when the transport fails, rather than
+    letting an SDK exception escape — because between them lies the real failure mode:
+    a `RateLimitError` is not an `LlmError`, so before this it would have propagated out
+    of the node and crashed the graph instead of degrading. Not hypothetical. The free
+    tier's daily cap (50 requests, account-wide) was hit during the U3 bake-off, which
+    is how the gap was found.
+    """
+    def rate_limited(**kwargs):
+        raise APIError(
+            "Rate limit exceeded: free-models-per-day",
+            request=httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions"),
+            body=None,
+        )
+
+    client = LlmClient(token="not-a-real-key")
+    monkeypatch.setattr(client._client.chat.completions, "create", rate_limited)
+
+    with pytest.raises(LlmError):
+        client.complete("anything")
+
+
+def test_missing_coordinates_are_disclosed_as_critical():
+    """The default stub's path: nothing resolved, so retrieval cannot run at all."""
+    result = run_deal()
+    raised = assert_reaches_report(result, FlagKind.GEOCODING_UNAVAILABLE)
+    assert raised.severity == Severity.CRITICAL
+    assert result["deal_terms"].latitude is None
+
+
+def test_a_city_centroid_fallback_is_disclosed_as_an_approximation(monkeypatch):
+    """The middle geography tier: coordinates exist, but not for this property."""
+    centroid = GeocodeResult(
+        latitude=LOS_ANGELES[0],
+        longitude=LOS_ANGELES[1],
+        matched_address="Los Angeles, CA (corpus centroid — city-level approximation)",
+        source="city_centroid",
+    )
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: centroid)
+    monkeypatch.setitem(
+        graph_module.NODE_FUNCTIONS, nodes.COMPS_RETRIEVAL, lambda state: {"comps": []}
+    )
+
+    result = run_deal()
+    raised = assert_reaches_report(result, FlagKind.COORDINATES_FROM_CITY_CENTROID)
+    assert raised.severity == Severity.WARN
+    assert result["deal_terms"].latitude == LOS_ANGELES[0]
+
+
+def test_supplied_coordinates_conflicting_with_the_address_escalate(monkeypatch):
+    """The U3 conflict path.
+
+    The system cannot tell whether the caller meant this address or those coordinates,
+    so it escalates instead of choosing silently. The address wins for the purpose of
+    continuing the run — the report names the address, so retrieval is anchored to the
+    same property the reader is being shown — and the discarded coordinates are recorded
+    in the flag so a reviewer can see both.
+    """
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
+    monkeypatch.setitem(
+        graph_module.NODE_FUNCTIONS, nodes.COMPS_RETRIEVAL, lambda state: {"comps": []}
+    )
+
+    # Santa Monica: ~13 mi from the geocoded address, well beyond the tolerance.
+    supplied = DealTerms(latitude=34.0195, longitude=-118.4912)
+    result = run_deal(terms=supplied)
+
+    raised = assert_reaches_report(result, FlagKind.SUPPLIED_COORDINATES_CONFLICT)
+    assert raised.severity == Severity.CRITICAL
+    assert result["status"] == "needs_review"
+    assert result["deal_terms"].latitude == LOS_ANGELES[0], (
+        "The geocoded address should be what the pipeline carries."
+    )
+    assert "34.01950" in raised.detail, (
+        "The discarded coordinates must be in the flag; a reviewer resolving the "
+        "conflict needs both values, not just the one that won."
+    )
+
+
+def test_supplied_coordinates_close_to_the_address_raise_nothing(monkeypatch):
+    """The negative case, and the reason the one above means anything.
+
+    A tolerance that fired on every supplied coordinate would be indistinguishable from
+    a tolerance of zero — the §2 argument about a signal that is always on, applied to a
+    threshold rather than to a search radius.
+    """
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
+    monkeypatch.setitem(
+        graph_module.NODE_FUNCTIONS, nodes.COMPS_RETRIEVAL, lambda state: {"comps": []}
+    )
+
+    # ~0.1 mi away — a parcel-level disagreement, not a different property.
+    nearby = DealTerms(latitude=LOS_ANGELES[0] + 0.0015, longitude=LOS_ANGELES[1])
+    result = run_deal(terms=nearby)
+
+    assert not flags_of_kind(result, FlagKind.SUPPLIED_COORDINATES_CONFLICT)
+    assert not flags_of_kind(result, FlagKind.GEOCODING_UNAVAILABLE)
+
+
+def test_supplied_coordinates_survive_an_unresolvable_address(monkeypatch):
+    """The one branch where no conflict check is possible.
+
+    With the address unresolvable, the supplied point is the best available location and
+    is used — but it could not be checked against the address, and the report says so
+    rather than presenting it as verified. Uses the autouse stub's `geocode -> None`.
+    """
+    monkeypatch.setitem(
+        graph_module.NODE_FUNCTIONS, nodes.COMPS_RETRIEVAL, lambda state: {"comps": []}
+    )
+
+    supplied = DealTerms(latitude=LOS_ANGELES[0], longitude=LOS_ANGELES[1])
+    result = run_deal(terms=supplied)
+
+    raised = assert_reaches_report(result, FlagKind.GEOCODING_UNAVAILABLE)
+    assert raised.severity == Severity.WARN, (
+        "Coordinates exist, so retrieval can run; this is not the critical no-location "
+        "case and should not score as one."
+    )
+    assert result["deal_terms"].latitude == LOS_ANGELES[0]
+
+
+# --------------------------------------------------------------------------
 # Grounded path — skipped when the Chroma index is absent
 # --------------------------------------------------------------------------
 
@@ -315,7 +626,16 @@ def _corpus_available() -> bool:
         from tools import vector_store
 
         return vector_store.get_collection().count() > 0
-    except Exception:  # noqa: BLE001 - absence of the index is the only thing tested
+    except Exception as exc:  # noqa: BLE001 - absence of the index is the only thing tested
+        # The skip message below asserts one cause ("index not built"), but this catch
+        # accepts any — a failed embedding-model download, a Chroma version mismatch.
+        # Logging the real reason keeps the skip from quietly misattributing itself.
+        from tools import diagnostics
+
+        diagnostics.log_exception(
+            "test_flag_propagation: corpus unavailable, skipping the grounded case",
+            exc,
+        )
         return False
 
 
@@ -323,23 +643,25 @@ def _corpus_available() -> bool:
     not _corpus_available(),
     reason="Chroma index not built; run scripts/build_comps_index.py",
 )
-def test_grounded_run_reaches_the_report_with_real_comps():
+def test_grounded_run_reaches_the_report_with_real_comps(monkeypatch):
     """The dense Los Angeles case: retrieval succeeds and the comps reach the report.
 
     The counterpart to everything above. Those tests prove flags survive; this one
-    proves a *clean* run stays clean — no relaxation flag, and real comps rendered with
-    their citable source. §2 makes this argument about the evidence scripts and it
-    applies here too: a suite where every case is degraded cannot show that the
-    degradation signals mean anything.
+    proves a *clean* run stays clean — no relaxation flag, no geography flag, and real
+    comps rendered with their citable source. §2 makes this argument about the evidence
+    scripts and it applies here too: a suite where every case is degraded cannot show
+    that the degradation signals mean anything.
     """
-    terms = DealTerms(latitude=34.0522, longitude=-118.2437)
-    listing = (
-        "For sale: 1234 Sunset Ridge Ave, Los Angeles, CA 90026. 2-unit duplex, "
-        "2 bed / 1 bath, approx 950 sq ft. Asking $1,150,000."
+    extraction = EXTRACTION_MISSING_PRICE.model_copy(
+        deep=True, update={"price": 1_150_000.0}
     )
-    result = run_deal(listing, terms)
+    monkeypatch.setattr(extractor_module, "_extract_terms", lambda text: (extraction, 1))
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
+
+    result = run_deal()
 
     assert result["comps"], "Expected comps in a market measured as dense in §2."
-    assert not [f for f in result["flags"] if f.kind == FlagKind.SPARSE_COMPS]
+    assert not flags_of_kind(result, FlagKind.SPARSE_COMPS)
+    assert not flags_of_kind(result, FlagKind.GEOCODING_UNAVAILABLE)
     assert "## Comparable Rentals" in result["report_markdown"]
     assert result["comps"][0].listing_id in result["report_markdown"]
