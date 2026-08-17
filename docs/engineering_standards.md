@@ -185,6 +185,21 @@ and it is recorded as such rather than left as an unexplained gap.
 - **One unit per change set**, self-contained, accompanied by a summary of what changed
   and where the reviewer's attention is most warranted. A diff spanning five loosely
   related files costs more review time than the batching saves.
-- **All test and development data is synthetic or public**, per program requirements.
-  No scraped or proprietary listings enter this repository at any point.
+- **Test and development data should be synthetic or public.** "Public" means openly
+  licensed or a public record — Census boundaries, HUD FMR, Redfin's published extracts,
+  county assessor data — not merely publicly visible. Scraped listings are the case the
+  distinction exists for: visible to anyone, proprietary to their platform, restricted by
+  its terms. This is stricter than the program requires, by choice. A deviation gets
+  recorded as a decision in §7 rather than taken quietly — decision #11 is the open
+  example.
+
+  Revised Aug 16, 2026, from an absolute — *"all test and development data **is**
+  synthetic or public"*. Two reasons the norm is the better form. A claim about what the
+  repository contains goes false the moment a deliberated exception lands, and a standard
+  that lies about its own repo is worse than one that admits an exception and points at
+  where it was recorded. And the absolute version stated a prohibition without defining
+  the term it turned on: "public" is genuinely ambiguous between *openly licensed* and
+  *publicly visible*, and scraped listings sit exactly on that seam. Naming the
+  distinction is what the prohibition was doing implicitly, so stating it directly gives
+  up nothing and travels better to a reader who was not in the conversation.
 

@@ -737,9 +737,17 @@ held-out slice of the Kaggle corpus — real listing text, real rents, which is 
 the Checkpoint 1.1 feedback asked for ("lock one metro and a small held-out test set
 early") — and the value estimate is documented as unvalidated.
 
-Note this would relax the standing rule that no real listing data enters the repository.
-Assessor records are public records rather than listings, so the rule may not need
-changing at all; that is worth settling before the work starts rather than during it.
+**Settled Aug 16, 2026, before the work rather than during it.** The open question was
+whether this breaches the standing data rule. It does not, and §8 now says why rather
+than leaving it to a judgment call at implementation time: the rule turns on "public,"
+which is defined there as *openly licensed or a public record* — not *publicly visible*.
+Assessor records are the first; scraped listings are only the second. So the planned work
+is admissible under the standard as written, and scraping remains excluded by the same
+sentence rather than by a separate prohibition.
+
+Worth noting the rule was also relaxed from an absolute to a norm in the same pass, which
+is what makes a recorded exception possible at all. That is the general pattern this log
+exists for, applied to the standards document itself.
 
 **Decision #9 detail.** The pipeline order is fixed by data dependency — Valuation consumes
 `state.comps`, Scenario consumes `rent_estimate`/`value_estimate` — so the sequence
