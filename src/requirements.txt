@@ -16,6 +16,12 @@ langsmith>=0.1
 # State schema / validation
 pydantic>=2.7
 
+# MCP reference server (mcp_server.py, §7 decision #13). Exposes the read-only HUD FMR
+# and Redfin appreciation tools to the U6 ToT evaluator and to any MCP host during
+# evaluation and demo. The pipeline does not import this — the server is a separate
+# process — so it is not a runtime dependency of `main.py`.
+mcp>=2.0
+
 # LLM access (OpenRouter is OpenAI-API-compatible)
 openai>=1.40
 

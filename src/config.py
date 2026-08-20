@@ -263,3 +263,61 @@ RETRIEVAL_ENABLED = True
 
 LANGSMITH_PROJECT = "deal-evaluator"
 LANGSMITH_ENABLED = os.environ.get("LANGSMITH_TRACING", "").lower() == "true"
+
+
+# --------------------------------------------------------------------------
+# Tree-of-Thought reasoning (§7 decisions #12, #14 — U6/U7)
+# --------------------------------------------------------------------------
+# Applied inside two nodes only: Scenario/Forecast (U6) and the Critic's cross-agent
+# consistency checks (U7). The rest of the pipeline is ordered by data dependency, so
+# there is nothing there to search over.
+#
+# Every value below is PROVISIONAL and tuned in U8, where the eval harness supplies
+# synthetic cases whose correct branch is known by construction. They are named here
+# rather than inside the agent because a tunable hardcoded in an agent is a defect (§8).
+
+# Candidate hypotheses generated per expansion. Anchored to the Tree-of-Thought paper's
+# b=5 on Game of 24 (4% -> 74% over chain-of-thought), not yet to this project's data.
+TOT_BRANCHING_FACTOR = 5
+
+# Depth 1 picks framing (window + appreciation tier), 2 selects a rate within it, 3
+# reconciles survivors into the three reported scenarios. Deeper adds no new question.
+TOT_MAX_DEPTH = 3
+
+# Survivors carried forward per level. Three, because three scenarios are reported.
+TOT_BEAM_WIDTH = 3
+
+# Branches scoring below this are discarded. Pruning is never silent: each discarded
+# branch writes {id, parent, depth, score, prune_reason} to the ledger on DealState so
+# the report can disclose what was considered and why it was dropped (decision #14).
+TOT_PRUNE_THRESHOLD = 0.40
+
+# Scores within this distance are treated as tied, and resolved toward the more
+# conservative growth assumption rather than by arbitrary ordering. For an investment
+# tool the cost of being wrong is not symmetric.
+TOT_TIE_EPSILON = 0.05
+
+# Sampling temperature for hypothesis generation. This is the documented exception to
+# LLM_TEMPERATURE = 0.0 above: diversity is bought deliberately at one seam rather than
+# leaking across a pipeline that is otherwise reproducible.
+TOT_TEMPERATURE = 0.7
+
+# Write the complete reasoning tree to EVAL_RESULTS_DIR. Off in production runs, where
+# the ledger on state is enough to disclose; on for eval runs, which need to reconstruct
+# why the evaluator scored what it did. Unlike LangSmith traces, the dump does not expire.
+TOT_PERSIST_FULL_TREE = False
+
+
+# --------------------------------------------------------------------------
+# MCP reference server (§7 decision #13 — mcp_server.py)
+# --------------------------------------------------------------------------
+# Read-only surface over tools/hud_fmr.py and tools/redfin_data.py. Consumed by the U6
+# ToT evaluator's per-branch evidence pulls, and by any MCP host during U8 evaluation and
+# the Week 7 demonstration. The pipeline itself does not require it — see the decision
+# log for the honest accounting of what it does and does not buy.
+
+MCP_SERVER_NAME = "deal-evaluator-reference"
+
+# Default number of recent monthly periods returned by get_appreciation_history.
+# Twelve gives a full year of trailing movement to compare against the long-run bands.
+MCP_APPRECIATION_HISTORY_PERIODS = 12

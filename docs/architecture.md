@@ -94,8 +94,11 @@ nodes would port to a hand-rolled loop without touching the reasoning logic.
 - Every agent is a **node function**: state in, **partial state update** out. Note
   *partial* — returning the whole mutated state object is the most common LangGraph
   error.
-- **No agent calls another agent directly.** Routing lives in edges and `route_*`
-  functions, never inside a specialist.
+- **Agents communicate only through shared state.** A node reads `DealState` and
+  returns a partial update; it never invokes another agent, and never hands data to
+  one. Routing is a separate concern that lives in edges and `route_*` functions,
+  never inside a specialist — and a `route_*` function returns the *name* of the next
+  node, carrying no payload of its own.
 - **State is a single typed object** (§5), never scattered across variables.
 - **Flags and retries are state-encoded, not control-flow-encoded.** Conditional edges
   read state to route; anything outside state is invisible to the graph.
@@ -177,6 +180,7 @@ carnegie_mellon_agentic_repo/
     ├── tests/
     │   ├── conftest.py            # ✅ puts src/ on the import path
     │   └── test_flag_propagation.py  # ✅ the one test that must never fail — 24 hermetic cases
+    ├── mcp_server.py              # ✅ MCP read-only reference server (FMR + appreciation)
     ├── app.py                     # Streamlit demo UI (local only)
     └── main.py                    # ✅ entrypoint: run full pipeline on one listing
 ```

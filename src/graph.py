@@ -4,7 +4,7 @@ This module is *only* wiring. Every decision it expresses was made elsewhere: th
 topology in §7 decision #9, the state schema in §5, the node names in `nodes.py`. If a
 piece of reasoning shows up here, it is in the wrong file — a specialist's logic
 belongs in `agents/`, and a routing rule belongs in a `route_*` function beside the
-Planner (§3, "no agent calls another agent directly").
+Planner (§3, "agents communicate only through shared state").
 
 **The topology** (decision #9 — pre-flight Planner, not a supervisor):
 

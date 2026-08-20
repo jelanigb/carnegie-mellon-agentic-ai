@@ -31,7 +31,8 @@ Reason/Act/Observe/Decide:
   and note whether the rework budget still has room.
 - **Decide.** Proceed to the report, send the deal back for one more pass, or escalate
   to a human. The decision is written to state; the routing that acts on it lives in
-  `agents/planner.route_after_critic`, never here (§3 — no agent calls another agent).
+  `agents/planner.route_after_critic`, never here (§3 — agents communicate only through
+  shared state; routing is an edge's job, not a specialist's).
 """
 
 from __future__ import annotations

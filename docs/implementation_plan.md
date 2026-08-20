@@ -463,6 +463,9 @@ needed. Target: all closed during Week 4.
 | 9 | Planner topology — pre-flight vs. supervisor | ✅ **pre-flight + rework re-entry** (Aug 9, 2026); built and topology-asserted in U2 |
 | 10 | **Geocoding source** — how `DealTerms.latitude/longitude` get derived | ✅ **Census Geocoder + corpus-centroid fallback** (Aug 11, 2026); `tools/geocoding.py` built and verified live. Wiring into the real Extractor remains U3 — see below |
 | 11 | **Grounding for demo and evaluation deal terms** | 🟨 **Half taken (Aug 16, 2026).** Demo listings are now calibrated against Redfin metro medians and HUD FMR, with `scripts/verify_demo_calibration.py` re-deriving every figure. Real for-sale ground truth via county public records is **planned, scheduled at U8, and on the cut list** — see below |
+| 12 | **Reasoning strategy — Tree-of-Thought scope** | ✅ **Selective ToT (Aug 18, 2026).** Adopted inside two nodes only: Scenario/Forecast (U6) and the Critic's cross-agent consistency checks (U7). The rest of the pipeline stays linear — its order is fixed by data dependency, so there is nothing to search over. See below |
+| 13 | **MCP adoption** | ✅ **Read-only reference server (Aug 18, 2026).** Wraps `tools/hud_fmr.py` and `tools/redfin_data.py` at the ToT evaluator's tool-call boundary. Adopted for portability and a second consumer, **not** for capability — see the honest accounting below. CrewAI declined |
+| 14 | **ToT branch-state persistence** | ✅ **Ledger in state, full tree to `eval/results/` (Aug 18, 2026).** A compact pruned-branch record reaches `DealState` so the report can disclose what was discarded; the complete tree is written as an eval-run artifact behind a config flag |
 
 **Decision #8 detail (Aug 9, 2026).** The `TODO(U3)` in `config.py` warned that the four
 model IDs were unverified placeholders. Checked against OpenRouter's live catalogue while
@@ -776,7 +779,8 @@ the Planner"* — so A ratifies the stated design rather than changing it.
 - The Planner node runs at most `1 + rework_count` times per deal, which is the figure the
   Checkpoint 5.1 coordination section should quote.
 - Specialists have static outgoing edges except where skipping is legal, so `route_*`
-  functions stay few and small — consistent with §3's "no agent calls another agent directly."
+  functions stay few and small — consistent with §3's "agents communicate only through
+  shared state."
 
 Recorded because the hand-drawn diagram in `lang_graph_onboarding.md` §4 showed B's shape (and
 showed it incoherently — see the correction note there), which is how an unclosed decision
@@ -788,6 +792,88 @@ corresponding unit is specified to produce each required element as a build arti
 rather than as a write-up authored afterward — see the U4 acceptance criteria in §6 for
 the pattern. Apply the same treatment to 4.1, 5.1, and 6.1 as their criteria are
 published.
+
+**Decisions #12–#14 detail (Aug 18, 2026) — reasoning strategy, MCP, and branch state.**
+Taken together while specifying U6 ahead of building it, and prompted by Checkpoint 4.1.
+All three concern the same sub-system, so they are recorded as one block.
+
+**#12 — ToT is adopted selectively, not globally.** The pipeline order
+(Extractor → Comps → Valuation → Scenario → Critic) is fixed by data dependency: comps
+cannot precede geocoding, valuation cannot precede comps. There are no alternative paths
+to explore, so branching across the pipeline would multiply cost with nothing to select
+between. Two nodes fail that test in the other direction:
+
+- **Scenario/Forecast (U6)** faces two genuine forks with no single correct answer — the
+  2020–2022 window (`ANOMALOUS_PERIOD_INCLUDED`) and the `appreciation_source` tier
+  ladder. They interact, and a linear chain resolves both by whichever framing it reaches
+  first, anchoring every downstream figure to it.
+- **Critic consistency checks (U7)** — the four checks named in `_consistency_objections`'s
+  `TODO(U7)` differ in cost and are not independent, so running all of them on every deal
+  spends the expensive ones on deals that do not need them.
+
+Structure and parameters are specified in the Checkpoint 4.1 response. New `config.py`
+constants (`TOT_BRANCHING_FACTOR`, `TOT_MAX_DEPTH`, `TOT_BEAM_WIDTH`,
+`TOT_PRUNE_THRESHOLD`, `TOT_TEMPERATURE`) are **provisional and tuned in U8**, where
+synthetic cases have a known-correct branch. Search strategy is **beam search**: BFS at
+*b*=5 over depth 3 is 125 leaf evaluations for a three-output forecast, and DFS commits
+to a framing before comparing it — reintroducing the premature commitment ToT exists to
+prevent. `config.LLM_TEMPERATURE = 0.0` already carried the comment
+`# deterministic by default; ToT overrides`, so this decision closes a seam the config
+anticipated.
+
+**#13 — MCP is adopted, and the honest case for it is narrower than the rubric implies.**
+The Module 4 material frames MCP as a connectivity protocol (client, servers, resources,
+tools over JSON-RPC), and its own decision framework routes "connecting tools to multiple
+models" there. This project's ToT evaluator pulls evidence per branch — appreciation
+history for an aggressive-growth branch, an FMR record for a high-rent branch — and that
+tool-call boundary is where MCP fits.
+
+**What it does not buy: capability.** These are in-process Python functions, and
+LangChain's `@tool` decorator would give the evaluator dynamic tool selection with no
+protocol hop. The gain is *portability and a second consumer* — the same read-only tools
+become callable from any MCP host during U8 evaluation and Week 7 demonstration, so the
+data layer can be interrogated directly rather than through a one-off script each time.
+That is a real benefit and a modest one, and recording it that way is the point: the
+alternative was overstating a tool's necessity to satisfy a rubric.
+
+**MCP is explicitly *not* the ToT state manager**, despite Checkpoint 4.1 suggesting it
+for "shared state, context passing, branch tracking." It has no state primitive. Using it
+that way would mean building a stateful server duplicating the LangGraph checkpointer and
+losing the `operator.add` reducer semantics that make flag accumulation structurally
+correct (§5).
+
+**CrewAI is declined.** Its strength is modeling an organization of role-playing agents,
+and the session's framework points to it for "modeling a human workflow." This pipeline's
+shape comes from data dependency, not a team's division of labor, and the role separation
+it offers already exists as typed nodes. Adopting a second orchestrator mid-project for
+one sub-feature adds a second execution model, a second state representation, and a second
+failure surface without adding capability. **The deciding factor is scope, not merit** —
+a ten-agent system designed today with no existing graph would deserve a real evaluation.
+Note this argument deliberately does *not* rest on §8's "agents communicate only
+through shared state"
+convention, which is a project convention rather than a constraint CrewAI violates.
+
+**#14 — the branch tree is split between state and eval artifact.** A compact ledger
+(`{id, parent, depth, score, prune_reason}`) per pruned branch reaches `DealState`, which
+is what lets the Summarizer say four hypotheses were considered and two discarded, and
+why. The full tree — every generated hypothesis, surviving and pruned — is written to
+`EVAL_RESULTS_DIR` during eval runs only, behind a config flag.
+
+The split exists because the two artifacts answer different questions. The ledger is
+enough to *disclose*; only the full tree lets you reconstruct why the evaluator scored
+what it did, which is what U8 needs when a forecast looks wrong and the evaluator rather
+than the model is the suspect. Persisting the full tree in state instead would re-serialize
+it into the SQLite checkpointer on every subsequent node transition, and would need a
+nested model with parent pointers in §5. The eval-only dump also does not expire, which
+matters because LangSmith traces on the free tier do, at 14 days.
+
+**This extends Transparent Degradation to the reasoning process itself.** The risk being
+mitigated is a silent one: an evaluator that systematically undervalues a correct-but-
+unusual hypothesis produces confident, well-formed, wrong forecasts and looks identical to
+one working properly. U2 already produced a defect of that exact shape — one critical flag
+cost 0.40, landed confidence at exactly 0.60, and `0.60 < 0.60` is false, so a
+zero-comparable deal reported as an ordinary result. Pruning that leaves no trace is the
+same failure waiting to happen one layer up.
 
 ### Open items
 

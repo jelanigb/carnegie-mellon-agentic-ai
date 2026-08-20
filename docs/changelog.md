@@ -13,7 +13,7 @@
 - [§9](implementation_plan.md#9-current-build-hud-fmr-api-client-toolshud_fmrpy)
 
 **Chronological record of code changes.**
-Author: Jelani Gould-Bailey · Last updated: Aug 16, 2026
+Author: Jelani Gould-Bailey · Last updated: Aug 19, 2026
 
 ## Why this file exists
 
@@ -53,6 +53,21 @@ rows. The unit of a row is the change, not the file.
   uses.
 
 ---
+
+## Aug 19, 2026 — invariant rewording
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Aug 19, 2026 | maintenance | **"No agent calls another agent directly" reworded to "Agents communicate only through shared state."** `docs/architecture.md` §3 (canonical), `engineering_standards.md`, `implementation_plan.md` ×2, `src/graph.py`, `src/agents/critic.py`, plus the private onboarding notes and `claude.md`. The original phrasing paired the prohibition with "routing lives in edges," which read as though routing were the communication channel — it is not. Data moves through `DealState`; a `route_*` function returns only the *name* of the next node and carries no payload. Same invariant, stated as what it actually is | maintenance |
+
+## Aug 18, 2026 — decisions #12–#14, MCP reference server
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Aug 18, 2026 | U6 (partial) | **MCP reference server over the read-only data layer (decision #13).** `mcp_server.py` — four tools: `get_fmr`, `get_growth_bands`, `get_appreciation_history`, `list_available_metros`, all annotated `readOnlyHint`. Wraps `tools/hud_fmr.py` and `tools/redfin_data.py` without modifying either. Two consumers: the U6 ToT evaluator's per-branch evidence pulls, and any MCP host during evaluation and the Week 7 demo. **The pipeline does not import it** — the honest case is portability and a second consumer, not capability, since LangChain `@tool` would give in-process dynamic tool selection with no protocol hop. Recorded that way in the module docstring rather than overstated | 4.1 |
+| Aug 18, 2026 | U6 (partial) | **Tool returns carry provenance, not just values.** Every tool returns what a caller would need to disclose the result — `used_msa_fallback` and `is_safmr` on FMR, `includes_anomalous_period` and `optimistic_stretch_in_anomalous_period` on growth bands. Unknown metros and HUD 404s return `available: false` with a reason and the valid alternatives rather than raising, so a missing tool degrades instead of killing the server | 4.1 |
+| Aug 18, 2026 | U6 (partial) | **ToT tunables named ahead of the unit that consumes them (decisions #12, #14).** `config.py` — `TOT_BRANCHING_FACTOR`, `TOT_MAX_DEPTH`, `TOT_BEAM_WIDTH`, `TOT_PRUNE_THRESHOLD`, `TOT_TIE_EPSILON`, `TOT_TEMPERATURE`, `TOT_PERSIST_FULL_TREE`, plus `MCP_SERVER_NAME` and `MCP_APPRECIATION_HISTORY_PERIODS`. All provisional and tuned in U8. `TOT_TEMPERATURE = 0.7` is the documented exception to `LLM_TEMPERATURE = 0.0`, whose comment already read `# deterministic by default; ToT overrides` | 4.1 |
+| Aug 18, 2026 | maintenance | **`mcp>=2.0` added to `requirements.txt`**, noted as a server-process dependency rather than a runtime dependency of `main.py`. The 2.0 SDK exposes `MCPServer`, not the older `FastMCP` | maintenance |
 
 ## Aug 16, 2026 — review follow-ups: diagnostics, response cache, eval scaffolding, decision #8 closed
 

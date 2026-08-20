@@ -21,7 +21,8 @@ in a focused session or across a fragmented week.
 ### Architecture
 
 - **Follow the design conventions in §3**: node functions returning *partial* state
-  updates, no agent-to-agent calls, a single typed state object, flags and retries
+  updates, agents communicating only through shared state, a single typed state object,
+  flags and retries
   encoded in state, every cycle bounded by an explicit counter. LangGraph enforces
   several of these structurally; the partial-update rule and the bounded-cycle rule
   remain a review responsibility.
