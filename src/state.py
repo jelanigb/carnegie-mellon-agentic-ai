@@ -28,9 +28,11 @@ from __future__ import annotations
 import operator
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Optional
 
 from pydantic import BaseModel, Field
+
+from enums import AppreciationTier
 
 
 class Severity(StrEnum):
@@ -131,6 +133,30 @@ class LocationPrecision(StrEnum):
 
     ADDRESS = "address"
     AREA = "area"
+
+
+class RentEstimateSource(StrEnum):
+    """Which estimator produced `DealState.rent_estimate`.
+
+    The report cites this so a reader can weigh a regression output differently from an
+    LLM fallback. Closed set for the same reason as `LocationPrecision`: it's compared
+    (`agents/summarizer.py`) rather than only displayed.
+    """
+
+    REGRESSION_MODEL = "regression_model"
+    LLM_FALLBACK = "llm_fallback"
+
+
+class DealStatus(StrEnum):
+    """Where a deal's run stands. Terminal values are `COMPLETE` and `FAILED`;
+    `NEEDS_REVIEW` is a durable state a deal can still be resumed from (see
+    `agents/human_review.py`), not a terminal one.
+    """
+
+    IN_PROGRESS = "in_progress"
+    NEEDS_REVIEW = "needs_review"
+    COMPLETE = "complete"
+    FAILED = "failed"
 
 
 class Flag(BaseModel):
@@ -313,13 +339,11 @@ class DealState(BaseModel):
     rent_estimate_ratio_to_fmr: Optional[float] = None
     fmr_anchor_used: Optional[float] = None
     value_estimate: Optional[float] = None
-    rent_estimate_source: Optional[Literal["regression_model", "llm_fallback"]] = None
+    rent_estimate_source: Optional[RentEstimateSource] = None
 
     # forecast
     # "zip_multifamily" is documented future work (§2) and is not produced by this build.
-    appreciation_source: Optional[
-        Literal["metro_multifamily", "zip_multifamily", "metro_all_residential"]
-    ] = None
+    appreciation_source: Optional[AppreciationTier] = None
     scenarios: dict = Field(default_factory=dict)
 
     # review
@@ -358,7 +382,7 @@ class DealState(BaseModel):
 
     # cross-cutting
     flags: Annotated[list[Flag], operator.add] = Field(default_factory=list)
-    status: Literal["in_progress", "needs_review", "complete", "failed"] = "in_progress"
+    status: DealStatus = DealStatus.IN_PROGRESS
     created_at: datetime = Field(default_factory=datetime.now)
 
     def flags_by_severity(self, severity: Severity) -> list[Flag]:

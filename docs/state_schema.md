@@ -39,15 +39,42 @@ concrete payoff is in U8: `set(FlagKind)` is enumerable, so the eval harness can
 test case — which turns "flags fire" into a materially stronger claim. `StrEnum` members
 are `str`, so serialization and comparison are unchanged.
 
+**Every closed-vocabulary field is now a `StrEnum`, not just flag kinds** (extended Aug
+22, 2026). `FlagKind`/`Severity` set the precedent above; `location_precision`,
+`rent_estimate_source`, `appreciation_source`, and `status` used bare `Literal`s instead,
+which was an inconsistency rather than a considered difference — they're compared and
+filtered on the same way flags are (`count_area_positioned`, the eval harness,
+`agents/summarizer.py`'s status branching), so the same typo-at-construction argument
+applies. One field's enum, `AppreciationTier`, lives in a new `src/enums.py` rather than
+here: `tools/redfin_data.py` returns flag-worthy findings as data specifically so it
+never has to import `state.py` (see that module's docstring), and `enums.py` — a module
+with no dependencies of its own — lets both sides share one definition without either
+depending on the other. `GeocodeSource` (`census_geocoder` / `city_centroid`) got the
+same treatment locally in `tools/geocoding.py`, and `tools/llm_cache.py`'s `CacheMode`
+now coerces its env-driven string through the enum at construction, so a typo'd
+`LLM_CACHE_MODE` raises at startup instead of silently matching no branch.
+
 ```python
 import operator
 from enum import StrEnum
-from typing import Annotated, Literal, Optional
+from typing import Annotated, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field
 
+from enums import AppreciationTier  # shared with tools/redfin_data.py — see prose above
+
 class Severity(StrEnum):
     INFO = "info"; WARN = "warn"; CRITICAL = "critical"
+
+class LocationPrecision(StrEnum):
+    ADDRESS = "address"; AREA = "area"
+
+class RentEstimateSource(StrEnum):
+    REGRESSION_MODEL = "regression_model"; LLM_FALLBACK = "llm_fallback"
+
+class DealStatus(StrEnum):
+    IN_PROGRESS = "in_progress"; NEEDS_REVIEW = "needs_review"
+    COMPLETE = "complete"; FAILED = "failed"
 
 class FlagKind(StrEnum):
     UNRESOLVED_FIELD = "unresolved_field"
@@ -99,7 +126,7 @@ class Comp(BaseModel):
     distance_miles: float                  # 1 dp — see location_precision
     listing_source: Optional[str] = None   # originating site, for citation
     listed_date: Optional[datetime] = None # per-row vintage, for FMR normalization
-    location_precision: Optional[Literal["address", "area"]] = None
+    location_precision: Optional[LocationPrecision] = None
     latitude: Optional[float] = None       # from the corpus, never geocoded
     longitude: Optional[float] = None
 
@@ -121,14 +148,12 @@ class DealState(BaseModel):
     rent_estimate_ratio_to_fmr: Optional[float] = None  # model's raw structural output
     fmr_anchor_used: Optional[float] = None              # today's FMR figure applied
     value_estimate: Optional[float] = None
-    rent_estimate_source: Literal["regression_model", "llm_fallback", None] = None
+    rent_estimate_source: Optional[RentEstimateSource] = None
 
     # forecast
     # "zip_multifamily" is a documented future option (deferred — see §2); not
     # produced by the current build.
-    appreciation_source: Literal[
-        "metro_multifamily", "zip_multifamily", "metro_all_residential", None
-    ] = None
+    appreciation_source: Optional[AppreciationTier] = None
     scenarios: dict = Field(default_factory=dict)  # optimistic/base/pessimistic branches
 
     # review
@@ -139,7 +164,7 @@ class DealState(BaseModel):
 
     # cross-cutting
     flags: Annotated[list[Flag], operator.add] = Field(default_factory=list)
-    status: Literal["in_progress", "needs_review", "complete", "failed"] = "in_progress"
+    status: DealStatus = DealStatus.IN_PROGRESS
     created_at: datetime = Field(default_factory=datetime.now)
 ```
 

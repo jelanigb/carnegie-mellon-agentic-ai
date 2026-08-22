@@ -52,7 +52,7 @@ from pydantic import BaseModel, Field
 import config
 from state import DealState, DealTerms, Flag, FlagKind, Severity, flag
 from tools import county_crosswalk, diagnostics
-from tools.geocoding import GeocodeResult, geocode
+from tools.geocoding import GeocodeResult, GeocodeSource, geocode
 from tools.llm_client import LlmClient, LlmError, SchemaValidationExhausted
 
 # Imported rather than reimplemented: a second haversine would be a second thing to keep
@@ -250,7 +250,11 @@ def _resolve_geography(
     resolved: Optional[GeocodeResult] = geocode(
         terms.street_address, terms.city, terms.state, terms.zip_code
     )
-    parcel = resolved if resolved is not None and resolved.source == "census_geocoder" else None
+    parcel = (
+        resolved
+        if resolved is not None and resolved.source == GeocodeSource.CENSUS_GEOCODER
+        else None
+    )
 
     if parcel is not None:
         terms.latitude, terms.longitude = parcel.latitude, parcel.longitude

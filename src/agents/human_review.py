@@ -31,7 +31,7 @@ from __future__ import annotations
 
 from langgraph.types import interrupt
 
-from state import DealState, Severity
+from state import DealState, DealStatus, Severity
 
 AGENT = "human_review"
 
@@ -57,6 +57,6 @@ def human_review_node(state: DealState) -> dict:
     # cleared review on its own — overwriting the status at the Summarizer would erase
     # the distinction between "the system was confident" and "a human signed off".
     return {
-        "status": "needs_review",
+        "status": DealStatus.NEEDS_REVIEW,
         "human_review_note": str(reviewer_note) if reviewer_note is not None else None,
     }

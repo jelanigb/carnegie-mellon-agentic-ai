@@ -56,7 +56,8 @@ from __future__ import annotations
 
 import functools
 from dataclasses import dataclass
-from typing import Literal, Optional
+from enum import StrEnum
+from typing import Optional
 
 import requests
 
@@ -64,6 +65,19 @@ from tools import diagnostics
 from tools.county_crosswalk import normalize_city, normalize_state
 
 CENSUS_GEOCODER_URL = "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
+
+
+class GeocodeSource(StrEnum):
+    """Which of the two tiers in the module docstring produced a `GeocodeResult`.
+
+    The caller reads this to decide the disclosure (see the docstring's last paragraph
+    above): `CENSUS_GEOCODER` raises nothing, `CITY_CENTROID` raises
+    `FlagKind.COORDINATES_FROM_CITY_CENTROID`. A closed type means that branch in the
+    Extractor can't silently stop matching because of a typo on either side.
+    """
+
+    CENSUS_GEOCODER = "census_geocoder"
+    CITY_CENTROID = "city_centroid"
 
 # The "current" public address reference vintage, as opposed to a historical benchmark
 # (Census also publishes point-in-time snapshots for reproducibility research, which is
@@ -89,7 +103,7 @@ class GeocodeResult:
     latitude: float
     longitude: float
     matched_address: str
-    source: Literal["census_geocoder", "city_centroid"]
+    source: GeocodeSource
 
 
 def _oneline_address(
@@ -141,7 +155,7 @@ def geocode_census(
         latitude=float(coords["y"]),
         longitude=float(coords["x"]),
         matched_address=best.get("matchedAddress", oneline),
-        source="census_geocoder",
+        source=GeocodeSource.CENSUS_GEOCODER,
     )
 
 
@@ -193,7 +207,7 @@ def city_centroid(city: Optional[str], state: Optional[str]) -> Optional[Geocode
         latitude=lat,
         longitude=lon,
         matched_address=f"{city}, {state} (corpus centroid — city-level approximation)",
-        source="city_centroid",
+        source=GeocodeSource.CITY_CENTROID,
     )
 
 

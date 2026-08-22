@@ -69,10 +69,24 @@ import os
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from enum import StrEnum
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Optional
 
-CacheMode = Literal["off", "read_write", "replay"]
+
+class CacheMode(StrEnum):
+    """The three cache behaviors — see the module docstring's "Three modes" section.
+
+    `config.LLM_CACHE_MODE` is env-driven and arrives here as a plain string
+    (`LLM_CACHE_MODE=replay ...`); `ResponseCache.__init__` coerces it through this enum
+    rather than comparing it as a bare string, so a typo'd env value raises at startup
+    instead of silently behaving like a mode that matches none of the branches below —
+    which would mean `get()` never hits and `put()` never writes, with nothing to say why.
+    """
+
+    OFF = "off"
+    READ_WRITE = "read_write"
+    REPLAY = "replay"
 
 
 class CacheMiss(Exception):
@@ -117,9 +131,11 @@ class CacheKey:
 
 
 class ResponseCache:
-    def __init__(self, directory: Path, mode: CacheMode = "read_write"):
+    def __init__(self, directory: Path, mode: CacheMode = CacheMode.READ_WRITE):
         self._dir = Path(directory)
-        self._mode = mode
+        # Coerces a raw string (e.g. from config.LLM_CACHE_MODE) into the enum, raising
+        # ValueError on an unrecognized value rather than accepting it silently.
+        self._mode = CacheMode(mode)
 
     @property
     def mode(self) -> CacheMode:
@@ -133,7 +149,7 @@ class ResponseCache:
 
         Raises `CacheMiss` in `replay` mode — see that exception's docstring.
         """
-        if self._mode == "off":
+        if self._mode == CacheMode.OFF:
             return None
 
         digest = key.digest()
@@ -152,13 +168,13 @@ class ResponseCache:
                     exc,
                 )
 
-        if self._mode == "replay":
+        if self._mode == CacheMode.REPLAY:
             raise CacheMiss(digest, key.model, self._dir)
         return None
 
     def put(self, key: CacheKey, response: str) -> None:
         """Record a response. No-op in `off`; in `replay` nothing new is ever recorded."""
-        if self._mode != "read_write":
+        if self._mode != CacheMode.READ_WRITE:
             return
 
         self._dir.mkdir(parents=True, exist_ok=True)

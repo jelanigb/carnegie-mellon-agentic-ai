@@ -42,7 +42,7 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Optional
 
 import pandas as pd
 
@@ -51,6 +51,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import config
+from enums import AppreciationTier
 
 REDFIN_CSV = (
     config.DATA_DIR
@@ -125,12 +126,12 @@ SUSTAINED_STRETCH_PERIODS = 12
 ANOMALOUS_PERIOD_START = pd.Timestamp("2020-01-01")
 ANOMALOUS_PERIOD_END = pd.Timestamp("2022-12-31")
 
-# Mirrors DealState.appreciation_source in §5. Declared as a Literal here rather than
-# imported from state.py, which is being written in parallel; the string values are the
-# contract between the two.
-AppreciationTier = Literal["metro_multifamily", "zip_multifamily", "metro_all_residential"]
-
-TIER_METRO_MULTIFAMILY: AppreciationTier = "metro_multifamily"
+# Mirrors DealState.appreciation_source in §5. Imported from enums.py rather than
+# state.py: this module returns flag-worthy findings as data rather than constructing
+# Flag objects itself (see the module docstring above), specifically so it never has to
+# depend on state.py. enums.py carries no dependencies of its own, so importing the
+# shared type here doesn't reintroduce that coupling.
+TIER_METRO_MULTIFAMILY: AppreciationTier = AppreciationTier.METRO_MULTIFAMILY
 
 
 @dataclass(frozen=True)

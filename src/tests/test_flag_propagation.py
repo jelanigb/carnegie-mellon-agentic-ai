@@ -67,8 +67,16 @@ from agents.critic import critic_agent
 from agents.extractor import FieldAssumption, ListingExtraction
 from agents.planner import route_after_critic
 from graph import build_graph
-from state import DealState, DealTerms, Flag, FlagKind, Severity
-from tools.geocoding import GeocodeResult
+from state import (
+    DealState,
+    DealStatus,
+    DealTerms,
+    Flag,
+    FlagKind,
+    LocationPrecision,
+    Severity,
+)
+from tools.geocoding import GeocodeResult, GeocodeSource
 from tools.llm_client import LlmClient, LlmError, SchemaValidationExhausted
 
 # The listing text is now inert — the stubbed model call decides what comes back, so the
@@ -117,7 +125,7 @@ def parcel_at(
         latitude=latitude,
         longitude=longitude,
         matched_address=matched_address,
-        source="census_geocoder",
+        source=GeocodeSource.CENSUS_GEOCODER,
     )
 
 
@@ -353,7 +361,7 @@ def test_rework_cycle_terminates_and_discloses_that_it_did(monkeypatch):
         "The cycle terminated but did not disclose why. A bound that escalates "
         "silently loses the reason, which is the same failure as dropping a flag."
     )
-    assert result["status"] == "needs_review"
+    assert result["status"] == DealStatus.NEEDS_REVIEW
     assert "rework_limit_reached" in result["report_markdown"]
 
 
@@ -416,7 +424,7 @@ def test_human_review_pauses_and_surfaces_the_grounds_for_escalation():
     resumed = graph.invoke(Command(resume="[test] reviewer note"), invoke_config)
     assert resumed["human_review_note"] == "[test] reviewer note"
     assert "[test] reviewer note" in resumed["report_markdown"]
-    assert resumed["status"] == "needs_review", (
+    assert resumed["status"] == DealStatus.NEEDS_REVIEW, (
         "A reviewed deal must not be recorded as having cleared on its own."
     )
 
@@ -479,7 +487,9 @@ def test_retry_exhaustion_escalates_and_writes_no_deal_terms(monkeypatch):
 
     result = run_deal()
     assert_reaches_report(result, FlagKind.EXTRACTION_RETRY_EXHAUSTED)
-    assert result["status"] == "needs_review", "A failed extraction must not report as normal."
+    assert result["status"] == DealStatus.NEEDS_REVIEW, (
+        "A failed extraction must not report as normal."
+    )
     assert result["deal_terms"].price is None
     assert result["deal_terms"].full_address is None
     assert result["extraction_attempts"] == config.MAX_EXTRACTION_RETRIES
@@ -544,7 +554,7 @@ def test_a_city_centroid_fallback_is_disclosed_as_an_approximation(monkeypatch):
         latitude=LOS_ANGELES[0],
         longitude=LOS_ANGELES[1],
         matched_address="Los Angeles, CA (corpus centroid — city-level approximation)",
-        source="city_centroid",
+        source=GeocodeSource.CITY_CENTROID,
     )
     monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: centroid)
     monkeypatch.setitem(
@@ -577,7 +587,7 @@ def test_supplied_coordinates_conflicting_with_the_address_escalate(monkeypatch)
 
     raised = assert_reaches_report(result, FlagKind.SUPPLIED_COORDINATES_CONFLICT)
     assert raised.severity == Severity.CRITICAL
-    assert result["status"] == "needs_review"
+    assert result["status"] == DealStatus.NEEDS_REVIEW
     assert result["deal_terms"].latitude == LOS_ANGELES[0], (
         "The geocoded address should be what the pipeline carries."
     )
@@ -764,7 +774,7 @@ def test_comps_carry_their_location_precision_and_vintage(monkeypatch):
     assert comps, "Expected comps in a market measured as dense in §2."
 
     for c in comps:
-        assert c.location_precision in {"address", "area"}, (
+        assert c.location_precision in {LocationPrecision.ADDRESS, LocationPrecision.AREA}, (
             f"Comp {c.listing_id} carries location_precision={c.location_precision!r}; "
             "an unset value would let a city-area point pass as a located comparable."
         )

@@ -106,7 +106,16 @@ def main() -> None:
                 # a city area — 92% of rows have no address and sit on placeholder
                 # points. Indexed rather than derived at query time because the address
                 # column itself is not carried into the index. See state.Comp.
-                "location_precision": "address" if pd.notna(r.get("address")) else "area",
+                #
+                # `r.get("address")` below is the *Kaggle column* named "address" — a
+                # presence check, unrelated to the LocationPrecision value it feeds.
+                # The two spell alike by coincidence; only the assigned value is the
+                # enum.
+                "location_precision": (
+                    LocationPrecision.ADDRESS
+                    if pd.notna(r.get("address"))
+                    else LocationPrecision.AREA
+                ),
             }
             for _, r in batch.iterrows()
         ]

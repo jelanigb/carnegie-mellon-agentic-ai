@@ -39,7 +39,7 @@ from __future__ import annotations
 from collections import Counter
 
 import config
-from state import Comp, DealState, Flag, Severity, count_area_positioned
+from state import Comp, DealState, DealStatus, Flag, Severity, count_area_positioned
 
 AGENT = "summarizer"
 
@@ -255,7 +255,7 @@ def summarizer_agent(state: DealState) -> dict:
 
     lines.extend(_build_status_section(state.stub_nodes))
 
-    if state.status == "needs_review" or state.needs_human_review:
+    if state.status == DealStatus.NEEDS_REVIEW or state.needs_human_review:
         # Deliberately does not name the confidence threshold as the cause. A critical
         # disclosure escalates on its own, above the threshold — see agents/critic.py —
         # so a banner that always blamed the score would misreport that case.
@@ -310,5 +310,9 @@ def summarizer_agent(state: DealState) -> dict:
     return {
         "report_markdown": "\n".join(lines),
         # A reviewed deal keeps its needs_review status; see the module docstring.
-        "status": "needs_review" if state.status == "needs_review" else "complete",
+        "status": (
+            DealStatus.NEEDS_REVIEW
+            if state.status == DealStatus.NEEDS_REVIEW
+            else DealStatus.COMPLETE
+        ),
     }
