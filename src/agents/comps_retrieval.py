@@ -34,10 +34,35 @@ inspect the result of its own retrieval and adjust; this loop is why that matter
 from __future__ import annotations
 
 import config
-from state import DealState, FlagKind, Severity, flag
+from state import DealState, FlagKind, Severity, count_area_positioned, flag
 from tools import vector_store
 
 AGENT = "comps_retrieval"
+
+
+def _distinct_locations(comps: "list") -> int:
+    """Count the distinct places a comp set actually represents.
+
+    Counted on the comps' own coordinates, which is what makes this an actual location
+    count rather than an approximation of one.
+
+    It was briefly keyed on rounded distance instead, when `Comp` carried no coordinate.
+    That proxy was wrong in a specific way worth recording: two buildings equidistant
+    from the subject in opposite directions counted as one place, so it *understated*
+    variety, and it moved whenever `config.COMP_DISTANCE_DECIMALS` changed — a
+    disclosure threshold silently coupled to a display setting. Both problems are gone
+    now that `Comp.latitude`/`longitude` exist.
+
+    A comp without coordinates is not counted as a place. Every comp from
+    `vector_store.query_comps` has them (the corpus requires them at load), so this
+    guards against directly-constructed comps in tests and fixtures rather than against
+    the retrieval path.
+    """
+    return len({
+        (c.latitude, c.longitude)
+        for c in comps
+        if c.latitude is not None and c.longitude is not None
+    })
 
 
 def comps_retrieval_agent(state: DealState) -> dict:
@@ -154,6 +179,28 @@ def comps_retrieval_agent(state: DealState) -> dict:
                 Severity.CRITICAL if len(comps) == 0 else Severity.WARN,
             )
         )
+
+    # Spatial concentration is a separate observation from sparsity, and a comp set can
+    # fail this check while passing the count check — the Cleveland demo returns a full
+    # 8 comps from one coordinate. Reported because eight listings at one point are not
+    # eight independent observations of a neighborhood, however many rows they are.
+    if comps:
+        distinct = _distinct_locations(comps)
+        if distinct < config.COMP_MIN_DISTINCT_LOCATIONS:
+            area_positioned = count_area_positioned(comps)
+            flags.append(
+                flag(
+                    AGENT,
+                    FlagKind.COMPS_SPATIALLY_CONCENTRATED,
+                    f"{len(comps)} comps resolve to only {distinct} distinct "
+                    f"location(s) (threshold {config.COMP_MIN_DISTINCT_LOCATIONS}); "
+                    f"{area_positioned} of them carry a city-area coordinate rather "
+                    f"than a street address. They are fewer independent observations "
+                    f"than the comp count suggests, and reported distances are "
+                    f"correspondingly approximate.",
+                    Severity.WARN,
+                )
+            )
 
     return {
         "comps": comps,

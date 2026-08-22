@@ -52,6 +52,28 @@ MIN_QUALIFYING_COMPS = 8  # PROVISIONAL — tune in U4
 MAX_RETRIEVAL_ITERATIONS = 4  # PROVISIONAL — tune in U4
 
 # Hard match criteria, relaxed in order as the loop widens its search.
+# Minimum number of *distinct coordinates* a comp set should represent before it is
+# reported without a spatial-concentration disclosure.
+#
+# Measured Aug 22, 2026, and this threshold is set against that measurement rather than
+# chosen for roundness. 92% of the corpus carries no street address, and those rows sit
+# on city-area placeholder coordinates — so a comp set can satisfy MIN_QUALIFYING_COMPS
+# while describing far fewer places than listings. Running the shipped retrieval path on
+# the three demo subjects: Los Angeles returned 8 comps from 3 coordinates, Chicago 5
+# from 2, Cleveland 8 from **1**.
+#
+# 3 is therefore the value that separates the case that is arguably fine (LA) from the
+# two that need saying out loud, rather than a bar every metro clears — per §2's tuning
+# principle, a signal that never fires conveys nothing. PROVISIONAL — U8 has the case
+# volume to settle it.
+COMP_MIN_DISTINCT_LOCATIONS = 3
+
+# Decimal places for a reported comp distance. Was 3 (~1.6 m implied precision), which
+# was false precision on a coordinate that is a city-area placeholder for most rows.
+# One decimal (~160 m) still distinguishes a neighbouring block from the next
+# neighbourhood without claiming the corpus knows where a building is.
+COMP_DISTANCE_DECIMALS = 1
+
 COMP_MATCH_BEDROOM_TOLERANCE = 0  # exact bed match before relaxation
 COMP_MATCH_SQFT_TOLERANCE_PCT = 0.25  # PROVISIONAL — tune in U4
 
@@ -153,6 +175,93 @@ ANOMALOUS_PERIOD = ("2020-01-01", "2022-12-31")
 # 79 rows outside these bounds, so this trims noise rather than reshaping the data.
 KAGGLE_MIN_RENT = 300.0
 KAGGLE_MAX_RENT = 10_000.0
+
+# Training metros (§7 decision #4, closed Aug 21, 2026). Distinct from INFERENCE_METROS
+# above, and deliberately a superset of it: the regression predicts a *ratio* to local
+# FMR rather than a dollar level, so it benefits from markets it will never be asked to
+# price, while comp retrieval needs density in the specific subject market.
+#
+# Selected on Kaggle rent density alone — every metro in §2's density table at >=200
+# usable rows, minus Boston. The table's own verdict column fails Cincinnati on Redfin
+# sales volume; that bar is an *inference* requirement (an appreciation series) and the
+# rent model reads Redfin at no point, so Cincinnati is selected here with 798 usable
+# rows. Boston is excluded as blocked rather than unselected: county_crosswalk.py
+# returns None throughout New England (TODO(geography)), so its rows cannot be
+# FMR-normalized and would drop silently at training time.
+#
+# Keyed state -> city-name patterns, the shape tools/kaggle_data.filter_markets consumes.
+# Matching is word-boundary, not substring, so "Cleveland" rolls up "Cleveland Heights"
+# while "Queens" does not match "Queensbury" — both real cases in this data.
+#
+# Measured 5,717 usable rows (scripts/train_rent_model.py --dry-run re-derives it).
+# Note for anyone reconciling against §2: that section quotes 21,768 rows for a
+# candidate ~10-metro shortlist, which no metro-filtered count reproduces. The six
+# states these metros sit in hold 22,323 usable rows between them, so the older figure
+# is a state-level rollup. 5,717 is the metro-filtered number and the one to trust.
+TRAINING_METROS: dict[str, list[str]] = {
+    "CA": ["Los Angeles"],
+    "OH": ["Cincinnati", "Cleveland"],
+    "IL": ["Chicago"],
+    "NJ": ["Newark", "Jersey City"],
+    "NY": ["New York", "Brooklyn", "Queens", "Bronx", "Staten Island", "Manhattan"],
+    "PA": ["Pittsburgh", "Philadelphia"],
+}
+
+
+# --------------------------------------------------------------------------
+# Rent regression (U5 — tools/model/rent_model.py)
+# --------------------------------------------------------------------------
+# The target is rent / FMR-for-that-row's-county-and-year, not rent. §2's rent-anchoring
+# design in one line: a 2018-19 corpus cannot supply a 2026 dollar figure, but the
+# *ratio* of a unit's rent to its local FMR is a structural property that ages far more
+# slowly than the dollar level does. Training learns the ratio; prediction multiplies it
+# by today's FMR for the subject's own county.
+
+RENT_MODEL_PATH = DATA_DIR / "processed" / "rent_model.joblib"
+
+# Features. Deliberately small and all structural — no free text, no market identifier.
+# Excluding the metro is the point rather than an omission: a metro dummy would let the
+# model memorize a per-market rent level, which is exactly the dollar-level dependence
+# the FMR ratio exists to remove. What generalizes to an unseen market is how much a
+# bedroom or a square foot moves rent *relative to local FMR*, and that is all these
+# columns carry.
+RENT_MODEL_FEATURES = ("bedrooms", "bathrooms", "square_feet")
+
+# TODO(cut-list): feature engineering and model form are deferred, not dismissed — §6's
+# cut list, item 1a, carries the measurement and the reasoning. In short: the estimator is
+# a vanilla LinearRegression on these three raw columns, it underfits rather than overfits
+# (train-vs-holdout gap $0.04), and a random forest on identical data and features reaches
+# $434 MAE against this model's $524 — about 17% of the error is in model form alone.
+# Deferred because this project's subject is agent architecture, and because added capacity
+# introduces a real overfitting risk this model cannot currently have (poly-3 scored
+# R² -13.3 on the same probe), so it needs proper validation rather than one split.
+
+# Holdout is random rather than by-metro. A by-metro split would answer a different and
+# more demanding question — does the model transfer to a market it never saw — which is
+# worth asking but is not the claim this build makes; §2 scopes the model to the three
+# inference metros, all of which are in the training set. Recorded because the weaker
+# split is a real limitation of the reported MAE and should be disclosed, not because it
+# is wrong for the purpose. TODO(U8): add a leave-one-metro-out run as evaluation
+# evidence if the buffer week allows; it needs no new data, only a second fit.
+RENT_MODEL_HOLDOUT_FRACTION = 0.20
+RENT_MODEL_RANDOM_SEED = 42
+
+# Below this, refuse to train rather than emit a model fit on too little data. Set
+# against the measured 5,717-row training set, so it trips on a broken filter or a
+# missing corpus rather than on ordinary variation.
+RENT_MODEL_MIN_TRAINING_ROWS = 1_000
+
+# Ratio bounds. A rent/FMR ratio outside this range is a data defect, not a luxury unit:
+# the corpus carries rows whose square_feet or bedrooms are transcription errors, and an
+# unbounded ratio lets one of them dominate a least-squares fit. Bounds are wide enough
+# to keep genuine high-end and subsidized units.
+RENT_MODEL_MIN_RATIO = 0.25
+RENT_MODEL_MAX_RATIO = 4.0
+
+# HUD publishes FMR by federal fiscal year. The corpus spans Dec 2018 - Dec 2019, so a
+# row is normalized against the FMR year its own listing date falls in, not against a
+# single assumed vintage. FY N runs Oct 1 (N-1) through Sep 30 N.
+RENT_MODEL_FMR_FISCAL_YEAR_START_MONTH = 10
 
 
 # --------------------------------------------------------------------------

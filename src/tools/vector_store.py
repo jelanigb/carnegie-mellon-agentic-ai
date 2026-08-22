@@ -30,6 +30,7 @@ could surface half a comparable as a match.
 from __future__ import annotations
 
 import math
+from datetime import datetime
 from typing import Optional
 
 import chromadb
@@ -175,8 +176,19 @@ def query_comps(
                 beds=int(meta["bedrooms"]),
                 baths=float(meta["bathrooms"]),
                 square_feet=float(meta["square_feet"]),
-                distance_miles=round(miles, 3),
+                # One decimal, not three. A 3-decimal mile is ~1.6 m of implied
+                # precision on a coordinate that is a city-area placeholder for 92% of
+                # this corpus; `location_precision` below says which kind this is.
+                distance_miles=round(miles, config.COMP_DISTANCE_DECIMALS),
                 listing_source=meta.get("source"),
+                listed_date=(
+                    datetime.fromtimestamp(int(meta["listed_epoch"]))
+                    if meta.get("listed_epoch")
+                    else None
+                ),
+                location_precision=meta.get("location_precision"),
+                latitude=float(meta["latitude"]),
+                longitude=float(meta["longitude"]),
             )
         )
         if len(comps) >= n_results:

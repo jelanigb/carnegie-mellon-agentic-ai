@@ -96,8 +96,12 @@ class Comp(BaseModel):
     beds: int
     baths: float
     square_feet: float
-    distance_miles: float
+    distance_miles: float                  # 1 dp — see location_precision
     listing_source: Optional[str] = None   # originating site, for citation
+    listed_date: Optional[datetime] = None # per-row vintage, for FMR normalization
+    location_precision: Optional[Literal["address", "area"]] = None
+    latitude: Optional[float] = None       # from the corpus, never geocoded
+    longitude: Optional[float] = None
 
 class DealState(BaseModel):
     # inputs
@@ -227,4 +231,34 @@ all, and that absence should be representable rather than filled with a placehol
 
 This is a starting point — field names get refined once the Extractor's actual output
 schema is confirmed (Unit 3, §6).
+
+### `Comp` location fields (added Aug 22, 2026)
+
+`listed_date`, `location_precision`, `latitude`, and `longitude` were added together,
+and the reason is the same finding in each case: §2 measured that **92% of the corpus
+carries no street address**, and those rows sit on a city-area placeholder coordinate
+rather than a parcel.
+
+`location_precision` (`"address"` / `"area"`) is how a comp says which kind it is, so a
+report can distinguish eight located comparables from eight points that are really one
+city. `listed_date` carries the row's own vintage, because the corpus straddles the
+FY2019/FY2020 boundary and §2's anchoring normalizes each rent against the FMR for *the
+year it was recorded*.
+
+**The coordinates are the correction of an omission rather than a new capability.** The
+original schema above carried `distance_miles` and no coordinate, on the reasonable
+grounds that a distance is the spatial fact a *report* needs. Two things downstream turn
+out to need the point itself. Counting how many distinct places a comp set represents
+cannot be done from distances — two buildings equidistant from the subject in opposite
+directions are two places, and a distance-keyed count silently merges them, while also
+coupling a disclosure threshold to the display setting `COMP_DISTANCE_DECIMALS`. And any
+comp-derived rent figure must pass through FMR normalization per §2's invariant, which
+needs each comp's county, which `county_crosswalk` resolves from coordinates.
+
+Note what these are *not*: comps are never geocoded. The corpus ships
+`latitude`/`longitude`, `kaggle_data.CORE_FIELDS` requires them, and
+`vector_store.query_comps` was already reading both to compute the haversine distance
+before discarding them — so carrying them costs no re-index and no lookup. Geocoding
+(`tools/geocoding.py`, decision #10) applies to the *subject* property, which arrives as
+address text. The two paths are easy to conflate and share no code.
 

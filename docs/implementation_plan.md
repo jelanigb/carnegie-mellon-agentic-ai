@@ -158,7 +158,7 @@ safe to defer.
 | **Week 5 — Input** | | |
 | **U3** ✅ | Extractor: real LLM call, Pydantic validate→retry loop, clarifying questions, assumption flags, bounded escalation; 3 synthetic listings. Also wires geocoding into the pipeline (decision #10's remaining half), adds the model liveness check, and takes the flag-propagation suite to 24 hermetic cases | 2.1 evidence |
 | **Week 6 — Estimation & Forecast** | | |
-| **U5** | Rent model: FMR-normalized regression, holdout MAE, Valuation agent, LLM fallback path + `rent_anchored_to_fmr` / `fmr_unavailable_for_county` flags | — |
+| **U5** | Rent model: FMR-normalized regression on the decision #4 shortlist, holdout MAE, Valuation agent, `rent_anchored_to_fmr` / `fmr_unavailable_for_county` / `fmr_bedroom_cap_exceeded` flags. **LLM fallback path descoped Aug 21, 2026** — cut-list item 3 taken in advance; ships as a documented gap | — |
 | **U6** | Scenario/Forecast: `redfin_data.py` (rolling-3, min-price floor), ToT branching over optimistic/base/pessimistic, `anomalous_period_included` flag | **4.1** |
 | **Buffer week — Guardrails, Eval, Demo** | | |
 | **U7** | Critic: cross-agent consistency checks, confidence scoring, bounded rework cycle, human-review escalation via `interrupt()` | **6.1** |
@@ -415,14 +415,40 @@ distinction between them is worth drawing explicitly in the report.
 If the schedule slips, shed scope in this order rather than improvising:
 
 1. **ZIP-tier appreciation** (already deferred in §2 — keep it deferred).
+1a. **Rent-model feature engineering and model form** (deferred Aug 22, 2026 — keep it
+   deferred). The shipped estimator is a vanilla `LinearRegression` on three raw features
+   with no transforms, interactions, or regularization. Its weakness is *underfitting*,
+   not overfitting: measured train-vs-holdout gap is $0.04 on 896 rows per parameter, so
+   there is no variance problem to solve, only unused capacity.
+
+   Probed on the inference trio, same features and same data, 10 splits:
+
+   | Model form | MAE | R² |
+   | --- | --- | --- |
+   | `LinearRegression` (shipped) | $524 | 0.28 |
+   | Poly-2 + Ridge | $496 | 0.27 |
+   | Poly-3 + Ridge | $524 | **−13.3** |
+   | Gradient boosting | $446 | 0.49 |
+   | **Random forest** | **$434** | **0.52** |
+
+   So roughly **17% of rent error is available to model form alone**, with no new data and
+   no new features. Deferred anyway, for two stated reasons: the project's subject is agent
+   architecture rather than regression quality, and the choice deserves a closer look than
+   the schedule affords — the poly-3 row is the warning, where added capacity produces
+   genuine overfitting (R² −13.3) of exactly the kind the linear model cannot exhibit.
+   Any future pass needs proper validation rather than a single split, and should be
+   weighed against the §2 finding that location — the dominant driver — is unavailable in
+   this corpus at useful granularity, which may cap the real ceiling well below the probe.
 2. **Public-record for-sale ground truth** (decision #11) — the county-assessor dataset
    that would let the *value* estimate be scored rather than only demonstrated. Cut
    before the LLM fallback because it is a new data source arriving late, attached to the
    one unit that must not slip. Cutting it costs a validated value estimate, not a
    working one: demo deals stay calibrated against Redfin and FMR, and the rent model
    keeps real ground truth from the held-out corpus slice. Document the gap explicitly.
-3. **LLM rent fallback path** — document as designed-but-unbuilt; Checkpoint 2.1
-   already anticipated this exact trade.
+3. ~~**LLM rent fallback path**~~ — **taken Aug 21, 2026, ahead of any slip.** Documented
+   as designed-but-unbuilt; Checkpoint 2.1 already anticipated this exact trade. Recorded
+   here rather than struck out, because this item left the cut list by being *spent*, not
+   by becoming unnecessary — the remaining list is one item shorter than it looks.
 4. **Streamlit app** — fall back to a terminal recording plus LangSmith traces.
 5. **Critic rework-loop depth** — reduce to single-pass review with escalation,
    keeping the cycle in the graph but capping `MAX_REWORKS = 1`.
@@ -455,7 +481,7 @@ needed. Target: all closed during Week 4.
 | 1 | Orchestration framework | ✅ LangGraph, day one |
 | 2 | Inference metro trio | ✅ Chicago, LA, Cleveland |
 | 3 | Demo surface | ✅ Streamlit, local, scheduled U9 |
-| 4 | Training metro shortlist (~5–8, superset of the trio) | ⬜ final selection pending. `county_crosswalk.py`'s coverage is no longer a constraint on this (Aug 15, 2026 rewrite resolves any US county from coordinates, not a hand-picked city list) — the decision now turns purely on comp density, per §2 |
+| 4 | Training metro shortlist (~5–8, superset of the trio) | ✅ **Eight metros (Aug 21, 2026)** — Los Angeles, Cincinnati, Chicago, Cleveland, Jersey City/Newark, New York, Pittsburgh, Philadelphia; ~5,717 usable rows. Every §2 density-table metro at ≥200 usable rent listings, minus Boston. See below |
 | 5 | X / Y / Z loop parameters | ✅ X=2.0 mi, Y=8, Z=4 — tuned in U4 against measured density curves; rationale in `config.py` |
 | 6 | Confidence threshold for human-review escalation | ⬜ provisional 0.60 set; tune in U7. **U2 added a second, independent escalation ground** — any critical flag escalates regardless of score (see §6, finding 1); confirm rather than re-derive |
 | 7 | Redfin minimum-price floor | ✅ $10,000, with evidence (§2) — note it is inert for all three inference metros |
@@ -875,6 +901,96 @@ cost 0.40, landed confidence at exactly 0.60, and `0.60 < 0.60` is false, so a
 zero-comparable deal reported as an ordinary result. Pruning that leaves no trace is the
 same failure waiting to happen one layer up.
 
+**Decision #4 detail (closed Aug 21, 2026) — eight training metros.** The shortlist is
+**Los Angeles, Cincinnati, Chicago, Cleveland, Jersey City/Newark, New York, Pittsburgh,
+and Philadelphia**: every metro in §2's density table carrying ≥200 usable rent
+listings, minus Boston. Roughly 5,717 usable rows across eight structurally different
+markets, and a superset of the inference trio as §2 requires.
+
+**The selection rule is deliberately not the one §2's table implies.** That table applies
+two bars to every metro — Kaggle rent listings *and* Redfin 2–4 unit sales volume — and
+the verdict column marks a metro failed if it misses either. That is the right rule for an
+*inference* metro, which needs both comps and an appreciation series. It is the wrong rule
+for a *training* metro, which needs neither: the regression consumes Kaggle rent rows and
+HUD FMR, and touches Redfin at no point. Applying the inference rule to the training
+shortlist would have discarded **Cincinnati**, whose 798 usable rent listings make it the
+second-densest rent corpus in the extract, on the strength of a sales figure the rent model
+never reads. Recorded because the table's own verdict column says `❌ sales volume too
+thin` next to a metro this decision selects, and that disagreement should look deliberate
+rather than careless.
+
+**Boston is excluded as blocked, not as unselected**, which is a different status from the
+"viable but not selected" §2 assigns it. Since the Aug 15 crosswalk rewrite, a resolved
+point in any of the six New England states returns `None` (`TODO(geography)`), so Boston's
+599 rows cannot be FMR-normalized. Including it without building the Census
+county-subdivision layer first would not fail loudly — the rows would drop at
+normalization and the training set would be quietly 599 rows smaller than the shortlist
+claims. Building that layer was considered and declined here on schedule grounds; it stays
+`TODO(geography)`.
+
+**One quantity must be re-measured before U5 trains anything.** §2 quotes 21,768 complete
+rows for "a candidate ~10-metro training shortlist," which does not reconcile with the
+per-metro counts in the same section — those are usable rows after de-duplication,
+completeness filtering, and rent-bound trimming, and the 21,768 predates the two data
+defects corrected on Aug 8. The ~5,717 above is the sum of the per-metro column and is the
+figure to trust, but U5 should re-derive it from `tools/kaggle_data.py` against the actual
+shortlist rather than inherit either number. Per §8, a training-set size nobody measured
+is not a measurement.
+
+**What this cost to implement** turned out to be less than estimated. The original note
+here budgeted for writing word-boundary city patterns for the five metros outside the
+inference trio; they already existed in `scripts/verify_metro_selection.py` from the
+Aug 8 density check and only had to move into `config.py` as `TRAINING_METROS`. The
+remaining cost is one HUD FMR pull per distinct county — bounded by county count rather
+than row count, cached by `tools/hud_fmr.py`, and measured at 15 counties across two
+fiscal years, so 30 calls.
+
+**The reasoning behind the eight-metro shortlist was tested (Aug 22, 2026), and it holds
+where it matters.** Reproduce with `scripts/metro_shortlist_ablation.py`. The test holds
+the evaluation set fixed and varies only what the model trains on; comparing each variant
+against its own holdout would confound the training choice with the test choice.
+
+Three questions, because "does breadth help" has different answers depending on what is
+being predicted:
+
+| Test | trio only | five metros | eight metros |
+| --- | --- | --- | --- |
+| Held-out inference-trio properties, 20 splits | $519.45 (0/20) | **$515.49 (19/20)** | $517.72 (1/20) |
+| Held-out New York properties, 20 splits | $1,064.79 | — | $1,068.47 |
+| Transfer to an unseen metro (leave-one-out) | worse on 3/3 | — | **better on 3/3** |
+
+**On the metros the system prices, the three variants are within $4 of each other** —
+under 1%, and small against a ±$12 spread across splits. Breadth neither helps nor hurts
+there in any way worth acting on.
+
+**On a metro the model has never seen, breadth clearly wins.** Excluding the target metro
+entirely and predicting it: Los Angeles $537.87 with eight metros against $612.17 with the
+trio, Chicago $612.23 against $635.97, Cleveland $455.85 against $457.92. This is the
+generalization case, it is the case §2's diversity argument was actually about, and the
+eight-metro set wins all three.
+
+**So decision #4 stands, and so does its rationale.** The shortlist is kept.
+
+**One number worth carrying forward as a limitation:** New York predicts at ~$1,065 MAE
+against ~$518 for the trio — twice the error, under either training set. New York is in
+`build_comps_index.INDEXED_MARKETS`, so a Staten Island subject reaches the rent model and
+gets an estimate roughly half as reliable as a Los Angeles one. That is a disclosure
+requirement for U7/U8, not a training-set problem: no shortlist tested here fixes it.
+
+**Correction, recorded rather than quietly fixed.** The first run of this analysis
+reported the opposite on every count — that trio-only training beat eight metros
+everywhere, by $12 on the trio and $36 on New York. That was a defect, not a finding.
+`kaggle_data.filter_markets` concatenates with `ignore_index=True`, so its result cannot
+be joined back to the frame it came from; taking `.index` off it and passing that to
+`df.loc[...]` selected rows *positionally*. The "trio" set so constructed held 2,354 Los
+Angeles rows, 1,233 Ohio rows mixing Cleveland with Cincinnati, and **no Chicago at all**.
+The script now computes membership as a boolean mask on the frame's own index and prints
+its trio composition by state on every run, so the same failure would be visible rather
+than silent. Recorded because a reversed result that was acted on is exactly the class of
+error §8's evidence standard exists to catch, and because the corrected answer happens to
+agree with the original decision — which is the case where a quiet fix would have left no
+trace that anything had been wrong.
+
 ### Open items
 
 U1, U4, U2, and U3 are complete. What remains, in the order it is needed:
@@ -944,8 +1060,12 @@ U1, U4, U2, and U3 are complete. What remains, in the order it is needed:
    calls makes the fixture's address text inert, so moving it to an ungeocodable address
    became unnecessary rather than done. Recorded because a plan item closed by being
    obviated is easy to mistake later for one quietly skipped.
-4. **Decision #4** — finalize the training shortlist from the 29 crosswalk entries.
-   Blocks U5.
+4. ~~**Decision #4**~~ — ✅ **closed Aug 21, 2026.** Eight training metros; detail above.
+   The wording of this item was itself stale: it said "from the 29 crosswalk entries,"
+   but the Aug 15 rewrite removed the hand-maintained table the 29 referred to, so the
+   shortlist was never actually bounded by it. **Remaining U5 work this creates:**
+   `TRAINING_METROS` in `config.py` with word-boundary city patterns for the five new
+   metros, and one row re-count — see the detail above.
 5. ~~**OpenRouter API key**~~ — ✅ **closed Aug 9, 2026.** Stored at `ignore/openrouter_key`
    (gitignored); `llm_client._load_token()` reads `OPENROUTER_API_KEY` first and falls back
    to that file. Verified by live calls in `retrieval_ablation_llm.py`.

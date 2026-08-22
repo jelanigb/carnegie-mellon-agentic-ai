@@ -20,6 +20,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import config
+from state import LocationPrecision
 from tools import diagnostics, kaggle_data, vector_store
 
 # state code -> city name patterns. New York rolls up its boroughs, which appear as
@@ -95,9 +96,17 @@ def main() -> None:
                 # Originating site, so a retrieved comp can be cited rather than merely
                 # asserted, and so source concentration is visible downstream.
                 "source": str(r.get("source", "") or "unknown"),
-                # TODO(U5): also index `r["time"]` (Unix timestamp) as a listed-date
-                # metadata field, so Comp.listed_date can be populated and each comp
-                # normalized against the FMR for its own year. See state.Comp.
+                # Listing date as a Unix timestamp. Chroma metadata values must be
+                # scalars, so the epoch is stored and vector_store converts it back to
+                # a datetime. Lets each comp be normalized against the FMR for its own
+                # fiscal year rather than one assumed vintage (§2).
+                "listed_epoch": int(r["time"]) if pd.notna(r.get("time")) else 0,
+                # Whether the source row carried a street address. This is the corpus's
+                # only available signal for whether a coordinate identifies a parcel or
+                # a city area — 92% of rows have no address and sit on placeholder
+                # points. Indexed rather than derived at query time because the address
+                # column itself is not carried into the index. See state.Comp.
+                "location_precision": "address" if pd.notna(r.get("address")) else "area",
             }
             for _, r in batch.iterrows()
         ]

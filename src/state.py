@@ -79,6 +79,11 @@ class FlagKind(StrEnum):
     RELAXED_MATCH_CRITERIA = "relaxed_match_criteria"
     SPARSE_COMPS = "sparse_comps"
     RETRIEVAL_DISABLED = "retrieval_disabled"  # U4 ablation path
+    # A comp set can satisfy MIN_QUALIFYING_COMPS while representing far fewer
+    # *places* than listings — see Comp.location_precision. Measured Aug 22, 2026:
+    # the Cleveland demo returns 8 comps from a single coordinate. Distinct from
+    # SPARSE_COMPS, which counts listings; this one counts locations.
+    COMPS_SPATIALLY_CONCENTRATED = "comps_spatially_concentrated"
 
     # Geography resolution
     #
@@ -113,6 +118,19 @@ class FlagKind(StrEnum):
     LOW_CONFIDENCE_ESTIMATE = "low_confidence_estimate"
     CRITIC_INCONSISTENCY = "critic_inconsistency"
     REWORK_LIMIT_REACHED = "rework_limit_reached"
+
+
+class LocationPrecision(StrEnum):
+    """How well a comp's coordinate identifies an actual place.
+
+    See `Comp.location_precision` for what the two values mean and the measured
+    coverage behind them. `StrEnum` for the same reason as `FlagKind` above: the value
+    is compared and filtered on (`count_area_positioned`, the eval harness), so a closed
+    type catches a typo at construction rather than producing a silent non-match.
+    """
+
+    ADDRESS = "address"
+    AREA = "area"
 
 
 class Flag(BaseModel):
@@ -211,12 +229,50 @@ class Comp(BaseModel):
     distance_miles: float
     listing_source: Optional[str] = None
 
-    # TODO(U5): add `listed_date: Optional[datetime]`. The corpus carries a `time`
-    # column (Unix timestamp, Dec 2018 - Dec 2019) that is currently discarded at index
-    # time. Per-comp vintage matters for valuation specifically: the FMR anchoring in §2
-    # normalizes by the FMR for *the year a row was recorded*, so a comp set spanning
-    # more than one fiscal year needs per-row dates to be normalized correctly rather
-    # than against a single assumed vintage. Requires re-indexing (metadata change).
+    # The comp's own coordinate, carried from the corpus rather than geocoded — this
+    # dataset ships latitude/longitude columns, and `kaggle_data.CORE_FIELDS` requires
+    # them, so every indexed comp has one. Read `location_precision` below for how much
+    # any given one is worth.
+    #
+    # Added Aug 22, 2026. The original schema omitted these because `distance_miles` is
+    # the spatial fact a *report* needs, which was true as far as it went — but two
+    # things downstream need the coordinate itself, and neither can be served by a
+    # distance. Counting how many distinct places a comp set represents requires the
+    # points, not their distances from a subject (two buildings equidistant in opposite
+    # directions are two places). And §2's invariant that every rent figure passes
+    # through FMR normalization means any comp-derived rent must be normalized by *that
+    # comp's* county FMR, which `county_crosswalk` resolves from coordinates.
+    #
+    # `vector_store.query_comps` already read both from Chroma metadata to compute the
+    # haversine distance and then discarded them, so this costs no re-index.
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+    # Populated from the corpus `time` column (Unix timestamp, Dec 2018 - Dec 2019).
+    # Per-comp vintage matters for valuation: §2's FMR anchoring normalizes by the FMR
+    # for *the year a row was recorded*, and this corpus straddles a federal fiscal-year
+    # boundary, so a comp set spanning both needs per-row dates rather than a single
+    # assumed vintage. Closed the U5 TODO on Aug 22, 2026 in the same re-index that
+    # added `location_precision`.
+    listed_date: Optional[datetime] = None
+
+    # How well this comp's coordinate identifies an actual place.
+    #
+    # "address" — the source row carried a street address; its coordinate is very
+    #   likely parcel-level (measured: median 1 listing per coordinate).
+    # "area"    — the source row had no address and carries what is effectively a
+    #   city-area placeholder (measured: median 5 listings per coordinate, one point
+    #   in Jersey City standing in for 497 listings spanning $1,200-$5,240).
+    #
+    # **The signal is strong but not clean, and overstating it would be the exact error
+    # this field exists to prevent.** 74 coordinates in the training shortlist carry
+    # both kinds at once (2,390 rows), so an "address" tag makes a coordinate probable,
+    # not certain. It is recorded per comp so the report can disclose the composition of
+    # a comp set rather than presenting eight city-area points as eight located
+    # comparables. Coverage varies enormously by metro — Chicago 42%, LA 5%,
+    # Cleveland 2% — which is why this is disclosed rather than used to rank or filter:
+    # preferring "address" comps would empty the Cleveland comp set entirely.
+    location_precision: Optional[LocationPrecision] = None
 
 
 class DealState(BaseModel):
@@ -336,3 +392,14 @@ def flag(
     — and the reducer on DealState.flags accumulates them.
     """
     return Flag(source_agent=source_agent, kind=kind, detail=detail, severity=severity)
+
+
+def count_area_positioned(comps: list[Comp]) -> int:
+    """How many comps carry a city-area placeholder coordinate rather than a street
+    address. See `Comp.location_precision` for what the two values mean and why the
+    distinction matters.
+
+    Shared by `comps_retrieval` (spatial-concentration flag) and `summarizer`
+    (location-precision disclosure) so the two stay in agreement by construction.
+    """
+    return sum(1 for c in comps if c.location_precision == LocationPrecision.AREA)

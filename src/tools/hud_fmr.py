@@ -46,6 +46,23 @@ _BEDROOM_FIELDS = {
 }
 
 
+def bedroom_field(bedrooms: int) -> tuple[str, bool]:
+    """Map a bedroom count to its HUD rent field, and report whether it was capped.
+
+    HUD publishes no field beyond Four-Bedroom, so a 5+ bedroom unit is priced against
+    the four-bedroom figure. That is an approximation and the caller is expected to
+    disclose it (`FlagKind.FMR_BEDROOM_CAP_EXCEEDED`), which is why the cap is returned
+    alongside the field rather than applied silently.
+
+    Public as of U5. The rent regression normalizes thousands of rows against FMR and
+    needs the mapping without paying for a client call per row, but the capping rule
+    must not be reimplemented at the call site — two copies would drift, and a training
+    set capped differently from the inference path is a silent model defect.
+    """
+    capped = bedrooms > 4
+    return _BEDROOM_FIELDS[min(max(bedrooms, 0), 4)], capped
+
+
 class HudFmrApiError(Exception):
     """Raised when the HUD FMR API returns a non-200 response, or auth is missing."""
 
@@ -231,10 +248,9 @@ class HudFmrClient:
         """Single rent figure for a given bedroom count. Caps at Four-Bedroom
         (HUD publishes no field beyond it) instead of raising.
         """
-        bedroom_cap_exceeded = bedrooms > 4
-        bedrooms_used = min(bedrooms, 4)
+        field_name, bedroom_cap_exceeded = bedroom_field(bedrooms)
+        bedrooms_used = min(max(bedrooms, 0), 4)
         result = self.get_fmr(entityid, year=year, zip_code=zip_code)
-        field_name = _BEDROOM_FIELDS[bedrooms_used]
         return {
             "rent": result.rents[field_name],
             "bedrooms_requested": bedrooms,

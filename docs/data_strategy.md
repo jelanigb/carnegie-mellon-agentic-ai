@@ -18,6 +18,23 @@ Two problems surfaced while planning the data layer, and both are resolved the s
 ground every dollar figure in a *dated, purpose-matched* source rather than trusting a
 single dataset to do more than it can.
 
+### Provenance and licence of the rent corpus
+
+Recorded Aug 22, 2026 — a gap rather than a change. §8's data rule turns on whether a
+source is *openly licensed or a public record*, naming scraped listings as the case the
+distinction exists for, and this project's primary dataset had no licence recorded
+anywhere.
+
+The corpus is **UCI Machine Learning Repository dataset #555, "Apartment for Rent
+Classified"** (donated 25 Dec 2019, DOI [10.24432/C5X623](https://doi.org/10.24432/C5X623)),
+licensed **CC BY 4.0**. It is therefore admissible under the first branch of the rule —
+openly licensed — rather than needing an exception. The listings within it originated on
+classified sites (`source` values include RentDigs.com and RentLingo), but the compilation
+this project consumes is a licensed research dataset, and no scraping is performed here.
+
+CC BY requires attribution, which is why the citation above is stated rather than left
+implicit.
+
 ### Problem 1 — the Kaggle rent data has no reliable current date
 
 The Kaggle apartment dataset is a single historical scrape (~2017–2019). Any rent
@@ -276,6 +293,94 @@ markets, and because the shared CBSA means its appreciation series would duplica
 New York's rather than add an independent one. Recorded here as a viable substitute if
 one of the three proves problematic later.
 
+### Corpus coordinates are city-area placeholders for most rows (Aug 22, 2026)
+
+Found while investigating why U5's rent regression fit so weakly, and it turned out to
+be the more consequential of the two findings. **92% of the corpus carries no street
+address** (91,027 of 98,844 usable rows), and those rows do not carry a per-property
+coordinate either — they carry what is effectively a city-area placeholder.
+
+The evidence is the clustering, not the precision. Coordinates are stored to four
+decimals (~11 m), so this is substitution rather than rounding:
+
+| rows | count | rows per distinct coordinate | median cluster |
+| --- | --- | --- | --- |
+| `address` present | 7,817 | 3.3 | 1 |
+| `address` null | 91,027 | 15.0 | 5 |
+
+The clearest single case: Jersey City holds 505 listings at **4** distinct coordinates,
+497 of them on one point — a set spanning $1,200–$5,240 and 400–2,750 sq ft, which is
+not one building.
+
+**This reaches shipped output.** Running the retrieval path on the three demo subjects,
+through real Census geocoding:
+
+| Metro | Comps returned | Distinct locations |
+| --- | --- | --- |
+| Los Angeles | 8 | 3 |
+| Chicago | 5 | 2 |
+| **Cleveland** | **8** | **1** |
+
+Cleveland's eight comparables are one point — rents $1,875–$2,329, sq ft 1,005–1,133.
+`vector_store.py` was also reporting `distance_miles` to three decimals, i.e. ~1.6 m of
+implied precision on a coordinate that does not know where the building is.
+
+**What this does and does not undermine.** It does *not* touch the anti-fabrication
+argument: the comps are real records that demonstrably exist, which is what Checkpoint
+2.1 claims and what the U4 ablation measured. Nor does it affect FMR normalization,
+which needs only city-level accuracy — zero of 5,717 training rows failed county
+resolution. What it does undermine is any claim about *spatial* discrimination. The
+X=2.0/Y=8/Z=4 parameters were tuned against a distance signal that takes 2–4 values
+inside the radius, so the relaxation loop expands against a step function rather than a
+density curve. The density table in the next section is measured in *listings*, and
+should be read as listings rather than as places.
+
+It also explains U5's weak fit. Rent relative to local FMR is driven substantially by
+where a unit is, and location is unavailable here at any useful granularity — which is
+a ceiling on the rent model, not a defect in it.
+
+**Handled by disclosure rather than by correction, because correction is not available.**
+Each comp now carries `location_precision` (`"address"` / `"area"`), derived from
+address presence at index time; `FlagKind.COMPS_SPATIALLY_CONCENTRATED` fires when a
+comp set resolves to fewer than `COMP_MIN_DISTINCT_LOCATIONS` places; reported distances
+dropped to one decimal; and the report states the composition of every comp set beside
+the existing source-concentration line.
+
+`Comp` also gained `latitude`/`longitude` in the same pass, so that place count is
+computed from the points themselves rather than inferred from distances — a
+distance-keyed count merges two buildings that sit equidistant in opposite directions,
+and moves whenever the display precision changes. The coordinates were already being
+read from the index to compute each distance and then discarded, so this cost no
+re-index. It also unblocks per-comp FMR normalization, which the rent-anchoring
+invariant above requires of any comp-derived rent figure.
+
+**The tag is deliberately not used to rank or filter**, and the coverage numbers are why:
+Chicago is 42% addressed, Los Angeles 5%, Cleveland 2%. Preferring addressed comps would
+empty the Cleveland set entirely. **The signal is also strong rather than clean** — 74
+coordinates in the training shortlist carry both addressed and null-address rows (2,390
+rows), so an `"address"` tag makes a coordinate probable, not certain. Recorded that way
+rather than as a clean partition, since overstating a precision signal is the exact error
+the field exists to prevent.
+
+One footnote on method, because it repeats a lesson this section already contains: the
+UCI dataset page states *"has Missing Values? No."* It has 92% nulls in `address`. The
+metadata was wrong, and the only reason the project knows is that it measured — the same
+way the metro-selection hypothesis was overturned in the first place. Earlier in the process,
+I did not spend enlugh time on an important CRISP-DM step (Data Understanding) because I
+was focused more on the agent harness than the data.Earlier in the process, I did not spend enough time on an important CRISP-DM step (Data
+Understanding) because I was focused more on the agent harness than the data. The key
+learning for future projects is not to rush this step, which has now resulted in the need to revise the approach multiple times in later phases.
+
+### What this cost, and the process lesson
+
+The revisions this refers to are all recorded in this section rather than summarized
+away: the metro-selection hypothesis overturned by a `groupby` that should have run
+first; the county crosswalk rebuilt from a hand-maintained table to a geometric join;
+the training-row count corrected from a state-level rollup to a metro-filtered one; and
+the coordinate finding above, which surfaced only because a weak regression fit prompted
+a look at the data underneath it. None were especially expensive to find late, but they all would have been
+cheaper to find early.
+
 ### Sparsity is a property of sub-locations, not metros
 
 New York's thin coverage is a **retrieval** problem, not a training problem. Per the
@@ -416,7 +521,9 @@ if the full 100K rows are ever needed; **not worth the dependency now.**
 **Superseded Aug 15, 2026 — the scale-up path turned out to be the right call from the
 start, and the "not worth it" judgment was made without testing it.** Once
 `tools/geocoding.py` existed to put a *subject* property at a real coordinate (decision
-#10, §7), the geometric join stopped being a training-only scale-up option and became a
+
+# 10, §7), the geometric join stopped being a training-only scale-up option and became a
+
 strict improvement on the hand-maintained table for every consumer, subject-side
 included: no per-city curation, coverage of any US county rather than a hand-picked
 shortlist, and the *exact* county for a point rather than the table's principal-county
@@ -473,4 +580,3 @@ Concrete details for `tools/hud_fmr.py`, from the API docs
   header, 60 requests/minute — reinforces why local caching (fips + year → result) in
   `tools/hud_fmr.py` matters, since a training set spanning many counties means many
   distinct calls during development.
-

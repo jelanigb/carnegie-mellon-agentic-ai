@@ -149,7 +149,9 @@ carnegie_mellon_agentic_repo/
     │   ├── diagnostics.py         # ✅ full error detail to stdout, kept out of the report
     │   ├── vector_store.py        # ✅ Chroma setup + embedding + hybrid query
     │   ├── kaggle_data.py         # ✅ single cleaning path: dedupe, completeness, city match
-    │   ├── rent_model.py          # sklearn regression: train/load/predict (FMR-normalized target)
+    │   ├── model/
+    │   │   ├── __init__.py
+    │   │   └── rent_model.py      # sklearn regression: train/load/predict (FMR-normalized target)
     │   ├── hud_fmr.py             # ✅ HUD FMR API client (§9)
     │   ├── county_crosswalk.py    # ✅ lat/lon → county_fips via point-in-polygon join (rewritten Aug 15, 2026)
     │   ├── geocoding.py           # ✅ address → lat/lon: Census primary, corpus centroid fallback

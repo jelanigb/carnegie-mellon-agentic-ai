@@ -105,7 +105,7 @@ in a focused session or across a fragmented week.
   |---|---|---|
   | ~~`TODO(U3)`~~ | `config.py` | ✅ **closed Aug 16, 2026** — decision #8 settled on `nvidia/nemotron-3-nano-30b-a3b` (paid) across four bake-off passes, and `verify_models_live()` guards the IDs at launch |
   | ~~`TODO(U3)`~~ | `extractor.py` | ✅ **closed Aug 16, 2026** — geocoding is called as an ordinary extraction step. The paired fixture update was resolved differently than planned: stubbing the Extractor's outbound calls makes the fixture's address inert, so the "move it to an ungeocodable address" half was unnecessary rather than done |
-  | `TODO(U5)` | `state.py`, `build_comps_index.py` | Index the `time` column so `Comp.listed_date` allows per-row FMR normalization |
+  | ~~`TODO(U5)`~~ | `state.py`, `build_comps_index.py` | ✅ **closed Aug 22, 2026** — `listed_epoch` indexed and decoded to `Comp.listed_date`. Landed in the same re-index as `location_precision`, since both are metadata changes and a corpus rebuild is the cost either way |
   | ~~`TODO(U5)`~~ | `county_crosswalk.py` | ✅ **moot as of Aug 15, 2026** — the principal-county approximation this described is gone; `county_fips` now resolves the exact county from the subject's coordinates. `FlagKind.COUNTY_FROM_PRINCIPAL_COUNTY` removed rather than left unraisable |
   | `TODO(U7)` | `critic.py` | Cross-agent consistency checks — `_consistency_objections()` returns empty until then |
   | `TODO(U7)` | `critic.py` | Confirm the critical-flag escalation rule when the severity weights are tuned (§6, finding 1) |

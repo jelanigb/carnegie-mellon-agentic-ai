@@ -39,7 +39,7 @@ from __future__ import annotations
 from collections import Counter
 
 import config
-from state import Comp, DealState, Flag, Severity
+from state import Comp, DealState, Flag, Severity, count_area_positioned
 
 AGENT = "summarizer"
 
@@ -122,7 +122,8 @@ def _comps_section(comps: list[Comp], radius_miles: float, iterations: int) -> l
     for c in comps:
         lines.append(
             f"| `{c.listing_id}` | {_money(c.rent)} | {c.beds} | {c.baths:g} | "
-            f"{c.square_feet:,.0f} | {c.distance_miles:.2f} mi | "
+            f"{c.square_feet:,.0f} | "
+            f"{c.distance_miles:.{config.COMP_DISTANCE_DECIMALS}f} mi | "
             f"{c.similarity_score:.3f} | {c.listing_source or '—'} |"
         )
     lines.append("")
@@ -145,6 +146,33 @@ def _comps_section(comps: list[Comp], radius_miles: float, iterations: int) -> l
     else:
         lines.append(
             f"**Source concentration:** drawn from {len(sources)} distinct sources."
+        )
+    lines.append("")
+
+    # Location precision — the spatial counterpart to source concentration above, and
+    # disclosed for the same reason. 92% of the corpus carries no street address, and
+    # those rows sit on a city-area placeholder coordinate rather than a parcel, so a
+    # distance column can imply a precision the underlying data does not have. Stated
+    # here so a reader sees it beside the numbers rather than having to infer it from
+    # repeated distances.
+    area_positioned = count_area_positioned(comps)
+    if area_positioned == len(comps):
+        lines.append(
+            f"**Location precision:** none of these {len(comps)} comparables carries a "
+            f"street address in the source data; each is positioned at a city-area "
+            f"coordinate. Distances are approximate and should be read as "
+            f"*within this market*, not as measured separations."
+        )
+    elif area_positioned:
+        lines.append(
+            f"**Location precision:** {area_positioned} of {len(comps)} comparables "
+            f"are positioned at a city-area coordinate rather than a street address; "
+            f"their distances are approximate."
+        )
+    else:
+        lines.append(
+            f"**Location precision:** all {len(comps)} comparables carry a street "
+            f"address in the source data."
         )
     lines.append("")
 

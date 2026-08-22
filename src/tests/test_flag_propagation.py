@@ -96,14 +96,27 @@ EXTRACTION_MISSING_PRICE = ListingExtraction(
 )
 
 LOS_ANGELES = (34.0522, -118.2437)
+# Cleveland's demo subject. Retained as its own constant because it is the corpus's
+# worst-positioned market — 2% of its rows carry a street address — so it is the point
+# that exercises the spatial-concentration disclosure. See Comp.location_precision.
+CLEVELAND = (41.4670, -81.7001)
 
 
-def parcel_at(latitude: float, longitude: float) -> GeocodeResult:
-    """A Census-tier geocode result — the tier that outranks supplied coordinates."""
+def parcel_at(
+    latitude: float,
+    longitude: float,
+    matched_address: str = "1234 SUNSET RIDGE AVE, LOS ANGELES, CA, 90026",
+) -> GeocodeResult:
+    """A Census-tier geocode result — the tier that outranks supplied coordinates.
+
+    `matched_address` is parameterised so a non-Los Angeles case does not carry an LA
+    address string. It is inert for routing, but a fixture that says one city while
+    testing another is the kind of detail that misleads whoever reads a failure next.
+    """
     return GeocodeResult(
         latitude=latitude,
         longitude=longitude,
-        matched_address="1234 SUNSET RIDGE AVE, LOS ANGELES, CA, 90026",
+        matched_address=matched_address,
         source="census_geocoder",
     )
 
@@ -665,3 +678,101 @@ def test_grounded_run_reaches_the_report_with_real_comps(monkeypatch):
     assert not flags_of_kind(result, FlagKind.GEOCODING_UNAVAILABLE)
     assert "## Comparable Rentals" in result["report_markdown"]
     assert result["comps"][0].listing_id in result["report_markdown"]
+
+@pytest.mark.skipif(
+    not _corpus_available(),
+    reason="Chroma index not built; run scripts/build_comps_index.py",
+)
+def test_a_comp_set_drawn_from_one_place_is_disclosed(monkeypatch):
+    """A *full* comp set describing a single location must say so.
+
+    The failure this guards against was live in the build until Aug 22, 2026. 92% of
+    the corpus carries no street address and sits on a city-area placeholder
+    coordinate, so a comp set can satisfy MIN_QUALIFYING_COMPS while describing one
+    point. Cleveland is the case: 8 comps, 8 of them city-area positioned, all at the
+    same distance. The count check passes and the concentration check is what fires,
+    which is exactly why this is a separate flag from SPARSE_COMPS rather than a
+    stricter version of it.
+    """
+    extraction = EXTRACTION_MISSING_PRICE.model_copy(
+        deep=True, update={"price": 385_000.0}
+    )
+    monkeypatch.setattr(extractor_module, "_extract_terms", lambda text: (extraction, 1))
+    monkeypatch.setattr(
+        extractor_module,
+        "geocode",
+        lambda *a, **k: parcel_at(*CLEVELAND, matched_address="3200 W 25TH ST, CLEVELAND, OH, 44109"),
+    )
+
+    result = run_deal()
+
+    assert not flags_of_kind(result, FlagKind.SPARSE_COMPS), (
+        "This case is only meaningful while the comp count itself is adequate — "
+        "otherwise it is testing sparsity, which is already covered."
+    )
+    assert_reaches_report(result, FlagKind.COMPS_SPATIALLY_CONCENTRATED)
+
+
+@pytest.mark.skipif(
+    not _corpus_available(),
+    reason="Chroma index not built; run scripts/build_comps_index.py",
+)
+def test_an_adequately_spread_comp_set_raises_nothing(monkeypatch):
+    """The negative case, and the suite does not accept the flag without it.
+
+    §8's standard applied to a threshold: a check that fired on every comp set would be
+    indistinguishable from a check with no threshold at all, and would tell a reader
+    nothing when it appeared. The Los Angeles subject clears
+    COMP_MIN_DISTINCT_LOCATIONS exactly, so this case also pins the boundary — if the
+    threshold is ever raised, this test fails rather than the disclosure quietly
+    becoming universal.
+    """
+    extraction = EXTRACTION_MISSING_PRICE.model_copy(
+        deep=True, update={"price": 1_150_000.0}
+    )
+    monkeypatch.setattr(extractor_module, "_extract_terms", lambda text: (extraction, 1))
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
+
+    result = run_deal()
+
+    assert result["comps"], "Expected comps in a market measured as dense in §2."
+    assert not flags_of_kind(result, FlagKind.COMPS_SPATIALLY_CONCENTRATED)
+
+
+@pytest.mark.skipif(
+    not _corpus_available(),
+    reason="Chroma index not built; run scripts/build_comps_index.py",
+)
+def test_comps_carry_their_location_precision_and_vintage(monkeypatch):
+    """Every retrieved comp reports how well it is located and when it was listed.
+
+    Both fields landed in the Aug 22, 2026 re-index. `location_precision` is what lets
+    the report distinguish eight located comparables from eight city-area points;
+    `listed_date` is what lets each comp be normalized against the FMR for its own
+    fiscal year rather than one assumed vintage (§2). Asserted on the comps themselves
+    rather than through the report, because rendering them is the Summarizer's concern
+    while this is the retrieval contract.
+    """
+    extraction = EXTRACTION_MISSING_PRICE.model_copy(
+        deep=True, update={"price": 1_150_000.0}
+    )
+    monkeypatch.setattr(extractor_module, "_extract_terms", lambda text: (extraction, 1))
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
+
+    result = run_deal()
+    comps = result["comps"]
+    assert comps, "Expected comps in a market measured as dense in §2."
+
+    for c in comps:
+        assert c.location_precision in {"address", "area"}, (
+            f"Comp {c.listing_id} carries location_precision={c.location_precision!r}; "
+            "an unset value would let a city-area point pass as a located comparable."
+        )
+        assert c.listed_date is not None, (
+            f"Comp {c.listing_id} has no listed_date, so it cannot be normalized "
+            "against the FMR for its own fiscal year (§2)."
+        )
+        assert c.listed_date.year in (2018, 2019), (
+            f"Comp {c.listing_id} is dated {c.listed_date.year}; the corpus spans "
+            "Dec 2018 - Dec 2019, so anything else means the epoch decode is wrong."
+        )
