@@ -3,7 +3,11 @@
 
 # Secrets
 ignore/
-data/
+# Anchored to the repo root on purpose. An unanchored `data/` also matches
+# src/eval/data/, which config.EVAL_DATA_DIR documents as the *committed*
+# counterpart holding the LLM recordings an evaluation replays - a fresh clone
+# cannot reproduce the report's figures without them (found during U6).
+/data/
 
 # Docs
 docs/private/
