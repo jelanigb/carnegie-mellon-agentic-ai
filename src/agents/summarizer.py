@@ -202,6 +202,110 @@ def _build_status_section(stub_nodes: list[str]) -> list[str]:
     ]
 
 
+def _benchmark_section(state: DealState, detail) -> list[str]:
+    """Redfin's metro sale-price median, framed as a reference rather than an estimate.
+
+    **The framing is the whole point of this section, not its wording.** The figure is a
+    median over one metro-month series with no individual sales behind it, so it says
+    what a typical 2-4 unit property in this metro sold for — and nothing whatsoever
+    about *this* property's square footage, unit count, or condition. Printed in the
+    findings table it would read as a value estimate; printed here, next to the asking
+    price it is meant to be read against, it reads as what it is.
+    """
+    lines = ["### Market benchmark", ""]
+
+    if detail is None or detail.benchmark_median_sale_price is None:
+        reason = (detail.benchmark_unavailable_reason if detail else None) or (
+            "The valuation step did not run."
+        )
+        lines.extend([f"**Not available.** {reason}", ""])
+        return lines
+
+    lines.append(
+        f"Typical **Multi-Family (2-4 unit)** sale in the {detail.benchmark_metro} "
+        f"metro: **{_money(detail.benchmark_median_sale_price)}**, the median over the "
+        f"last {detail.benchmark_periods_averaged} monthly periods "
+        f"(~{detail.benchmark_homes_sold_per_period:,.0f} sales per period, Redfin)."
+    )
+    if state.deal_terms.price:
+        drift = (state.deal_terms.price - detail.benchmark_median_sale_price) / (
+            detail.benchmark_median_sale_price
+        )
+        side = "above" if drift >= 0 else "below"
+        lines.append(
+            f"This listing asks {_money(state.deal_terms.price)} — "
+            f"**{abs(drift):.0%} {side}** that benchmark."
+        )
+    lines.extend([
+        "",
+        "> **This is not an estimate of this property's value.** The source is "
+        "pre-aggregated to one median per metro per month and exposes no individual "
+        "sales, so it carries no square footage, unit count, or condition — the same "
+        "figure describes every 2-4 unit property in the metro. It is a market "
+        "reference for reading the asking price against, and nothing more.",
+        "",
+    ])
+    return lines
+
+
+def _rent_basis_section(state: DealState, detail) -> list[str]:
+    """How the rent figure was reached, and whether the comps agreed with it.
+
+    Rendered even when the cross-check did not run. A report that silently omits the
+    check whenever it fails would show its working only on the runs where the working
+    looked good, which is the opposite of what disclosure is for.
+    """
+    if detail is None or state.rent_estimate is None:
+        return []
+
+    lines = ["### How the rent figure was reached", ""]
+
+    if detail.model_holdout_mae_dollars is not None:
+        trained = (
+            f", trained {detail.model_trained_at:%b %d, %Y}"
+            if detail.model_trained_at else ""
+        )
+        lines.append(
+            f"A linear regression on bedrooms, bathrooms and square footage, fit to "
+            f"{detail.model_training_rows:,} listings{trained}. On a held-out slice it "
+            f"missed by **{_money(detail.model_holdout_mae_dollars)}/mo on average** "
+            f"({detail.model_holdout_mae_ratio:.3f} in ratio terms). That is the error "
+            f"band on the figure above, and it is wide."
+        )
+        lines.append("")
+
+    if detail.comp_implied_rent_median is not None:
+        direction = "above" if (detail.divergence_pct or 0) >= 0 else "below"
+        at_zip = (
+            f", {detail.comps_zip_anchored} of them at ZIP resolution"
+            if detail.comps_zip_anchored else ""
+        )
+        lines.append(
+            f"**Cross-check against the comps:** {detail.comps_cross_checked} of "
+            f"{detail.comps_available} retrieved comps normalized cleanly to their own "
+            f"area and fiscal year{at_zip}, implying "
+            f"**{_money(detail.comp_implied_rent_median)}/mo** "
+            f"(middle half {_money(detail.comp_implied_rent_p25)}–"
+            f"{_money(detail.comp_implied_rent_p75)}). The model sits "
+            f"{abs(detail.divergence_pct):.0%} {direction} that."
+        )
+    else:
+        shortfall = (
+            f"only {detail.comps_cross_checked} of {detail.comps_available} retrieved "
+            f"comps could be normalized to this county and fiscal year"
+            if detail.comps_available
+            else "no comps were retrieved"
+        )
+        lines.append(
+            f"**Cross-check against the comps: not run** — {shortfall}, below the "
+            f"{config.RENT_COMP_CROSSCHECK_MIN_COMPS} needed for a median to describe a "
+            f"distribution rather than a single listing. The estimate above rests on "
+            f"the model alone, with no local evidence corroborating it."
+        )
+    lines.append("")
+    return lines
+
+
 def _findings_section(state: DealState) -> list[str]:
     terms = state.deal_terms
     lines = ["## Findings", ""]
@@ -213,20 +317,53 @@ def _findings_section(state: DealState) -> list[str]:
         f"| Units | {terms.unit_count if terms.unit_count is not None else '—'} | listing |"
     )
 
-    if state.rent_estimate is not None:
-        basis = state.rent_estimate_source or "unspecified"
-        if state.fmr_anchor_used is not None:
-            basis += f", anchored to FMR {_money(state.fmr_anchor_used)}"
-        lines.append(f"| Estimated rent | {_money(state.rent_estimate)}/mo | {basis} |")
-    else:
-        lines.append("| Estimated rent | not produced | valuation agent unbuilt (U5) |")
+    detail = state.valuation_detail
 
-    if state.value_estimate is not None:
-        lines.append(f"| Estimated value | {_money(state.value_estimate)} | comps-based |")
+    if state.rent_estimate is not None:
+        # The error band is printed inside the value cell rather than in a footnote,
+        # because a reader who takes one number away from this table should take the
+        # spread with it. $2,431 and "$2,431 give or take $519" support different
+        # decisions, and the second one is what this model actually supports.
+        value = f"{_money(state.rent_estimate)}/mo per unit"
+        if detail and detail.model_holdout_mae_dollars is not None:
+            value += f" ± {_money(detail.model_holdout_mae_dollars)}"
+        basis = str(state.rent_estimate_source or "unspecified")
+        if state.rent_estimate_ratio_to_fmr is not None and state.fmr_anchor_used is not None:
+            year = f"FY{detail.fmr_year} " if detail and detail.fmr_year else ""
+            # Name the spatial resolution, not just the figure. ZIP schedules span
+            # roughly 2x within a single county, so "FMR $2,220" means something very
+            # different depending on which of the two it is.
+            where = ""
+            if detail and detail.fmr_resolution == "zip":
+                where = f" (ZIP {detail.fmr_zip})" if detail.fmr_zip else " (ZIP)"
+            elif detail and detail.fmr_resolution == "county":
+                where = " (county-wide)"
+            basis += (
+                f", ratio {state.rent_estimate_ratio_to_fmr:.2f} × {year}FMR "
+                f"{_money(state.fmr_anchor_used)}{where}"
+            )
+        lines.append(f"| Estimated rent | {value} | {basis} |")
     else:
-        lines.append("| Estimated value | not produced | valuation agent unbuilt (U5) |")
+        # No reason text here on purpose: whichever path declined to produce a figure
+        # raised a flag saying which one, and those are rendered *above* this table.
+        # Restating it would give the report two authorities on the same fact.
+        lines.append(
+            "| Estimated rent | not produced | see the disclosures above for which "
+            "input was missing |"
+        )
+
+    # `value_estimate` is never populated by this build; see agents/valuation_rent.py
+    # for the evidence behind that. The row stays, and says so — dropping it would let
+    # a reader conclude the property has no determinable value, which is a claim about
+    # the deal rather than about this system's inputs.
+    lines.append(
+        "| Estimated value | not produced | no property-level sale data exists in this "
+        "project's sources; see the market benchmark below |"
+    )
 
     lines.append("")
+    lines.extend(_benchmark_section(state, detail))
+    lines.extend(_rent_basis_section(state, detail))
 
     if state.scenarios:
         lines.append("### Scenarios")
@@ -239,8 +376,10 @@ def _findings_section(state: DealState) -> list[str]:
         lines.append("")
     else:
         lines.append(
-            "### Scenarios\n\nNot produced — the forecast agent is unbuilt (U6), and "
-            "it has no base value to project from until U5 lands.\n"
+            "### Scenarios\n\nNot produced — the forecast agent is unbuilt (U6). The "
+            "rent estimate it will project from now exists; what U6 still has to settle "
+            "is what a *value* forecast is anchored to, since this project has no "
+            "property-level sale data to estimate one from.\n"
         )
 
     return lines

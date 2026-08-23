@@ -55,7 +55,7 @@ def main() -> None:
     for name, value in report.coefficients.items():
         print(f"  {name:<16} {value:>12.6f}")
 
-    rent_model.save(model)
+    rent_model.save(model, report)
     print()
     print(f"saved -> {config.RENT_MODEL_PATH}")
 

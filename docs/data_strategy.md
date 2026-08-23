@@ -2,6 +2,12 @@
 
 ## 2. Data Strategy: Reconciling Kaggle/Redfin Vintage and Category Mismatch
 
+> **Looking for which dataset feeds which process?** That is
+> [`data_sources.md`](data_sources.md) — a source-by-source map with row counts,
+> geographic levels, and exact consumers. **This section is the *argument*: why these
+> sources, and what measuring them found.** Where a figure appears in both, the map is
+> derived from the code and is the one to trust.
+
 ### Section Links
 
 - [§1](implementation_plan.md#1-project-summary)
@@ -50,6 +56,39 @@ visibly 2020–2022, when price growth far outpaced rent growth as low rates pul
 buyers in. Using Redfin's price trend to adjust a *rent* number would import
 interest-rate-driven price dynamics into a quantity they don't actually explain.
 
+**Measured Aug 22, 2026, and it is worse than "weak" — the relationship is inverted.**
+This section asserted the divergence from housing-market reasoning rather than from this
+project's own data. Tested against it, using HUD FMR's published history as the rent
+series and the Redfin extract as the price series, both annualized across the inference
+trio for FY2019–FY2026:
+
+| | Correlation of rent growth with price growth |
+| --- | --- |
+| Pooled, 24 metro-years | **r = −0.309** |
+| Chicago | −0.135 |
+| Los Angeles | −0.226 |
+| Cleveland | −0.530 |
+
+Negative in all three metros independently. A rent forecast driven by a price series
+would not merely be imprecise — it would point **the wrong way**. And the mechanism is
+the one predicted above: across 2021–22, price grew **+11.7%** while rent grew **+2.8%**,
+an 8.9-point gap in exactly the low-rate window this section names.
+
+*Caveats, because the sample is small.* Eight annual observations per metro is thin and
+growth-rate correlations are noisy, so the coefficient itself should not be defended. The
+*direction* is consistent across three independent markets with a documented mechanism,
+which is what makes it more than an artifact. Reproduce with the FMR client's historical
+years against `tools/redfin_data.load_redfin`.
+
+**Consequence for U6.** §1 specifies the Scenario/Forecast agent as *"Tree-of-Thought
+reasoning over rent-growth/appreciation scenarios, informed by metro-level housing trend
+data,"* and `agents/scenario_forecast.py` inherited that wording. **The rent half of that
+premise does not survive this measurement.** Redfin stays the source for *price*
+appreciation, which is what it measures; rent growth needs a rent-native series. See
+[`data_sources.md`](data_sources.md) — HUD FMR publishes ten years of history through the
+client this project already uses, at county and ZIP resolution, which makes it the
+candidate that costs nothing new and stays consistent with the anchoring design.
+
 ### Resolution: separate "structure" from "level," and match each quantity to a same-kind source
 
 **Rent-level anchoring (Valuation & Rent agent):**
@@ -63,8 +102,17 @@ interest-rate-driven price dynamics into a quantity they don't actually explain.
    real, dated reference point instead of an implicit 2018 price level.
 3. Flag every estimate that used this anchoring path (`kind="rent_anchored_to_fmr"`,
    `severity="info"`) so the report can disclose the mechanism, and flag separately
-   (`kind="fmr_unavailable_for_county"`, `severity="warn"`) if HUD has no FMR entry for
-   the subject county and a coarser (state/national) fallback had to be used.
+   (`kind="fmr_unavailable_for_county"`) when the subject county will not resolve.
+
+   **Revised at implementation (U5, Aug 22, 2026): that second flag is `critical`, not
+   `warn`, and there is no coarser fallback.** As written above it assumed a
+   state/national FMR could stand in, which would have made the flag mean "this figure
+   is less precise." It cannot: a state-level FMR is not a rent this property could
+   command, and the nearest available substitute — a mean of the retrieved comps — is
+   precisely the unanchored 2019 dollar figure §8 forbids reaching the Summarizer. So
+   the path produces **no rent figure at all**, and the severity follows the
+   consequence. `SPARSE_COMPS` already sets that precedent, being `critical` at zero
+   comps and `warn` otherwise.
 
 **Appreciation forecasting (Scenario/Forecast agent):**
 
@@ -170,18 +218,38 @@ coverage gap is handled (below):
   be geographically near the subject property to be meaningful. A national corpus does
   not help price a building in a market the corpus barely covers.
 
-**Verified sufficiency of the training data (Aug 8, 2026).** The Kaggle extract holds
-99,492 rows, of which **99,007 (99.5%) are complete on every core feature** — price,
-bedrooms, bathrooms, square_feet, latitude, longitude, cityname, state. Notably
-`square_feet` has **zero** missing values, which removes the most likely blocker for a
-sqft-aware comp match and regression. A candidate ~10-metro training shortlist yields
-**21,768 complete rows**, which is abundant for a regression on roughly 8–12 features.
+**Verified sufficiency of the training data (Aug 8, 2026; counts corrected Aug 22,
+2026).** The Kaggle extract holds 99,492 rows, of which **98,923 (99.4%) are complete on
+every core feature** — price, bedrooms, bathrooms, square_feet, latitude, longitude,
+cityname, state — and **98,844** survive the rent bounds as well. Notably `square_feet`
+has **zero** missing values, which removes the most likely blocker for a sqft-aware comp
+match and regression.
+
+> **⚠️ The training-set size originally stated here was wrong, and this is the most
+> misread number in the project.** This paragraph claimed a candidate ~10-metro shortlist
+> yields **21,768 complete rows**. It does not, and no metro-filtered count reproduces
+> it: 21,768 is a *state-level* rollup — the six states the shortlist's metros sit in hold
+> 22,323 usable rows between them, which is what that figure was actually counting.
+>
+> **The real training-set size is 5,717 rows** (of which 4,550 are trained on and 1,138
+> held out), re-derived against the settled eight-metro shortlist and reproducible with
+> `.venv/bin/python scripts/train_rent_model.py --dry-run`. Per §8, a training-set size
+> nobody measured is not a measurement.
+>
+> The correction is stated here, at the point the wrong number appeared, rather than only
+> in §7 and `config.py` where it was first recorded — because this section is titled
+> *Data Strategy* and *Training vs. Inference*, so it is where anyone looking for the
+> training row count will look first. See [`data_sources.md`](data_sources.md) for the
+> full source-by-source map.
 
 Price distribution is sane (median $1,350; IQR $1,014–$1,795) with negligible outlier
 contamination — 8 rows below $300 and 71 above $10,000, removable by the same
 min/max filter pattern §2 already applies to the Redfin extract.
 
-**Conclusion: row count is not a binding constraint on training, and never was.** The
+**Conclusion: row count is not a binding constraint on training, and never was.** That
+conclusion survives the correction above — 5,717 rows is still ample for a regression on
+three features, and the eight-metro shortlist was selected on per-metro density rather
+than on the aggregate. The
 binding constraint was the county/FIPS mapping and FMR-pull effort per added metro,
 exactly as this section originally predicted. Adding a metro to the training set cost
 crosswalk entries and API calls, not data.
@@ -365,11 +433,113 @@ the field exists to prevent.
 One footnote on method, because it repeats a lesson this section already contains: the
 UCI dataset page states *"has Missing Values? No."* It has 92% nulls in `address`. The
 metadata was wrong, and the only reason the project knows is that it measured — the same
-way the metro-selection hypothesis was overturned in the first place. Earlier in the process,
-I did not spend enlugh time on an important CRISP-DM step (Data Understanding) because I
-was focused more on the agent harness than the data.Earlier in the process, I did not spend enough time on an important CRISP-DM step (Data
-Understanding) because I was focused more on the agent harness than the data. The key
-learning for future projects is not to rush this step, which has now resulted in the need to revise the approach multiple times in later phases.
+way the metro-selection hypothesis was overturned in the first place. Earlier in the
+process I did not spend enough time on an important CRISP-DM step (Data Understanding),
+because I was focused more on the agent harness than on the data. The key learning for
+future projects is not to rush that step: skipping it here has forced the approach to be
+revised several times in later phases.
+
+### The rent estimate is location-blind below the county (U5, Aug 22, 2026)
+
+The Valuation agent's Observe step re-expresses every retrieved comp's rent in the
+subject's current dollars — each comp divided by the FMR for *its own* county and fiscal
+year, then multiplied by the subject's current FMR — and compares the modelled rent
+against their median. On its first live run the model came in **below** the comp median
+in all five subjects tested: 13.0% and 21.6% (Los Angeles), 29.7% and 30.4% (Chicago),
+40.0% (Cleveland).
+
+**This section originally concluded that the comp sets were unrepresentative. That was
+wrong, and the error is worth keeping rather than deleting**, because it is the same
+mistake this document already records twice: reaching a conclusion from a comparison
+whose baseline was not checked. The first analysis compared each comp set against its
+metro's *entire* 2-bedroom population and found the comps sitting +7.9% / +70.4% /
++73.1% above it — which does look like retrieval selecting expensive listings. But a comp
+set is drawn from within a 2–4 mile radius, and comparing a neighborhood against a metro
+measures the neighborhood, not the retrieval.
+
+Against the **right** baseline — every corpus row passing the same hard filters at the
+same radius — the skew decomposes very differently:
+
+| Metro | Neighborhood effect *(local pool vs. metro)* | Ranking effect *(retrieved vs. local pool)* |
+| --- | --- | --- |
+| Los Angeles | +5.1% | **+2.7%** |
+| Chicago | +40.1% | **+21.6%** |
+| Cleveland | +66.2% | **+4.2%** |
+
+Semantic ranking contributes far less than location does in every market measured — and
+in Los Angeles and Cleveland, an order of magnitude less. Retrieval's
+result also sits at the 58th, 76th and 76th percentile of 500 random eight-comp draws
+from the same candidate pool — unremarkable. **Echo Park, Logan Square and Ohio City
+genuinely rent above their metro medians, and the comps are reporting that correctly.**
+
+**The real finding is a structural blind spot, and it is on the model side.**
+`RENT_MODEL_FEATURES` deliberately excludes any market identifier — a metro dummy would
+let the regression memorize a per-market dollar level, defeating the ratio design — so
+the FMR anchor is the *only* channel through which location enters a rent estimate. That
+anchor is county-level. Nothing in the pipeline can therefore represent sub-metro rent
+variation, and `rent_diverges_from_comps` is currently detecting that blind spot rather
+than an anomaly. See [`data_sources.md`](data_sources.md), "The sub-metro gap," for what
+is available and unused.
+
+### Closed Aug 22, 2026 — ZIP-resolution anchoring
+
+The blind spot was closable with data the project already had. HUD publishes Small Area
+FMRs — a schedule per ZIP — for all three inference counties, spanning roughly 2x within
+a single county, which is more than enough resolution to cover the neighborhood effects
+above. `tools/zcta_crosswalk.py` resolves a coordinate to a ZCTA, and training, the comp
+cross-check and inference all anchor through one shared function so they cannot drift
+onto different denominators.
+
+**One obstacle was nearly disqualifying and is worth recording, because it is the same
+vintage problem this section is about, in a new place.** SAFMR coverage is *younger than
+the rent corpus*: Los Angeles publishes 474 ZIP schedules for FY2026 and **zero** for
+FY2019; Cuyahoga went 0 → 126. Only Cook had ZIP data in the corpus's own vintage. So
+ZIP resolution existed on the inference side and not the training side — and anchoring
+the two differently is not an option, because a ratio to a ZIP denominator is a different
+quantity from a ratio to a county one.
+
+The fix carries each ZIP's position *within its county* backwards from the current year
+and applies it to the row's own year's county FMR. **The dollar level always comes from
+the row's own vintage; only the within-county shape is imported.** That assumption is
+tested rather than asserted, on the two counties where both years are published:
+correlation r = 0.873 (Cook) and 0.771 (Philadelphia), median back-cast error 4.5% and
+5.1%. Against a county anchor's blind spot of +40.1% to +66.2%, that is roughly 5% of new
+error to remove 40-66% of existing error — and back-cast rows are labelled as such rather
+than presented as published figures.
+
+**Result — partial, and the partial-ness is the finding.** Only Cook County had
+published ZIP schedules in the corpus's own FY2019 vintage, and only Chicago improved:
+−30.4% → **−9.9%**. Los Angeles (−21.6% → −21.0%) and Cleveland (−40.0% → −39.6%) are
+anchored at county resolution on both sides and now say so via
+`FlagKind.FMR_ANCHOR_COUNTY_LEVEL`.
+
+**The back-cast was tried, looked better, and was rejected on measurement.**
+Reconstructing ZIP schedules for every county produced convergence across all three
+markets (−10.7% / −14.3% / −13.9%), which was briefly taken as success. It was an
+artifact: the same reconstructed schedule normalizes both the training rows and the
+comps, so a shared error cancels in the comparison while surviving in the estimate — the
+same circularity as calibrating a demo price to a benchmark and then reporting agreement
+with it. The independent test is whether the anchor explains rent variation at all:
+
+| ZIP schedule source | n | CV county | CV ZIP | Change |
+| --- | --- | --- | --- | --- |
+| **published** | 1,109 | 44.3% | **35.9%** | **−19.1%** |
+| back-cast | 4,281 | 34.0% | 36.2% | +6.6% |
+
+`config.RENT_MODEL_BACKCAST_ZIP_FMR = False`. The relativity it carries back is stable
+enough to look reasonable (r = 0.873 Cook / 0.771 Philadelphia, median error ~5%), but
+that residual is comparable to the within-county signal it is trying to capture.
+
+Holdout dollar MAE moved $519 → $524 and R² 0.173 → 0.159.
+
+**One confound that limits how far even the corrected reading can be pushed.****One confound that limits how far even the corrected reading can be pushed.**
+Cleveland's local pool is 123 rows sitting on **four distinct coordinates, 66% of them on
+one**. Its +66.2% "neighborhood effect" is not a verified fact about Ohio City; it is one
+city-area placeholder standing in for much of the city. Los Angeles (9 coordinates) and
+Chicago (21) are better but still coarse. The coordinate limitation above sets a ceiling
+on how precisely any of this can be measured, which is the honest state of it.
+
+Reproduce with `scripts/valuation_evidence.py --diagnose-divergence`.
 
 ### What this cost, and the process lesson
 

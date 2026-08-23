@@ -1,0 +1,390 @@
+**Reference map for the plan of record — see [`implementation_plan.md`](implementation_plan.md) §2.**
+
+# Data Sources: what each one is, and what it feeds
+
+### Section Links
+
+- [§1](implementation_plan.md#1-project-summary)
+- [§2](implementation_plan.md#2-data-strategy-reconciling-kaggleredfin-vintage-and-category-mismatch)
+- [§3](implementation_plan.md#3-stack-decision-langgraph-from-day-one)
+- [§4](implementation_plan.md#4-proposed-repository-structure)
+- [§5](implementation_plan.md#5-state-schema-design-target-for-statepy)
+- [§6](implementation_plan.md#6-execution-order)
+- [§7](implementation_plan.md#7-immediate-next-actions)
+- [§8](implementation_plan.md#8-engineering-standards)
+- [§9](implementation_plan.md#9-current-build-hud-fmr-api-client-toolshud_fmrpy)
+
+Related: [`data_strategy.md`](data_strategy.md) (§2 — *why* these sources, and the
+findings against them) · [`architecture.md`](architecture.md) (§3, §4) ·
+[`hud_fmr_client.md`](hud_fmr_client.md) (§9)
+
+## Why this file exists
+
+This project uses four external sources for three different purposes, and the same
+source is used differently depending on the purpose. The rent regression and comp
+retrieval both draw on the Kaggle corpus but filter it to different metros and consume
+different columns. HUD FMR appears at four separate points in one pipeline run, playing
+a different role each time. Redfin never touches a rent figure at all.
+
+None of that was written down in one place. §2 explains *why* each source was chosen and
+was written before most of the code existed; `config.py` holds the parameters;
+the module docstrings hold the mechanics. Assembling "which dataset is used in which
+process" meant reading six files and holding the answer in your head — and the answer
+drifted from §2 as the build progressed.
+
+**This file is the map. §2 stays the argument.** Where a number appears in both, this
+one is derived from the code and is the one to trust.
+
+---
+
+## The map
+
+| Source | Vintage | Finest geography it carries | Geography this system actually uses | What it feeds |
+| --- | --- | --- | --- | --- |
+| **Kaggle rent corpus** | Dec 7 2018 – Dec 26 2019, static | Street address (**8% of rows**), else city | Latitude/longitude per row (city-area placeholder for 92%) | Rent-model training · comp index |
+| **HUD FMR API** | Live, by federal fiscal year, **FY2017–2026 history** | **ZIP** (SAFMR counties only) | **ZIP** where published, county elsewhere | Training target denominator · inference anchor · comp cross-check · demo calibration · **rent-growth series (U6)** |
+| **Redfin sale medians** | Jan 2018 – Jun 2026, monthly | Metro (this extract); ZIP extract exists unused | Metro | Market benchmark · **price** appreciation (U6) · demo calibration |
+| **Census Geocoder** | Live | Parcel / street address | Parcel, with city-centroid fallback | Subject-property coordinates |
+| **Census county boundaries** | TIGER/Line 2023 | County polygon | County | Coordinate → county FIPS |
+| **Census ZCTA boundaries** | Cartographic 2020 | ZCTA polygon (~33,800) | ZCTA | Coordinate → ZIP, for ZIP-level FMR |
+| *(derived)* **Chroma index** | Inherits Kaggle | Inherits Kaggle | Inherits Kaggle | Comp retrieval only |
+
+**Read the two geography columns as a pair.** The gap between them is where this
+system's precision is lost by choice rather than by the data's limits, and it is the
+single most useful thing on this page — writing this file is what surfaced the HUD row's
+gap, which had gone unnoticed through three units and was closed the same day (below).
+One gap remains open: Redfin.
+
+| Source | Gap | Status |
+| --- | --- | --- |
+| HUD FMR | County used where ZIP published | ✅ **Closed Aug 22, 2026** — see below |
+| Redfin | Metro used; a ZIP extract sits unused on disk | 🟨 **Not a defect.** §2's metro choice is correct and settled for the *appreciation series* — measured, the ZIP extract has a median of **2 sales per period** nationally, and a YoY growth rate off 2 sales is noise. The only open question is the far narrower one of whether the *market benchmark* (a level, not a growth rate) could be ZIP-level where volume allows: 90026 / 60647 / 44109 carry 15 / 42 / 35 sales per period. A possible refinement to a figure already labelled "not this property's value", not a gap |
+
+---
+
+## Kaggle rent corpus
+
+`data/apartments_for_rent_classified_100K.csv` · UCI ML Repository, CC BY 4.0 ·
+loader `tools/kaggle_data.py` (the **only** supported entry point)
+
+| | |
+| --- | --- |
+| Raw rows | 99,492 |
+| After `load_clean()` | **98,844** (de-duplicated, core-field-complete, rent-bounded) |
+| Vintage | Dec 7, 2018 – Dec 26, 2019 |
+| Geographic columns | `address`, `cityname`, `state`, `latitude`, `longitude` |
+| **No county column. No ZIP column.** | Both are derived — see §2, "Two data gaps" |
+| `address` populated | **8%** (92% null) |
+| Source concentration | 91% `RentDigs.com` (90,428 of 98,844); 25 distinct sources |
+
+**Geographic level, precisely.** Every row has a coordinate, but a coordinate is not an
+address. For the 8% of rows carrying a street address the coordinate is likely
+parcel-level; for the other 92% it is a city-area placeholder that many listings share —
+one point in Jersey City stands in for 497 listings spanning $1,200–$5,240. `Comp.location_precision`
+records which kind each comp is (`"address"` / `"area"`), and the report discloses the
+composition of every comp set. The tag is **not** used to rank or filter: coverage is 42%
+in Chicago, 5% in Los Angeles, 2% in Cleveland, so preferring addressed comps would empty
+the Cleveland set.
+
+### Used for — 1. Rent-model training
+
+`tools/model/rent_model.py`, filtered to `config.TRAINING_METROS`.
+
+| | |
+| --- | --- |
+| Rows in shortlist | 5,717 |
+| Dropped: county unresolved / FMR missing / ratio bounds | 0 / 0 / 29 |
+| Trained | **4,550** · Holdout **1,138** |
+| Counties · fiscal years | 15 · FY2019–FY2020 |
+| Columns consumed | `bedrooms`, `bathrooms`, `square_feet`, `price`, `latitude`, `longitude`, `time` |
+
+The target is `price ÷ FMR-for-that-row's-county-and-fiscal-year`, **not** `price`.
+Reproduce with `.venv/bin/python scripts/train_rent_model.py --dry-run`.
+
+### Used for — 2. Comp index
+
+`scripts/build_comps_index.py`, filtered to `config.INDEXED_MARKETS` → ChromaDB.
+
+| | |
+| --- | --- |
+| Listings indexed | **3,880** |
+| Document granularity | One document per listing, **never chunked** (§6) |
+| Embedded text | Description + amenity free-text |
+| Carried as metadata | beds, baths, sqft, lat/long, `listed_epoch`, `location_precision`, source |
+
+### Not used for
+
+**Any dollar figure that reaches the report unmodified.** This is the invariant in §8:
+the corpus is a 2018–19 scrape, so a raw rent or a mean of comp rents is a 2019 figure
+that would appear in a 2026 report wearing no date. Every rent number passes through FMR
+normalization first — including the comp cross-check, which normalizes each comp
+individually rather than averaging them.
+
+---
+
+## HUD FMR API
+
+`tools/hud_fmr.py` · live API + on-disk cache (`data/raw/hud_fmr_cache.json`) ·
+token `HUD_FMR_TOKEN` · full detail in [`hud_fmr_client.md`](hud_fmr_client.md) (§9)
+
+**Geographic level: county, by `entityid` = state FIPS + county FIPS + `99999`.**
+Published by federal fiscal year (FY N runs Oct 1 N−1 → Sep 30 N), with rent figures for
+Efficiency through Four-Bedroom. Nothing above four bedrooms exists, so a 5+ bedroom unit
+is priced against the four-bedroom figure and `FlagKind.FMR_BEDROOM_CAP_EXCEEDED` says so.
+
+> **ZIP resolution, and the vintage trap inside it.** Cook (Chicago), Los Angeles and
+> Cuyahoga (Cleveland) are **Small Area FMR** counties — HUD publishes a separate
+> schedule per ZIP, and within a single county those span roughly 2x. The pipeline
+> anchors on them as of Aug 22, 2026. Richmond County (Staten Island) is not SAFMR and
+> is county-only, which raises `FlagKind.FMR_ANCHOR_COUNTY_LEVEL`.
+>
+> **SAFMR coverage is younger than the rent corpus, and that nearly broke the change.**
+> Los Angeles publishes 474 ZIP schedules for FY2026 and **zero** for FY2019; Cuyahoga
+> went 0 → 126 over the same window. Only Cook had ZIP-level data in the corpus's own
+> vintage (344 → 370). So ZIP resolution exists on the inference side and largely does
+> not on the training side — and the two must match, because the model learns a *ratio*
+> and a ratio to a ZIP denominator is a different quantity from a ratio to a county one.
+> `rent_model._zip_anchor_tables` resolves this by carrying each ZIP's position *within
+> its county* backwards from the current year and applying it to the row's own year's
+> county FMR: the dollar level always comes from the row's own vintage, only the
+> within-county shape is imported. Tested where both years exist — r = 0.873 (Cook),
+> 0.771 (Philadelphia), median back-cast error 4.5% / 5.1%.
+
+### Used for — four distinct roles in one run
+
+| # | Role | Where | Which FMR |
+| --- | --- | --- | --- |
+| 1 | **Training denominator** — makes the target a ratio | `rent_model.build_training_frame` | Each row's own county, own fiscal year (FY2019/2020) |
+| 2 | **Inference anchor** — converts the ratio back to dollars | `agents/valuation_rent.py` | Subject's county, **current** fiscal year (FY2026) |
+| 3 | **Comp cross-check denominator** | `rent_model.anchor_comp_rents` | Each comp's own county, own fiscal year |
+| 4 | **Demo calibration** | `scripts/verify_demo_calibration.py` | Geocoded county, FY2026 |
+
+Roles 1 and 2 are the whole rent-anchoring design: train on a ratio that ages slowly,
+multiply by a current dated reference. Role 3 is what makes the cross-check a fair
+comparison rather than a 2019-vs-2026 vintage error.
+
+**A fifth role lands at U6: the rent-growth series.** The API serves ten fiscal years
+(FY2017–2026, verified for all three inference counties), which is a rent-native growth
+series at county and ZIP resolution costing no new dependency. It is also the only
+candidate consistent with the anchoring design by construction — the estimate is
+`ratio × FMR`, so projecting the anchor forward while holding the ratio constant forecasts
+rent by the same mechanism that produced it. **Caveat that U6 must handle:** FMR is an
+administrative 40th-percentile figure, and the history contains methodology jumps rather
+than market moves — Chicago +19.0% in FY2024, Los Angeles +14.5%. Zillow ZORI is the
+independent check (decision #16).
+
+---
+
+## Redfin sale-price medians
+
+`data/redfin_property_types_monthly_all_metros_multi_family_2_4_units_2018_Jan_to_2026_Jun.csv`
+· loader `tools/redfin_data.py`
+
+| | |
+| --- | --- |
+| `REGION TYPE` | **Metro only** — 943 metros nationally, filtered to 3 |
+| `PROPERTY TYPE` | `Multi-Family (2-4 Units)` only |
+| `FREQUENCY` | Monthly |
+| Range | Jan 2018 – Jun 2026 (102 periods) |
+| Rows after filtering | **306** (3 metros × 102 periods) |
+| Columns used | `MEDIAN SALE PRICE NSA ($)`, `HOMES SOLD` |
+
+**It is pre-aggregated. There are zero individual sales in it** — one median per
+metro-month, carrying no square footage, unit count, or condition. That is why decision
+#15 declined to produce a property-level `value_estimate` from it: the same figure would
+describe a 2-unit duplex and a 4-unit building in the same metro.
+
+> A **ZIP-level** Redfin extract for the same property type is on disk at
+> `data/old/redfin_property_types_monthly_all_zips_multi_family_2_4_units_key_metrics_2024_Jan_to_2026_Jun.csv`
+> (48 MB, Jan 2024 – Jun 2026) and is **not used, correctly.** §2 rejected the ZIP tier
+> for the appreciation series on sample-size grounds, and the full extract bears that out:
+> median **2** homes sold per ZIP-period, 75th percentile 4. A year-over-year growth rate
+> computed off two sales is noise, so metro is the right tier for U6 and that is settled.
+>
+> The narrower question — whether the *market benchmark*, which is a level rather than a
+> growth rate, could use ZIP where volume allows — is genuinely open but small. The three
+> demo ZIPs carry 15 (90026), 42 (60647) and 35 (44109) sales per period, which is ample
+> for a median. It would make an already-labelled reference figure more specific; it would
+> not change any estimate.
+
+### Used for
+
+- **Market benchmark** in the report (`agents/valuation_rent.py`) — smoothed over
+  `config.REDFIN_ROLLING_WINDOW_PERIODS` (3), because Cleveland's month-over-month median
+  swings 6.9% (max 14.4%) against 1.5% in Chicago
+- **Price appreciation forecast** — U6, `agents/scenario_forecast.py` is still a stub.
+  **Price only.** §1 originally had this series driving *rent* growth too; measured, rent
+  and price growth are negatively correlated (pooled r = −0.309 across the trio), so rent
+  growth comes from HUD FMR history instead. Decision #16, §2's Problem 2
+- **Demo asking-price calibration** (`scripts/verify_demo_calibration.py`)
+- **MCP reference server** (`mcp_server.py`, decision #13)
+
+### Not used for
+
+**Any rent figure, ever.** §2, Problem 2: Redfin tracks *sale* prices, and home-price
+appreciation diverges from rent growth over multi-year windows — most visibly 2020–2022,
+when low rates pulled price growth far above rent growth. Using it to adjust a rent
+number would import interest-rate-driven price dynamics into a quantity they do not
+explain.
+
+---
+
+## Census Geocoder
+
+`tools/geocoding.py` · live, free, no key
+
+Two tiers, and the caller discloses which one produced a result:
+
+| Tier | Geographic level | Flag raised |
+| --- | --- | --- |
+| `CENSUS_GEOCODER` | Parcel / street address | none |
+| `CITY_CENTROID` | City centroid, computed from the corpus itself | `COORDINATES_FROM_CITY_CENTROID` |
+
+Feeds `DealTerms.latitude/longitude` for the **subject property only**. Comps are never
+geocoded — they carry the corpus's own coordinates.
+
+## Census ZCTA boundaries
+
+`tools/zcta_crosswalk.py` · `cb_2020_us_zcta520_500k` (67 MB, cached) · 33,791 polygons
+
+Point-in-polygon join, coordinate → 5-digit ZCTA, so a rent figure can be anchored at ZIP
+resolution rather than county. Added Aug 22, 2026; see "The sub-metro gap" above.
+
+**GENZ2020 rather than 2023** because Census publishes no ZCTA layer in the 2021–2023
+cartographic releases — verified by listing the directories, not assumed. Generalized
+(1:500,000) rather than full-resolution TIGER, matching the county file's reasoning.
+
+**A miss is cheap here, unlike the county join.** A county miss means no estimate at all,
+so `county_crosswalk` snaps to the nearest county within five miles. A ZCTA miss just
+falls back to the county schedule the caller would have used anyway, so there is no
+nearest-ZCTA tolerance — guessing at a boundary would buy nothing and cost precision that
+looked real. `None` means "use the county anchor," not "failure."
+
+**ZCTA is not ZIP**, and this is the approximation to keep in mind: USPS ZIPs are
+collections of mail *delivery routes*, not areas, and USPS publishes no polygons at all.
+Census ZCTAs approximate them by assigning each census block its most common ZIP. Most
+match; PO-box-only ZIPs have no ZCTA. HUD's SAFMR is keyed on real ZIPs, so a lookup can
+miss a ZIP that genuinely exists. Measured on the training set: 5,717 of 5,717 rows
+resolved to a ZCTA, and every ZCTA in a SAFMR county was present in HUD's list — zero
+misses, though that is a property of these metros rather than a guarantee.
+
+## Census county boundaries
+
+`tools/county_crosswalk.py` · TIGER/Line `cb_2023_us_county_500k` (11 MB, cached)
+
+Point-in-polygon join, coordinate → county FIPS → HUD `entityid`. Replaced a
+hand-maintained city→county table on Aug 15, 2026, so a multi-county city now resolves to
+the county the point actually falls in rather than a "principal" county.
+
+**Returns `None` throughout New England** (`TODO(geography)`): HUD prices those six states
+by town, and a county polygon cannot produce a town-level entityid. A `None` here becomes
+`FlagKind.FMR_UNAVAILABLE_FOR_COUNTY` and **no rent estimate at all**.
+
+---
+
+## The sub-metro gap — found by writing this page, closed the same day
+
+Two rows of the map originally had a gap between "finest geography carried" and
+"geography used." The HUD row's was the significant one, and it had survived three units
+unnoticed:
+
+- **HUD FMR** carried ZIP-level schedules for all three inference counties. The pipeline
+  read the county-wide figure.
+- **`RENT_MODEL_FEATURES`** deliberately excludes any market identifier, so the model
+  cannot represent location at all. That remains the right call — a metro dummy would let
+  it memorize a per-market dollar level, defeating the ratio design — but it means *the
+  FMR anchor is the only channel through which location enters a rent estimate.*
+
+County-level anchor + location-blind model meant **nothing in the pipeline could
+represent sub-metro rent variation.** The measured cost: the modelled rent sat 21.6% /
+30.4% / 40.0% below the local comp median in Echo Park, Logan Square and Ohio City — all
+neighborhoods that genuinely rent above their metro median.
+
+**What closing it required.** A ZCTA polygon join (`tools/zcta_crosswalk.py`, mirroring
+the county crosswalk), a bulk ZIP schedule fetch (`hud_fmr.get_fmr_zip_table`, no extra
+HTTP requests — the SAFMR payload already carries every ZIP), back-casting to reconcile
+the vintage mismatch above, and one shared `anchor_for_row` used by training, the comp
+cross-check and inference alike so the three cannot drift onto different denominators.
+
+**Result, and it is a partial win rather than the clean one first reported.**
+
+| Metro | Training vintage has ZIP FMR? | Divergence before | After |
+| --- | --- | --- | --- |
+| Chicago (Cook) | **Yes** — 344 ZIPs in FY2019 | −30.4% | **−9.9%** |
+| Los Angeles | No — 0 in FY2019, 474 in FY2026 | −21.6% | −21.0% |
+| Cleveland (Cuyahoga) | No — 0 in FY2019, 126 in FY2026 | −40.0% | −39.6% |
+
+Only the county with published ZIP data in the *corpus's own vintage* improved, and it
+improved a lot. The other two are anchored at county resolution on both sides and raise
+`FlagKind.FMR_ANCHOR_COUNTY_LEVEL`.
+
+**An intermediate version of this looked much better and was wrong**, which is worth
+recording because the mistake is the one this project keeps having to catch. Back-casting
+the ZIP relativity to every county produced convergence across all three markets
+(−10.7% / −14.3% / −13.9%) and that was briefly reported as success. It was an artifact:
+the same reconstructed ZIP schedule normalizes *both* the training rows and the comps, so
+a shared error cancels in the comparison between them while remaining in the estimate.
+The independent check is whether the anchor explains rent variation at all, measured as
+dispersion in the rent-to-FMR ratio:
+
+| ZIP schedule source | n | CV county | CV ZIP | Change |
+| --- | --- | --- | --- | --- |
+| **published** | 1,109 | 44.3% | **35.9%** | **−19.1%** |
+| back-cast | 4,281 | 34.0% | 36.2% | +6.6% |
+
+The published anchor absorbs local rent level as intended; the reconstructed one adds
+noise. `config.RENT_MODEL_BACKCAST_ZIP_FMR` is therefore `False`, with the machinery kept
+and the measurement recorded beside it.
+
+**What it cost.** Holdout dollar MAE $519 → $524, R² 0.173 → 0.159, on 1,105 ZIP-anchored
+rows of 5,686. Small, and expected for the same reason as before: variation moved into
+the denominator is variation three structural features no longer have to explain.
+
+**One correctness constraint this exposed.** Inference may only anchor at ZIP for a county
+the model was *fit* on at ZIP resolution — not for one HUD happens to publish ZIP
+schedules for today. The persisted training report carries `zip_anchored_counties` and
+`agents/valuation_rent.py` gates on it. Without that gate a Los Angeles subject would
+multiply a county-relative ratio by a FY2026 ZIP-level figure.
+
+**Three approximations this rests on**, each disclosed at its site: ZCTA is not ZIP (USPS
+publishes no polygons); the boundary file is 2020 vintage; and 92% of corpus coordinates
+are city-area placeholders, so for those rows this resolves the placeholder's ZIP rather
+than the property's.
+
+## Metro scopes
+
+Three different scopes, each answering a different question. They are **not**
+interchangeable, and conflating them is the most common way to misread a row count.
+
+| Scope | Count | Defined at | Question it answers |
+| --- | --- | --- | --- |
+| `INFERENCE_METROS` | 3 | `config.py` | Which markets have a Redfin appreciation series? |
+| `TRAINING_METROS` | 8 (6 states, 14 city patterns) | `config.py` | Which listings does the regression learn from? |
+| `INDEXED_MARKETS` | 4 | `config.py` | Which listings can be retrieved as comps? |
+
+`INDEXED_MARKETS` is the trio **plus New York**, indexed deliberately as the sparse-comps
+case rather than excluded. That is why Staten Island returns comps and a rent estimate but
+**no market benchmark** — it is in the comp index and the training set, and outside
+Redfin's coverage.
+
+Training is a superset of inference by design: the model predicts a *ratio*, so it
+benefits from markets it will never price, while comp retrieval needs density in the
+specific subject market (§2, "Training vs. Inference").
+
+---
+
+## Invariants
+
+Four rules connect these sources. Each exists because breaking it produces an answer that
+looks right.
+
+1. **Never let Redfin data touch a rent dollar figure.** Sale-price dynamics ≠ rent
+   dynamics.
+2. **Never let an unanchored Kaggle dollar figure reach the Summarizer.** Every rent
+   number passes through FMR normalization first — including comp-derived ones.
+3. **No FMR, no estimate.** There is no coarser fallback. A subject whose county will not
+   resolve gets a critical flag and no rent figure, because the only available substitute
+   is a raw comp mean, which rule 2 forbids.
+4. **`tools/kaggle_data.load_clean()` is the only entry point to the corpus.** One
+   cleaning path, so a data-quality decision cannot drift between the index, the
+   regression, and the evidence scripts.

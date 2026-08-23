@@ -147,8 +147,9 @@ class DealState(BaseModel):
     rent_estimate: Optional[float] = None
     rent_estimate_ratio_to_fmr: Optional[float] = None  # model's raw structural output
     fmr_anchor_used: Optional[float] = None              # today's FMR figure applied
-    value_estimate: Optional[float] = None
+    value_estimate: Optional[float] = None               # never populated — see U5 below
     rent_estimate_source: Optional[RentEstimateSource] = None
+    valuation_detail: Optional[ValuationDetail] = None   # provenance for the report
 
     # forecast
     # "zip_multifamily" is a documented future option (deferred — see §2); not
@@ -201,6 +202,59 @@ settled the principle when tuning X to 2.0 miles, that a signal which is always 
 conveys nothing. A flag describes what the deal or the data did; a stub describes the
 state of the software. Keeping them in separate channels is what lets the report say
 both things without either diluting the other.
+
+### Fields added in U5 (Aug 22, 2026)
+
+**`ValuationDetail`, and why it is a nested object rather than more top-level fields.**
+The split is by *consumer*, not by tidiness. The five valuation fields above are the
+**result** — what a downstream agent reads and computes with; U6's forecast projects
+from `rent_estimate`. `ValuationDetail` is **provenance** — the holdout error band, the
+fiscal year of the FMR anchor, the comp cross-check, the market benchmark — read only by
+the Summarizer and calculated from by nothing. Keeping them apart lets U6 depend on a
+stable five-field contract while the disclosure surface grows freely behind it.
+
+Every field on it is `Optional` because each describes a step that fails independently.
+A run can produce a rent estimate with no comp cross-check (the comps resolved to no
+county), a cross-check with no estimate, or a market benchmark with neither — an
+uncovered metro is a fact about Redfin's extract, not about the deal. One presence flag
+across all three would make the report say "unavailable" about three different things at
+once.
+
+**`value_estimate` is never populated by this build, and that is a decision.** The only
+sale-price source in the project is Redfin's extract, pre-aggregated to one median per
+metro-period: 306 rows, zero individual sales, no square footage or unit count to adjust
+by. A value estimate built from it would return an identical figure for a 2-unit duplex
+and a 4-unit building in the same metro. The median is carried as
+`ValuationDetail.benchmark_median_sale_price` and rendered as a labelled market
+reference instead. The field is kept because U6 may choose a projection base for it;
+that decision belongs to U6, where the appreciation evidence is.
+
+**Two new `FlagKind` members.** `RENT_ESTIMATE_UNAVAILABLE` covers every way a rent
+figure can fail to be produced *other than* the county lookup — no trained model, a
+feature the listing never resolved, a predicted ratio outside the plausible band — as
+one kind rather than three, because a reader's response to all three is identical and
+the detail text names the cause. `RENT_DIVERGES_FROM_COMPS` is the Valuation agent
+observing that its own two inputs disagree, which is what distinguishes it from
+`CRITIC_INCONSISTENCY`: that one is the Critic comparing *different agents'* conclusions
+(U7).
+
+**Added Aug 22, 2026 with ZIP-resolution anchoring.** `ValuationDetail.fmr_resolution`
+(`"zip"` / `"county"`), `fmr_zip`, and `comps_zip_anchored`, plus
+`FlagKind.FMR_ANCHOR_COUNTY_LEVEL` (warn) for a county with no Small Area FMR. The
+distinction is carried because it is large — ZIP schedules span roughly 2x within a
+single county — and because a reader cannot tell a ZIP-anchored figure from a
+county-anchored one by looking at it. `FMR_ANCHOR_COUNTY_LEVEL` is deliberately distinct
+from `FMR_UNAVAILABLE_FOR_COUNTY`: that one means no estimate at all, this one means the
+estimate exists but cannot see below the county line.
+
+**One severity changed.** `FMR_UNAVAILABLE_FOR_COUNTY` moved from `warn` to `critical`.
+§2 specified `warn` when the design still had a coarser state/national fallback behind
+it, so the flag meant "this figure is less precise." The fallback was removed — a raw
+comp mean is exactly the unanchored 2019 figure the design forbids — so the flag now
+means there is no rent figure at all. A warn-level flag on a missing headline number
+would understate it to the Critic's confidence scoring as much as to a reader. The
+same reasoning `SPARSE_COMPS` already uses, which is `critical` at zero comps and `warn`
+otherwise: severity follows consequence.
 
 ### Geography fields are grouped by provenance
 

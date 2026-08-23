@@ -238,6 +238,35 @@ class HudFmrClient:
             raw=entry,
         )
 
+    def get_fmr_zip_table(
+        self, entityid: str, year: Optional[int] = None
+    ) -> dict:
+        """Every ZIP-level rent schedule for a Small Area FMR county, in one call.
+
+        Returns `{zip_code: {bedroom_field: rent}}`, empty for a county HUD does not
+        publish Small Area FMRs for. The "MSA level" entry is excluded — callers wanting
+        the county-wide figure should use `get_fmr` without a `zip_code`, so that the
+        two resolutions stay visibly distinct rather than one hiding inside the other.
+
+        **Added for the rent model, and the reason is parsing rather than network.**
+        `get_fmr(entityid, zip_code=...)` already works per ZIP, and because `zip_code`
+        is applied client-side after the fetch it costs no extra HTTP request. But it
+        rescans the county's full ZIP list — 474 entries for Los Angeles — once per
+        lookup, and training normalizes 5,688 rows. One table per county, built once,
+        is the same data at a fraction of the work.
+        """
+        payload = self._get(
+            f"fmr/data/{entityid}", params={"year": year} if year is not None else None
+        )
+        basicdata = payload["data"]["basicdata"]
+        if not isinstance(basicdata, list):
+            return {}
+        return {
+            entry["zip_code"]: {k: v for k, v in entry.items() if k != "zip_code"}
+            for entry in basicdata
+            if entry.get("zip_code") and entry["zip_code"] != "MSA level"
+        }
+
     def get_fmr_for_bedroom(
         self,
         entityid: str,

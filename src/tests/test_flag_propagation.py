@@ -51,6 +51,7 @@ degradation signals mean anything.
 from __future__ import annotations
 
 import operator
+from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
@@ -63,6 +64,7 @@ import graph as graph_module
 import nodes
 from agents import critic as critic_module
 from agents import extractor as extractor_module
+from agents import valuation_rent as valuation_module
 from agents.critic import critic_agent
 from agents.extractor import FieldAssumption, ListingExtraction
 from agents.planner import route_after_critic
@@ -74,10 +76,13 @@ from state import (
     Flag,
     FlagKind,
     LocationPrecision,
+    RentEstimateSource,
     Severity,
 )
+from tools import hud_fmr, zcta_crosswalk
 from tools.geocoding import GeocodeResult, GeocodeSource
 from tools.llm_client import LlmClient, LlmError, SchemaValidationExhausted
+from tools.model import rent_model
 
 # The listing text is now inert — the stubbed model call decides what comes back, so the
 # text is here for readability rather than for parsing. That is a deliberate improvement
@@ -166,6 +171,149 @@ def run_deal(listing: str = LISTING_MISSING_PRICE, terms: DealTerms | None = Non
     if "__interrupt__" in result:
         result = graph.invoke(Command(resume="[test] released"), invoke_config)
     return result
+
+
+# LA County: state FIPS 06 + county FIPS 037 + HUD's "99999" county placeholder. The
+# real entityid rather than a made-up one, so a fixture that leaks into a log or an
+# error message names a county that actually exists.
+LOS_ANGELES_COUNTY = "0603799999"
+
+
+class FakeFmrClient:
+    """A HUD client that answers from fixed schedules instead of over the network.
+
+    U5 gave this suite its first agent that *must* reach an external API to do its job at
+    all, which is a new problem for a file whose whole premise is that it fails only when
+    flag propagation is broken. Stubbed for the same reason as the Extractor's three
+    boundaries: a HUD outage turning the must-never-fail suite red would teach a reader
+    to stop trusting it. `scripts/pull_fmr_sample.py` exercises the real client, and
+    `scripts/valuation_evidence.py` runs the whole agent against it.
+
+    **The numbers are real Los Angeles County schedules, not invented ones**, pulled from
+    HUD for entityid 0603799999 and pasted here. That matters more than it looks: the
+    gap between the 2019 and 2026 columns *is* the vintage correction the Observe step
+    exists to apply, so a flat synthetic schedule would let every comp normalize to
+    itself and the cross-check would test nothing. With these, a hermetic run reproduces
+    the live evidence run's figures to the dollar.
+
+    What is deliberately *not* faked is `hud_fmr.bedroom_field`. The four-bedroom cap is
+    the thing under test in one case below, so the real implementation is called.
+    """
+
+    # ZIP 90026 (Echo Park) as published for FY2026, alongside the county-wide figures.
+    # One ZIP is enough: the point is that the pipeline resolves a ZIP and anchors on it,
+    # not that a fake reproduces all 474 of them. `zip_table_enabled=False` turns this off
+    # to exercise the non-SAFMR county path, which is a real case — Richmond County
+    # (Staten Island) has no Small Area FMR.
+    ZIP_SCHEDULES = {
+        "90026": {"Efficiency": 2064, "One-Bedroom": 2309, "Two-Bedroom": 2880,
+                  "Three-Bedroom": 3652, "Four-Bedroom": 4066},
+    }
+
+    # HUD FMR, Los Angeles County (entityid 0603799999), fiscal years as published.
+    SCHEDULES = {
+        2019: {"Efficiency": 1158, "One-Bedroom": 1384, "Two-Bedroom": 1791,
+               "Three-Bedroom": 2401, "Four-Bedroom": 2641},
+        2020: {"Efficiency": 1279, "One-Bedroom": 1517, "Two-Bedroom": 1956,
+               "Three-Bedroom": 2614, "Four-Bedroom": 2857},
+        2026: {"Efficiency": 2079, "One-Bedroom": 2328, "Two-Bedroom": 2903,
+               "Three-Bedroom": 3681, "Four-Bedroom": 4098},
+    }
+    CURRENT_YEAR = 2026
+
+    def __init__(self, scale: float = 1.0, zip_table_enabled: bool = True):
+        # `scale` multiplies every figure, so a case that needs the estimate pushed away
+        # from the comps can move the anchor without inventing a second schedule.
+        self.scale = scale
+        self.zip_table_enabled = zip_table_enabled
+
+    def get_fmr_zip_table(self, entityid, year=None):
+        if not self.zip_table_enabled:
+            return {}
+        return {
+            z: {k: v * self.scale for k, v in rents.items()}
+            for z, rents in self.ZIP_SCHEDULES.items()
+        }
+
+    def _schedule(self, year) -> dict:
+        table = self.SCHEDULES.get(year or self.CURRENT_YEAR, self.SCHEDULES[self.CURRENT_YEAR])
+        return {k: v * self.scale for k, v in table.items()}
+
+    def get_fmr(self, entityid, year=None, zip_code=None):
+        return SimpleNamespace(
+            entityid=entityid,
+            year=year or self.CURRENT_YEAR,
+            rents=self._schedule(year),
+        )
+
+    def get_fmr_for_bedroom(self, entityid, bedrooms, year=None, zip_code=None):
+        field_name, capped = hud_fmr.bedroom_field(bedrooms)
+        zip_rents = self.get_fmr_zip_table(entityid, year=year).get(zip_code or "")
+        used_msa_fallback = zip_rents is None
+        rents = zip_rents or self._schedule(year)
+        return {
+            "rent": rents[field_name],
+            "bedrooms_requested": bedrooms,
+            "bedrooms_used": min(max(bedrooms, 0), 4),
+            "bedroom_cap_exceeded": capped,
+            "year": year or self.CURRENT_YEAR,
+            "is_safmr": self.zip_table_enabled,
+            "used_msa_fallback": used_msa_fallback,
+        }
+
+
+def offline_valuation(
+    monkeypatch,
+    county: str = LOS_ANGELES_COUNTY,
+    scale: float = 1.0,
+    zip_table_enabled: bool = True,
+    zcta: str | None = "90026",
+    zip_trained: bool = True,
+):
+    """Give the Valuation agent a county and an FMR schedule without leaving the process.
+
+    Overrides the autouse fixture's `lookup_county_fips` stub, which returns `None` — the
+    default this file wants, since most cases here are about degradation, but the one
+    thing that makes a rent estimate impossible. Patching the module attribute covers
+    both callers at once: `agents/extractor.py` resolves the *subject's* county and
+    `tools/model/rent_model.py` resolves each *comp's*, and both hold a reference to the
+    same `tools.county_crosswalk` module object. Same for `hud_fmr`.
+    """
+    client = FakeFmrClient(scale=scale, zip_table_enabled=zip_table_enabled)
+    monkeypatch.setattr(
+        extractor_module.county_crosswalk, "lookup_county_fips", lambda lat, lon: county
+    )
+    monkeypatch.setattr(hud_fmr, "HudFmrClient", lambda *a, **k: client)
+    # The ZCTA join reads a 67 MB Census boundary file. Stubbed for the same reason as
+    # the county one: it is an integration point, and this suite tests flag propagation.
+    monkeypatch.setattr(zcta_crosswalk, "lookup_zcta", lambda lat, lon: zcta)
+    monkeypatch.setattr(
+        zcta_crosswalk, "zctas_for_points",
+        lambda lats, lons: [zcta] * len(lats),
+    )
+
+    # Pin the ZIP-anchor gate rather than inheriting it from whichever counties the
+    # artifact on disk happened to train at ZIP resolution. The agent only anchors at ZIP
+    # for a county the model was *fit* on at ZIP resolution — a real and load-bearing
+    # contract, since SAFMR coverage expanded after 2020 — but which counties those are
+    # is a property of a retrain, and a test that moved with it would be asserting on
+    # something other than the behaviour it names.
+    bundle = rent_model.load()
+    if bundle is not None:
+        gated = dict(bundle)
+        report = dict(gated.get("report") or {})
+        report["zip_anchored_counties"] = [county] if zip_trained else []
+        gated["report"] = report
+        monkeypatch.setattr(valuation_module.rent_model, "load", lambda: gated)
+    return client
+
+
+def _rent_model_available() -> bool:
+    """Whether a trained model is on disk. Same posture as `_corpus_available`: a
+    machine that has never run `scripts/train_rent_model.py` should skip these cases
+    rather than fail them, since the absence is a setup state and not a defect.
+    """
+    return rent_model.load() is not None
 
 
 def flags_of_kind(result: dict, kind: FlagKind) -> list[Flag]:
@@ -324,10 +472,17 @@ def test_rework_cycle_terminates_and_discloses_that_it_did(monkeypatch):
 
     Every escalation route is disabled for the duration so none can pre-empt the rework
     path, which is the only thing under test here — each has its own test above. The
-    threshold goes to zero, the retrieval node is swapped for a no-op, and the geocode
-    resolves cleanly so the Extractor raises no critical flag of its own. Substituting a
-    node is what `graph.NODE_FUNCTIONS` exists as a mapping for; `build_graph` reads it
-    at call time.
+    threshold goes to zero, the geocode resolves cleanly so the Extractor raises no
+    critical flag of its own, and the retrieval and valuation nodes are swapped for
+    no-ops. Substituting a node is what `graph.NODE_FUNCTIONS` exists as a mapping for;
+    `build_graph` reads it at call time.
+
+    **Valuation joined that list in U5, and the reason is worth recording.** Under this
+    file's autouse stubs the subject resolves to no county, so the real agent raises a
+    critical `fmr_unavailable_for_county` — which escalates immediately and leaves this
+    test measuring zero rework passes instead of two. That is the agent behaving
+    correctly and the test asking about something else. Stubbing it out is the same move
+    already made for retrieval, for the same reason, rather than a symptom worked around.
     """
     monkeypatch.setattr(
         critic_module, "_consistency_objections", lambda state: ["injected objection"]
@@ -336,6 +491,9 @@ def test_rework_cycle_terminates_and_discloses_that_it_did(monkeypatch):
     monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
     monkeypatch.setitem(
         graph_module.NODE_FUNCTIONS, nodes.COMPS_RETRIEVAL, lambda state: {"comps": []}
+    )
+    monkeypatch.setitem(
+        graph_module.NODE_FUNCTIONS, nodes.VALUATION_RENT, lambda state: {}
     )
 
     graph = build_graph()
@@ -674,18 +832,27 @@ def test_grounded_run_reaches_the_report_with_real_comps(monkeypatch):
     comps rendered with their citable source. §2 makes this argument about the evidence
     scripts and it applies here too: a suite where every case is degraded cannot show
     that the degradation signals mean anything.
+
+    **Extended in U5 to keep meaning what it says.** Without a county the real Valuation
+    agent raises a critical flag, so this case would have quietly become another degraded
+    one — still passing its own assertions while no longer demonstrating the thing it
+    exists to demonstrate. `offline_valuation` gives it a county and an FMR schedule, so
+    the run now produces an actual rent figure and the "clean" claim is true end to end.
     """
     extraction = EXTRACTION_MISSING_PRICE.model_copy(
         deep=True, update={"price": 1_150_000.0}
     )
     monkeypatch.setattr(extractor_module, "_extract_terms", lambda text: (extraction, 1))
     monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
+    offline_valuation(monkeypatch)
 
     result = run_deal()
 
     assert result["comps"], "Expected comps in a market measured as dense in §2."
     assert not flags_of_kind(result, FlagKind.SPARSE_COMPS)
     assert not flags_of_kind(result, FlagKind.GEOCODING_UNAVAILABLE)
+    assert not flags_of_kind(result, FlagKind.FMR_UNAVAILABLE_FOR_COUNTY)
+    assert not flags_of_kind(result, FlagKind.RENT_ESTIMATE_UNAVAILABLE)
     assert "## Comparable Rentals" in result["report_markdown"]
     assert result["comps"][0].listing_id in result["report_markdown"]
 
@@ -786,3 +953,271 @@ def test_comps_carry_their_location_precision_and_vintage(monkeypatch):
             f"Comp {c.listing_id} is dated {c.listed_date.year}; the corpus spans "
             "Dec 2018 - Dec 2019, so anything else means the epoch decode is wrong."
         )
+
+
+# --------------------------------------------------------------------------
+# 7. Valuation (U5) — every path that produces a rent figure, and every one that
+#    refuses to. Added when the Valuation agent became real: each is a new way for a
+#    flag to be raised and therefore a new way for one to be lost.
+# --------------------------------------------------------------------------
+
+
+def test_no_county_means_no_rent_figure_at_all():
+    """The invariant §2 exists to protect, asserted at the place it could break.
+
+    A subject with no county has no FMR to anchor against. The tempting behaviour is to
+    average the retrieved comps instead and report that — a plausible-looking figure in
+    one line. It would also be a 2019 dollar amount printed in a 2026 report with
+    nothing marking it as one, which is the exact failure the whole rent-anchoring
+    design exists to prevent. So the assertion is two-sided: the flag must reach the
+    report *and* no rent figure may appear beside it.
+    """
+    result = run_deal()
+
+    raised = assert_reaches_report(result, FlagKind.FMR_UNAVAILABLE_FOR_COUNTY)
+    assert raised.severity == Severity.CRITICAL, (
+        "This flag means there is no rent estimate at all, not that one is imprecise. "
+        "A warn here would understate a missing headline number to the Critic as much "
+        "as to a reader."
+    )
+    assert result.get("rent_estimate") is None
+    assert result.get("rent_estimate_ratio_to_fmr") is None
+    assert result.get("fmr_anchor_used") is None
+    assert "not produced" in result["report_markdown"]
+
+
+def test_the_valuation_agent_no_longer_reports_itself_as_a_stub():
+    """U5's completion, expressed as a property of the output rather than of the diff.
+
+    The report's provisional-build banner names every node that ran as a placeholder.
+    While the Valuation agent was a stub it appeared there, and a reader was told the
+    rent section was unbuilt rather than empty. That claim is now false, and a test that
+    pins it is what stops the banner from outliving the stub.
+    """
+    result = run_deal()
+    assert nodes.VALUATION_RENT not in result["stub_nodes"]
+
+
+@pytest.mark.skipif(not _rent_model_available(), reason="rent model not trained")
+def test_a_rent_estimate_discloses_the_anchor_it_was_built_from(monkeypatch):
+    """An estimate on the model path must show its working, not just its result.
+
+    `rent_anchored_to_fmr` is `INFO` and fires on every single estimate, which usually
+    makes a signal worthless — §2's own argument against always-on flags. It earns its
+    place by carrying content rather than existing as a marker: the ratio, the FMR, and
+    the fiscal year are all in the detail text, so a reader can multiply the two numbers
+    themselves and see that this is a modelled figure rather than an observed rent.
+    """
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
+    offline_valuation(monkeypatch)
+
+    result = run_deal()
+
+    assert result.get("rent_estimate") is not None
+    assert result.get("rent_estimate_source") == RentEstimateSource.REGRESSION_MODEL
+    # The anchoring arithmetic itself, asserted rather than assumed: the estimate is the
+    # ratio times the FMR and nothing else has been applied to it on the way out.
+    assert result.get("rent_estimate") == pytest.approx(
+        result.get("rent_estimate_ratio_to_fmr") * result.get("fmr_anchor_used")
+    )
+    # The ZIP schedule, not the county one — the model is trained against ZIP resolution
+    # wherever HUD publishes it, so a county-anchored subject would multiply a
+    # ZIP-relative ratio by a county-level figure.
+    assert result.get("fmr_anchor_used") == FakeFmrClient.ZIP_SCHEDULES["90026"]["Two-Bedroom"]
+    assert result["valuation_detail"].fmr_resolution == "zip"
+    assert result["valuation_detail"].fmr_zip == "90026"
+    assert not flags_of_kind(result, FlagKind.FMR_ANCHOR_COUNTY_LEVEL)
+
+    raised = assert_reaches_report(result, FlagKind.RENT_ANCHORED_TO_FMR)
+    assert raised.severity == Severity.INFO
+    assert "FY2026" in raised.detail
+    assert "90026" in raised.detail
+
+    detail = result.get("valuation_detail")
+    assert detail.model_holdout_mae_dollars > 0, (
+        "The report prints an error band beside the estimate; without the persisted "
+        "training metrics it would print a point estimate reading as exact."
+    )
+    assert f"{detail.model_holdout_mae_dollars:,.0f}" in result["report_markdown"]
+
+
+@pytest.mark.skipif(not _rent_model_available(), reason="rent model not trained")
+def test_a_five_bedroom_subject_discloses_the_hud_bedroom_cap(monkeypatch):
+    """HUD publishes nothing above four bedrooms, and the report has to say so.
+
+    The approximation is small and entirely invisible in the output — a five-bedroom
+    unit priced off the four-bedroom schedule produces a perfectly ordinary-looking
+    number. That is exactly the kind of silent degradation the flag vocabulary exists
+    for, which is why `hud_fmr.bedroom_field` returns the cap alongside the field
+    instead of applying it quietly.
+    """
+    # Sized like a real five-bedroom unit rather than by bumping the bedroom count on a
+    # 950 sqft duplex. That shortcut was tried first and the agent refused the estimate,
+    # correctly — see the out-of-bounds case below, which now pins that behaviour.
+    extraction = EXTRACTION_MISSING_PRICE.model_copy(
+        deep=True,
+        update={
+            "price": 1_150_000.0,
+            "bedrooms": 5,
+            "bathrooms": 2.0,
+            "square_footage": 2_200.0,
+        },
+    )
+    monkeypatch.setattr(extractor_module, "_extract_terms", lambda text: (extraction, 1))
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
+    offline_valuation(monkeypatch)
+
+    result = run_deal()
+
+    raised = assert_reaches_report(result, FlagKind.FMR_BEDROOM_CAP_EXCEEDED)
+    assert raised.severity == Severity.INFO
+    assert result.get("fmr_anchor_used") == FakeFmrClient.ZIP_SCHEDULES["90026"]["Four-Bedroom"]
+    assert result.get("rent_estimate") is not None, (
+        "The cap is an approximation to disclose, not a reason to refuse an estimate."
+    )
+
+
+@pytest.mark.skipif(not _rent_model_available(), reason="rent model not trained")
+def test_a_feature_the_listing_never_stated_blocks_the_estimate(monkeypatch):
+    """No substituted default may stand in for a field the listing did not contain.
+
+    A corpus mean for the missing square footage would produce a rent figure describing
+    a property nobody listed, and it would carry no marker distinguishing it from one
+    built on real inputs. Refusing is the only option that leaves the report honest,
+    and the flag names which field was missing so the refusal is actionable.
+    """
+    extraction = EXTRACTION_MISSING_PRICE.model_copy(
+        deep=True, update={"price": 1_150_000.0, "square_footage": None}
+    )
+    monkeypatch.setattr(extractor_module, "_extract_terms", lambda text: (extraction, 1))
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
+    offline_valuation(monkeypatch)
+
+    result = run_deal()
+
+    raised = assert_reaches_report(result, FlagKind.RENT_ESTIMATE_UNAVAILABLE)
+    assert "square_footage" in raised.detail
+    assert result.get("rent_estimate") is None
+
+
+@pytest.mark.skipif(not _corpus_available(), reason="Chroma index not built")
+@pytest.mark.skipif(not _rent_model_available(), reason="rent model not trained")
+def test_the_comp_cross_check_stays_silent_when_the_model_and_comps_agree(monkeypatch):
+    """The negative case, and §8 requires it: a flag that fired always would say nothing.
+
+    Los Angeles is the market this must hold on, and not by luck. Measured Aug 22, 2026,
+    its retrieved comps sit +7.9% against the metro's own 2-bedroom population, while
+    Chicago's and Cleveland's sit +70.4% and +73.1% — LA is the one inference market
+    whose comp set is genuinely representative, so it is the one where agreement is the
+    correct outcome rather than a threshold set generously enough to hide a disagreement.
+
+    The check must be shown to have actually *run*, not merely to have raised nothing.
+    Those are different states with the same flag output, and conflating them would let
+    this test keep passing if the cross-check silently stopped executing.
+    """
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
+    offline_valuation(monkeypatch)
+
+    result = run_deal()
+
+    detail = result.get("valuation_detail")
+    assert detail.comps_cross_checked >= config.RENT_COMP_CROSSCHECK_MIN_COMPS, (
+        "The cross-check did not run, so its silence proves nothing."
+    )
+    assert detail.divergence_pct is not None
+    assert abs(detail.divergence_pct) <= config.RENT_COMP_DIVERGENCE_THRESHOLD_PCT
+    assert not flags_of_kind(result, FlagKind.RENT_DIVERGES_FROM_COMPS)
+    assert "Cross-check against the comps:" in result["report_markdown"]
+
+
+@pytest.mark.skipif(not _corpus_available(), reason="Chroma index not built")
+@pytest.mark.skipif(not _rent_model_available(), reason="rent model not trained")
+def test_a_model_that_disagrees_with_its_comps_says_so(monkeypatch):
+    """Force the disagreement at the model, which is the honest seam to force it at.
+
+    The alternative — distorting the FMR schedule until the numbers separate — would
+    move the comps and the estimate together, since both are normalized through it, and
+    would therefore test the arithmetic rather than the disagreement. Overriding the
+    predicted ratio moves exactly one of the two inputs, which is the situation the flag
+    is about. Same reasoning as the `_consistency_objections` injection above.
+    """
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
+    offline_valuation(monkeypatch)
+    monkeypatch.setattr(
+        valuation_module.rent_model, "predict_ratio", lambda *a, **k: 3.5
+    )
+
+    result = run_deal()
+
+    raised = assert_reaches_report(result, FlagKind.RENT_DIVERGES_FROM_COMPS)
+    assert raised.severity == Severity.WARN
+    assert result.get("valuation_detail").divergence_pct > 0, (
+        "An over-prediction should be reported as sitting above the comps; a flag that "
+        "dropped the direction would tell a reader the estimate is suspect without "
+        "telling them which way."
+    )
+    assert "above" in raised.detail
+
+
+@pytest.mark.skipif(not _rent_model_available(), reason="rent model not trained")
+def test_an_implausible_prediction_is_refused_rather_than_reported(monkeypatch):
+    """The model's own bounds applied to the model's own output.
+
+    **This case exists because a fixture was written by accident and turned out to be
+    load-bearing.** An earlier draft of the bedroom-cap test raised a 950 sqft duplex to
+    five bedrooms without resizing it, and the agent declined to produce an estimate —
+    which looked like a bug and was not. The fitted `bedrooms` coefficient is *negative*,
+    because HUD's FMR schedule climbs with bedroom count faster than real rents do, so
+    the rent-to-FMR ratio genuinely falls as bedrooms rise. Push bedrooms high enough on
+    a small footprint and the prediction goes **negative** — a negative rent — which is
+    what the bound is really guarding against.
+
+    The exact inputs here had to be re-chosen once, and that is worth recording. The
+    original 5bd/950sqft fixture stopped tripping the bound when the model was retrained
+    against ZIP-resolution FMR: the bedrooms coefficient shrank from -0.44 to -0.33, so
+    the same fixture now predicts a low-but-legal 0.34. A test pinned to a threshold has
+    to be re-derived when the thing it thresholds moves; keeping the old numbers would
+    have left it asserting on a path it no longer reached.
+
+    `rent_model.predict_ratio` returns the raw output specifically so this stays visible
+    instead of being clipped into looking reasonable, and this is where that decision
+    gets paid off. Refusing an absurd number beats reporting one.
+    """
+    extraction = EXTRACTION_MISSING_PRICE.model_copy(
+        deep=True,
+        update={"price": 1_150_000.0, "bedrooms": 6, "square_footage": 500.0},
+    )
+    monkeypatch.setattr(extractor_module, "_extract_terms", lambda text: (extraction, 1))
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
+    offline_valuation(monkeypatch)
+
+    result = run_deal()
+
+    raised = assert_reaches_report(result, FlagKind.RENT_ESTIMATE_UNAVAILABLE)
+    assert raised.severity == Severity.CRITICAL
+    assert "ratio" in raised.detail
+    assert result.get("rent_estimate") is None
+
+
+@pytest.mark.skipif(not _rent_model_available(), reason="rent model not trained")
+def test_a_county_without_small_area_fmr_says_the_anchor_is_coarse(monkeypatch):
+    """A real case, not a hypothetical: Richmond County (Staten Island) has no SAFMR.
+
+    The estimate is still produced — a county anchor is coarse, not absent — but a reader
+    has no way to tell a ZIP-anchored figure from a county-anchored one by looking at it,
+    and the difference is large: within counties that publish Small Area FMRs the ZIP
+    schedules span roughly 2x. That is exactly the silent degradation the flag vocabulary
+    exists for.
+    """
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
+    offline_valuation(monkeypatch, zip_table_enabled=False, zip_trained=False)
+
+    result = run_deal()
+
+    raised = assert_reaches_report(result, FlagKind.FMR_ANCHOR_COUNTY_LEVEL)
+    assert raised.severity == Severity.WARN
+    assert result["valuation_detail"].fmr_resolution == "county"
+    assert result.get("fmr_anchor_used") == FakeFmrClient.SCHEDULES[2026]["Two-Bedroom"]
+    assert result.get("rent_estimate") is not None, (
+        "A coarse anchor is a disclosure, not a reason to refuse an estimate."
+    )

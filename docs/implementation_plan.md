@@ -158,8 +158,8 @@ safe to defer.
 | **Week 5 — Input** | | |
 | **U3** ✅ | Extractor: real LLM call, Pydantic validate→retry loop, clarifying questions, assumption flags, bounded escalation; 3 synthetic listings. Also wires geocoding into the pipeline (decision #10's remaining half), adds the model liveness check, and takes the flag-propagation suite to 24 hermetic cases | 2.1 evidence |
 | **Week 6 — Estimation & Forecast** | | |
-| **U5** | Rent model: FMR-normalized regression on the decision #4 shortlist, holdout MAE, Valuation agent, `rent_anchored_to_fmr` / `fmr_unavailable_for_county` / `fmr_bedroom_cap_exceeded` flags. **LLM fallback path descoped Aug 21, 2026** — cut-list item 3 taken in advance; ships as a documented gap | — |
-| **U6** | Scenario/Forecast: `redfin_data.py` (rolling-3, min-price floor), ToT branching over optimistic/base/pessimistic, `anomalous_period_included` flag | **4.1** |
+| **U5** ✅ | Rent model: FMR-normalized regression on the decision #4 shortlist, holdout MAE, Valuation agent, `rent_anchored_to_fmr` / `fmr_unavailable_for_county` / `fmr_bedroom_cap_exceeded` flags. **LLM fallback path descoped Aug 21, 2026** — cut-list item 3 taken in advance; ships as a documented gap. Landed with two flags beyond the spec (`rent_estimate_unavailable`, `rent_diverges_from_comps`), a comp cross-check as the agent's Observe step, and decision #15 below | — |
+| **U6** | Scenario/Forecast: ToT branching over optimistic/base/pessimistic, `anomalous_period_included` flag. **Rent growth and price appreciation forecast separately** (decision #16) — `redfin_data.py` for price, HUD FMR history for rent, ZORI as the independent check. The original "infer rent growth from housing trend data" premise was measured and disproved before the unit was built | **4.1** |
 | **Buffer week — Guardrails, Eval, Demo** | | |
 | **U7** | Critic: cross-agent consistency checks, confidence scoring, bounded rework cycle, human-review escalation via `interrupt()` | **6.1** |
 | **U8** | Eval harness: 8–10 synthetic listings each engineered to trip a *specific* flag, **plus the New York sparse-comps case run against real data** (see §2); batch runner → results table | **6.1** + report |
@@ -492,6 +492,8 @@ needed. Target: all closed during Week 4.
 | 12 | **Reasoning strategy — Tree-of-Thought scope** | ✅ **Selective ToT (Aug 18, 2026).** Adopted inside two nodes only: Scenario/Forecast (U6) and the Critic's cross-agent consistency checks (U7). The rest of the pipeline stays linear — its order is fixed by data dependency, so there is nothing to search over. See below |
 | 13 | **MCP adoption** | ✅ **Read-only reference server (Aug 18, 2026).** Wraps `tools/hud_fmr.py` and `tools/redfin_data.py` at the ToT evaluator's tool-call boundary. Adopted for portability and a second consumer, **not** for capability — see the honest accounting below. CrewAI declined |
 | 14 | **ToT branch-state persistence** | ✅ **Ledger in state, full tree to `eval/results/` (Aug 18, 2026).** A compact pruned-branch record reaches `DealState` so the report can disclose what was discarded; the complete tree is written as an eval-run artifact behind a config flag |
+| 16 | **Rent-growth source for U6** | ✅ **Rent and price forecast separately (Aug 22, 2026).** §1's premise — infer rent growth from Redfin's sale-price series — was measured and is *inverted* (pooled r = −0.309 across the trio). Redfin keeps the price side; rent growth comes from HUD FMR's published history, with Zillow ZORI as the independent validation. See below |
+| 15 | **Property-level value estimate** | ✅ **Not produced; carried as a labelled market benchmark instead (Aug 22, 2026).** Redfin's extract is the only sale-price source in the project and exposes zero individual sales. `DealState.value_estimate` stays `None`; the metro median is rendered as a reference the asking price is read against. **U6 must choose its own projection base** — see below |
 
 **Decision #8 detail (Aug 9, 2026).** The `TODO(U3)` in `config.py` warned that the four
 model IDs were unverified placeholders. Checked against OpenRouter's live catalogue while
@@ -778,6 +780,98 @@ Worth noting the rule was also relaxed from an absolute to a norm in the same pa
 is what makes a recorded exception possible at all. That is the general pattern this log
 exists for, applied to the standards document itself.
 
+**Decision #16 detail (Aug 22, 2026) — rent growth needs a rent source.** §1 describes
+the Scenario/Forecast agent as *"Tree-of-Thought reasoning over rent-growth/appreciation
+scenarios, informed by metro-level housing trend data."* §2's Problem 2 had already
+warned, on general housing-market reasoning, that price and rent dynamics diverge. Tested
+against this project's own data before U6 was built, the relationship is not weak but
+**negative**: pooled r = −0.309 across 24 metro-years, negative in all three metros
+independently, with price outrunning rent by 8.9 points across 2021–22. Detail and
+caveats in §2.
+
+**Taken: forecast the two quantities separately.** Redfin measures sale prices and stays
+the source for price appreciation. Rent growth comes from **HUD FMR's published history**
+— ten fiscal years at county and ZIP resolution, served by the client this project
+already caches, so it costs no new dependency. It is also the only candidate that is
+*architecturally* consistent: the rent estimate is `ratio × FMR`, so projecting the anchor
+forward while holding the structural ratio constant forecasts rent by the same mechanism
+that produced the estimate, with no second normalization basis and no new vintage problem.
+
+**Its weakness is that FMR is administrative, not market**, and the history shows
+methodology jumps — Chicago +19.0% in FY2024, Los Angeles +14.5% — that almost certainly
+reflect HUD changing how it derives the figure rather than a market event. A "base case"
+resting on one of those would be wrong in a way a reader could not see, so U6 must screen
+for them and disclose what it screened. **Zillow ZORI is adopted as the independent
+check** rather than the primary series: market-observed, monthly, ZIP-level, free, and it
+doubles as the only available test of the rent model's largest unverified assumption —
+that rent-to-FMR structure is stable over the ~7 years between the corpus and today.
+
+**Why forecast rent growth at all**, recorded because it was a fair question and the
+answer is not obvious: with `value_estimate` deliberately null (decision #15), the price
+side has no property-level base except the asking price, so **rent is the only quantity
+this system can forecast from a figure it actually derived.** Dropping it would leave the
+Scenario agent with nothing of its own to project, and decision #12 placed one of the
+project's two Tree-of-Thought nodes here — a node with nothing to branch over cannot
+satisfy Checkpoint 4.1's requirement that ToT be used where linear reasoning fails from
+premature commitment.
+
+**Decision #15 detail (Aug 22, 2026) — no property-level value estimate.** The question
+arrived as a loose end rather than a decision: `DealState.value_estimate` had a field, a
+Summarizer row reading *"not produced — valuation agent unbuilt (U5)"*, and no documented
+method anywhere. Three options were weighed, and the measurement that settled it is worth
+recording because the intuition pointing the other way was reasonable.
+
+The objection to a Redfin-anchored estimate was that a metro median is coarse. The
+counter-objection was sharper: **this project's comps are already coarse**, since 92% of
+the corpus carries no street address and sits on city-area placeholder coordinates, so if
+metro-level granularity disqualifies a value estimate it should equally disqualify the
+comp-based rent work. Measured, that turns out to be false, and the distinction is not a
+matter of degree:
+
+| | Rent path | Redfin value path |
+| --- | --- | --- |
+| Observations exposed | 5,717 individual listings | **0** — extract is pre-aggregated |
+| Rows available | one per listing | one median per metro-period (306 total) |
+| Property attributes | beds, baths, sqft | none |
+
+The comps' *coordinates* are coarse; their *rents* are not. Inside Chicago's busiest
+coordinate, 150 listings share one point and their rents span $760–$6,995 — CV 48.7%
+against 49.7% for the whole metro. That coordinate carries almost no information, but
+every row on it is still an individual rent with its own bed/bath/sqft, and that is what
+the model consumes. Redfin's extract has no equivalent: `load_redfin` returns
+`median_sale_price` and `homes_sold` per metro-month and nothing beneath it. A value
+estimate built from it would return **the same dollar figure for a 2-unit duplex and a
+4-unit building in the same metro**, not because adjustment was skipped but because
+there is nothing in the inputs to adjust with.
+
+Where the coarseness *can* be scored — rent, where both options exist — predicting the
+metro median for every listing gives MAE $600 (Chicago) / $793 (Los Angeles) / $526
+(Cleveland) against the model's $519. Los Angeles the model is 35% better; **Cleveland it
+is a wash.** So a metro median is weak-but-real for rent. For value it is not
+weak-but-real; it is the only thing there is.
+
+**And there is a trap specific to this repo.** Decision #11 calibrated the demo asking
+prices *to that same Redfin median* (`demo_deals.price_basis`). The latest Los Angeles
+median is $1,048,866 and the LA demo asks $1,049,000; Chicago is $499,460 against
+$499,000. Emitting the median as `value_estimate` would produce reports where the
+estimated value matches the asking price to within $140 — reading as striking validation
+while proving only that both numbers came from one source. That is the §8 failure this
+project has now caught itself on three times: the `LA001` id-format ablation, the
+2018-vs-2026 vintage comparison, and this.
+
+**Taken:** the field stays `None`; the median is carried as
+`ValuationDetail.benchmark_median_sale_price` and rendered under its own heading as a
+market reference the asking price is read *against*, with the pre-aggregation stated in
+the report itself. Smoothed over three periods rather than read off the latest, because
+Cleveland's month-over-month median swings 6.9% (max 14.4%) against 1.5% in Chicago.
+
+**Left open for U6, deliberately.** Decision #9 has the Scenario agent consuming
+`rent_estimate`/`value_estimate`, so a null value estimate means U6 needs another
+projection base. The asking price is the obvious candidate — an observed fact about the
+property rather than an estimate, and *"pay $1,049,000 today, here is what the metro
+multi-family trend implies"* needs no value estimate at all. Not settled here, because
+U6 is where the appreciation evidence is and this decision should be made in front of it.
+
 **Decision #9 detail.** The pipeline order is fixed by data dependency — Valuation consumes
 `state.comps`, Scenario consumes `rent_estimate`/`value_estimate` — so the sequence
 Extractor → Comps → Valuation → Scenario → Critic is not something the Planner chooses. The
@@ -928,14 +1022,16 @@ normalization and the training set would be quietly 599 rows smaller than the sh
 claims. Building that layer was considered and declined here on schedule grounds; it stays
 `TODO(geography)`.
 
-**One quantity must be re-measured before U5 trains anything.** §2 quotes 21,768 complete
-rows for "a candidate ~10-metro training shortlist," which does not reconcile with the
-per-metro counts in the same section — those are usable rows after de-duplication,
-completeness filtering, and rent-bound trimming, and the 21,768 predates the two data
-defects corrected on Aug 8. The ~5,717 above is the sum of the per-metro column and is the
-figure to trust, but U5 should re-derive it from `tools/kaggle_data.py` against the actual
-shortlist rather than inherit either number. Per §8, a training-set size nobody measured
-is not a measurement.
+**One quantity had to be re-measured before U5 trained anything — done Aug 22, 2026.**
+§2 quoted 21,768 complete rows for "a candidate ~10-metro training shortlist," which did
+not reconcile with the per-metro counts in the same section: those are usable rows after
+de-duplication, completeness filtering, and rent-bound trimming, and the 21,768 predates
+the two data defects corrected on Aug 8. Per §8, a training-set size nobody measured is
+not a measurement, so it was re-derived from `tools/kaggle_data.py` against the actual
+shortlist rather than inherited. **Result: 5,717 usable rows**, reproducible with
+`scripts/train_rent_model.py --dry-run`, and the older figure is now identified in
+`config.py` as a state-level rollup — the six states these metros sit in hold 22,323
+usable rows between them, which is what it was actually counting.
 
 **What this cost to implement** turned out to be less than estimated. The original note
 here budgeted for writing word-boundary city patterns for the five metros outside the
@@ -1090,7 +1186,12 @@ point-in-polygon join, replacing the hand-maintained table) and
 the pipeline too), `scripts/extraction_evidence.py`, `verify_models_live()` in
 `tools/llm_client.py`, and `tests/test_flag_propagation.py` at 24 cases. Verified against
 live services throughout — including, unplanned, the whole pipeline under a real provider
-outage.
+outage. Added and verified in U5 (Aug 22, 2026): `tools/model/rent_model.py`,
+`scripts/train_rent_model.py`, `agents/valuation_rent.py` (real, no longer a stub),
+`scripts/valuation_evidence.py` and `scripts/metro_shortlist_ablation.py`, with
+`tests/test_flag_propagation.py` at 35 cases. The rent path is exercised against live
+HUD FMR, real county polygons and the real comp index by the evidence script; the test
+suite stays hermetic against published FMR schedules pasted into a fake client.
 
 ### Prerequisite reading (before U2 review)
 

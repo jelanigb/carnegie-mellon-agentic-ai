@@ -208,6 +208,37 @@ TRAINING_METROS: dict[str, list[str]] = {
 }
 
 
+
+# Comp-index scope. The third of this project's three metro scopes, and the one that
+# decides which listings can be *retrieved* as comparables — distinct from
+# INFERENCE_METROS (which markets have a Redfin appreciation series) and from
+# TRAINING_METROS (which listings the regression learns from). See
+# docs/data_sources.md for all three side by side.
+#
+# The inference trio plus New York. New York is indexed **deliberately**, as the
+# sparse-comps case: §2 measured it as genuinely thin in Staten Island while dense in
+# central Brooklyn, which makes it the one market that exercises the relaxation loop to
+# exhaustion against real data. It is why the Staten Island demo returns no comps and no
+# market benchmark while still producing a rent estimate.
+#
+# New York rolls up its boroughs, which appear as separate `cityname` values. Matching is
+# word-boundary (tools/kaggle_data.city_matches): "Cleveland" must catch "Cleveland
+# Heights" while "Queens" must not catch "Queensbury" and "Bronx" must not catch
+# "Bronxville" — all real cases in this data.
+#
+# Lived in scripts/build_comps_index.py until Aug 22, 2026. Moved here because §8 makes
+# config.py the only home for a tunable parameter, and because a metro scope defined in a
+# script is a metro scope nobody finds when asking which markets the system covers —
+# which is exactly how it got missed.
+#
+# Changing this requires a re-index: .venv/bin/python scripts/build_comps_index.py
+INDEXED_MARKETS: dict[str, list[str]] = {
+    "IL": ["Chicago"],
+    "CA": ["Los Angeles"],
+    "OH": ["Cleveland"],
+    "NY": ["New York", "Brooklyn", "Queens", "Bronx", "Staten Island", "Manhattan"],
+}
+
 # --------------------------------------------------------------------------
 # Rent regression (U5 — tools/model/rent_model.py)
 # --------------------------------------------------------------------------
@@ -226,6 +257,17 @@ RENT_MODEL_PATH = DATA_DIR / "processed" / "rent_model.joblib"
 # bedroom or a square foot moves rent *relative to local FMR*, and that is all these
 # columns carry.
 RENT_MODEL_FEATURES = ("bedrooms", "bathrooms", "square_feet")
+
+# One fitted coefficient is worth knowing about before reading a prediction, because
+# it looks like a defect and is not: **`bedrooms` comes out negative** (-0.33 per
+# bedroom as of the ZIP-anchored retrain, Aug 22, 2026; -0.44 before it). The target is
+# a *ratio to FMR*, not a rent, and HUD's
+# schedule climbs with bedroom count faster than real rents do — LA's FY2026 4BR FMR
+# is 1.41x its 2BR, while actual 4BR rents are not — so the ratio genuinely falls as
+# bedrooms rise. The consequence is real and bounded: a high bedroom count on a small
+# footprint drives the predicted ratio below RENT_MODEL_MIN_RATIO, and the Valuation
+# agent refuses the estimate rather than reporting it. Pinned by
+# tests/test_flag_propagation.py::test_an_implausible_prediction_is_refused_rather_than_reported.
 
 # TODO(cut-list): feature engineering and model form are deferred, not dismissed — §6's
 # cut list, item 1a, carries the measurement and the reasoning. In short: the estimator is
@@ -262,6 +304,84 @@ RENT_MODEL_MAX_RATIO = 4.0
 # row is normalized against the FMR year its own listing date falls in, not against a
 # single assumed vintage. FY N runs Oct 1 (N-1) through Sep 30 N.
 RENT_MODEL_FMR_FISCAL_YEAR_START_MONTH = 10
+
+# Whether to reconstruct a ZIP-level FMR schedule for fiscal years HUD did not publish
+# one for, by carrying each ZIP's position within its county backwards from the current
+# year. See tools/model/rent_model._zip_anchor_tables.
+#
+# **Set from a measurement that split the change in half.** Anchoring at ZIP resolution
+# is supposed to absorb local rent level, which shows up as *lower* dispersion in the
+# rent-to-FMR ratio. Measured on the training shortlist, by how the ZIP schedule was
+# obtained:
+#
+#     published   n=1,109   CV 44.3% -> 35.9%   (-19.1%)   works as intended
+#     back-cast   n=4,281   CV 34.0% -> 36.2%   (+6.6%)    adds noise
+#
+# So the ZIP anchor earns its place and the back-cast does not. The relativity it carries
+# back is stable enough to look reasonable (r = 0.873 Cook / 0.771 Philadelphia, median
+# error ~5%) but that residual error is comparable to the within-county signal it is
+# trying to capture, so it imports more noise than structure.
+RENT_MODEL_BACKCAST_ZIP_FMR = False
+
+
+# --------------------------------------------------------------------------
+# Valuation agent (U5 — agents/valuation_rent.py)
+# --------------------------------------------------------------------------
+# The agent's Observe step re-expresses each retrieved comp's rent in the subject's
+# current dollars (rent / that comp's own county-and-year FMR, times the subject's
+# current FMR) and compares the model's estimate against the median of those. Both
+# constants below govern that comparison, not the model itself.
+
+# Below this many successfully normalized comps, the cross-check is not run at all and
+# the report says so. A "median" of one or two comps is a number, not a distribution,
+# and disagreeing with it would say more about the comps than about the estimate.
+# Set at 3 rather than tuned: it is the smallest count for which a median is not simply
+# one of the two values, and the measured cost is one demo deal (Staten Island, which
+# retrieves no comps at all and would fail this check regardless).
+RENT_COMP_CROSSCHECK_MIN_COMPS = 3
+
+# How far the modelled rent may sit from the comp median before the report says the two
+# disagree.
+#
+# Set against measured divergence rather than chosen. Five subjects, Aug 22, 2026 —
+# the three synthetic ones in scripts/valuation_evidence.py and the demo listings in
+# demo_deals.py, whose addresses geocode elsewhere in the same metros:
+#
+#   -21.6%  Los Angeles (Echo Park)   -30.4%  Chicago (Logan Square)
+#   -40.0%  Cleveland (Ohio City)
+#
+# **Re-measured after ZIP-resolution anchoring landed the same day: -10.7% / -14.3% /
+# -13.9%.** The threshold was kept at 0.30 rather than tightened to match, and the reason
+# is the point of the change. Those divergences used to be dominated by the model's
+# inability to see below the county line, so the flag fired on a known structural blind
+# spot rather than on anything about the deal. With the anchor at ZIP resolution the
+# residual is uniform across all three markets — an 18.4-point spread collapsed to 3.6 —
+# which is what a model characteristic looks like rather than a location effect.
+#
+# So the flag is now silent on all three inference markets by design, and that is the
+# correct state: it is available to detect a genuine anomaly instead of reporting a
+# mechanism. TODO(U8): confirm against the eval batch that something still trips it —
+# a flag nothing can raise would corrupt the coverage assertion, and this one moved from
+# firing on 2 of 5 subjects to 0 of 5 in a single change.
+#
+# **What the flag is actually detecting, corrected Aug 22, 2026.** An earlier reading of
+# this held that the markets it fires on are the ones whose comp sets are unrepresentative.
+# Measured against the right baseline — the candidate pool at the same radius, rather than
+# the whole metro — that is wrong: semantic ranking moves the comp median only +2.7% /
+# +21.6% / +4.2%, while the neighborhood itself moves it +5.1% / +40.1% / +66.2%. The comps
+# are reporting real neighborhood premiums correctly.
+#
+# What diverges is the *model*, because RENT_MODEL_FEATURES excludes any market identifier
+# and the FMR anchor is county-level, so nothing in the pipeline represents sub-metro rent
+# variation. This threshold therefore currently fires on a known structural blind spot
+# rather than on an anomaly, which is a real limitation of the check and not a tuning
+# problem. §2, "The rent estimate is location-blind below the county."
+#
+# PROVISIONAL on both counts. Five subjects show the signal separates but cannot place the
+# line precisely — Chicago straddling it is the proof. Retune in U8 against the eval batch,
+# and revisit the whole check if a ZIP-level anchor lands (docs/data_sources.md, "The
+# sub-metro gap"). `scripts/valuation_evidence.py --diagnose-divergence` reproduces it.
+RENT_COMP_DIVERGENCE_THRESHOLD_PCT = 0.30
 
 
 # --------------------------------------------------------------------------

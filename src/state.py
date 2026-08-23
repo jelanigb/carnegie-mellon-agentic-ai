@@ -110,7 +110,25 @@ class FlagKind(StrEnum):
     RENT_ANCHORED_TO_FMR = "rent_anchored_to_fmr"
     FMR_UNAVAILABLE_FOR_COUNTY = "fmr_unavailable_for_county"
     FMR_BEDROOM_CAP_EXCEEDED = "fmr_bedroom_cap_exceeded"
+    # The anchor fell back to the county-wide FMR because HUD publishes no Small Area
+    # (ZIP-level) schedule for the subject's county. Distinct from
+    # FMR_UNAVAILABLE_FOR_COUNTY, which means no anchor at all: this one means the
+    # estimate exists but cannot see below the county line.
+    FMR_ANCHOR_COUNTY_LEVEL = "fmr_anchor_county_level"
     LLM_RENT_FALLBACK_USED = "llm_rent_fallback_used"
+    # The rent estimate could not be produced at all, for a reason that is not the
+    # county lookup. One kind rather than three (no trained model / features the
+    # Extractor never resolved / a predicted ratio outside the plausible band) because
+    # the reader's response to all three is identical — there is no rent figure and the
+    # message says why. FMR_UNAVAILABLE_FOR_COUNTY stays separate because §2 specifies
+    # it by name and because it points at a fixable data gap rather than at this run.
+    RENT_ESTIMATE_UNAVAILABLE = "rent_estimate_unavailable"
+    # The modelled rent and the comp set disagree. Raised by the Valuation agent about
+    # its own two inputs, which is what makes it distinct from CRITIC_INCONSISTENCY:
+    # that one is the Critic comparing *different agents'* conclusions (U7). This is an
+    # agent observing that the evidence it was handed does not support the number it
+    # just produced, which is the Observe step of its own loop.
+    RENT_DIVERGES_FROM_COMPS = "rent_diverges_from_comps"
 
     # Forecast
     APPRECIATION_SOURCE = "appreciation_source"
@@ -301,6 +319,90 @@ class Comp(BaseModel):
     location_precision: Optional[LocationPrecision] = None
 
 
+class ValuationDetail(BaseModel):
+    """Everything the Valuation agent established beyond the headline rent figure.
+
+    Separate from the five top-level valuation fields on `DealState` rather than merged
+    into them, and the split is by **consumer**, not by tidiness. `rent_estimate`,
+    `fmr_anchor_used` and their siblings are the *result*: what a downstream agent reads
+    and computes with — U6's forecast projects from `rent_estimate`. Everything here is
+    *provenance*: what the report has to disclose so a reader can weigh that result, and
+    nothing downstream calculates from it. Keeping the two apart means U6 depends on a
+    stable five-field contract while this object stays free to grow as the disclosure
+    surface does.
+
+    Every field is Optional because every one of them describes a step that can fail
+    independently. A run can produce a rent estimate with no comp cross-check (the comps
+    resolved to no county), a cross-check with no estimate (the model artifact is
+    missing), or a market benchmark with neither (an uncovered metro is a fact about
+    Redfin's extract, not about this deal). Collapsing those into one presence check
+    would make the report say "unavailable" about three different things at once.
+    """
+
+    # --- Rent-model provenance -------------------------------------------------
+    # Carried so the report can print an error band beside the estimate. A point
+    # estimate with no spread is the shape §1 objects to: it reads as more precise than
+    # the thing that produced it. Read from the persisted model bundle rather than
+    # recomputed, so the figure quoted is the one the shipped model actually scored.
+    model_holdout_mae_dollars: Optional[float] = None
+    model_holdout_mae_ratio: Optional[float] = None
+    model_trained_at: Optional[datetime] = None
+    model_training_rows: Optional[int] = None
+
+    # Which HUD fiscal-year schedule anchored the estimate. The whole point of §2's
+    # design is that the number is dated; the date has to survive into the report or
+    # the anchoring is undisclosed and the reader is back where they started.
+    fmr_year: Optional[int] = None
+
+    # Which spatial resolution the anchor came from: "zip" where HUD publishes a Small
+    # Area FMR for the subject's ZIP, "county" otherwise. Carried because the difference
+    # is large — ZIP schedules span roughly 2x within a single county — and because the
+    # model is trained against ZIP resolution wherever it exists, so a county-anchored
+    # estimate is the degraded case rather than the normal one.
+    fmr_resolution: Optional[str] = None
+    fmr_zip: Optional[str] = None
+
+    # --- Comp cross-check (the agent's Observe step) ----------------------------
+    # Each comp's own rent, divided by the FMR for *its* county and *its* fiscal year,
+    # then re-anchored at the subject's current FMR. That last step is what makes the
+    # comparison fair: it re-expresses "what this comp rented for, where it is, in 2019"
+    # as "what a unit like it would rent for, here, today," which is the same question
+    # the model answered. A raw comp mean would compare a 2019 dollar to a 2026 one —
+    # the exact vintage error §2 exists to prevent.
+    comp_implied_rent_median: Optional[float] = None
+    comp_implied_rent_p25: Optional[float] = None
+    comp_implied_rent_p75: Optional[float] = None
+    # Two counts, not one, because their difference is the disclosure. A cross-check
+    # that ran on 3 of 8 comps is much weaker than one that ran on 8, and a single
+    # "comps used" number cannot tell those apart.
+    comps_cross_checked: int = 0
+    comps_available: int = 0
+    # How many of the cross-checked comps were anchored at ZIP rather than county
+    # resolution. A comp set spanning a SAFMR county and a non-SAFMR one is normalized
+    # on two different bases, and the report should not imply otherwise.
+    comps_zip_anchored: int = 0
+    # Signed: positive means the model came in above the comps. Direction matters to a
+    # reader deciding which way the estimate might be wrong, and an absolute value
+    # would throw it away.
+    divergence_pct: Optional[float] = None
+
+    # --- Market benchmark (not a value estimate; see the Summarizer) ------------
+    # Redfin's median sale price for Multi-Family (2-4 unit) in the subject's metro,
+    # smoothed over `config.REDFIN_ROLLING_WINDOW_PERIODS`. Deliberately *not* written
+    # to `DealState.value_estimate`: the extract is pre-aggregated to one median per
+    # metro-period and exposes no individual sales, so it carries no property-level
+    # signal at all — the same figure describes a 2-unit duplex and a 4-unit building
+    # in the same metro. It is a market reference the asking price can be read against,
+    # and the report labels it as one.
+    benchmark_metro: Optional[str] = None
+    benchmark_median_sale_price: Optional[float] = None
+    benchmark_periods_averaged: Optional[int] = None
+    benchmark_homes_sold_per_period: Optional[float] = None
+    # Why there is no benchmark, in words, for the metros Redfin's extract never
+    # reached — New York is the standing case (§2). Absence stated rather than omitted.
+    benchmark_unavailable_reason: Optional[str] = None
+
+
 class DealState(BaseModel):
     """The single typed object threaded through every node.
 
@@ -338,8 +440,20 @@ class DealState(BaseModel):
     rent_estimate: Optional[float] = None
     rent_estimate_ratio_to_fmr: Optional[float] = None
     fmr_anchor_used: Optional[float] = None
+    # Never populated by this build, and that is a design decision rather than an
+    # unfinished one — see `agents/valuation_rent.py`. The only sale-price source in
+    # this project is Redfin's pre-aggregated extract: one median per metro-period,
+    # zero individual sales, no property attributes to adjust by. Writing that median
+    # here would have state assert a property-level value it does not have. The figure
+    # is carried instead as `ValuationDetail.benchmark_median_sale_price` and rendered
+    # as a market reference. Kept as a field because U6 may yet choose a projection
+    # base for it; that decision belongs to U6, where the appreciation evidence is.
     value_estimate: Optional[float] = None
     rent_estimate_source: Optional[RentEstimateSource] = None
+
+    # Provenance for everything above, for the report to disclose. See ValuationDetail
+    # for why this is a separate object rather than more top-level fields.
+    valuation_detail: Optional[ValuationDetail] = None
 
     # forecast
     # "zip_multifamily" is documented future work (§2) and is not produced by this build.

@@ -23,17 +23,6 @@ import config
 from state import LocationPrecision
 from tools import diagnostics, kaggle_data, vector_store
 
-# state code -> city name patterns. New York rolls up its boroughs, which appear as
-# separate cityname values. Matching is word-boundary (see tools/kaggle_data.py):
-# "Cleveland" must catch "Cleveland Heights" while "Queens" must not catch
-# "Queensbury" and "Bronx" must not catch "Bronxville".
-INDEXED_MARKETS: dict[str, list[str]] = {
-    "IL": ["Chicago"],
-    "CA": ["Los Angeles"],
-    "OH": ["Cleveland"],
-    "NY": ["New York", "Brooklyn", "Queens", "Bronx", "Staten Island", "Manhattan"],
-}
-
 # Chroma's embedding step is the bottleneck; batching keeps memory flat and gives
 # visible progress on a multi-thousand-row load.
 BATCH_SIZE = 500
@@ -43,7 +32,7 @@ def load_listings() -> pd.DataFrame:
     df = kaggle_data.load_clean()
     print(f"  dropped {df.attrs['rows_deduped']} duplicate-id rows, "
           f"{df.attrs['rows_dropped']:,} rows total after cleaning")
-    return kaggle_data.filter_markets(df, INDEXED_MARKETS)
+    return kaggle_data.filter_markets(df, config.INDEXED_MARKETS)
 
 
 def main() -> None:

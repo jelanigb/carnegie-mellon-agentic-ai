@@ -51,7 +51,19 @@ from agents.planner import planner_agent, route_after_critic, route_after_planne
 from agents.scenario_forecast import scenario_forecast_agent
 from agents.summarizer import summarizer_agent
 from agents.valuation_rent import valuation_rent_agent
-from state import Comp, DealState, DealTerms, Flag, FlagKind, Severity
+from enums import AppreciationTier
+from state import (
+    Comp,
+    DealState,
+    DealStatus,
+    DealTerms,
+    Flag,
+    FlagKind,
+    LocationPrecision,
+    RentEstimateSource,
+    Severity,
+    ValuationDetail,
+)
 
 
 def state_serde() -> JsonPlusSerializer:
@@ -66,8 +78,23 @@ def state_serde() -> JsonPlusSerializer:
 
     Listing the types is also the safer posture rather than merely the quieter one: the
     permissive default deserializes *any* type a checkpoint file names. Passing an
-    explicit allowlist switches that to deny-by-default, and these six are everything
+    explicit allowlist switches that to deny-by-default, and these seven are everything
     the graph actually persists.
+
+    **Four names were missing from it until Aug 22, 2026, and how that surfaced is the
+    reason to record it.** `DealStatus`, `LocationPrecision`, `RentEstimateSource` and
+    `AppreciationTier` are all `StrEnum`, and a `StrEnum` member *is* a `str`, so a
+    blocked deserialization degraded to the bare string, which Pydantic then coerced
+    straight back to the enum on the next validation. Nothing broke and no output was
+    ever wrong. The gap was visible only as a log line, and it took a U5 test asserting
+    on a resumed run to put that line somewhere anyone would read it. A deny-by-default
+    list whose omissions are silent is a list that drifts, which is what happened here
+    across three units.
+
+    So the rule this docstring is really stating: **every type reachable from
+    `DealState` belongs here, enums included, whether or not omitting it currently
+    appears to matter.** `ValuationDetail` joined in U5 as a genuinely new type; the
+    four enums joined because they should have been here all along.
 
     Note the constructor argument rather than the more obvious
     `JsonPlusSerializer().with_msgpack_allowlist(...)`: that method returns `self`
@@ -76,7 +103,19 @@ def state_serde() -> JsonPlusSerializer:
     the warnings are what made it visible.
     """
     return JsonPlusSerializer(
-        allowed_msgpack_modules=[DealState, DealTerms, Comp, Flag, FlagKind, Severity]
+        allowed_msgpack_modules=[
+            DealState,
+            DealTerms,
+            Comp,
+            ValuationDetail,
+            Flag,
+            FlagKind,
+            Severity,
+            DealStatus,
+            LocationPrecision,
+            RentEstimateSource,
+            AppreciationTier,
+        ]
     )
 
 

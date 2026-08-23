@@ -11,10 +11,30 @@ the metro extract, applies the $10,000 floor, computes the rolling-3 window, and
 derives optimistic/base/pessimistic growth bands with the anomalous-period segmentation
 fix from §2. U6 is the reasoning layer over it, not the data layer.
 
+**⚠️ The original premise for the rent half of this agent was disproved on Aug 22, 2026,
+before it was built.** §1 and §2 specified Tree-of-Thought branching over rent-growth and
+appreciation scenarios *"informed by metro-level housing trend data"* — that is, inferring
+rent growth from Redfin's sale-price series. Measured, rent growth and price growth are
+**negatively** correlated across the inference trio (pooled r = −0.309; −0.135 Chicago,
+−0.226 Los Angeles, −0.530 Cleveland over FY2019–2026), with price outrunning rent by 8.9
+points in the 2021–22 window §2 already flagged. A rent forecast driven by that series
+would point the wrong way. Do not build the original spec.
+
+**The two quantities are forecast separately, from sources that match each.** Redfin
+remains correct for *price* appreciation, which is what it measures. Rent growth comes
+from HUD FMR's published history — ten fiscal years, county and ZIP resolution, served by
+the client this project already caches, and consistent with the anchoring design by
+construction: the rent estimate is `ratio × FMR`, so projecting the FMR anchor forward
+while holding the structural ratio constant forecasts rent by the same mechanism that
+produced the estimate. Zillow ZORI is the independent check on whether those bands match
+market-observed rent growth; FMR is administrative and shows methodology jumps (Chicago
++19.0% in FY2024, Los Angeles +14.5%) that a base case must screen for and disclose.
+
 What U6 builds here, per §2 and §6:
 
-1. Tree-of-Thought branching over optimistic / base / pessimistic rent-growth and
-   appreciation paths, grounded in the measured bands rather than invented spreads.
+1. Tree-of-Thought branching over optimistic / base / pessimistic paths for **rent growth
+   and price appreciation as separate quantities**, each grounded in measured bands from
+   its own source rather than invented spreads or a blended series.
 2. `appreciation_source` recorded on state — `metro_multifamily` for the tier-1 default,
    `metro_all_residential` for the tier-3 fallback. (`zip_multifamily` is tier 2,
    deferred in §2 and not produced by this build; it stays in the Literal so the
