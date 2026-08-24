@@ -137,8 +137,8 @@ carnegie_mellon_agentic_repo/
     │   ├── planner.py             # ✅ pre-flight plan + every route_* function
     │   ├── extractor.py           # ✅ schema-validated LLM call + geocoding + county
     │   ├── comps_retrieval.py     # ✅ adaptive relaxation loop
-    │   ├── valuation_rent.py      # ⬜ stub; U5
-    │   ├── scenario_forecast.py   # ⬜ stub; U6
+    │   ├── valuation_rent.py      # ✅ FMR-anchored rent estimate + comp cross-check
+    │   ├── scenario_forecast.py   # ✅ ToT beam search over enumerated framings/pairings
     │   ├── critic.py              # ◐ confidence + escalation built; consistency checks U7
     │   ├── summarizer.py          # ✅ real markdown, disclosure-first; polish in U9
     │   └── human_review.py        # ✅ the interrupt() escalation node

@@ -212,7 +212,7 @@ def get_growth_bands(
     return {
         "available": True,
         "metro": bands.metro,
-        "tier": bands.tier,
+        "source": bands.source_description,
         "base_yoy_pct": bands.base_yoy_pct,
         "optimistic_yoy_pct": bands.optimistic_yoy_pct,
         "pessimistic_yoy_pct": bands.pessimistic_yoy_pct,
@@ -275,7 +275,7 @@ def get_appreciation_history(
     return {
         "available": True,
         "metro": series.metro,
-        "tier": series.tier,
+        "source": series.source_description,
         "rows": rows,
         "n_periods_total": series.n_periods,
         "first_period": series.first_period.strftime("%Y-%m"),

@@ -37,9 +37,18 @@ Reason/Act/Observe/Decide:
 from __future__ import annotations
 
 from collections import Counter
+from typing import Optional
 
 import config
-from state import Comp, DealState, DealStatus, Flag, Severity, count_area_positioned
+from state import (
+    Comp,
+    DealState,
+    DealStatus,
+    Flag,
+    ForecastDetail,
+    Severity,
+    count_area_positioned,
+)
 
 AGENT = "summarizer"
 
@@ -365,23 +374,198 @@ def _findings_section(state: DealState) -> list[str]:
     lines.extend(_benchmark_section(state, detail))
     lines.extend(_rent_basis_section(state, detail))
 
-    if state.scenarios:
-        lines.append("### Scenarios")
-        lines.append("")
-        source = state.appreciation_source or "unspecified"
-        lines.append(f"Appreciation series: `{source}`.")
-        lines.append("")
-        for name, detail in state.scenarios.items():
-            lines.append(f"- **{name.title()}** — {detail}")
-        lines.append("")
-    else:
-        lines.append(
-            "### Scenarios\n\nNot produced — the forecast agent is unbuilt (U6). The "
-            "rent estimate it will project from now exists; what U6 still has to settle "
-            "is what a *value* forecast is anchored to, since this project has no "
-            "property-level sale data to estimate one from.\n"
-        )
+    lines.extend(_scenario_section(state))
 
+    return lines
+
+
+def _money_or_dash(value: Optional[float]) -> str:
+    return _money(value) if value is not None else "—"
+
+
+def _scenario_section(state: DealState) -> list[str]:
+    """The forecast, its basis, and what the search discarded on the way.
+
+    Three blocks rather than one table, and the split is the disclosure. The scenarios
+    say what the forecast is; the basis says which treatment of which series produced
+    it, including the fiscal years held out and the interquartile range the bands sit
+    inside; the ledger says what else was considered. A reader who only reads the first
+    block gets a forecast; one who reads all three can tell whether to believe it.
+    """
+    detail = state.forecast_detail
+    if not state.scenarios:
+        reason = "The forecast agent produced no scenarios for this deal."
+        if detail is not None:
+            halves = [
+                text
+                for text in (
+                    detail.rent_growth_unavailable_reason,
+                    detail.price_growth_unavailable_reason,
+                    detail.search_exhausted_reason,
+                )
+                if text
+            ]
+            if halves:
+                reason = " ".join(halves)
+        return ["### Scenarios", "", reason, ""]
+
+    horizon = detail.horizon_years if detail else config.FORECAST_HORIZON_YEARS
+    lines = [f"### Scenarios — {horizon}-year outlook", ""]
+
+    base_rent = detail.projection_base_rent if detail else None
+    base_price = detail.projection_base_price if detail else None
+    basis_parts = []
+    if base_rent is not None:
+        basis_parts.append(f"modelled rent {_money(base_rent)}/mo")
+    if base_price is not None:
+        basis_parts.append(f"the **asking price** {_money(base_price)}")
+    if basis_parts:
+        lines.append(
+            f"Projected from {' and '.join(basis_parts)}. The price side compounds the "
+            f"asking price rather than an estimated value — this system does not produce "
+            f"one, and says so above."
+        )
+        lines.append("")
+        lines.append(
+            "Scenarios are named for their **combined** outcome across both quantities. "
+            "Because rent growth and price growth are negatively correlated in this "
+            "project's data, a single column need not fall in label order — the "
+            "pessimistic case can carry the higher projected price and still be the worse "
+            "outcome overall. Each row states which band it drew from on each side."
+        )
+        lines.append("")
+
+    lines.append(
+        "| Scenario | Rent growth | Price growth | "
+        f"Rent in yr {horizon} | Price in yr {horizon} |"
+    )
+    lines.append("| --- | --- | --- | --- | --- |")
+    for scenario in state.scenarios:
+        rent_growth = (
+            f"{scenario.rent_growth_pct_per_year:+.2f}%/yr ({scenario.rent_band})"
+            if scenario.rent_growth_pct_per_year is not None
+            else "—"
+        )
+        price_growth = (
+            f"{scenario.price_growth_pct_per_year:+.2f}%/yr ({scenario.price_band})"
+            if scenario.price_growth_pct_per_year is not None
+            else "—"
+        )
+        lines.append(
+            f"| **{scenario.name.title()}** | {rent_growth} | {price_growth} | "
+            f"{_money_or_dash(scenario.projected_monthly_rent)} | "
+            f"{_money_or_dash(scenario.projected_price)} |"
+        )
+    lines.append("")
+
+    for scenario in state.scenarios:
+        if scenario.rationale:
+            lines.append(f"- **{scenario.name.title()}** — {scenario.rationale}")
+    lines.append("")
+
+    if detail is not None:
+        lines.extend(_forecast_basis_block(detail))
+        lines.extend(_branch_ledger_block(state))
+
+    return lines
+
+
+def _forecast_basis_block(detail: ForecastDetail) -> list[str]:
+    """How the bands were built — the part that lets a reader discount the forecast."""
+    lines = ["#### How these bands were built", ""]
+
+    if detail.rent_growth_base_pct is not None:
+        span = (
+            f"FY{detail.rent_growth_first_year}–{detail.rent_growth_last_year}"
+            if detail.rent_growth_first_year
+            else "the published history"
+        )
+        lines.append(
+            f"**Rent** — HUD Fair Market Rent history for "
+            f"{detail.rent_growth_area_name or 'the subject county'}, "
+            f"{detail.rent_growth_bedrooms}-bedroom, at "
+            f"{detail.rent_growth_resolution} resolution over {span} "
+            f"({detail.rent_growth_n_observations} year-over-year observations). "
+            f"The bands are the worst and best fiscal years observed "
+            f"(FY{detail.rent_growth_pessimistic_year} and "
+            f"FY{detail.rent_growth_optimistic_year}); the base case is their compound "
+            f"average."
+        )
+        if detail.rent_growth_iqr_lower_pct is not None:
+            lines.append(
+                f"  Interquartile range of those annual changes: "
+                f"{detail.rent_growth_iqr_lower_pct:.2f}% to "
+                f"{detail.rent_growth_iqr_upper_pct:.2f}% — shown so an extreme band "
+                f"that rests on an isolated year is visible as one."
+            )
+        if detail.cohort_shift_years_excluded:
+            years = ", ".join(f"FY{y}" for y in detail.cohort_shift_years_excluded)
+            lines.append(
+                f"  {years} were held out: every one of the {detail.cohort_n_areas} HUD "
+                f"areas in this project's panel moved together in those years, against a "
+                f"{detail.cohort_baseline_pct:.2f}% baseline. Whether that was a HUD "
+                f"methodology change or a delayed market signal is not determinable from "
+                f"this series, so it is disclosed rather than attributed."
+            )
+        if detail.local_deviation_years:
+            years = ", ".join(f"FY{y}" for y in detail.local_deviation_years)
+            lines.append(
+                f"  {years} saw this area depart sharply from the national cohort — a "
+                f"local move, kept in the bands because that is market signal."
+            )
+        lines.append("")
+    elif detail.rent_growth_unavailable_reason:
+        lines.append(f"**Rent** — {detail.rent_growth_unavailable_reason}")
+        lines.append("")
+
+    if detail.price_growth_base_pct is not None:
+        lines.append(
+            f"**Price** — Redfin metro-level Multi-Family (2–4 unit) median sale price "
+            f"for {detail.price_growth_metro}, "
+            f"{detail.price_growth_n_observations} year-over-year observations, "
+            f"2020–2022 "
+            f"{'excluded' if detail.anomalous_period_excluded else 'included'}."
+        )
+        lines.append("")
+    elif detail.price_growth_unavailable_reason:
+        lines.append(f"**Price** — {detail.price_growth_unavailable_reason}")
+        lines.append("")
+
+    return lines
+
+
+def _branch_ledger_block(state: DealState) -> list[str]:
+    """What the search considered and discarded.
+
+    Present even when nothing was pruned, because "four hypotheses considered, none
+    discarded" and "no search ran" are different facts about a forecast and a reader
+    should be able to tell them apart.
+    """
+    entries = [e for e in state.branch_ledger if e.agent == "scenario_forecast"]
+    if not entries:
+        return []
+
+    # A rework pass re-runs the node and appends a second set of rows; the raw history
+    # stays in state and the de-duplication happens here, matching how `stub_nodes` is
+    # handled.
+    seen: dict[str, object] = {}
+    for entry in entries:
+        seen[entry.id] = entry
+    entries = list(seen.values())
+
+    pruned = [e for e in entries if e.prune_reason]
+    lines = [
+        "#### What the forecast search considered",
+        "",
+        f"{len(entries)} hypotheses were evaluated and {len(pruned)} discarded. "
+        f"Pruning is recorded rather than silent: an evaluator that quietly drops a "
+        f"correct-but-unusual branch looks identical to one working properly.",
+        "",
+    ]
+    for entry in pruned:
+        score = f"{entry.score:.2f}" if entry.score is not None else "not scored"
+        lines.append(f"- `{entry.id}` ({score}) — {entry.summary} **Discarded:** {entry.prune_reason}")
+    lines.append("")
     return lines
 
 

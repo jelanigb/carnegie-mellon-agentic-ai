@@ -1,67 +1,987 @@
-"""Scenario/Forecast agent — **U2 STUB**. The real implementation is U6.
+"""Scenario/Forecast agent — U6. Projects rent and price forward, or says why it can't.
 
-Stubbed rather than partially built for a structural reason, not just a scheduling one:
-this agent's inputs do not exist yet. §5 has Scenario consuming `rent_estimate` and
-`value_estimate`, both of which the U2 Valuation stub deliberately declines to produce
-(see `valuation_rent.py`). Projecting growth bands onto a missing base value would
-produce three scenarios about nothing.
+**Two quantities, two sources, and mixing them was the original design.** §1 specified
+Tree-of-Thought branching over rent-growth and appreciation paths *"informed by
+metro-level housing trend data"* — that is, taking rent growth off Redfin's sale-price
+series. Measured before this agent was built, rent growth and price growth are
+**negatively** correlated across the inference trio (pooled r = −0.309), so that design
+would have pointed the rent forecast the wrong way. Decision #16 split them: Redfin for
+price, which is what it measures; HUD FMR's published history for rent, through
+`tools/fmr_history.py`.
 
-Note that the *data* half is already built and verified: `tools/redfin_data.py` loads
-the metro extract, applies the $10,000 floor, computes the rolling-3 window, and
-derives optimistic/base/pessimistic growth bands with the anomalous-period segmentation
-fix from §2. U6 is the reasoning layer over it, not the data layer.
+**What this agent projects from, and why it isn't a value estimate.** Decision #15
+leaves `DealState.value_estimate` null — Redfin's extract is pre-aggregated to one
+median per metro-period, so it carries no property-level signal, and this repo's demo
+asking prices were themselves calibrated to that median, which would have produced
+reports where the "estimate" matched the asking price to within $140. §7 left U6 to pick
+a projection base, and the choice is the **asking price**: an observed fact about this
+property rather than an estimate of it. The claim the report makes is therefore
+*"pay this today, and here is what the metro's measured trend implies"* — which needs no
+value estimate to be meaningful, and does not pretend to be one.
 
-**⚠️ The original premise for the rent half of this agent was disproved on Aug 22, 2026,
-before it was built.** §1 and §2 specified Tree-of-Thought branching over rent-growth and
-appreciation scenarios *"informed by metro-level housing trend data"* — that is, inferring
-rent growth from Redfin's sale-price series. Measured, rent growth and price growth are
-**negatively** correlated across the inference trio (pooled r = −0.309; −0.135 Chicago,
-−0.226 Los Angeles, −0.530 Cleveland over FY2019–2026), with price outrunning rent by 8.9
-points in the 2021–22 window §2 already flagged. A rent forecast driven by that series
-would point the wrong way. Do not build the original spec.
+**The search is over an enumerated space, so no figure here is invented.** Four
+framings — two rent treatments (screen the cohort shift or not) × two price treatments
+(exclude 2020–2022 or not) × one appreciation series — then nine band pairings under
+each. `tools/tot.py` explains why enumeration rather than sampling, and what follows
+from it: nothing sampled, a data-determined branching factor, and a pipeline that stays
+deterministic end to end.
 
-**The two quantities are forecast separately, from sources that match each.** Redfin
-remains correct for *price* appreciation, which is what it measures. Rent growth comes
-from HUD FMR's published history — ten fiscal years, county and ZIP resolution, served by
-the client this project already caches, and consistent with the anchoring design by
-construction: the rent estimate is `ratio × FMR`, so projecting the FMR anchor forward
-while holding the structural ratio constant forecasts rent by the same mechanism that
-produced the estimate. Zillow ZORI is the independent check on whether those bands match
-market-observed rent growth; FMR is administrative and shows methodology jumps (Chicago
-+19.0% in FY2024, Los Angeles +14.5%) that a base case must screen for and disclose.
+**The pairing is where the reasoning actually happens.** Three rent bands and three
+price bands give nine combinations, and the obvious three — optimistic with optimistic,
+and so on down the diagonal — are the ones this project's own measurement argues
+against, because rent and price growth move *opposite* each other here. A linear chain
+emits the diagonal without noticing. Asking which pairing deserves to be called
+"optimistic" for a particular deal, given that relationship and whatever flags the
+upstream agents raised, is a judgement over measured inputs, and it is the judgement
+this search exists to make.
 
-What U6 builds here, per §2 and §6:
+**Two search levels, then deterministic reconciliation** — stated plainly because
+`config.TOT_MAX_DEPTH` is 3 and it would be easy to imply three levels of search. Depth
+1 scores framings, depth 2 scores pairings, and the third step assigns the
+optimistic/base/pessimistic labels by projected outcome and checks that the survivors
+are actually distinct. That last step is arithmetic, not search, and inventing a scored
+level to fill the number would be the kind of decoration §8 exists to prevent.
 
-1. Tree-of-Thought branching over optimistic / base / pessimistic paths for **rent growth
-   and price appreciation as separate quantities**, each grounded in measured bands from
-   its own source rather than invented spreads or a blended series.
-2. `appreciation_source` recorded on state — `metro_multifamily` for the tier-1 default,
-   `metro_all_residential` for the tier-3 fallback. (`zip_multifamily` is tier 2,
-   deferred in §2 and not produced by this build; it stays in the Literal so the
-   deferral is legible in the type.)
-3. `anomalous_period_included` (info) wherever the 2020–2022 window feeds an average or
-   a band, so a "base case" resting partly on a near-zero-rate stretch says so.
+**Evidence pulls go through the MCP server's own registry, in-process.** The evaluator
+builds its tool menu from `mcp_server.server.list_tools()` — the same names, schemas and
+descriptions any external MCP host sees — and dispatches to the same functions, without
+the JSON-RPC hop. Decision #13's honest accounting applies: the protocol buys portability
+and a second consumer, not capability, and paying a subprocess, an async rewrite and a
+tracing gap to make an in-process call look remote would be buying the appearance of
+integration. The server remains the definition site and stays runnable for any host.
 
-Reason/Act/Observe/Decide (the loop U6 implements):
+Reason/Act/Observe/Decide:
 
-- **Reason.** Determine which appreciation tier the subject's metro can actually
-  support at adequate sample size, and which historical window is representative.
-- **Act.** Branch into three scenarios, each carrying its own growth assumption drawn
-  from the measured series rather than from a rule of thumb.
-- **Observe.** Check each branch's implied outcome against the observed historical
-  range — a projection outside anything the market has ever done is a defect in the
-  reasoning, not a bold forecast.
-- **Decide.** Emit the three branches with the source tier and any anomalous-period
-  contamination flagged, so a reader can see which years the base case rests on.
+- **Reason.** Establish what this deal can actually support: a rent estimate to project,
+  an asking price to project, an FMR history deep enough to band, and a Redfin metro.
+  Each can fail independently, and each failure is named rather than collapsed.
+- **Act.** Enumerate the framings, then the pairings under the survivors, scoring each
+  level with the evaluator and pruning against a recorded threshold.
+- **Observe.** Check the surviving set against itself — do three branches imply three
+  materially different outcomes, or has the search returned one answer three times? A
+  near-tie at the top means the selection was arbitrary, and that is reported.
+- **Decide.** Emit three scenarios with the treatment each rests on, the fiscal years
+  screened out of the rent bands, and a ledger of every hypothesis considered and why
+  each was discarded — so a reader can see what the search rejected, not only what it
+  chose.
 """
 
 from __future__ import annotations
 
-from state import DealState
+import asyncio
+import json
+from functools import lru_cache
+from typing import Any, Callable, Optional
+
+import config
+import mcp_server
+from state import (
+    BranchLedgerEntry,
+    DealState,
+    FlagKind,
+    ForecastDetail,
+    Scenario,
+    Severity,
+    flag,
+)
+from tools import fmr_history, redfin_data, tot
+from tools.llm_client import LlmClient, LlmError, SchemaValidationExhausted
 
 AGENT = "scenario_forecast"
+
+BAND_NAMES = ("pessimistic", "base", "optimistic")
+
+
+# ---------------------------------------------------------------------------
+# Evidence surface: the MCP server's registry, called in-process
+# ---------------------------------------------------------------------------
+
+
+@lru_cache(maxsize=1)
+def _evidence_surface() -> tuple[str, dict[str, Callable[..., Any]]]:
+    """The evaluator's tool menu and dispatch table, read from the MCP server itself.
+
+    `@server.tool()` returns the decorated function unchanged, so `mcp_server.get_fmr`
+    is directly callable and is the *same object* an MCP host reaches over stdio. The
+    menu text comes from `server.list_tools()`, so the descriptions the evaluator reads
+    are the descriptions the server publishes — there is one definition of this tool
+    surface, not two that can drift.
+
+    Degrades to an empty menu rather than raising: an evaluator with no evidence tools
+    still scores from the bands it was handed, which is worse but not broken.
+    """
+    try:
+        tools = asyncio.run(mcp_server.server.list_tools())
+    except (RuntimeError, AttributeError, OSError):
+        return "", {}
+
+    lines: list[str] = []
+    dispatch: dict[str, Callable[..., Any]] = {}
+    for spec in tools:
+        function = getattr(mcp_server, spec.name, None)
+        if function is None:
+            continue
+        dispatch[spec.name] = function
+        params = ", ".join((spec.input_schema or {}).get("properties", {}))
+        headline = (spec.description or "").strip().split("\n")[0]
+        lines.append(f"- {spec.name}({params}): {headline}")
+    return "\n".join(lines), dispatch
+
+
+def _pull_evidence(requests: list[dict], detail: ForecastDetail) -> str:
+    """Execute the evaluator's chosen tool calls and return their results as text.
+
+    Bounded by `config.TOT_MAX_EVIDENCE_CALLS`. A tool that raises is reported to the
+    evaluator as unavailable rather than killing the node — the same Transparent
+    Degradation the tools themselves apply to their own returns.
+    """
+    _, dispatch = _evidence_surface()
+    collected: list[str] = []
+    for request in requests[: config.TOT_MAX_EVIDENCE_CALLS]:
+        name = request.get("tool")
+        function = dispatch.get(name)
+        if function is None:
+            collected.append(f"{name}: no such tool")
+            continue
+        arguments = request.get("arguments") or {}
+        try:
+            result = function(**arguments)
+        except Exception as exc:  # noqa: BLE001 - a bad tool call must not end the run
+            collected.append(f"{name}({arguments}): unavailable ({type(exc).__name__})")
+            continue
+        detail.evidence_tools_called.append(name)
+        collected.append(f"{name}({arguments}) -> {json.dumps(result, default=str)}")
+    return "\n".join(collected)
+
+
+# ---------------------------------------------------------------------------
+# The enumerated space
+# ---------------------------------------------------------------------------
+
+
+def _framings(
+    rent_bands: dict[bool, fmr_history.RentGrowthBands],
+    price_bands: dict[bool, redfin_data.GrowthBands],
+) -> list[tot.Candidate]:
+    """Every treatment combination the evidence supports. Two by two, or fewer.
+
+    A side with only one usable treatment contributes one option rather than two, which
+    is why this enumerates from what was actually computed instead of from a constant.
+    """
+    candidates: list[tot.Candidate] = []
+    for screen_rent, rent in sorted(rent_bands.items()):
+        for exclude_price, price in sorted(price_bands.items()):
+            candidates.append(
+                tot.Candidate(
+                    id=f"f-{int(screen_rent)}{int(exclude_price)}",
+                    depth=1,
+                    payload={
+                        "screen_rent": screen_rent,
+                        "exclude_price": exclude_price,
+                        "rent": rent,
+                        "price": price,
+                    },
+                    summary="; ".join(
+                        [_rent_note(rent, screen_rent), _price_note(price, exclude_price)]
+                    ),
+                )
+            )
+    return candidates
+
+
+def _rent_note(rent: Optional[fmr_history.RentGrowthBands], screened: bool) -> str:
+    """One clause describing the rent treatment, safe when the side is unavailable."""
+    if rent is None or not rent.available:
+        return "rent: no usable FMR history"
+    treatment = (
+        f"FY{'/'.join(str(y) for y in rent.cohort_shift_years_excluded)} screened out"
+        if screened and rent.cohort_shift_years_excluded
+        else "every published fiscal year kept"
+    )
+    return (
+        f"rent: {treatment}, base {rent.base_yoy_pct:.2f}%/yr over "
+        f"n={rent.n_yoy_observations}"
+    )
+
+
+def _price_note(price: Optional[redfin_data.GrowthBands], excluded: bool) -> str:
+    """One clause describing the price treatment, safe when the side is unavailable."""
+    if price is None:
+        return "price: no sale-price series for this metro"
+    window = "2020-2022 excluded" if excluded else "2020-2022 included"
+    return (
+        f"price: {window}, base {price.base_yoy_pct:.2f}%/yr over "
+        f"n={price.n_yoy_observations}"
+    )
+
+
+def _band_value(bands: Any, name: Optional[str]) -> Optional[float]:
+    if bands is None or name is None:
+        return None
+    return getattr(bands, f"{name}_yoy_pct", None)
+
+
+def _pairings(parents: list[tot.Candidate]) -> list[tot.Candidate]:
+    """Nine band pairings under each surviving framing.
+
+    The diagonal is included rather than assumed. It is what a linear chain would emit,
+    so excluding it here would rig the comparison the search exists to make.
+    """
+    candidates: list[tot.Candidate] = []
+    for parent in parents:
+        rent = parent.payload["rent"]
+        price = parent.payload["price"]
+        # A side with no series contributes one empty slot rather than three identical
+        # ones — otherwise a one-sided forecast would generate nine candidates that are
+        # really three, and the ledger would report a search that never happened.
+        rent_options = BAND_NAMES if rent is not None and rent.available else (None,)
+        price_options = BAND_NAMES if price is not None else (None,)
+        for rent_name in rent_options:
+            for price_name in price_options:
+                rent_rate = _band_value(rent, rent_name)
+                price_rate = _band_value(price, price_name)
+                candidates.append(
+                    tot.Candidate(
+                        id=f"{parent.id}-{(rent_name or 'none')[:4]}{(price_name or 'none')[:4]}",
+                        parent=parent.id,
+                        depth=2,
+                        payload={
+                            "framing": parent.payload,
+                            "rent_band": rent_name,
+                            "price_band": price_name,
+                            "rent_rate": rent_rate,
+                            "price_rate": price_rate,
+                        },
+                        summary=" paired with ".join(
+                            [
+                                _side_note("rent", rent_name, rent_rate),
+                                _side_note("price", price_name, price_rate),
+                            ]
+                        ),
+                    )
+                )
+    return candidates
+
+
+def _side_note(side: str, band_name: Optional[str], rate: Optional[float]) -> str:
+    if band_name is None or rate is None:
+        return f"no {side} projection"
+    return f"{band_name} {side} ({rate:.2f}%/yr)"
+
+
+def _hard_check(candidate: tot.Candidate) -> Optional[str]:
+    """Free, decisive checks that run before any model call.
+
+    Deliberately thin, and worth saying why rather than padding it: the space is
+    enumerated from measured bands, so the usual hard constraint — "is this rate
+    something the market has ever done?" — is satisfied by construction. Every rate here
+    *is* an observed figure. What remains is genuine: a band that could not be computed,
+    and a pairing whose two sides are numerically identical to another's.
+    """
+    payload = candidate.payload
+    if candidate.depth == 2:
+        if payload["rent_rate"] is None and payload["price_rate"] is None:
+            return "Neither side of this pairing produced a usable growth rate."
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Evaluation
+# ---------------------------------------------------------------------------
+
+_SELECTION_SYSTEM = (
+    "You are evaluating candidate forecast hypotheses for a US multi-family real estate "
+    "deal. Before scoring, you may pull evidence from the read-only tools listed. "
+    "Choose only tools that would change how you score these specific candidates."
+)
+
+_SCORING_SYSTEM = (
+    "You score candidate forecast hypotheses from 0.0 to 1.0 on how defensible each is "
+    "for this specific deal. You never invent growth rates: every rate you are shown was "
+    "measured from a published series, and your job is to judge which combination is "
+    "most defensible, not to propose new numbers."
+)
+
+
+def _selection_prompt(candidates: list[tot.Candidate], context: str, menu: str) -> str:
+    listing = "\n".join(f"  {c.id}: {c.summary}" for c in candidates)
+    return (
+        f"{context}\n\nCandidates:\n{listing}\n\nAvailable evidence tools:\n{menu}\n\n"
+        f"Request at most {config.TOT_MAX_EVIDENCE_CALLS} tool calls whose results would "
+        f"change your scoring. Request none if the information above is sufficient."
+    )
+
+
+# The two levels ask different questions, and conflating them is what emptied the beam
+# on a fully-available Los Angeles deal. Depth 1 compares treatments of the data, all of
+# which are defensible by construction, so the task is to rank them relative to each
+# other. Depth 2 judges whether a specific pairing holds up, where a low score is a real
+# verdict.
+_DEPTH_INSTRUCTIONS = {
+    1: (
+        "These are alternative TREATMENTS of the same underlying data, and every one of "
+        "them is defensible — they differ in which years feed the bands, not in whether "
+        "they are legitimate. Your task is to RANK them relative to each other for this "
+        "particular deal, not to judge whether each passes an absolute bar. Use the full "
+        "0.0-1.0 range: the treatment you would choose should score near 1.0, and the "
+        "least suitable near 0.0. Do not score them all low."
+    ),
+    2: (
+        "These are specific band pairings under the chosen treatment. Here a low score is "
+        "a real verdict: a pairing that the evidence does not support should score below "
+        "0.4 and will be discarded."
+    ),
+}
+
+
+def _scoring_prompt(
+    depth: int, candidates: list[tot.Candidate], context: str, evidence: str
+) -> str:
+    listing = "\n".join(f"  {c.id}: {c.summary}" for c in candidates)
+    evidence_block = f"\n\nEvidence pulled:\n{evidence}" if evidence else ""
+    instruction = _DEPTH_INSTRUCTIONS.get(depth, _DEPTH_INSTRUCTIONS[2])
+    return (
+        f"{context}\n\nCandidates:\n{listing}{evidence_block}\n\n{instruction}\n\n"
+        f"Score each candidate 0.0-1.0 and give a one-sentence rationale that a reader of "
+        f"the final report would find useful. Return one entry per candidate id."
+    )
+
+
+def _heuristic_scores(
+    candidates: list[tot.Candidate],
+) -> list[tuple[float, str]]:
+    """Deterministic fallback when the model is unreachable.
+
+    Scores on the one relationship this project has actually measured: rent and price
+    growth are negatively correlated here (r = −0.309), so a pairing that puts both
+    sides at the same extreme describes a market behaving in a way it usually has not.
+    Mid-band pairings score highest, matched extremes lowest.
+
+    This is a degradation, not a design — but it keeps a forecast available when the
+    model is not, and it is reported through the rationale text rather than presented as
+    an evaluator judgement.
+    """
+    rank = {"pessimistic": -1, "base": 0, "optimistic": 1}
+    scored: list[tuple[float, str]] = []
+    for candidate in candidates:
+        if candidate.depth != 2:
+            scored.append(
+                (
+                    0.60,
+                    f"{candidate.summary} (scored without model evaluation)",
+                )
+            )
+            continue
+        # A side with no series contributes no opinion: rank 0 leaves the divergence
+        # term measuring only the side that exists, rather than crashing on a None key.
+        rent_rank = rank.get(candidate.payload.get("rent_band"), 0)
+        price_rank = rank.get(candidate.payload.get("price_band"), 0)
+        # Distance from the diagonal, which the measured correlation favours.
+        divergence = abs(rent_rank - price_rank)
+        score = 0.50 + 0.15 * divergence - 0.05 * abs(rent_rank + price_rank)
+        scored.append(
+            (
+                round(min(max(score, 0.0), 1.0), 2),
+                f"{candidate.summary} — scored without model evaluation, on the "
+                f"measured negative correlation between rent and price growth alone.",
+            )
+        )
+    return scored
+
+
+def _make_scorer(context: str, detail: ForecastDetail) -> tot.Scorer:
+    """Build the level scorer: one evidence-selection call, then one scoring call."""
+    menu, _ = _evidence_surface()
+
+    def score(depth: int, candidates: list[tot.Candidate]) -> list[tuple[float, str]]:
+        from pydantic import BaseModel, Field
+
+        class _ToolRequest(BaseModel):
+            tool: str
+            arguments: dict = Field(default_factory=dict)
+
+        class _Selection(BaseModel):
+            requests: list[_ToolRequest] = Field(default_factory=list)
+
+        class _Score(BaseModel):
+            id: str
+            score: float
+            rationale: str
+
+        class _Scores(BaseModel):
+            scores: list[_Score]
+
+        try:
+            client = LlmClient()
+            evidence = ""
+            if menu:
+                selection, _ = client.call_with_schema(
+                    _selection_prompt(candidates, context, menu),
+                    _Selection,
+                    model=config.MODEL_SCENARIO,
+                    system=_SELECTION_SYSTEM,
+                )
+                if selection.requests:
+                    evidence = _pull_evidence(
+                        [r.model_dump() for r in selection.requests], detail
+                    )
+
+            result, _ = client.call_with_schema(
+                _scoring_prompt(depth, candidates, context, evidence),
+                _Scores,
+                model=config.MODEL_SCENARIO,
+                system=_SCORING_SYSTEM,
+            )
+        except (LlmError, SchemaValidationExhausted, RuntimeError, OSError):
+            return _heuristic_scores(candidates)
+
+        by_id = {s.id: s for s in result.scores}
+        out: list[tuple[float, str]] = []
+        for candidate, fallback in zip(candidates, _heuristic_scores(candidates)):
+            scored = by_id.get(candidate.id)
+            if scored is None:
+                out.append(fallback)
+                continue
+            out.append(
+                (min(max(scored.score, 0.0), 1.0), scored.rationale or candidate.summary)
+            )
+        return out
+
+    return score
+
+
+def _conservatism(candidate: tot.Candidate) -> float:
+    """Tie-break key: lower is more conservative, so it sorts first.
+
+    Uses the pairing's combined growth assumption, because for an investment tool the
+    cost of being wrong is asymmetric — overstating growth is the expensive direction.
+    """
+    payload = candidate.payload
+    if candidate.depth != 2:
+        rent = payload.get("rent")
+        price = payload.get("price")
+        return (getattr(rent, "base_yoy_pct", 0.0) or 0.0) + (
+            getattr(price, "base_yoy_pct", 0.0) or 0.0
+        )
+    return (payload.get("rent_rate") or 0.0) + (payload.get("price_rate") or 0.0)
+
+
+# ---------------------------------------------------------------------------
+# Node
+# ---------------------------------------------------------------------------
+
+
+def _build_bands(
+    state: DealState, detail: ForecastDetail
+) -> tuple[
+    dict[bool, fmr_history.RentGrowthBands], dict[bool, redfin_data.GrowthBands]
+]:
+    """Compute both treatments of both series, recording why either side is missing."""
+    terms = state.deal_terms
+    rent_bands: dict[bool, fmr_history.RentGrowthBands] = {}
+    price_bands: dict[bool, redfin_data.GrowthBands] = {}
+
+    # --- rent side ---------------------------------------------------------
+    if terms.county_fips is None:
+        detail.rent_growth_unavailable_reason = (
+            "The subject resolved to no county, so there is no HUD Fair Market Rent "
+            "history to difference. Rent growth in this system is the change in the "
+            "same anchor the rent estimate was multiplied by; without a county there is "
+            "no anchor and no series."
+        )
+    elif terms.bedrooms is None:
+        detail.rent_growth_unavailable_reason = (
+            "The listing did not resolve a bedroom count, and FMR growth is measured on "
+            "the bedroom field the estimate was anchored to. Measured across the panel, "
+            "the five bedroom fields move by a median 2.16 percentage points within one "
+            "area-year, which is too much to substitute a default for."
+        )
+    else:
+        panel = fmr_history.load_cohort_panel()
+        series = fmr_history.get_rent_growth_series(
+            terms.county_fips, int(terms.bedrooms)
+        )
+        for screen in (False, True):
+            bands = fmr_history.compute_rent_growth_bands(
+                series, panel, exclude_cohort_shift_years=screen
+            )
+            if bands.available:
+                rent_bands[screen] = bands
+            elif detail.rent_growth_unavailable_reason is None:
+                detail.rent_growth_unavailable_reason = bands.unavailable_reason
+        if panel is None and rent_bands:
+            detail.rent_growth_unavailable_reason = None
+
+    # --- price side --------------------------------------------------------
+    metro = (state.valuation_detail.benchmark_metro if state.valuation_detail else None)
+    if metro is None:
+        detail.price_growth_unavailable_reason = (
+            (state.valuation_detail.benchmark_unavailable_reason if state.valuation_detail else None)
+            or "No Redfin metro was resolved for this subject, so there is no "
+               "multi-family sale-price series to project from."
+        )
+    else:
+        try:
+            appreciation = redfin_data.get_appreciation_series(
+                redfin_data.load_redfin(), metro=metro
+            )
+            for exclude in (False, True):
+                price_bands[exclude] = redfin_data.compute_growth_bands(
+                    appreciation, exclude_anomalous_period=exclude
+                )
+        except (KeyError, ValueError, FileNotFoundError, OSError) as exc:
+            detail.price_growth_unavailable_reason = (
+                f"The Redfin appreciation series for {metro} could not be built "
+                f"({type(exc).__name__}), so no price projection was produced."
+            )
+
+    return rent_bands, price_bands
+
+
+def _record_band_provenance(
+    detail: ForecastDetail,
+    rent: Optional[fmr_history.RentGrowthBands],
+    price: Optional[redfin_data.GrowthBands],
+) -> None:
+    """Copy the chosen framing's provenance onto the detail object for the report."""
+    if rent is not None:
+        detail.rent_growth_area_name = rent.area_name
+        detail.rent_growth_resolution = rent.resolution
+        detail.rent_growth_bedrooms = rent.bedrooms
+        detail.rent_growth_n_observations = rent.n_yoy_observations
+        detail.rent_growth_first_year = rent.first_year
+        detail.rent_growth_last_year = rent.last_year
+        detail.rent_growth_pessimistic_pct = rent.pessimistic_yoy_pct
+        detail.rent_growth_base_pct = rent.base_yoy_pct
+        detail.rent_growth_optimistic_pct = rent.optimistic_yoy_pct
+        detail.rent_growth_pessimistic_year = rent.pessimistic_year
+        detail.rent_growth_optimistic_year = rent.optimistic_year
+        detail.rent_growth_iqr_lower_pct = rent.iqr_lower_yoy_pct
+        detail.rent_growth_iqr_upper_pct = rent.iqr_upper_yoy_pct
+        detail.cohort_shift_years_detected = list(rent.cohort_shift_years_detected)
+        detail.cohort_shift_years_excluded = list(rent.cohort_shift_years_excluded)
+        detail.cohort_baseline_pct = rent.cohort_baseline_pct
+        detail.cohort_n_areas = rent.cohort_n_areas
+        detail.local_deviation_years = list(rent.local_deviation_years)
+    if price is not None:
+        detail.price_growth_metro = price.metro
+        detail.price_growth_n_observations = price.n_yoy_observations
+        detail.price_growth_pessimistic_pct = price.pessimistic_yoy_pct
+        detail.price_growth_base_pct = price.base_yoy_pct
+        detail.price_growth_optimistic_pct = price.optimistic_yoy_pct
+        detail.anomalous_period_excluded = price.anomalous_period_excluded
+        detail.anomalous_period_share = price.anomalous_period_share
+        detail.optimistic_stretch_in_anomalous_period = (
+            price.optimistic_stretch_in_anomalous_period
+        )
+
+
+def _to_scenarios(
+    survivors: list[tot.Candidate],
+    base_rent: Optional[float],
+    base_price: Optional[float],
+    horizon: int,
+) -> list[Scenario]:
+    """Project each survivor and label the set by outcome — the reconciliation step.
+
+    Labels are assigned here rather than chosen by the evaluator: a scenario's name has
+    to describe its outcome, or a reader comparing three rows cannot trust the column.
+
+    **Ordering is by the sum of the two growth multiples, and that is a stated convention
+    rather than a return model.** Ranking on rent alone produced exactly the incoherence
+    this step exists to prevent - a first Chicago run labelled a path "pessimistic" while
+    it projected a price of $1.29M against the "optimistic" path's $390K, because the two
+    shared a rent band and the price column was never consulted. Weighting the two sides
+    equally is a choice; a real total-return model would weight them by holding period,
+    leverage and exit assumption, none of which this system has. What matters is that the
+    label follows both quantities and that the reader is told how.
+    """
+    projected: list[tuple[float, Scenario]] = []
+    for candidate in survivors:
+        payload = candidate.payload
+        rent_rate = payload.get("rent_rate")
+        price_rate = payload.get("price_rate")
+        scenario = Scenario(
+            name="",
+            rent_band=payload.get("rent_band"),
+            price_band=payload.get("price_band"),
+            rent_growth_pct_per_year=rent_rate,
+            price_growth_pct_per_year=price_rate,
+            projected_monthly_rent=(
+                base_rent * (1 + rent_rate / 100.0) ** horizon
+                if base_rent is not None and rent_rate is not None
+                else None
+            ),
+            projected_price=(
+                base_price * (1 + price_rate / 100.0) ** horizon
+                if base_price is not None and price_rate is not None
+                else None
+            ),
+            rationale=candidate.summary,
+            evaluator_score=candidate.score,
+        )
+        projected.append((_outcome_rank(scenario, base_rent, base_price), scenario))
+
+    projected.sort(key=lambda pair: pair[0])
+    names = _labels_for(len(projected))
+    for name, (_, scenario) in zip(names, projected):
+        scenario.name = name
+    return [scenario for _, scenario in projected]
+
+
+def _outcome_rank(
+    scenario: Scenario, base_rent: Optional[float], base_price: Optional[float]
+) -> float:
+    """Sum of the growth multiples on the sides that were actually projected.
+
+    Unit-free, so a rent in dollars per month and a price in dollars do not have to be
+    made commensurable. A side with no projection contributes 1.0 - no change - which
+    leaves the ordering driven by whichever side exists.
+    """
+    total = 0.0
+    for projected, base in (
+        (scenario.projected_monthly_rent, base_rent),
+        (scenario.projected_price, base_price),
+    ):
+        total += projected / base if projected is not None and base else 1.0
+    return total
+
+
+def _labels_for(count: int) -> list[str]:
+    """Names for however many branches survived.
+
+    Fewer than three survivors is a real outcome — pruning is allowed to leave two — and
+    labelling two branches "pessimistic" and "optimistic" with no base case says more
+    than padding the set would.
+    """
+    if count >= 3:
+        return ["pessimistic"] + ["base"] * (count - 2) + ["optimistic"]
+    if count == 2:
+        return ["pessimistic", "optimistic"]
+    return ["base"]
 
 
 def scenario_forecast_agent(state: DealState) -> dict:
     """Node function: returns a partial state update, never the whole state."""
-    return {"stub_nodes": [AGENT]}
+    terms = state.deal_terms
+    horizon = config.FORECAST_HORIZON_YEARS
+    detail = ForecastDetail(
+        horizon_years=horizon,
+        projection_base_price=terms.price,
+        projection_base_source="asking price" if terms.price is not None else None,
+        projection_base_rent=state.rent_estimate,
+    )
+    flags: list = []
+
+    rent_bands, price_bands = _build_bands(state, detail)
+
+    if not rent_bands and not price_bands:
+        flags.append(
+            flag(
+                AGENT,
+                FlagKind.FORECAST_UNAVAILABLE,
+                "No forecast was produced: neither a rent-growth series nor a "
+                f"sale-price series was available. Rent side — "
+                f"{detail.rent_growth_unavailable_reason} Price side — "
+                f"{detail.price_growth_unavailable_reason}",
+                Severity.CRITICAL,
+            )
+        )
+        return {"forecast_detail": detail, "flags": flags}
+
+    if not rent_bands or not price_bands:
+        missing, reason = (
+            ("rent growth", detail.rent_growth_unavailable_reason)
+            if not rent_bands
+            else ("price appreciation", detail.price_growth_unavailable_reason)
+        )
+        flags.append(
+            flag(
+                AGENT,
+                FlagKind.FORECAST_UNAVAILABLE,
+                f"The forecast covers only one side of this deal: no {missing} "
+                f"projection was produced. {reason} The scenarios below are real for "
+                f"the side that was available and silent on the other.",
+                Severity.WARN,
+            )
+        )
+
+    # A missing side still has to contribute exactly one option, or the product that
+    # enumerates the framings collapses to nothing and a one-sided forecast — which is a
+    # real, reportable outcome — would look identical to a total failure.
+    if not rent_bands:
+        rent_bands = {False: None}
+    if not price_bands:
+        price_bands = {False: None}
+
+    context = _context_block(state, detail, horizon)
+
+    def expand(depth: int, parents: list[tot.Candidate]) -> list[tot.Candidate]:
+        if depth == 1:
+            return _framings(rent_bands, price_bands)
+        if depth == 2:
+            return _pairings(parents)
+        # Depth 3 is reconciliation, which is arithmetic rather than search — see the
+        # module docstring. Returning nothing ends the beam cleanly.
+        return []
+
+    result = tot.beam_search(
+        expand=expand,
+        hard_check=_hard_check,
+        score=_make_scorer(context, detail),
+        beam_width={
+            1: config.TOT_FRAMING_BEAM_WIDTH,
+            2: config.TOT_BEAM_WIDTH,
+        },
+        prune_threshold={
+            1: config.TOT_FRAMING_PRUNE_THRESHOLD,
+            2: config.TOT_PRUNE_THRESHOLD,
+        },
+        conservatism_key=_conservatism,
+    )
+
+    detail.framings_considered = sum(1 for c in result.ledger if c.depth == 1)
+    detail.branches_generated = len(result.ledger)
+    detail.branches_pruned = result.n_pruned
+    detail.top_two_score_gap = result.top_two_score_gap
+
+    ledger = [
+        BranchLedgerEntry(
+            id=c.id,
+            parent=c.parent,
+            depth=c.depth,
+            agent=AGENT,
+            summary=c.summary,
+            score=c.score,
+            prune_reason=c.prune_reason,
+        )
+        for c in result.ledger
+    ]
+
+    if not result.survivors:
+        detail.search_exhausted_reason = result.exhausted_reason
+        flags.append(
+            flag(
+                AGENT,
+                FlagKind.FORECAST_UNAVAILABLE,
+                f"The scenario search ended with no surviving hypothesis. "
+                f"{result.exhausted_reason} Every candidate considered is listed in the "
+                f"branch ledger with the reason it was discarded.",
+                Severity.CRITICAL,
+            )
+        )
+        return {"forecast_detail": detail, "branch_ledger": ledger, "flags": flags}
+
+    chosen = result.survivors[0].payload.get("framing") or result.survivors[0].payload
+    _record_band_provenance(detail, chosen.get("rent"), chosen.get("price"))
+
+    scenarios = _to_scenarios(
+        result.survivors, state.rent_estimate, terms.price, horizon
+    )
+
+    flags.extend(_disclosure_flags(detail, result, chosen, scenarios))
+
+    return {
+        "scenarios": scenarios,
+        "forecast_detail": detail,
+        "appreciation_source": (
+            redfin_data.SERIES_DESCRIPTION if chosen.get("price") is not None else None
+        ),
+        "branch_ledger": ledger,
+        "flags": flags,
+    }
+
+
+def _context_block(state: DealState, detail: ForecastDetail, horizon: int) -> str:
+    """What the evaluator is told about the deal before it scores anything."""
+    terms = state.deal_terms
+    raised = ", ".join(sorted({f.kind.value for f in state.flags})) or "none"
+    return (
+        f"Deal: {terms.full_address or 'unidentified property'}, "
+        f"{terms.unit_count or '?'} units, {terms.bedrooms or '?'} bed / "
+        f"{terms.bathrooms or '?'} bath, {terms.square_footage or '?'} sqft.\n"
+        f"Asking price: {terms.price if terms.price is not None else 'not stated'}. "
+        f"Modelled monthly rent: {state.rent_estimate if state.rent_estimate is not None else 'not produced'}.\n"
+        f"Forecast horizon: {horizon} years.\n"
+        f"Flags already raised upstream: {raised}.\n\n"
+        f"{_availability_note(detail)}\n\n"
+        f"Measured context you must respect: across this project's three inference "
+        f"metros, rent growth and sale-price growth are NEGATIVELY correlated "
+        f"(pooled r = -0.309). A pairing that puts rent and price at the same extreme "
+        f"describes a market behaving in a way this data says is uncommon; that does not "
+        f"make it wrong, but it needs a reason. Rent bands come from HUD Fair Market Rent "
+        f"history (administrative, annual); price bands from Redfin metro multi-family "
+        f"sales (market, monthly)."
+    )
+
+
+def _availability_note(detail: ForecastDetail) -> str:
+    """Tell the evaluator which sides exist, so it does not penalise an absence.
+
+    **Added after a Staten Island run returned no forecast at all.** Redfin's extract
+    does not reach that metro, so every candidate carried a rent band and no price band;
+    the evaluator, told only that rent and price growth are negatively correlated, scored
+    each of them below the prune threshold and the beam emptied. The deal had a perfectly
+    good rent forecast and the report said nothing — which is the degradation failure
+    this project exists to prevent, produced by a prompt that described a two-sided
+    problem to a one-sided deal.
+    """
+    if detail.rent_growth_unavailable_reason and not detail.price_growth_unavailable_reason:
+        return (
+            "IMPORTANT: this deal has NO rent-growth series — "
+            f"{detail.rent_growth_unavailable_reason} Candidates therefore carry a price "
+            "band only. Judge each on whether that price treatment is defensible for this "
+            "deal. Do not penalise a candidate for the missing rent side; it is a gap in "
+            "the data, not a weakness of the hypothesis."
+        )
+    if detail.price_growth_unavailable_reason and not detail.rent_growth_unavailable_reason:
+        return (
+            "IMPORTANT: this deal has NO price-appreciation series — "
+            f"{detail.price_growth_unavailable_reason} Candidates therefore carry a rent "
+            "band only, and the rent/price correlation below cannot apply. Judge each on "
+            "whether that rent treatment is defensible for this deal. Do not penalise a "
+            "candidate for the missing price side; it is a gap in the data, not a "
+            "weakness of the hypothesis."
+        )
+    return "Both a rent-growth series and a price-appreciation series are available."
+
+
+def _disclosure_flags(
+    detail: ForecastDetail,
+    result: tot.SearchResult,
+    chosen: dict,
+    scenarios: list[Scenario],
+) -> list:
+    """Every flag that describes how the surviving forecast was reached."""
+    flags: list = []
+    price = chosen.get("price")
+    rent = chosen.get("rent")
+
+    if price is not None:
+        flags.append(
+            flag(
+                AGENT,
+                FlagKind.APPRECIATION_SOURCE,
+                f"Price appreciation is projected from {redfin_data.SERIES_DESCRIPTION} "
+                f"for the {price.metro} metro, over {price.n_yoy_observations} "
+                f"year-over-year observations. This project has one appreciation series: "
+                f"the ZIP-level tier was closed on sample size (median 2 sales per "
+                f"ZIP-period) and no all-residential extract exists here, so there is no "
+                f"fallback below this one.",
+                Severity.INFO,
+            )
+        )
+        if price.includes_anomalous_period:
+            flags.append(
+                flag(
+                    AGENT,
+                    FlagKind.ANOMALOUS_PERIOD_INCLUDED,
+                    f"The price bands include the 2020-2022 window, which is "
+                    f"{price.anomalous_period_share:.0%} of the observations. Near-zero "
+                    f"rates pulled price growth well above trend in that stretch"
+                    + (
+                        ", and the optimistic band rests on it."
+                        if price.optimistic_stretch_in_anomalous_period
+                        else "."
+                    ),
+                    Severity.INFO,
+                )
+            )
+
+    if rent is not None and rent.cohort_shift_years_excluded:
+        years = ", ".join(f"FY{y}" for y in rent.cohort_shift_years_excluded)
+        flags.append(
+            flag(
+                AGENT,
+                FlagKind.RENT_GROWTH_COHORT_SHIFT_SCREENED,
+                f"{years} were held out of the rent bands: every one of the "
+                f"{rent.cohort_n_areas} HUD Fair Market Rent areas in this project's "
+                f"panel moved together in those years, against a "
+                f"{rent.cohort_baseline_pct:.2f}% baseline. Whether that was HUD changing "
+                f"its methodology or the 2021-22 market surge reaching an administrative "
+                f"series two years late is not determinable from FMR alone, so it is "
+                f"screened and disclosed rather than attributed. Note these are not the "
+                f"same years as the price series' 2020-2022 window.",
+                Severity.INFO,
+            )
+        )
+
+    # Two near-ties are possible and they mean different things, so they are reported
+    # separately rather than collapsed into one score gap.
+    framing_gap = result.score_gap_by_depth.get(1)
+    if framing_gap is not None and framing_gap < config.TOT_TIE_EPSILON:
+        flags.append(
+            flag(
+                AGENT,
+                FlagKind.FORECAST_BRANCHES_NEAR_TIED,
+                f"The two best *framings* scored within {framing_gap:.3f} of each other, "
+                f"inside the {config.TOT_TIE_EPSILON} tie threshold. A framing decides "
+                f"which years feed every band, so this means the whole forecast rests on "
+                f"a reading the evaluator could not separate from its alternative, "
+                f"resolved by the conservatism tie-break. The branch ledger lists the "
+                f"framing that lost and what it would have implied.",
+                Severity.WARN,
+            )
+        )
+
+    pairing_gap = result.score_gap_by_depth.get(2)
+    if pairing_gap is not None and pairing_gap < config.TOT_TIE_EPSILON:
+        flags.append(
+            flag(
+                AGENT,
+                FlagKind.FORECAST_BRANCHES_NEAR_TIED,
+                f"The two best-scoring scenarios were separated by {pairing_gap:.3f}, "
+                f"inside the {config.TOT_TIE_EPSILON} tie threshold, so which one leads "
+                f"was settled by the conservatism tie-break rather than on evidence. "
+                f"Treat the ordering as one defensible reading rather than as the "
+                f"search's conclusion.",
+                Severity.WARN,
+            )
+        )
+
+    flags.extend(_distinctness_flags(scenarios))
+    return flags
+
+
+def _distinctness_flags(scenarios: list[Scenario]) -> list:
+    """Report when the search returned fewer distinct answers than it has labels for.
+
+    The reconciliation step promises three scenarios that bracket an outcome range. When
+    two of them land within `config.TOT_SCENARIO_DISTINCTNESS_PCT` of each other, the
+    labels imply a spread the numbers do not contain, and a reader comparing rows would
+    take the difference for signal.
+    """
+    collisions: list[str] = []
+    for i, first in enumerate(scenarios):
+        for second in scenarios[i + 1 :]:
+            if _outcomes_match(first, second):
+                collisions.append(f"{first.name} and {second.name}")
+    if not collisions:
+        return []
+    return [
+        flag(
+            AGENT,
+            FlagKind.FORECAST_BRANCHES_NEAR_TIED,
+            f"The surviving scenarios are not fully distinct: {', '.join(collisions)} "
+            f"project outcomes within {config.TOT_SCENARIO_DISTINCTNESS_PCT:.0f}% of each "
+            f"other. The labels imply a spread these figures do not contain, which "
+            f"usually means the underlying bands are close together rather than that the "
+            f"search failed.",
+            Severity.INFO,
+        )
+    ]
+
+
+def _outcomes_match(first: Scenario, second: Scenario) -> bool:
+    """True when two scenarios project effectively the same outcome on every side that
+    both of them produced."""
+    compared = False
+    for attribute in ("projected_monthly_rent", "projected_price"):
+        left = getattr(first, attribute)
+        right = getattr(second, attribute)
+        if left is None or right is None or not left:
+            continue
+        compared = True
+        if abs(left - right) / abs(left) * 100.0 > config.TOT_SCENARIO_DISTINCTNESS_PCT:
+            return False
+    return compared

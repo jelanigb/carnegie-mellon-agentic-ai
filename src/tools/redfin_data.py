@@ -29,7 +29,7 @@ Three transformations happen here rather than downstream, and each exists for a 
    immaterial against a series whose purpose is directional banding.
 
 Flag-worthy conditions are **returned as data**, never printed or raised. `GrowthBands`
-carries `includes_anomalous_period` and `tier`; the Scenario/Forecast agent converts
+carries `includes_anomalous_period` and `source_description`; the Scenario agent converts
 those into `anomalous_period_included` and `appreciation_source` `Flag` objects. Keeping
 the judgment here and the flag construction there is what stops this module from needing
 to import `state.py`.
@@ -51,7 +51,6 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import config
-from enums import AppreciationTier
 
 REDFIN_CSV = (
     config.DATA_DIR
@@ -126,12 +125,19 @@ SUSTAINED_STRETCH_PERIODS = 12
 ANOMALOUS_PERIOD_START = pd.Timestamp("2020-01-01")
 ANOMALOUS_PERIOD_END = pd.Timestamp("2022-12-31")
 
-# Mirrors DealState.appreciation_source in §5. Imported from enums.py rather than
-# state.py: this module returns flag-worthy findings as data rather than constructing
-# Flag objects itself (see the module docstring above), specifically so it never has to
-# depend on state.py. enums.py carries no dependencies of its own, so importing the
-# shared type here doesn't reintroduce that coupling.
-TIER_METRO_MULTIFAMILY: AppreciationTier = AppreciationTier.METRO_MULTIFAMILY
+# What this series actually is, in the words the report should use. Mirrors
+# DealState.appreciation_source in §5.
+#
+# **This was an `AppreciationTier` enum until U6 (Aug 24, 2026), and the ladder it
+# belonged to turned out to have one rung.** `zip_multifamily` is closed on evidence -
+# the ZIP extract carries a median 2 homes sold per ZIP-period, so a year-over-year rate
+# off it is noise - and `metro_all_residential` is closed by decision: no such extract
+# exists in this project, and §2's asset-match argument says a 2-4 unit forecast should
+# not fall back onto single-family dynamics anyway. A three-member type advertising a
+# fallback the system cannot reach is a claim about the design that the build does not
+# support, so the type went and a description stayed. The closed rungs are recorded in
+# §7 where closed decisions live.
+SERIES_DESCRIPTION = "Redfin metro-level Multi-Family (2-4 units) median sale price"
 
 
 @dataclass(frozen=True)
@@ -145,7 +151,7 @@ class AppreciationSeries:
 
     metro: str
     region_name: str
-    tier: AppreciationTier
+    source_description: str
     frame: pd.DataFrame
     window_periods: int
     price_floor: float
@@ -163,13 +169,13 @@ class GrowthBands:
     """Optimistic / base / pessimistic year-over-year growth, plus its own provenance.
 
     Every field a Flag would need is here as data. Nothing in this module prints or
-    raises on a flag-worthy condition: `includes_anomalous_period` and `tier` are the
+    raises on a flag-worthy condition: `includes_anomalous_period` and `source_description` are
     inputs the Scenario/Forecast agent turns into `anomalous_period_included` and
     `appreciation_source` flags respectively.
     """
 
     metro: str
-    tier: AppreciationTier
+    source_description: str
 
     # The three bands, in percent per year.
     base_yoy_pct: float          # long-run mean growth
@@ -246,7 +252,7 @@ def get_appreciation_series(
     metro: str,
     window_periods: int = ROLLING_WINDOW_PERIODS,
     price_floor: float = MIN_SALE_PRICE_USD,
-    tier: AppreciationTier = TIER_METRO_MULTIFAMILY,
+    source_description: str = SERIES_DESCRIPTION,
 ) -> AppreciationSeries:
     """Build one metro's smoothed appreciation series.
 
@@ -287,7 +293,7 @@ def get_appreciation_series(
     return AppreciationSeries(
         metro=metro,
         region_name=region_name,
-        tier=tier,
+        source_description=source_description,
         frame=series,
         window_periods=window_periods,
         price_floor=price_floor,
@@ -378,7 +384,7 @@ def compute_growth_bands(
 
     return GrowthBands(
         metro=series.metro,
-        tier=series.tier,
+        source_description=series.source_description,
         base_yoy_pct=float(yoy.mean()),
         optimistic_yoy_pct=float(sustained.max()),
         pessimistic_yoy_pct=float(sustained.min()),
@@ -425,7 +431,7 @@ def _print_bands(label: str, bands: GrowthBands) -> None:
           f"(ending {bands.pessimistic_stretch_end.date()})")
     print(f"    median YoY {bands.median_yoy_pct:+.2f}%   "
           f"stdev {bands.stdev_yoy_pct:.2f}   n={bands.n_yoy_observations}")
-    print(f"    flag data: tier={bands.tier!r}  "
+    print(f"    flag data: source={bands.source_description!r}  "
           f"includes_anomalous_period={bands.includes_anomalous_period}  "
           f"anomalous_share={bands.anomalous_period_share:.1%}  "
           f"optimistic_stretch_in_anomalous_period="
@@ -445,7 +451,8 @@ def main() -> None:
     for metro in TARGET_METROS:
         series = get_appreciation_series(frame, metro)
         print("=" * 78)
-        print(f"{metro}  —  {series.region_name}  [tier: {series.tier}]")
+        print(f"{metro}  —  {series.region_name}")
+        print(f"  source: {series.source_description}")
         print(f"  {series.n_periods} periods, "
               f"{series.first_period.date()} to {series.last_period.date()}; "
               f"{series.periods_dropped_below_floor} period(s) dropped below the "
@@ -462,7 +469,7 @@ def main() -> None:
     print("=" * 78)
     print("Flag-worthy conditions above are returned as GrowthBands fields, not raised:")
     print("  includes_anomalous_period -> Flag(kind='anomalous_period_included', 'info')")
-    print("  tier                      -> Flag(kind='appreciation_source', 'info')")
+    print("  source_description        -> Flag(kind='appreciation_source', 'info')")
     print("Constructing those Flag objects is the Scenario/Forecast agent's job (§2, §5).")
 
 

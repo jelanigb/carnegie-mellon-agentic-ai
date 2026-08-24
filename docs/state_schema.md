@@ -45,11 +45,7 @@ are `str`, so serialization and comparison are unchanged.
 which was an inconsistency rather than a considered difference — they're compared and
 filtered on the same way flags are (`count_area_positioned`, the eval harness,
 `agents/summarizer.py`'s status branching), so the same typo-at-construction argument
-applies. One field's enum, `AppreciationTier`, lives in a new `src/enums.py` rather than
-here: `tools/redfin_data.py` returns flag-worthy findings as data specifically so it
-never has to import `state.py` (see that module's docstring), and `enums.py` — a module
-with no dependencies of its own — lets both sides share one definition without either
-depending on the other. `GeocodeSource` (`census_geocoder` / `city_centroid`) got the
+applies. `GeocodeSource` (`census_geocoder` / `city_centroid`) got the
 same treatment locally in `tools/geocoding.py`, and `tools/llm_cache.py`'s `CacheMode`
 now coerces its env-driven string through the enum at construction, so a typo'd
 `LLM_CACHE_MODE` raises at startup instead of silently matching no branch.
@@ -60,8 +56,6 @@ from enum import StrEnum
 from typing import Annotated, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field
-
-from enums import AppreciationTier  # shared with tools/redfin_data.py — see prose above
 
 class Severity(StrEnum):
     INFO = "info"; WARN = "warn"; CRITICAL = "critical"
@@ -151,11 +145,13 @@ class DealState(BaseModel):
     rent_estimate_source: Optional[RentEstimateSource] = None
     valuation_detail: Optional[ValuationDetail] = None   # provenance for the report
 
-    # forecast
-    # "zip_multifamily" is a documented future option (deferred — see §2); not
-    # produced by the current build.
-    appreciation_source: Optional[AppreciationTier] = None
-    scenarios: dict = Field(default_factory=dict)  # optimistic/base/pessimistic branches
+    # forecast (U6)
+    appreciation_source: Optional[str] = None            # which series, in words
+    scenarios: list[Scenario] = Field(default_factory=list)
+    forecast_detail: Optional[ForecastDetail] = None     # provenance for the report
+    branch_ledger: Annotated[list[BranchLedgerEntry], operator.add] = Field(
+        default_factory=list
+    )
 
     # review
     confidence_score: Optional[float] = None
@@ -228,6 +224,62 @@ and a 4-unit building in the same metro. The median is carried as
 `ValuationDetail.benchmark_median_sale_price` and rendered as a labelled market
 reference instead. The field is kept because U6 may choose a projection base for it;
 that decision belongs to U6, where the appreciation evidence is.
+
+> **Closed at U6 (Aug 24, 2026): the projection base is the asking price**, and
+> `value_estimate` stays `None` permanently rather than pending. Projecting from the
+> Redfin median would have compounded a figure this repo's demo asking prices were
+> themselves calibrated to. The asking price is an observed fact about the property, so
+> the report's claim is *"pay this today, and here is what the measured trend implies"* —
+> which needs no value estimate. Carried as `ForecastDetail.projection_base_price` with
+> `projection_base_source` naming it in words.
+
+### Fields added in U6 (Aug 24, 2026)
+
+**Three new types, and one enum removed.** `Scenario` is the *result* — the reported
+forecast paths — and `ForecastDetail` is the *provenance*, following exactly the split
+`ValuationDetail` established above and for the same reason: the Critic checks scenario
+bands against a base value, while nothing downstream calculates from the provenance.
+`BranchLedgerEntry` is the third, and it is neither: it records what the reasoning
+*considered*, which is a disclosure obligation rather than a result (decision #14).
+
+**`scenarios` stops being an untyped `dict`.** It held one through U5 because nothing
+wrote it. It is now `list[Scenario]`, ordered pessimistic → optimistic by combined
+outcome across both projected quantities.
+
+**A `Scenario` pairs a rent band with a price band, and the pairing is the reasoning.**
+Three rent bands and three price bands give nine combinations. The diagonal — optimistic
+with optimistic, and so on — is what a linear chain emits, and it is the combination
+§2's measurement argues against, since rent and price growth are *negatively* correlated
+across the inference trio (pooled r = −0.309). `rent_band` and `price_band` are carried
+separately from `name` because they legitimately differ: a scenario labelled "base" may
+pair an optimistic rent band with a pessimistic price one, and collapsing that would make
+the label look like a measurement rather than a composition.
+
+**`branch_ledger` carries an `operator.add` reducer**, for two reasons that both apply.
+The Critic's own search appends to it in U7 (decision #12), and a rework pass re-runs the
+Scenario node — so the raw history stays inspectable and the Summarizer de-duplicates at
+render time, matching how `stub_nodes` is handled.
+
+**`AppreciationTier` and `src/enums.py` were removed.** The enum described a fallback
+ladder — `metro_multifamily | zip_multifamily | metro_all_residential` — and U6 measured
+it down to a single rung: the ZIP tier is closed on sample size (median 2 homes sold per
+ZIP-period) and no all-residential extract exists in this project. A three-member type
+advertising fallbacks the build cannot reach describes a design rather than a system, so
+`appreciation_source` now carries a plain description of the series
+(`redfin_data.SERIES_DESCRIPTION`), which tells a report reader more than a tier label
+did. `enums.py` existed solely to hold that type and went with it.
+
+**Three new `FlagKind` members.** `FORECAST_UNAVAILABLE` covers a missing side — critical
+when both fail, warn when one does, because the two halves fail for unrelated reasons and
+a blanket absence would tell a reader nothing about which. `RENT_GROWTH_COHORT_SHIFT_SCREENED`
+is the rent-side counterpart to `ANOMALOUS_PERIOD_INCLUDED`, and is deliberately separate
+because **the two series' anomalous windows do not overlap**: Redfin's is calendar
+2020–2022, FMR's is FY2023–2024, since an administrative series lags the market it
+measures. One kind covering both would imply the same years were treated the same way on
+both sides. `FORECAST_BRANCHES_NEAR_TIED` fires when the evaluator could not separate the
+top two hypotheses, or when the surviving scenarios do not span distinct outcomes.
+
+### Fields added in U5 (Aug 22, 2026), continued
 
 **Two new `FlagKind` members.** `RENT_ESTIMATE_UNAVAILABLE` covers every way a rent
 figure can fail to be produced *other than* the county lookup — no trained model, a

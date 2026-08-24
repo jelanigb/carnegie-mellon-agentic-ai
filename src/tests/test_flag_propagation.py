@@ -64,6 +64,7 @@ import graph as graph_module
 import nodes
 from agents import critic as critic_module
 from agents import extractor as extractor_module
+from agents import scenario_forecast as scenario_module
 from agents import valuation_rent as valuation_module
 from agents.critic import critic_agent
 from agents.extractor import FieldAssumption, ListingExtraction
@@ -81,6 +82,7 @@ from state import (
 )
 from tools import hud_fmr, zcta_crosswalk
 from tools.geocoding import GeocodeResult, GeocodeSource
+from tools.llm_client import LlmError
 from tools.llm_client import LlmClient, LlmError, SchemaValidationExhausted
 from tools.model import rent_model
 
@@ -157,6 +159,29 @@ def offline_extractor(monkeypatch):
     monkeypatch.setattr(
         extractor_module.county_crosswalk, "lookup_county_fips", lambda lat, lon: None
     )
+
+
+@pytest.fixture(autouse=True)
+def offline_scenario_evaluator(monkeypatch):
+    """Keep U6's Tree-of-Thought evaluator off the network, for every test here.
+
+    Same reasoning as `offline_extractor` above, and the same autouse posture so a case
+    added later cannot reach out by forgetting to opt in. The Scenario agent scores each
+    level with a model call; left live, this suite would make several per test, take
+    minutes, and go red whenever OpenRouter did — which is exactly the failure mode that
+    teaches a reader to stop trusting a must-never-fail suite.
+
+    Forcing the constructor to raise routes the agent down its documented fallback: a
+    deterministic scorer over the measured negative correlation between rent and price
+    growth. That path is worth exercising on its own account, since it is what a real run
+    degrades to when the model is unreachable. The evaluator's live behaviour belongs to
+    `scripts/forecast_evidence.py`, which runs it against real services.
+    """
+
+    def _refuse(*args, **kwargs):
+        raise LlmError("LLM disabled for the hermetic suite")
+
+    monkeypatch.setattr(scenario_module, "LlmClient", _refuse)
 
 
 def run_deal(listing: str = LISTING_MISSING_PRICE, terms: DealTerms | None = None) -> dict:
@@ -243,6 +268,10 @@ class FakeFmrClient:
         return SimpleNamespace(
             entityid=entityid,
             year=year or self.CURRENT_YEAR,
+            # `area_name` is read by tools/fmr_history when it builds the rent-growth
+            # series; the real client always returns one.
+            area_name="Los Angeles-Long Beach-Glendale, CA HUD Metro FMR Area",
+            is_safmr=self.zip_table_enabled,
             rents=self._schedule(year),
         )
 
@@ -483,6 +512,14 @@ def test_rework_cycle_terminates_and_discloses_that_it_did(monkeypatch):
     test measuring zero rework passes instead of two. That is the agent behaving
     correctly and the test asking about something else. Stubbing it out is the same move
     already made for retrieval, for the same reason, rather than a symptom worked around.
+
+    **Scenario joined in U6 for exactly the same reason, which is what makes the pattern
+    worth naming.** With no county there is no FMR history to difference, and with
+    Valuation stubbed there is no resolved metro, so the forecast has neither side and
+    raises a critical `forecast_unavailable`. Three agents have now pre-empted this test
+    by correctly reporting a degradation, so the rule is general: a test that isolates
+    one route has to silence every *other* route that can escalate, and the list grows as
+    the pipeline learns to disclose more.
     """
     monkeypatch.setattr(
         critic_module, "_consistency_objections", lambda state: ["injected objection"]
@@ -494,6 +531,9 @@ def test_rework_cycle_terminates_and_discloses_that_it_did(monkeypatch):
     )
     monkeypatch.setitem(
         graph_module.NODE_FUNCTIONS, nodes.VALUATION_RENT, lambda state: {}
+    )
+    monkeypatch.setitem(
+        graph_module.NODE_FUNCTIONS, nodes.SCENARIO_FORECAST, lambda state: {}
     )
 
     graph = build_graph()

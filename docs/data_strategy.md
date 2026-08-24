@@ -134,6 +134,15 @@ candidate that costs nothing new and stays consistent with the anchoring design.
   stability outweighs the lost granularity. Revised three-tier design, with the tier
   used flagged (`kind="appreciation_source"`, `severity="info"` for tiers 1–2,
   `"warn"` for tier 3):
+
+  > **Built at U6 (Aug 24, 2026): the ladder has one rung, and the type that described it
+  > was removed.** Tier 2 is closed on the sample-size evidence this very paragraph gives
+  > (median 2 homes sold per ZIP-period). Tier 3 needs an all-residential Redfin extract
+  > that does not exist in this project — and §2's own asset-match argument says a 2–4
+  > unit forecast should not fall back onto single-family dynamics even if it did. Since
+  > tier 1's series never goes thin (minimum 81 sales/month across 102 periods in the
+  > sparsest metro), the fallback would never fire. `appreciation_source` now carries a
+  > description of the series rather than a tier label; see §7 decision #17.
   1. **Metro-level, multi-family filtered (default for the project).** Adequate
      sample for any of the target metros; this is the only tier required for the
      pipeline to work end-to-end.

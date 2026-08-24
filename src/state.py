@@ -32,7 +32,6 @@ from typing import Annotated, Optional
 
 from pydantic import BaseModel, Field
 
-from enums import AppreciationTier
 
 
 class Severity(StrEnum):
@@ -133,6 +132,24 @@ class FlagKind(StrEnum):
     # Forecast
     APPRECIATION_SOURCE = "appreciation_source"
     ANOMALOUS_PERIOD_INCLUDED = "anomalous_period_included"
+    # No forecast at all on at least one side. Both halves fail independently and for
+    # unrelated reasons — a Staten Island subject has a full FMR history and no Redfin
+    # metro; a subject with no resolvable county has the reverse — so the message names
+    # which side is missing rather than reporting a blanket absence.
+    FORECAST_UNAVAILABLE = "forecast_unavailable"
+    # Fiscal years in which every area in the FMR cohort panel moved together were held
+    # out of the rent bands. The rent-side counterpart to ANOMALOUS_PERIOD_INCLUDED,
+    # and deliberately a separate kind: the two series' anomalous windows do not
+    # overlap. Redfin's is calendar 2020-2022; FMR's is FY2023-2024, because an
+    # administrative series lags the market it measures. One kind covering both would
+    # let a report imply the same years were treated the same way on both sides.
+    RENT_GROWTH_COHORT_SHIFT_SCREENED = "rent_growth_cohort_shift_screened"
+    # The top two branches scored within `config.TOT_TIE_EPSILON` of each other while
+    # implying materially different outcomes, so the winner was near-arbitrary. Raised
+    # rather than resolved silently: an evaluator that cannot separate two hypotheses
+    # has not chosen between them, and a report that presents the survivor as the
+    # conclusion would be overstating what the search established.
+    FORECAST_BRANCHES_NEAR_TIED = "forecast_branches_near_tied"
 
     # Review
     LOW_CONFIDENCE_ESTIMATE = "low_confidence_estimate"
@@ -403,6 +420,160 @@ class ValuationDetail(BaseModel):
     benchmark_unavailable_reason: Optional[str] = None
 
 
+class Scenario(BaseModel):
+    """One reported forecast path: a rent band paired with a price band, projected out.
+
+    **The pairing is the reasoning, not a formatting choice.** Three rent bands and
+    three price bands give nine combinations, and the obvious three — optimistic with
+    optimistic, base with base, pessimistic with pessimistic — are the ones this
+    project's own data argues against. Rent growth and price growth are *negatively*
+    correlated across the inference trio (pooled r = -0.309, §2), so the diagonal
+    pairings describe a market behaving in a way it has usually not. Which pairing
+    deserves to be called "optimistic" for a given deal is a judgement over measured
+    inputs, and it is the judgement the Scenario agent's search exists to make.
+
+    Every rate here is an observed figure from `tools/fmr_history.py` or
+    `tools/redfin_data.py` - never a model's invention. The search selects among
+    measured values; it does not produce new ones.
+    """
+
+    # "optimistic" | "base" | "pessimistic" - the label this path is reported under,
+    # assigned after the search by ordering the survivors, not chosen by the evaluator.
+    name: str
+
+    # Which band each side contributes. Carried separately from `name` because they can
+    # legitimately differ: a "base" scenario may pair an optimistic rent band with a
+    # pessimistic price band, and hiding that would make the label look like a
+    # measurement rather than a composition.
+    rent_band: Optional[str] = None
+    price_band: Optional[str] = None
+
+    rent_growth_pct_per_year: Optional[float] = None
+    price_growth_pct_per_year: Optional[float] = None
+
+    # Projected levels at `ForecastDetail.horizon_years`. Rent projects from
+    # `DealState.rent_estimate`; price projects from the **asking price**, which is an
+    # observed fact about this property rather than an estimate - decision #15 leaves
+    # `value_estimate` null, and §7 assigned this choice to U6.
+    projected_monthly_rent: Optional[float] = None
+    projected_price: Optional[float] = None
+
+    # Why this pairing, in the evaluator's words. Rendered verbatim: a scenario a reader
+    # cannot interrogate is a number with a label on it.
+    rationale: Optional[str] = None
+    evaluator_score: Optional[float] = None
+
+
+class BranchLedgerEntry(BaseModel):
+    """One hypothesis the search considered, surviving or discarded (decision #14).
+
+    **Pruning that leaves no trace is the failure mode this project has already had
+    once.** In U2 a single critical flag cost 0.40, landed confidence at exactly 0.60,
+    and `0.60 < 0.60` is false, so a zero-comparable deal reported as ordinary. An
+    evaluator that systematically undervalues a correct-but-unusual branch produces
+    confident, well-formed, wrong forecasts and looks identical to one working properly.
+    So every branch writes a row here whether it survived or not, and the Summarizer can
+    state how many hypotheses were considered and why each was dropped.
+
+    This is the compact ledger, which is what disclosure needs. The full tree - every
+    generated hypothesis with its evidence - goes to `EVAL_RESULTS_DIR` during eval runs
+    only, behind `config.TOT_PERSIST_FULL_TREE`, because only that lets U8 reconstruct
+    why the evaluator scored what it did.
+    """
+
+    id: str
+    parent: Optional[str] = None
+    depth: int = 0
+    # Which node produced it. Present so the Critic's own search (U7, decision #12) can
+    # append to the same ledger rather than needing a second one.
+    agent: str = ""
+    summary: str = ""
+    score: Optional[float] = None
+    # None when the branch survived. A sentence, not a code: the report prints it.
+    prune_reason: Optional[str] = None
+
+
+class ForecastDetail(BaseModel):
+    """Provenance for the forecast, split from the scenarios for the same reason
+    `ValuationDetail` is split from `rent_estimate` - by consumer.
+
+    `DealState.scenarios` is the *result*: what the report leads with and what the
+    Critic checks against the base value. Everything here is what a reader needs in
+    order to weigh that result, and nothing downstream calculates from it.
+
+    Every field is Optional because the two sides fail independently. A Staten Island
+    subject has an FMR history and no Redfin metro at all; a subject with no resolvable
+    county has the reverse. Collapsing those into one "forecast unavailable" would tell
+    a reader nothing about which half is missing.
+    """
+
+    horizon_years: Optional[int] = None
+
+    # --- What the projection is anchored to ------------------------------------
+    # The asking price, and the fact that it is the asking price. Decision #15 declined
+    # to produce a property-level `value_estimate`, so the alternative was projecting
+    # from a metro median that this repo's demo prices were themselves calibrated to -
+    # an agreement that would measure nothing. The asking price is at least an observed
+    # fact about this property, and the report says that is what it is.
+    projection_base_price: Optional[float] = None
+    projection_base_source: Optional[str] = None
+    projection_base_rent: Optional[float] = None
+
+    # --- Rent side (HUD FMR history) -------------------------------------------
+    rent_growth_area_name: Optional[str] = None
+    rent_growth_resolution: Optional[str] = None
+    rent_growth_bedrooms: Optional[int] = None
+    rent_growth_n_observations: Optional[int] = None
+    rent_growth_first_year: Optional[int] = None
+    rent_growth_last_year: Optional[int] = None
+    rent_growth_pessimistic_pct: Optional[float] = None
+    rent_growth_base_pct: Optional[float] = None
+    rent_growth_optimistic_pct: Optional[float] = None
+    rent_growth_pessimistic_year: Optional[int] = None
+    rent_growth_optimistic_year: Optional[int] = None
+    # Disclosed beside the bands, never as the bands - it distinguishes an isolated
+    # spike from a cluster. See config.FMR_IQR_*_PERCENTILE.
+    rent_growth_iqr_lower_pct: Optional[float] = None
+    rent_growth_iqr_upper_pct: Optional[float] = None
+    # Fiscal years in which every area in the cohort panel moved together. Named rather
+    # than counted, because "FY2023 and FY2024 were screened" is checkable and "two
+    # years were screened" is not.
+    cohort_shift_years_detected: list[int] = Field(default_factory=list)
+    cohort_shift_years_excluded: list[int] = Field(default_factory=list)
+    cohort_baseline_pct: Optional[float] = None
+    cohort_n_areas: Optional[int] = None
+    local_deviation_years: list[int] = Field(default_factory=list)
+    rent_growth_unavailable_reason: Optional[str] = None
+
+    # --- Price side (Redfin metro multi-family) --------------------------------
+    price_growth_metro: Optional[str] = None
+    price_growth_n_observations: Optional[int] = None
+    price_growth_pessimistic_pct: Optional[float] = None
+    price_growth_base_pct: Optional[float] = None
+    price_growth_optimistic_pct: Optional[float] = None
+    anomalous_period_excluded: Optional[bool] = None
+    anomalous_period_share: Optional[float] = None
+    optimistic_stretch_in_anomalous_period: Optional[bool] = None
+    price_growth_unavailable_reason: Optional[str] = None
+
+    # --- The search itself ------------------------------------------------------
+    # Counts rather than the tree, which lives in the ledger. Enough for the report to
+    # say what was considered without re-serializing the search on every state write.
+    framings_considered: Optional[int] = None
+    branches_generated: Optional[int] = None
+    branches_pruned: Optional[int] = None
+    # Gap between the top two scores at the final level. Below config.TOT_TIE_EPSILON
+    # the selection was near-arbitrary, and the system says so rather than presenting a
+    # coin flip as a conclusion.
+    top_two_score_gap: Optional[float] = None
+    evidence_tools_called: list[str] = Field(default_factory=list)
+    # Why the search produced nothing, when it produced nothing. Distinct from the two
+    # `*_unavailable_reason` fields above: those say a *series* was missing, this says
+    # the series were present and no hypothesis over them survived. A report that
+    # confused the two would tell a reader to go find data they already have.
+    search_exhausted_reason: Optional[str] = None
+
+
 class DealState(BaseModel):
     """The single typed object threaded through every node.
 
@@ -456,9 +627,30 @@ class DealState(BaseModel):
     valuation_detail: Optional[ValuationDetail] = None
 
     # forecast
-    # "zip_multifamily" is documented future work (§2) and is not produced by this build.
-    appreciation_source: Optional[AppreciationTier] = None
-    scenarios: dict = Field(default_factory=dict)
+    # Which series the appreciation figures came from, in the words the report uses -
+    # `tools/redfin_data.SERIES_DESCRIPTION`. A plain string rather than the
+    # `AppreciationTier` enum this held until U6: the tier ladder it belonged to was
+    # measured down to a single rung (`zip_multifamily` closed on sample size,
+    # `metro_all_residential` closed by decision - see §7), and a three-member type
+    # advertising fallbacks the build cannot reach describes a design rather than a
+    # system. A description also tells a reader more than a tier label does.
+    appreciation_source: Optional[str] = None
+
+    # The reported forecast paths, and the provenance behind them. `scenarios` was an
+    # untyped dict through U5 because nothing wrote it; U6 gives it the same
+    # result/provenance split `ValuationDetail` uses - see `Scenario` and
+    # `ForecastDetail` above for why the pairing of bands is the reasoning rather than a
+    # presentation choice.
+    scenarios: list[Scenario] = Field(default_factory=list)
+    forecast_detail: Optional[ForecastDetail] = None
+
+    # Every hypothesis the Tree-of-Thought search considered, surviving or pruned
+    # (decision #14). Carries a reducer because the Critic's own search appends to it in
+    # U7, and because a rework pass re-runs the Scenario node - the raw history stays
+    # inspectable and the Summarizer de-duplicates at render time, matching `stub_nodes`.
+    branch_ledger: Annotated[list[BranchLedgerEntry], operator.add] = Field(
+        default_factory=list
+    )
 
     # review
     confidence_score: Optional[float] = None

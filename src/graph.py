@@ -51,8 +51,8 @@ from agents.planner import planner_agent, route_after_critic, route_after_planne
 from agents.scenario_forecast import scenario_forecast_agent
 from agents.summarizer import summarizer_agent
 from agents.valuation_rent import valuation_rent_agent
-from enums import AppreciationTier
 from state import (
+    BranchLedgerEntry,
     Comp,
     DealState,
     DealStatus,
@@ -60,7 +60,9 @@ from state import (
     Flag,
     FlagKind,
     LocationPrecision,
+    ForecastDetail,
     RentEstimateSource,
+    Scenario,
     Severity,
     ValuationDetail,
 )
@@ -83,7 +85,8 @@ def state_serde() -> JsonPlusSerializer:
 
     **Four names were missing from it until Aug 22, 2026, and how that surfaced is the
     reason to record it.** `DealStatus`, `LocationPrecision`, `RentEstimateSource` and
-    `AppreciationTier` are all `StrEnum`, and a `StrEnum` member *is* a `str`, so a
+    `AppreciationTier` (removed in U6) are all `StrEnum`, and a `StrEnum` member *is* a
+    `str`, so a
     blocked deserialization degraded to the bare string, which Pydantic then coerced
     straight back to the enum on the next validation. Nothing broke and no output was
     ever wrong. The gap was visible only as a log line, and it took a U5 test asserting
@@ -114,7 +117,9 @@ def state_serde() -> JsonPlusSerializer:
             DealStatus,
             LocationPrecision,
             RentEstimateSource,
-            AppreciationTier,
+            Scenario,
+            BranchLedgerEntry,
+            ForecastDetail,
         ]
     )
 

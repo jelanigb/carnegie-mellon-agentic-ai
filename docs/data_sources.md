@@ -169,9 +169,33 @@ series at county and ZIP resolution costing no new dependency. It is also the on
 candidate consistent with the anchoring design by construction — the estimate is
 `ratio × FMR`, so projecting the anchor forward while holding the ratio constant forecasts
 rent by the same mechanism that produced it. **Caveat that U6 must handle:** FMR is an
-administrative 40th-percentile figure, and the history contains methodology jumps rather
-than market moves — Chicago +19.0% in FY2024, Los Angeles +14.5%. Zillow ZORI is the
-independent check (decision #16).
+administrative 40th-percentile figure, and the history contains year-to-year jumps far
+larger than any single market moved — Chicago +19.0% in FY2024, Los Angeles +14.5%.
+Zillow ZORI is the independent check (decision #16).
+
+> **Measured at U6 (Aug 22, 2026), and this section previously called those jumps
+> "methodology jumps rather than market moves." That attribution is not supportable from
+> FMR alone and has been withdrawn.** Across a panel of the ten distinct HUD FMR areas
+> behind this project's training metros, **every one of them moved in FY2024** (cohort
+> median 11.65%, minimum 6.5%). Chicago's +19.0% decomposes into 11.7 points of
+> cohort and 7.4 points of local movement — 61% of it is shared with every other market
+> in the panel — and Los Angeles's +14.5% is mostly cohort. A cohort-wide move is equally
+> consistent with HUD changing its methodology and with the 2021–22 market surge reaching
+> an administrative series two years late, and nothing in FMR separates the two. So the
+> screen `tools/fmr_history.py` implements measures **co-movement**, which is observable,
+> and the report claims nothing about cause. ZORI, being market-observed, is what could
+> attribute it.
+>
+> **A second finding matters more for the code.** The rent series' anomalous years are
+> **FY2023 and FY2024**, not the calendar 2020–2022 window `config.ANOMALOUS_PERIOD`
+> defines for the price series — those three fiscal years run at 2.73% / 5.22% / 3.09%
+> against a 4.17% baseline, i.e. entirely ordinary. Applying the price window to the rent
+> series would have dropped three normal years and kept both distorted ones. The two
+> series carry separate windows for this reason.
+>
+> Reproduce with `scripts/fmr_history_evidence.py`. The panel is committed at
+> `src/tools/data/fmr_cohort_panel.json`; it is ten large coastal/midwest areas, not a
+> national sample, so the direction is trustworthy and the baseline level is not.
 
 ---
 

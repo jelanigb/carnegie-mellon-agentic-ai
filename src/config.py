@@ -385,6 +385,107 @@ RENT_COMP_DIVERGENCE_THRESHOLD_PCT = 0.30
 
 
 # --------------------------------------------------------------------------
+# Scenario / Forecast agent (U6 - agents/scenario_forecast.py)
+# --------------------------------------------------------------------------
+# Two quantities, two sources, and they are NOT interchangeable (decision #16): Redfin
+# drives price appreciation, HUD FMR history drives rent growth. Measured across the
+# inference trio, the two are negatively correlated (pooled r = -0.309), so a rent
+# forecast taken off the price series would point the wrong way.
+
+# How far the scenarios project. Five years is the standard multi-family hold period,
+# and it is long enough that the choice of growth band is visible rather than academic:
+# on Chicago's rent series the two defensible base cases (4.34%/yr with the FY2023-24
+# cohort shift included, 1.80%/yr with it screened out) compound to 23.7% against 9.3%
+# over this horizon - $2,474 against $2,186 on a $2,000 rent. That gap is the reason
+# this node branches instead of committing to one framing.
+FORECAST_HORIZON_YEARS = 5
+
+# --- FMR rent-growth series (tools/fmr_history.py) -------------------------
+# HUD publishes FY2017 onward through the API this project already caches, giving nine
+# year-over-year observations. Note the asymmetry with the price series: Redfin supplies
+# 88 *monthly* YoY observations, so the two series cannot use the same band construction
+# and do not (see FMR_BAND_* below).
+FMR_HISTORY_FIRST_YEAR = 2017
+
+# Below this many usable YoY observations, no rent-growth band is produced at all. A
+# "range" over three points describes the sample, not the market. Follows the precedent
+# set by RENT_COMP_MIN_COMPS_FOR_CROSS_CHECK: refuse the figure rather than qualify it.
+FMR_HISTORY_MIN_YOY_OBSERVATIONS = 5
+
+# The cohort panel: every HUD FMR area this project touches, FY2017-2026, all five
+# bedroom fields. Committed rather than pulled at runtime - deriving the cohort live
+# would cost ~100 API calls on a cold cache inside a per-deal node. Rebuild with
+# `scripts/fmr_history_evidence.py --build-panel` when a fiscal year is published.
+FMR_COHORT_PANEL_PATH = SRC_DIR / "tools" / "data" / "fmr_cohort_panel.json"
+
+# --- Cohort-shift screen ---------------------------------------------------
+# A fiscal year where *every* area in the panel moved together, well above the long-run
+# baseline. FY2023 (+5.10pp) and FY2024 (+7.48pp) are the two in the current panel.
+#
+# **This screen replaces the "methodology jump" screen the plan originally specified,
+# and the rename is the point.** Whether HUD changed its methodology or the 2021-22
+# market surge reached an administrative series two years late is not determinable from
+# FMR alone - both produce a cohort-wide move. What IS observable is whether every area
+# moved at once, so that is what this measures and what the report says. Attribution
+# waits for Zillow ZORI, which is market-observed (decision #16).
+#
+# Measured, not chosen: sorting the nine fiscal years by cohort excess leaves a 4.05pp
+# gap between the largest ordinary year (FY2021, +1.05pp) and the smallest shifted one
+# (FY2023, +5.10pp). Any threshold in 2-5pp selects the same two years, so this value
+# sits in the middle of a wide indifference band rather than on a boundary.
+# Reproduce with `scripts/fmr_history_evidence.py`.
+FMR_COHORT_SHIFT_EXCESS_PP = 3.0
+
+# One area departing from its own cohort, which is a *local* event rather than a
+# national one - Jersey City FY2026 (+20.2% against a 4.2% cohort) is the panel's
+# clearest case. Disclosed, never excluded: a local move is exactly the market signal a
+# forecast should carry. Set at the panel's p90 |deviation| (7.7pp), rounded, so it
+# marks the tail rather than ordinary dispersion (median 2.7pp).
+FMR_LOCAL_DEVIATION_PP = 8.0
+
+# --- Rent band construction ------------------------------------------------
+# **Bands are the worst and best fiscal years actually observed; the base case is the
+# geometric mean of the retained years.** Nine annual points cannot support Redfin's
+# definition, where "optimistic" is the best sustained 12-observation stretch, so the
+# construction had to be chosen rather than copied. Four candidates were measured:
+#
+#   * min / geometric mean / max (adopted). Coherent by construction, and each outer
+#     band names a real fiscal year the report can cite.
+#   * p25 / arithmetic mean / p75. **Rejected on its own output:** mixing a mean with
+#     percentiles does not order. Chicago reported base 4.34% against an optimistic
+#     4.09% on the unscreened series, and base 1.80% against a *pessimistic* 1.92% on
+#     the screened one - a base case outside its own band, in both directions.
+#   * p25 / median / p75. Orders correctly, but on 7-9 points the percentiles are
+#     interpolations between adjacent observations rather than genuinely more robust
+#     summaries, and the median moves in discrete jumps - Cleveland's shifts 2.64pp on a
+#     one-slot change, more than its mean does.
+#   * A sustained 3-year window, the closest analogue to the price-side method.
+#     **Rejected on measurement:** screening FY2023-24 breaks the run of consecutive
+#     years, so only three windows qualify and FY2025-26 - the two most recent
+#     observations, the ones a forecast leans on hardest - fall out of all of them.
+#
+# Geometric rather than arithmetic because the projection compounds: an arithmetic mean
+# of annual rates overstates cumulative growth (measured here at 0.07-0.16pp/yr across
+# the trio, ~1pp over the five-year horizon).
+#
+# **The known weakness, recorded rather than papered over:** min and max are extreme
+# order statistics, so they can only widen as the series lengthens, unlike percentiles.
+# Measured by recomputing what each statistic would have reported at n=5, 6 and 7, the
+# minimum has not moved at all in any of the three metros and the maximum moved less
+# than p75 did in Cleveland - so the drift is structural but not yet observable, and the
+# series grows by one observation per year. The IQR below exists partly so that
+# comparison stays available if it ever does bite.
+FMR_BAND_USE_OBSERVED_EXTREMES = True
+
+# Disclosed alongside the bands, never as the bands. The interquartile range shows
+# whether an extreme is an isolated spike or part of a cluster: Chicago's -4.2% minimum
+# against a 1.9% p25 says the pessimistic band rests on an outlier, which the headline
+# triple alone cannot reveal. Rendered in the report's disclosure block under its own
+# name so it cannot be mistaken for the projection basis.
+FMR_IQR_LOWER_PERCENTILE = 25
+FMR_IQR_UPPER_PERCENTILE = 75
+
+# --------------------------------------------------------------------------
 # Models (OpenRouter)
 # --------------------------------------------------------------------------
 #
@@ -431,6 +532,12 @@ MODEL_DEV = "nvidia/nemotron-3-nano-30b-a3b"
 MODEL_EXTRACTION = "nvidia/nemotron-3-nano-30b-a3b"
 MODEL_CRITIC = "nvidia/nemotron-3-nano-30b-a3b"
 MODEL_SUMMARIZER = "nvidia/nemotron-3-nano-30b-a3b"
+# Added in U6. The Scenario agent's evaluator scores enumerated hypotheses and selects
+# which evidence to pull for them; that is a judgement task rather than an extraction
+# task, so it gets its own role even though every role currently resolves to the same
+# model. Same reasoning as the original four-way split: the seam is where a future
+# bake-off happens, and naming it costs nothing now.
+MODEL_SCENARIO = "nvidia/nemotron-3-nano-30b-a3b"
 
 LLM_TIMEOUT_SECONDS = 90
 LLM_MAX_RETRIES = 3
@@ -516,6 +623,38 @@ TOT_MAX_DEPTH = 3
 # Survivors carried forward per level. Three, because three scenarios are reported.
 TOT_BEAM_WIDTH = 3
 
+# ...except at the framing level, where exactly one survives, and the difference is not
+# a tuning choice. A framing is which treatment of the data the whole forecast rests on
+# (are the FY2023-24 cohort-shift years screened out of the rent bands? is 2020-2022 in
+# the price bands?). Carrying three framings forward produces three scenarios built on
+# three different readings of the same series - not a scenario set, and impossible to
+# describe with one provenance statement.
+#
+# **Found by reading the output rather than by reasoning about it.** The first Chicago
+# run reported an optimistic case of +19.03%/yr rent directly beneath a basis block
+# stating that FY2023-24 had been held out - and 19.03% *is* Chicago's FY2024 figure,
+# arriving from a framing that had not screened it. All four framings are still scored
+# and compared before the cut; only one is carried.
+TOT_FRAMING_BEAM_WIDTH = 1
+
+# No rejection threshold at the framing level, and this is a statement about what a
+# framing is rather than a loosened bar. A threshold asks "did this hypothesis survive
+# contact with the data?" — a real question about a band pairing, and a category error
+# about a framing, since framings are enumerated from the treatments the evidence
+# actually supports and are therefore all defensible by construction. Decision #12 says
+# as much: this fork is in the design precisely because it has no single correct answer.
+#
+# **Also found by reading output.** With the uniform 0.40 applied, an evaluator applying
+# ordinary skepticism scored all four Los Angeles framings below it and emptied the beam
+# on a deal whose rent and price series were both fully available. The level's job is to
+# select, and selection is what TOT_FRAMING_BEAM_WIDTH does.
+TOT_FRAMING_PRUNE_THRESHOLD = 0.0
+
+# Two reported scenarios whose projected outcomes differ by less than this are not
+# telling a reader two things. Used by the reconciliation step to disclose that the
+# search returned fewer distinct answers than it has labels for.
+TOT_SCENARIO_DISTINCTNESS_PCT = 1.0
+
 # Branches scoring below this are discarded. Pruning is never silent: each discarded
 # branch writes {id, parent, depth, score, prune_reason} to the ledger on DealState so
 # the report can disclose what was considered and why it was dropped (decision #14).
@@ -535,6 +674,12 @@ TOT_TEMPERATURE = 0.7
 # the ledger on state is enough to disclose; on for eval runs, which need to reconstruct
 # why the evaluator scored what it did. Unlike LangSmith traces, the dump does not expire.
 TOT_PERSIST_FULL_TREE = False
+
+# How many evidence tools the evaluator may pull per level. The tools are read-only and
+# in-process, so the cost is latency and prompt size rather than money — but an
+# evaluator that pulls everything is running a fixed battery, which is the behaviour
+# selective evidence pulling exists to avoid.
+TOT_MAX_EVIDENCE_CALLS = 3
 
 
 # --------------------------------------------------------------------------

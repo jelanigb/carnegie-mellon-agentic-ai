@@ -159,7 +159,7 @@ safe to defer.
 | **U3** ✅ | Extractor: real LLM call, Pydantic validate→retry loop, clarifying questions, assumption flags, bounded escalation; 3 synthetic listings. Also wires geocoding into the pipeline (decision #10's remaining half), adds the model liveness check, and takes the flag-propagation suite to 24 hermetic cases | 2.1 evidence |
 | **Week 6 — Estimation & Forecast** | | |
 | **U5** ✅ | Rent model: FMR-normalized regression on the decision #4 shortlist, holdout MAE, Valuation agent, `rent_anchored_to_fmr` / `fmr_unavailable_for_county` / `fmr_bedroom_cap_exceeded` flags. **LLM fallback path descoped Aug 21, 2026** — cut-list item 3 taken in advance; ships as a documented gap. Landed with two flags beyond the spec (`rent_estimate_unavailable`, `rent_diverges_from_comps`), a comp cross-check as the agent's Observe step, and decision #15 below | — |
-| **U6** | Scenario/Forecast: ToT branching over optimistic/base/pessimistic, `anomalous_period_included` flag. **Rent growth and price appreciation forecast separately** (decision #16) — `redfin_data.py` for price, HUD FMR history for rent, ZORI as the independent check. The original "infer rent growth from housing trend data" premise was measured and disproved before the unit was built | **4.1** |
+| **U6** ✅ | Scenario/Forecast: beam search over an **enumerated** hypothesis space — 4 framings, then 9 band pairings — with an LLM evaluator pulling evidence through the MCP tool registry in-process. **Rent growth and price appreciation forecast separately** (decision #16): `fmr_history.py` for rent, `redfin_data.py` for price, projected 5 years from the **asking price** (closing decision #15's open question). Two premises measured and disproved before the unit was built, and two more during it — see decision #16 and #17. ZORI validation deferred to its own step | **4.1** |
 | **Buffer week — Guardrails, Eval, Demo** | | |
 | **U7** | Critic: cross-agent consistency checks, confidence scoring, bounded rework cycle, human-review escalation via `interrupt()` | **6.1** |
 | **U8** | Eval harness: 8–10 synthetic listings each engineered to trip a *specific* flag, **plus the New York sparse-comps case run against real data** (see §2); batch runner → results table | **6.1** + report |
@@ -494,6 +494,7 @@ needed. Target: all closed during Week 4.
 | 14 | **ToT branch-state persistence** | ✅ **Ledger in state, full tree to `eval/results/` (Aug 18, 2026).** A compact pruned-branch record reaches `DealState` so the report can disclose what was discarded; the complete tree is written as an eval-run artifact behind a config flag |
 | 16 | **Rent-growth source for U6** | ✅ **Rent and price forecast separately (Aug 22, 2026).** §1's premise — infer rent growth from Redfin's sale-price series — was measured and is *inverted* (pooled r = −0.309 across the trio). Redfin keeps the price side; rent growth comes from HUD FMR's published history, with Zillow ZORI as the independent validation. See below |
 | 15 | **Property-level value estimate** | ✅ **Not produced; carried as a labelled market benchmark instead (Aug 22, 2026).** Redfin's extract is the only sale-price source in the project and exposes zero individual sales. `DealState.value_estimate` stays `None`; the metro median is rendered as a reference the asking price is read against. **U6 must choose its own projection base** — see below |
+| 17 | **ToT structure at build time** | ✅ **Enumerate the space; do not sample it (Aug 24, 2026).** The hypothesis space is 4 framings then 9 band pairings — small enough to write down — so candidates are proposed exhaustively rather than sampled at `TOT_TEMPERATURE`. Nothing is invented, the branching factor is data-determined, and the pipeline stays deterministic. `AppreciationTier` removed as part of the same measurement. See below |
 
 **Decision #8 detail (Aug 9, 2026).** The `TODO(U3)` in `config.py` warned that the four
 model IDs were unverified placeholders. Checked against OpenRouter's live catalogue while
@@ -798,13 +799,36 @@ forward while holding the structural ratio constant forecasts rent by the same m
 that produced the estimate, with no second normalization basis and no new vintage problem.
 
 **Its weakness is that FMR is administrative, not market**, and the history shows
-methodology jumps — Chicago +19.0% in FY2024, Los Angeles +14.5% — that almost certainly
-reflect HUD changing how it derives the figure rather than a market event. A "base case"
-resting on one of those would be wrong in a way a reader could not see, so U6 must screen
-for them and disclose what it screened. **Zillow ZORI is adopted as the independent
+year-to-year jumps larger than any single market moved — Chicago +19.0% in FY2024, Los
+Angeles +14.5%. A "base case" resting on one of those would be wrong in a way a reader
+could not see, so U6 must screen for them and disclose what it screened. **Zillow ZORI is
+adopted as the independent
 check** rather than the primary series: market-observed, monthly, ZIP-level, free, and it
 doubles as the only available test of the rent model's largest unverified assumption —
 that rent-to-FMR structure is stable over the ~7 years between the corpus and today.
+
+**Corrected when U6 measured it (Aug 22, 2026), and the paragraph above is the second
+version.** It originally read *"methodology jumps … that almost certainly reflect HUD
+changing how it derives the figure rather than a market event."* That is an attribution,
+and FMR cannot support it. Built into a panel of the ten distinct HUD FMR areas behind
+this project's training metros, **FY2024 moved every one of them** — cohort median
+11.65%, minimum 6.5%. Chicago's headline +19.0% is 11.7 points of cohort and 7.4 of
+local, so 61% of the move it was named for is shared with every other market in the
+panel; Los Angeles's +14.5% is mostly cohort. A cohort-wide move is equally consistent
+with a methodology change and with the 2021–22 rent surge reaching an administrative
+series two years late, and no test inside FMR separates them. So `tools/fmr_history.py`
+screens for **co-movement**, which is observable, and says nothing about cause. This is
+the same error class §8's evidence standard exists for: the original claim was plausible,
+was never measured, and would have been printed in a report as fact.
+
+**And the screen could not have reused the price-side window.** The rent series' shifted
+years are **FY2023–24**; the calendar 2020–2022 window `config.ANOMALOUS_PERIOD` defines
+for Redfin runs at 2.73% / 5.22% / 3.09% against a 4.17% baseline — three ordinary years.
+Sharing one constant across the two series would have excluded the ordinary years and
+kept both distorted ones. FMR lags because it is administrative: the FY2024 schedules
+were published in Sept 2023 on 2021–22 data. Reproduce both findings with
+`scripts/fmr_history_evidence.py`; the panel is committed at
+`src/tools/data/fmr_cohort_panel.json`.
 
 **Why forecast rent growth at all**, recorded because it was a fair question and the
 answer is not obvious: with `value_estimate` deliberately null (decision #15), the price
@@ -872,6 +896,60 @@ property rather than an estimate, and *"pay $1,049,000 today, here is what the m
 multi-family trend implies"* needs no value estimate at all. Not settled here, because
 U6 is where the appreciation evidence is and this decision should be made in front of it.
 
+**Closed Aug 24, 2026: the asking price it is**, carried as
+`ForecastDetail.projection_base_price` with `projection_base_source` naming it in words
+so the report never implies a valuation happened. `value_estimate` is therefore `None`
+permanently rather than pending, and nothing in the built system writes it.
+
+**Decision #17 detail (Aug 24, 2026) — the ToT structure changed once the data was in
+front of it.** Checkpoint 4.1 specified sampling *b*=5 hypotheses per expansion at
+`TOT_TEMPERATURE = 0.7`. Building against the measured bands, that is the wrong
+mechanism for this space, and three things follow.
+
+**The space is enumerable, so it is enumerated.** Four framings — two rent treatments
+(screen the FY2023–24 cohort shift or not) × two price treatments (exclude calendar
+2020–22 or not) × one appreciation series — then nine band pairings under each. Asking a
+model for five hypotheses over a four-point space makes it *invent growth rates*, and
+every figure in this system must trace to a measured source. The Tree-of-Thought paper
+distinguishes *sampling* thoughts i.i.d. (for rich spaces) from *proposing* them (for
+constrained ones, where sampling returns duplicates); this is the constrained case.
+Consequences: nothing is invented, the branching factor is a property of the evidence
+rather than a knob, and **the pipeline stays deterministic end to end** —
+`TOT_TEMPERATURE` is now unused, and `LLM_TEMPERATURE = 0.0`'s comment
+*"deterministic by default; ToT overrides"* no longer has an exception to describe.
+
+**Two search parameters had to become per-depth, and both were found by reading output
+rather than by reasoning.**
+
+- *Beam width.* At 3 everywhere, the three reported scenarios came from three different
+  framings — so the Chicago report showed an optimistic rent of +19.03%/yr directly
+  beneath a basis block stating FY2024 had been screened out, and 19.03% **is** Chicago's
+  FY2024 figure. Scenarios resting on different treatments are not commensurable and
+  cannot share one provenance statement. `TOT_FRAMING_BEAM_WIDTH = 1`.
+- *Prune threshold.* At 0.40 everywhere, an evaluator applying ordinary skepticism scored
+  all four Los Angeles framings below it and emptied the beam on a deal whose series were
+  both fully available. A threshold asks *"did this survive contact with the data?"* —
+  a real question about a pairing, a category error about a framing, since framings are
+  enumerated from treatments the evidence supports and are all defensible by
+  construction. `TOT_FRAMING_PRUNE_THRESHOLD = 0.0`; the level selects rather than
+  filters.
+
+**`AppreciationTier` was removed rather than trimmed.** It typed a fallback ladder with
+one reachable rung: the ZIP tier is closed on sample size (median 2 homes sold per
+ZIP-period) and no all-residential extract exists in this project — checked, including
+`data/old/`. Keeping two unreachable members would advertise a fallback the build cannot
+climb, which is a claim about the design rather than about the system. `src/enums.py`
+existed solely to hold the type and went with it; `appreciation_source` now carries a
+plain description of the series.
+
+**What the search is worth, measured.** `scripts/forecast_evidence.py` compares the
+search against a linear baseline — the first framing in enumeration order with the three
+diagonal pairings, i.e. what a competent implementation without a search would emit.
+Across all four subjects the search kept the first-enumerated framing **0 times** and
+chose an all-diagonal pairing set **0 times**; on Cleveland the base case differs by
+−22.0% on rent and +26.4% on price. The script states what it would have shown had the
+search been decoration, and reports each of those outcomes whether or not it holds.
+
 **Decision #9 detail.** The pipeline order is fixed by data dependency — Valuation consumes
 `state.comps`, Scenario consumes `rent_estimate`/`value_estimate` — so the sequence
 Extractor → Comps → Valuation → Scenario → Critic is not something the Planner chooses. The
@@ -923,10 +1001,21 @@ cannot precede geocoding, valuation cannot precede comps. There are no alternati
 to explore, so branching across the pipeline would multiply cost with nothing to select
 between. Two nodes fail that test in the other direction:
 
-- **Scenario/Forecast (U6)** faces two genuine forks with no single correct answer — the
-  2020–2022 window (`ANOMALOUS_PERIOD_INCLUDED`) and the `appreciation_source` tier
-  ladder. They interact, and a linear chain resolves both by whichever framing it reaches
-  first, anchoring every downstream figure to it.
+- **Scenario/Forecast (U6)** faces genuine forks with no single correct answer, and a
+  linear chain resolves them by whichever framing it reaches first, anchoring every
+  downstream figure to it.
+
+  > **Revised at build time (Aug 24, 2026).** This originally named two forks: the
+  > 2020–2022 window and the `appreciation_source` tier ladder. **The tier ladder is not
+  > a fork** — measured, it has one rung, and `AppreciationTier` was removed with it
+  > (§5). What replaced it is better grounded: the window fork turns out to be *two*
+  > independent windows, because the rent and price series are anomalous in different
+  > years (FY2023–24 against calendar 2020–22), and beneath them sits the choice of which
+  > rent band pairs with which price band. Since the two quantities are negatively
+  > correlated here (r = −0.309), the diagonal pairing a chain emits is the one the data
+  > argues against. Measured across four subjects in
+  > `scripts/forecast_evidence.py`, the search kept the first-enumerated framing **0
+  > times** and chose an all-diagonal pairing set **0 times**.
 - **Critic consistency checks (U7)** — the four checks named in `_consistency_objections`'s
   `TODO(U7)` differ in cost and are not independent, so running all of them on every deal
   spends the expensive ones on deals that do not need them.
