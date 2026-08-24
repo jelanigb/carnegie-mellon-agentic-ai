@@ -213,7 +213,7 @@ TRAINING_METROS: dict[str, list[str]] = {
 # decides which listings can be *retrieved* as comparables — distinct from
 # INFERENCE_METROS (which markets have a Redfin appreciation series) and from
 # TRAINING_METROS (which listings the regression learns from). See
-# docs/data_sources.md for all three side by side.
+# docs/design/data_sources.md for all three side by side.
 #
 # The inference trio plus New York. New York is indexed **deliberately**, as the
 # sparse-comps case: §2 measured it as genuinely thin in Staten Island while dense in
@@ -379,7 +379,7 @@ RENT_COMP_CROSSCHECK_MIN_COMPS = 3
 #
 # PROVISIONAL on both counts. Five subjects show the signal separates but cannot place the
 # line precisely — Chicago straddling it is the proof. Retune in U8 against the eval batch,
-# and revisit the whole check if a ZIP-level anchor lands (docs/data_sources.md, "The
+# and revisit the whole check if a ZIP-level anchor lands (docs/design/data_sources.md, "The
 # sub-metro gap"). `scripts/valuation_evidence.py --diagnose-divergence` reproduces it.
 RENT_COMP_DIVERGENCE_THRESHOLD_PCT = 0.30
 

@@ -1,19 +1,15 @@
 # Changelog
 
-### Section Links
-
-- [§1](implementation_plan.md#1-project-summary)
-- [§2](implementation_plan.md#2-data-strategy-reconciling-kaggleredfin-vintage-and-category-mismatch)
-- [§3](implementation_plan.md#3-stack-decision-langgraph-from-day-one)
-- [§4](implementation_plan.md#4-proposed-repository-structure)
-- [§5](implementation_plan.md#5-state-schema-design-target-for-statepy)
-- [§6](implementation_plan.md#6-execution-order)
-- [§7](implementation_plan.md#7-immediate-next-actions)
-- [§8](implementation_plan.md#8-engineering-standards)
-- [§9](implementation_plan.md#9-current-build-hud-fmr-api-client-toolshud_fmrpy)
+**Chronological record for the plan of record — [`implementation_plan.md`](../implementation_plan.md).**
+Section numbers (§1–§9) and decision numbers (#1–#17) anywhere in this repository refer
+to that file: §-numbers to its sections, #-numbers to the **decisions register in §7**,
+which names every decision and links to its full reasoning in
+[`decision_log.md`](decision_log.md). A
+[document map](../implementation_plan.md#document-map) there lists every document in this
+project and when to read it.
 
 **Chronological record of code changes.**
-Author: Jelani Gould-Bailey · Last updated: Aug 22, 2026
+Author: Jelani Gould-Bailey · Last updated: Aug 24, 2026
 
 ## Why this file exists
 
@@ -53,6 +49,17 @@ rows. The unit of a row is the change, not the file.
   uses.
 
 ---
+
+## Aug 24, 2026 — documentation restructure
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Aug 24, 2026 | maintenance | **`docs/` reorganised into `design/` and `history/`.** The six current-state documents moved to `docs/design/`, `changelog.md` to `docs/history/`. `implementation_plan.md`, `open_questions.md` and `task_list.md` stay at `docs/` root, which is now the load-every-session tier — the path says when to read a file. `implementation_plan.md` did **not** move: 17 source files cite it by path. Code comments repathed in `config.py` (×2) and `tools/county_crosswalk.py` | maintenance |
+| Aug 24, 2026 | maintenance | **`implementation_plan.md` split: 1,302 lines → 277.** The §7 decision detail (680 lines), the U2 walking-skeleton retrospective and the U4 ablation record moved to the new `docs/history/decision_log.md`, grouped by system area rather than chronology. §7 becomes a 17-row register naming each decision and linking to its reasoning; §-numbering is unchanged because code comments cite it. One duplicated paragraph in the free-tier item removed | maintenance |
+| Aug 24, 2026 | maintenance | **`docs/open_questions.md` (new).** Open questions only, extracted from §7 where 4 of 6 "open items" were already closed. Grouped by system area, each naming the unit that closes it and what closing looks like. Kept short deliberately: it is loaded at the start of every session, so a closed entry is deleted rather than struck through | maintenance |
+| Aug 24, 2026 | maintenance | **`docs/task_list.md` (new) + U7 planned.** Per-unit breakdown into commit-sized subsections, written and approved before coding. The U7 pass found two defects in `agents/critic.py`'s `TODO(U7)`: of the four consistency checks it names, one is already built in `agents/valuation_rent.py` and one is dead, since decision #15 made `value_estimate` permanently `None` | 6.1 |
+| Aug 24, 2026 | maintenance | **Seven duplicated "Section Links" blocks (63 links) replaced by a header note.** Each document now states that §-numbers and #-numbers resolve to `implementation_plan.md`, and links there. Fixes a real navigation failure: a bare "decision #8 in §7" gave a reader no way to find §7 or to learn what #8 was | maintenance |
+| Aug 24, 2026 | maintenance | **`design/engineering_standards.md` §8 — "How a unit is built" added; "one unit per change set" revised.** The old standard optimised for batching; review throughput is the binding constraint and optimises the other way. Now one *logical* change per set, with maintenance landing separately from logic. Revision recorded inline, per the precedent that section already set | maintenance |
 
 ## Aug 24, 2026 — U6 complete: the Scenario/Forecast agent
 

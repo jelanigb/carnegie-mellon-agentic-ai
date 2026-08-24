@@ -1,4 +1,10 @@
-**Part of the plan of record — see [`implementation_plan.md`](implementation_plan.md) §2.**
+**§2 of the plan of record — [`implementation_plan.md`](../implementation_plan.md).**
+Section numbers (§1–§9) and decision numbers (#1–#17) anywhere in this repository refer
+to that file: §-numbers to its sections, #-numbers to the **decisions register in §7**,
+which names every decision and links to its full reasoning in
+[`decision_log.md`](../history/decision_log.md). A
+[document map](../implementation_plan.md#document-map) there lists every document in this
+project and when to read it.
 
 ## 2. Data Strategy: Reconciling Kaggle/Redfin Vintage and Category Mismatch
 
@@ -7,18 +13,6 @@
 > geographic levels, and exact consumers. **This section is the *argument*: why these
 > sources, and what measuring them found.** Where a figure appears in both, the map is
 > derived from the code and is the one to trust.
-
-### Section Links
-
-- [§1](implementation_plan.md#1-project-summary)
-- [§2](implementation_plan.md#2-data-strategy-reconciling-kaggleredfin-vintage-and-category-mismatch)
-- [§3](implementation_plan.md#3-stack-decision-langgraph-from-day-one)
-- [§4](implementation_plan.md#4-proposed-repository-structure)
-- [§5](implementation_plan.md#5-state-schema-design-target-for-statepy)
-- [§6](implementation_plan.md#6-execution-order)
-- [§7](implementation_plan.md#7-immediate-next-actions)
-- [§8](implementation_plan.md#8-engineering-standards)
-- [§9](implementation_plan.md#9-current-build-hud-fmr-api-client-toolshud_fmrpy)
 
 Two problems surfaced while planning the data layer, and both are resolved the same way:
 ground every dollar figure in a *dated, purpose-matched* source rather than trusting a

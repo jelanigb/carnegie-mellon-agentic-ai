@@ -1,18 +1,12 @@
-**Part of the plan of record — see [`implementation_plan.md`](implementation_plan.md) §8.**
+**§8 of the plan of record — [`implementation_plan.md`](../implementation_plan.md).**
+Section numbers (§1–§9) and decision numbers (#1–#17) anywhere in this repository refer
+to that file: §-numbers to its sections, #-numbers to the **decisions register in §7**,
+which names every decision and links to its full reasoning in
+[`decision_log.md`](../history/decision_log.md). A
+[document map](../implementation_plan.md#document-map) there lists every document in this
+project and when to read it.
 
 ## 8. Engineering Standards
-
-### Section Links
-
-- [§1](implementation_plan.md#1-project-summary)
-- [§2](implementation_plan.md#2-data-strategy-reconciling-kaggleredfin-vintage-and-category-mismatch)
-- [§3](implementation_plan.md#3-stack-decision-langgraph-from-day-one)
-- [§4](implementation_plan.md#4-proposed-repository-structure)
-- [§5](implementation_plan.md#5-state-schema-design-target-for-statepy)
-- [§6](implementation_plan.md#6-execution-order)
-- [§7](implementation_plan.md#7-immediate-next-actions)
-- [§8](implementation_plan.md#8-engineering-standards)
-- [§9](implementation_plan.md#9-current-build-hud-fmr-api-client-toolshud_fmrpy)
 
 These are the standards every change set is held to in review. They are recorded here
 rather than left implicit so that the bar is the same whether a given unit is written
@@ -181,11 +175,52 @@ rather than restating implementation details. Additional coverage gets added
 retroactively if the buffer week allows. This is a scheduling judgment about sequence,
 and it is recorded as such rather than left as an unexplained gap.
 
+### How a unit is built
+
+Adopted Aug 24, 2026, after six units. The two failure modes it exists to prevent were both
+observed rather than anticipated: units were reaching implementation on assumptions nobody
+had checked, and they were landing as single change sets too large to review in one pass.
+
+1. **Plan before coding.** The unit is decomposed into subsections in
+   [`../task_list.md`](../task_list.md), each scoped to be its own change set. Critical
+   dependencies and open questions are raised at the *unit* level, naming the subsection
+   they block, so they are answered up front rather than discovered mid-implementation.
+   The plan is reviewed and approved before any code is written.
+2. **Answer the blocking questions first.** A question that would change the design is
+   settled — or explicitly deferred with its assumption labelled — before the subsection
+   that depends on it starts. This is the same discipline §7's register applies to
+   decisions, moved one level earlier.
+3. **Land in reviewable pieces.** See *Change management* below.
+4. **Close the unit.** Append to [`../history/changelog.md`](../history/changelog.md);
+   move any decision taken during the build into §7's register with its reasoning in
+   [`../history/decision_log.md`](../history/decision_log.md); delete anything from
+   [`../open_questions.md`](../open_questions.md) that the unit closed.
+
+The cost of this is a planning pass per unit. The measured justification for paying it is
+in the units that did not have one: U5 discovered mid-build that its training-set size had
+never been measured, and U6 disproved two of its own premises after the unit was specified.
+Both were caught, but both were caught late, and late is where redesign is expensive.
+
 ### Change management
 
-- **One unit per change set**, self-contained, accompanied by a summary of what changed
-  and where the reviewer's attention is most warranted. A diff spanning five loosely
-  related files costs more review time than the batching saves.
+- **One logical change per change set**, self-contained, accompanied by a summary of what
+  changed and where the reviewer's attention is most warranted. A unit is decomposed into
+  commit-sized subsections in [`../task_list.md`](../task_list.md) *before* coding starts,
+  and each lands on its own. A diff spanning five loosely related files costs more review
+  time than the batching saves.
+- **Maintenance lands separately from logic.** If a unit stops to extract enums, rename for
+  consistency, move constants into `config.py`, or repath documentation, that work gets its
+  own change set rather than riding along inside a behavioural one. Mixed diffs are where
+  review attention goes to the wrong half.
+- **Checking in a temporarily incomplete state is acceptable** when the completing change is
+  already planned and named. Smaller, more frequent review beats an integrated whole that
+  arrives too large to review carefully.
+
+  Revised Aug 24, 2026, from *"one unit per change set"*. The original optimized for
+  batching — fewer, larger reviews. That was the wrong objective: review throughput is the
+  binding constraint on this project (§6), and it optimizes the other way. The failure the
+  original guarded against was the *unrelated* five-file diff, and that guard is kept; what
+  changed is that a unit is no longer assumed to be one related thing.
 - **Test and development data should be synthetic or public.** "Public" means openly
   licensed or a public record — Census boundaries, HUD FMR, Redfin's published extracts,
   county assessor data — not merely publicly visible. Scraped listings are the case the

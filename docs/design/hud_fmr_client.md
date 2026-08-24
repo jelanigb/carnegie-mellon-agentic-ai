@@ -1,18 +1,12 @@
-**Part of the plan of record — see [`implementation_plan.md`](implementation_plan.md) §9.**
+**§9 of the plan of record — [`implementation_plan.md`](../implementation_plan.md).**
+Section numbers (§1–§9) and decision numbers (#1–#17) anywhere in this repository refer
+to that file: §-numbers to its sections, #-numbers to the **decisions register in §7**,
+which names every decision and links to its full reasoning in
+[`decision_log.md`](../history/decision_log.md). A
+[document map](../implementation_plan.md#document-map) there lists every document in this
+project and when to read it.
 
 ## 9. Current Build: HUD FMR API Client (`tools/hud_fmr.py`)
-
-### Section Links
-
-- [§1](implementation_plan.md#1-project-summary)
-- [§2](implementation_plan.md#2-data-strategy-reconciling-kaggleredfin-vintage-and-category-mismatch)
-- [§3](implementation_plan.md#3-stack-decision-langgraph-from-day-one)
-- [§4](implementation_plan.md#4-proposed-repository-structure)
-- [§5](implementation_plan.md#5-state-schema-design-target-for-statepy)
-- [§6](implementation_plan.md#6-execution-order)
-- [§7](implementation_plan.md#7-immediate-next-actions)
-- [§8](implementation_plan.md#8-engineering-standards)
-- [§9](implementation_plan.md#9-current-build-hud-fmr-api-client-toolshud_fmrpy)
 
 **Status:** built and verified against the live API, Aug 8, 2026. `tools/hud_fmr.py`,
 `scripts/pull_fmr_sample.py`, `requirements.txt`, and a dedicated `.venv/` all exist

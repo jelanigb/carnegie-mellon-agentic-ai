@@ -4,7 +4,7 @@ Replaced Aug 15, 2026 — from a hand-maintained table to a spatial join
 ------------------------------------------------------------------------
 This module originally hand-maintained a `(cityname, state) -> county FIPS` table for a
 29-city shortlist, each entry verified against a live HUD `listCounties` response (see
-git history / docs/changelog.md for that version). Once `tools/geocoding.py` existed to
+git history / docs/history/changelog.md for that version). Once `tools/geocoding.py` existed to
 put a subject property at a real coordinate (decision #10), that table became strictly
 dominated by a geometric point-in-polygon join against the same coordinate:
 
