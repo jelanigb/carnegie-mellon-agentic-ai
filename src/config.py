@@ -541,7 +541,7 @@ MODEL_SCENARIO = "nvidia/nemotron-3-nano-30b-a3b"
 
 LLM_TIMEOUT_SECONDS = 90
 LLM_MAX_RETRIES = 3
-LLM_TEMPERATURE = 0.0  # deterministic by default; ToT overrides
+LLM_TEMPERATURE = 0.0  # deterministic everywhere; see TOT_TEMPERATURE
 
 
 # --------------------------------------------------------------------------
@@ -665,10 +665,18 @@ TOT_PRUNE_THRESHOLD = 0.40
 # tool the cost of being wrong is not symmetric.
 TOT_TIE_EPSILON = 0.05
 
-# Sampling temperature for hypothesis generation. This is the documented exception to
-# LLM_TEMPERATURE = 0.0 above: diversity is bought deliberately at one seam rather than
-# leaking across a pipeline that is otherwise reproducible.
-TOT_TEMPERATURE = 0.7
+# **Currently unused, and kept deliberately rather than by oversight.** This was the
+# sampling temperature for hypothesis generation, and the documented exception to
+# LLM_TEMPERATURE = 0.0 above. U6 enumerates its hypothesis space instead of sampling it
+# (decision #17), so nothing reads this and the whole pipeline runs deterministic —
+# the exception the comment on LLM_TEMPERATURE describes no longer exists in the
+# Scenario node.
+#
+# Retained because the Critic's search (U7, decision #12) is unbuilt and its space is
+# not yet known to be enumerable: candidate objections are generated rather than drawn
+# from a fixed lattice, which is the case sampling exists for. If U7 also enumerates,
+# delete this and the LLM_TEMPERATURE comment together.
+TOT_TEMPERATURE = 0.7  # unused by the built system; see above
 
 # Write the complete reasoning tree to EVAL_RESULTS_DIR. Off in production runs, where
 # the ledger on state is enough to disclose; on for eval runs, which need to reconstruct
