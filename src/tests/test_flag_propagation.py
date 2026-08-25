@@ -765,6 +765,37 @@ def test_a_city_centroid_fallback_is_disclosed_as_an_approximation(monkeypatch):
     assert result["deal_terms"].latitude == LOS_ANGELES[0]
 
 
+def test_an_unreachable_geocoder_is_disclosed_as_distinct_from_a_bad_address(monkeypatch):
+    """Same centroid coordinate as the test above, different cause, different flag.
+
+    The distinction is load-bearing rather than cosmetic: this is the one degradation in
+    the system a rework pass can actually fix, because re-running the Extractor
+    re-attempts the call. An address with no street number will never resolve no matter
+    how often it is retried. The Critic routes on the flag kind, so the two cannot be
+    allowed to arrive as one.
+    """
+    centroid = GeocodeResult(
+        latitude=LOS_ANGELES[0],
+        longitude=LOS_ANGELES[1],
+        matched_address="Los Angeles, CA (corpus centroid — city-level approximation)",
+        source=GeocodeSource.CITY_CENTROID,
+        primary_unavailable=True,
+    )
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: centroid)
+    monkeypatch.setitem(
+        graph_module.NODE_FUNCTIONS, nodes.COMPS_RETRIEVAL, lambda state: {"comps": []}
+    )
+
+    result = run_deal()
+    raised = assert_reaches_report(result, FlagKind.GEOCODER_SERVICE_UNAVAILABLE)
+    assert raised.severity == Severity.WARN
+    assert result["deal_terms"].latitude == LOS_ANGELES[0]
+    # The address-side flag must NOT also fire — one cause, one disclosure.
+    assert not any(
+        f.kind == FlagKind.COORDINATES_FROM_CITY_CENTROID for f in result["flags"]
+    )
+
+
 def test_supplied_coordinates_conflicting_with_the_address_escalate(monkeypatch):
     """The U3 conflict path.
 

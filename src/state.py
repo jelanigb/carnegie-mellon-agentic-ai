@@ -97,6 +97,13 @@ class FlagKind(StrEnum):
     # kinds against the full enum, and a kind nothing can ever raise would corrupt that
     # comparison rather than merely go unexercised.
     COORDINATES_FROM_CITY_CENTROID = "coordinates_from_city_centroid"
+    # Same centroid fallback as above, but reached because the Census *request* failed
+    # rather than because the address had nothing to resolve to. A distinct kind rather
+    # than a detail inside the message, because the Critic has to branch on it: this is
+    # the one degradation in the system that a rework pass can actually fix, since
+    # re-running the Extractor re-attempts the call. Parsing prose to decide routing is
+    # how a message edit silently becomes a behaviour change.
+    GEOCODER_SERVICE_UNAVAILABLE = "geocoder_service_unavailable"
     GEOCODING_UNAVAILABLE = "geocoding_unavailable"
     # A caller supplied coordinates that disagree with the geocode of the listing's own
     # address. Raised rather than resolved: the system cannot tell whether the caller

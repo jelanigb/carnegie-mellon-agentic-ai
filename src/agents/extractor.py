@@ -293,17 +293,36 @@ def _resolve_geography(
         )
     elif resolved is not None:
         terms.latitude, terms.longitude = resolved.latitude, resolved.longitude
-        flags.append(
-            flag(
-                AGENT,
-                FlagKind.COORDINATES_FROM_CITY_CENTROID,
-                f"The address could not be resolved to a parcel; coordinates fall back "
-                f"to {resolved.matched_address}. Comparables are drawn from a radius "
-                f"around the city's centre of listing density rather than around this "
-                f"property, which costs the most accuracy in large metros.",
-                Severity.WARN,
-            )
+        # Same coordinate, same accuracy cost, different cause — and the cause decides
+        # whether retrying is worth anything. See GeocodeResult.primary_unavailable.
+        consequence = (
+            f"Comparables are drawn from a radius around the city's centre of listing "
+            f"density rather than around this property, which costs the most accuracy "
+            f"in large metros."
         )
+        if resolved.primary_unavailable:
+            flags.append(
+                flag(
+                    AGENT,
+                    FlagKind.GEOCODER_SERVICE_UNAVAILABLE,
+                    f"The Census geocoder could not be reached, so the address was "
+                    f"never tested against it; coordinates fall back to "
+                    f"{resolved.matched_address}. {consequence} This is a service "
+                    f"outage rather than a problem with the address — the same listing "
+                    f"may resolve to a parcel on a later run.",
+                    Severity.WARN,
+                )
+            )
+        else:
+            flags.append(
+                flag(
+                    AGENT,
+                    FlagKind.COORDINATES_FROM_CITY_CENTROID,
+                    f"The address could not be resolved to a parcel; coordinates fall "
+                    f"back to {resolved.matched_address}. {consequence}",
+                    Severity.WARN,
+                )
+            )
     else:
         flags.append(
             flag(

@@ -39,9 +39,17 @@ to work with, or a city absent from the corpus entirely. The caller (the Extract
 wired — see the TODO in `agents/extractor.py`) is responsible for turning `.source` into
 the right disclosure: a `census_geocoder` result raises no flag, the same asymmetry the
 crosswalk already applies to an unambiguous county match; a `city_centroid` result raises
-`FlagKind.COORDINATES_FROM_CITY_CENTROID` (warn — the radius search is exactly where a
-city-level approximation costs accuracy, worst in a large metro like Los Angeles); `None`
-raises `FlagKind.GEOCODING_UNAVAILABLE` (critical — retrieval cannot run at all).
+one of two warn-level flags depending on `.primary_unavailable` —
+`FlagKind.COORDINATES_FROM_CITY_CENTROID` when the address simply had nothing to resolve
+to, or `FlagKind.GEOCODER_SERVICE_UNAVAILABLE` when the Census call could not be made at
+all (warn either way — the radius search is exactly where a city-level approximation costs
+accuracy, worst in a large metro like Los Angeles, and that cost is identical whatever the
+cause); `None` raises `FlagKind.GEOCODING_UNAVAILABLE` (critical — retrieval cannot run at
+all).
+
+The two centroid flags are split because only one of them is worth retrying: a service
+outage may resolve on a later run, an address with no street number will not. The Critic's
+rework cycle branches on that.
 
 Kept out of scope deliberately
 -------------------------------
@@ -71,9 +79,13 @@ class GeocodeSource(StrEnum):
     """Which of the two tiers in the module docstring produced a `GeocodeResult`.
 
     The caller reads this to decide the disclosure (see the docstring's last paragraph
-    above): `CENSUS_GEOCODER` raises nothing, `CITY_CENTROID` raises
-    `FlagKind.COORDINATES_FROM_CITY_CENTROID`. A closed type means that branch in the
-    Extractor can't silently stop matching because of a typo on either side.
+    above): `CENSUS_GEOCODER` raises nothing, `CITY_CENTROID` raises one of two warn
+    flags chosen by `GeocodeResult.primary_unavailable`. A closed type means that branch
+    in the Extractor can't silently stop matching because of a typo on either side.
+
+    The cause of a fallback is deliberately *not* a third member here. This enum answers
+    "which tier produced the coordinate"; the tier is the same either way, and folding a
+    reason into it would make the type answer two questions at once.
     """
 
     CENSUS_GEOCODER = "census_geocoder"
@@ -104,6 +116,14 @@ class GeocodeResult:
     longitude: float
     matched_address: str
     source: GeocodeSource
+
+    # True only when the Census *request* failed — as distinct from it running and
+    # finding no match. Both produce a centroid fallback and used to be
+    # indistinguishable to the caller, which mattered because they call for opposite
+    # responses: an outage is worth retrying, an address with no street number is not.
+    # `source` says which tier produced the coordinate; this says why the tier above it
+    # did not. Only meaningful when `source is CITY_CENTROID`.
+    primary_unavailable: bool = False
 
 
 def _oneline_address(
@@ -190,12 +210,19 @@ def _city_centroids() -> dict[tuple[str, str], tuple[float, float]]:
     }
 
 
-def city_centroid(city: Optional[str], state: Optional[str]) -> Optional[GeocodeResult]:
+def city_centroid(
+    city: Optional[str],
+    state: Optional[str],
+    primary_unavailable: bool = False,
+) -> Optional[GeocodeResult]:
     """Fallback lookup: the mean coordinates of every corpus listing in (city, state).
 
     Returns `None` if the city isn't in the corpus at all — which also means comp
     retrieval would find nothing there regardless of how the subject was geocoded, so
     there is no accuracy lost by declining to invent a coordinate for it.
+
+    `primary_unavailable` is passed through to the result rather than inspected here:
+    this function does not know why it was called, and the caller does.
     """
     if not city or not state:
         return None
@@ -208,6 +235,7 @@ def city_centroid(city: Optional[str], state: Optional[str]) -> Optional[Geocode
         longitude=lon,
         matched_address=f"{city}, {state} (corpus centroid — city-level approximation)",
         source=GeocodeSource.CITY_CENTROID,
+        primary_unavailable=primary_unavailable,
     )
 
 
@@ -222,21 +250,28 @@ def geocode(
     propagating, matching how every other derived-tier lookup in this system behaves.
     Returns `None` only if both tiers come up empty.
     """
+    primary_unavailable = False
     try:
         result = geocode_census(street_address, city, state, zip_code)
     except GeocodingError as exc:
         # Previously silent, and it was the worst place in the system to be silent: the
         # caller sees only "no parcel match", which is indistinguishable from the
         # geocoder having run fine and found nothing. Those call for opposite responses
-        # — one is an outage to retry, the other is an address to correct — and the
-        # resulting flag says the same thing either way.
+        # — one is an outage to retry, the other is an address to correct.
+        #
+        # U3 logged the distinction here but let both cases raise the same flag, noting
+        # that "the resulting flag says the same thing either way". U7 needs them apart:
+        # the Critic's rework cycle is worth spending on an outage, because re-running
+        # the Extractor re-attempts the call, and is worth nothing on an address that
+        # will never resolve. So the cause now rides on the result.
         diagnostics.log_exception(
             "geocoding.geocode: the Census request failed (as distinct from running "
             "and finding no match); falling through to the corpus city centroid",
             exc,
         )
         result = None
+        primary_unavailable = True
 
     if result is not None:
         return result
-    return city_centroid(city, state)
+    return city_centroid(city, state, primary_unavailable=primary_unavailable)

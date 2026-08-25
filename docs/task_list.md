@@ -170,6 +170,50 @@ tunes against the five demo deals (weak, and they were calibrated to be clean), 
 slips to U8. **Recommendation: slip the tuning to U8, land the mechanism in U7**, and say
 so in the register rather than tuning against inputs that cannot exercise the range.
 
+**Q5 — NEW, blocks U7.2 and U7.3. Measured Aug 24, 2026. This is a unit-level question,
+not a subsection one: six of the eight candidate checks are dead or already built, and
+U7's premise needs restating before any of them is written.**
+
+| Check | Verdict | Evidence |
+| --- | --- | --- |
+| Rent vs. comp distribution | built in Valuation | `valuation_rent.py:247` (Q1) |
+| Value vs. listing price | dead | #15 made `value_estimate` permanently `None` (Q1) |
+| **C** projection base | **unfalsifiable** | `scenario_forecast.py:670–672` assigns `projection_base_price=terms.price` directly, and `planner._PIPELINE` is a fixed tuple, so Scenario always re-runs whenever Extractor does. The check compares a field to the variable it was assigned from |
+| **D** band monotonicity, combined | **structural** | `_to_scenarios` sorts by `_outcome_rank` then labels by rank. Cannot fail by construction |
+| **D** band monotonicity, per-series | **fires on intended behaviour** | Verified live on `los-angeles`: pessimistic carries price +4.50%/yr, optimistic −0.80%/yr. The report *already explains this*: "a single column need not fall in label order — the pessimistic case can carry the higher projected price and still be the worse outcome overall." Flagging it would contradict the system's own disclosure |
+| **D** screening coherence | **structurally impossible** | #17 set `TOT_FRAMING_BEAM_WIDTH = 1`, so every scenario descends from one framing and shares one screening decision. The U6 motivating case cannot recur |
+| **F** comp-source concentration | **already built** | `summarizer.py:143–158`, with a 0.75 threshold and three-way branching. Promoting it to an objection would fire on both dense demo deals — measured: `los-angeles` 8/8 from RentDigs.com, `chicago` 6/8 — including the clean baseline |
+| **E** comp attribute drift | **survives** | The relaxation flags record which tolerance was loosened, never the realized drift of the returned comps. Genuinely unbuilt, and it cannot fire on a deal that never relaxed |
+
+**The pattern, which is the actual finding.** U5 and U6 each built their consistency checks
+*into the agent that owns the data*, and the Summarizer built the cross-agent *disclosures*.
+The Critic's job description was written in U2, when those agents were stubs and it looked
+like the only place such checks could live. It is now largely done — and done in a better
+place, next to the data that makes each check computable.
+
+**What is left that only the Critic can do.** It is the one node that sees every agent's
+flags at once. Individual agents raise flags about their own step; **only the Critic can
+judge whether a combination of them undermines the result.** The gap is concrete and
+visible in the code: `RENT_DIVERGES_FROM_COMPS` ends by telling the reader *"Check the comp
+disclosures above — a set concentrated in one location or drawn from one aggregator can sit
+well away from its own metro."* Nothing checks that for them. Turning that sentence into a
+determination is a real check, is uniquely the Critic's, and cannot fire on a clean deal.
+
+**Recommendation — restate U7 around flag interaction rather than flag re-derivation:**
+
+1. **Drop C, D and F.** Record each as retired-on-evidence; do not write a check that cannot
+   fail or that contradicts a disclosure the system already makes.
+2. **Keep E**, the one surviving attribute check.
+3. **Add interaction checks** as the unit's substance — e.g. `SPARSE_COMPS` or a relaxation
+   flag co-occurring with `RENT_DIVERGES_FROM_COMPS` means the divergence signal is itself
+   unreliable rather than informative; `COORDINATES_FROM_CITY_CENTROID` with a tight
+   distance column means the distances imply precision the geocode does not have.
+4. This **preserves decision #12's premise** (checks that differ in cost and are not
+   independent — interaction checks are by definition not independent) and gives Checkpoint
+   6.1 guardrail content that is real rather than inherited.
+
+**Needs a decision because it changes what U7 is**, not just what it contains.
+
 ### U7.1 ✅ — Correct the U7 docstrings to the system that exists *(maintenance)*
 
 No logic. `agents/critic.py`'s module docstring and both `TODO(U7)` comments describe four
@@ -178,26 +222,79 @@ rent-vs-comps is consumed, not reproduced — so the file stops advertising a de
 build abandoned. Lands first so the behavioural diffs that follow are read against an
 accurate description.
 
-### U7.2 — Checks: forecast coherence *(C + D)*
+### U7.1b ✅ — Distinguish a retryable geocode failure from an unresolvable address
 
-- **C.** `forecast_detail.projection_base_price` == `deal_terms.price` and
-  `projection_base_rent` == `rent_estimate`. Exact equality against the bases #15 and #17
-  fixed. Cheap, and it catches a class of defect nothing else would see.
-- **D.** Band monotonicity (optimistic ≥ base ≥ pessimistic, on both series) and coherence
-  with the disclosed screening. The motivating case is real and from U6: an optimistic rent
-  of +19.03%/yr printed beneath a basis block stating FY2024 had been screened out —
-  19.03% *is* Chicago's FY2024 figure.
+Enabling change for U7.4, landed separately because it is behavioural. `tools/geocoding.py`
+caught a failed Census *request* and fell through to the corpus centroid raising the same
+flag as an address that simply had nothing to resolve to. U3 logged the distinction to
+diagnostics and left the flag identical, noting *"the resulting flag says the same thing
+either way."*
 
-### U7.3 — Checks: comp-set quality *(E + F)*
+- `GeocodeResult.primary_unavailable` now carries the cause. `GeocodeSource` is unchanged
+  and deliberately gains no third member — it answers "which tier produced the
+  coordinate", and the tier is the same either way.
+- New `FlagKind.GEOCODER_SERVICE_UNAVAILABLE` (WARN), raised instead of
+  `COORDINATES_FROM_CITY_CENTROID` when the call could not be made. A distinct kind rather
+  than a detail in the message, because the Critic routes on it — parsing prose to decide
+  routing is how a message edit silently becomes a behaviour change.
+- `tests/test_flag_propagation.py` at 37 cases, asserting the new flag reaches the report
+  **and** that the address-side flag does not also fire.
+- **Creates an obligation for U8:** `set(FlagKind)` coverage now has one more member, and
+  a service outage is awkward to trip from listing text alone. It may need injection
+  rather than a synthetic listing.
 
-- **F.** Comp-source concentration via `Comp.listing_source`. Eight comps from one feed are
-  not eight independent observations; the corpus is 91% RentDigs.com. **Must not
-  double-count with `COMPS_SPATIALLY_CONCENTRATED`**, which is a different concentration
-  and already exists.
-- **E.** Comp attribute drift: the comps' bed/sqft distribution against `deal_terms`.
-  `RELAXED_MATCH_CRITERIA` records *that* relaxation happened, never *how far* it went.
+### U7.2 — Interaction checks: when disclosures compound *(the unit's substance)*
 
-Lowest-value pair of the three; cut here first if U7 runs long.
+**Q5 resolved: C, D and F are retired on evidence. This replaces them.**
+
+The Critic is the only node that sees every agent's flags at once. Agents flag their own
+step; only the Critic can judge whether a *combination* changes what the result means.
+This is not extra penalty — `confidence_from_flags` is a sum, and a sum can only say
+*more doubt*. An interaction says something a sum cannot: **this measurement does not mean
+what it appears to mean.**
+
+**Where the gap actually is, with real weights** (`info 0.00`, `warn 0.15`,
+`critical 0.40`, threshold `0.60`): one warn → 0.85, two warns → 0.70, three warns → 0.55
+which *already* escalates, and any critical escalates on its own ground. **So the window
+is exactly two warns, plus any number of INFO flags, which cost literally nothing.**
+
+Candidate interactions, strongest first. Each is a pure function of `state.flags` plus the
+detail objects, so all are hermetically unit-testable with no LLM, network, corpus or
+model:
+
+| # | Combination | Why the combination changes the meaning |
+| --- | --- | --- |
+| **I1** | `RELAXED_MATCH_CRITERIA` (bedroom tolerance loosened) + `RENT_DIVERGES_FROM_COMPS` | The comps now span bedroom counts the subject does not have, and bedroom count is the dominant rent driver. The comp median is for a *different unit type*, so divergence from it is expected rather than informative |
+| **I2** | `COMPS_SPATIALLY_CONCENTRATED` + `RENT_DIVERGES_FROM_COMPS` | The comp median is a point sample from one location. #15 measured one Chicago coordinate carrying 150 listings spanning $760–$6,995 (CV 48.7%), so that median is a weak statistic to diverge *from* |
+| **I3** | `COORDINATES_FROM_CITY_CENTROID` + `RENT_DIVERGES_FROM_COMPS` | Comps shifted to a city-density-centre sample while the model, being location-blind below the county, did not move at all. **Degrades rather than voids** the cross-check — see the note below |
+
+**A correction carried into this plan.** I3 was first described as making the cross-check
+"void". That is too strong, and the reason matters: **the rent model is location-blind
+below the county** (§2) — its features are beds/baths/sqft against a county FMR anchor, so
+the subject's coordinates do not affect the estimate at all. They affect only which comps
+are retrieved. So I3 means the comps moved and the model did not, which tells you *which*
+branch of the divergence flag's own either/or is likely — not that the comparison is
+worthless. I1 is the stronger case and should be built first.
+
+**Mechanism.** Raise `CRITIC_INCONSISTENCY` at CRITICAL, reusing U2's existing rule (any
+critical flag escalates regardless of score) rather than inventing a second escalation
+ground. The deal escalates at 0.70, which is exactly the branch `critic.py` already has
+wording for: *"clears the threshold, but a critical-severity disclosure was raised."*
+
+**These escalate; they do not rework.** Re-running the pipeline cannot produce a better
+geocode or a denser market. See U7.4.
+
+### U7.3 — Check: comp attribute drift *(E — the one surviving attribute check)*
+
+The relaxation flags record *which tolerance was loosened* — "dropped the square-footage
+band", "loosened bedroom tolerance from ±0 to ±1" — but never the **realized drift** of the
+comps that came back. A reader is told the criteria widened, not that the returned set
+averages 1,400 sqft against a 950 sqft subject.
+
+Compares `state.comps` against `deal_terms`, so it is cross-agent. **Cannot fire on a deal
+that never relaxed**, which is what keeps it off the clean baseline. Threshold to
+`config.py`. Feeds I1 above rather than duplicating it: drift is the measurement, I1 is the
+consequence for the divergence signal.
 
 ### U7.4 — Wire the objections in, and make the rework cycle fire on its own
 
@@ -209,12 +306,38 @@ for the first time.
 **Three things are mandatory here.**
 
 1. **Bounded-cycle regression tests.** `MAX_REWORKS` stops being theoretical.
-2. **Decide which objections are worth a rework at all.** A rework re-runs the pipeline, so
+2. **One case genuinely warrants rework, and it is not obvious.**
+   `tools/geocoding.py:225–238` catches a `GeocodingError` — the Census *request* failing,
+   as distinct from running and finding no match — and falls through to the corpus
+   centroid. Both paths raise the same `COORDINATES_FROM_CITY_CENTROID` flag. U3 caught
+   this and logged the distinction to diagnostics, with the comment stating plainly that
+   *"the resulting flag says the same thing either way."*
+
+   That matters here: **a centroid fallback caused by a Census outage is retryable, and a
+   rework pass would re-run the Extractor and re-attempt the geocode.** A fallback caused
+   by an address with no street number is not retryable and should escalate. This is the
+   clearest case in the system where rework is the right response rather than escalation —
+   and the Critic cannot currently tell the two apart, because the flag does not carry the
+   cause. Either the flag gains a distinguishing detail, or rework is not offered here.
+3. **Decide which objections are worth a rework at all.** A rework re-runs the pipeline, so
    an objection a second pass cannot possibly resolve — B, a mispriced listing — should
    escalate rather than loop. Objections that warrant rework and objections that warrant
    human review are different sets; conflating them spends the budget on deals it cannot
    help.
-3. **Mind the routing precedence.** `planner.route_after_critic` checks
+3. **Two defects in `critic.py` that block interaction checks**, both found while
+   designing U7.2 and neither visible from the plan:
+   - ✅ **Resolved in U7.1b** — the retryable case is now `GEOCODER_SERVICE_UNAVAILABLE`
+     and the unresolvable one stays `COORDINATES_FROM_CITY_CENTROID`, so the Critic can
+     branch without parsing message text.
+   - **`critic.py:155` reads `state.flags`**, the *incoming* accumulated list, not the
+     local `flags` list the Critic is building this pass. A CRITICAL the Critic raises
+     itself would not trigger its own escalation. U7.2's mechanism depends on this being
+     fixed.
+   - **`_DERIVED_KINDS` excludes only `LOW_CONFIDENCE_ESTIMATE` and
+     `REWORK_LIMIT_REACHED`.** `CRITIC_INCONSISTENCY` is not in it, so on a rework lap the
+     Critic's own objection would count against the score — the exact self-driving-down
+     defect that set exists to prevent. It should join.
+4. **Mind the routing precedence.** `planner.route_after_critic` checks
    `needs_human_review` **before** `critic_rejected`, deliberately (a deal a human should
    see reaches a human rather than being quietly re-run first). Consequence: a deal
    carrying any critical flag escalates and **never reworks**. So the rework path is only

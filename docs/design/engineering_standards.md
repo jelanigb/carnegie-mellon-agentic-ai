@@ -196,6 +196,26 @@ had checked, and they were landing as single change sets too large to review in 
    [`../history/decision_log.md`](../history/decision_log.md); delete anything from
    [`../open_questions.md`](../open_questions.md) that the unit closed.
 
+**Before a proposed check enters a plan, answer three questions about it.** Added Aug 24,
+2026, after U7's planning pass proposed eight consistency checks and measurement killed
+six. The pass had verified that each check's *input fields existed* — which establishes
+only that the comparison is expressible, not that it is worth making:
+
+1. **Can it fail?** Trace how each input is *populated*, not just that it exists. A field
+   assigned directly from the thing it will be compared against cannot diverge from it.
+   U7's projection-base check compared `forecast_detail.projection_base_price` to
+   `deal_terms.price`, which is the value it is assigned from three lines earlier.
+2. **Is it already made?** Grep every *consumer* of the fields, not only their producer.
+   Two of U7's proposed checks were already computed and rendered in the Summarizer, and
+   one was already raised as a flag by the agent that owns the data.
+3. **Would it fire on the clean baseline?** If a check trips on the run that is supposed
+   to raise nothing, it is measuring the fixture or the design rather than the deal. This
+   question alone caught three of U7's six, and it costs one run to ask.
+
+The general form is the standard this project already applies to evidence — *a check that
+cannot fail is not a check* — moved one step earlier, to the plan rather than the result.
+Reading a field list is not measurement; running the thing is.
+
 The cost of this is a planning pass per unit. The measured justification for paying it is
 in the units that did not have one: U5 discovered mid-build that its training-set size had
 never been measured, and U6 disproved two of its own premises after the unit was specified.
