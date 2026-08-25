@@ -103,6 +103,38 @@ lets the system escalate to human review gracefully, which is the behavior Check
 2.1 actually specified.
 
 
+### Coordination and communication
+
+Documented here Aug 24, 2026, as current state. The *decision* that produced it is #9 in
+[`../history/decision_log.md`](../history/decision_log.md#orchestration--control-flow); the
+topology is asserted on every diagram export by `scripts/export_graph_diagram.py`.
+
+**The pipeline is strictly sequential.** `graph.py` wires a static spine —
+Extractor → Comps → Valuation → Scenario → Critic — and that ordering is fixed by data
+dependency, not chosen at runtime: Valuation consumes `state.comps`, Scenario consumes
+`rent_estimate`. **There is no parallelism and no fan-out anywhere in the graph.**
+
+**The Planner runs pre-flight, not as a supervisor.** It writes a plan into state once, up
+front, and a conditional edge reads it. Specialists do not return to it between hops. Its
+real degrees of freedom are which optional steps to skip, rework routing, and escalation.
+
+**One back edge, and it is the only cycle.** `Critic → Planner`, bounded by
+`rework_count` against `config.MAX_REWORKS`. Any second loop-closing edge is a defect and
+the export fails on it.
+
+**"Cross-agent" means across agents' outputs, not across concurrent streams.** The Critic's
+consistency checks compare what *different agents wrote to state* — the Extractor's stated
+rents against Valuation's modelled rent, the Scenario agent's projection base against the
+price the Extractor read. It sits last in the spine precisely because it is the only node
+positioned to see all of them. This is worth stating because "cross-agent checking" reads
+like concurrency and is not.
+
+**Communication is one-way along the spine, two-way only at the rework edge.** Every node
+reads `DealState` and returns a partial update; nothing is passed between agents directly.
+The single validation loop-back is the Critic's, which is the whole of this system's
+two-way communication.
+
+
 ---
 
 ## 4. Proposed Repository Structure
