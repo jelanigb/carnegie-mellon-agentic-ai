@@ -40,6 +40,8 @@ Reason/Act/Observe/Decide:
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 import config
 from state import DealState, FlagKind, Severity, flag
 
@@ -117,6 +119,154 @@ def _consistency_objections(state: DealState) -> list[str]:
     settles which baseline is right.
     """
     return []
+
+
+# ---------------------------------------------------------------------------
+# Interaction checks (U7)
+# ---------------------------------------------------------------------------
+#
+# Every other agent checks what it has the data to check and flags its own step. The
+# Critic is the only node that sees all of those flags at once, and that is the whole of
+# what it can contribute that nothing upstream can: **whether a combination of
+# disclosures changes what the result means.**
+#
+# This is not extra penalty. `confidence_from_flags` is a sum, and a sum can only ever
+# say *more doubt*. These say something a sum cannot express — *this measurement does not
+# mean what it appears to mean* — which is a different claim and needs a different
+# mechanism.
+#
+# Where the gap is, with the weights as they stand (info 0.00, warn 0.15, critical 0.40,
+# threshold 0.60): one warn lands at 0.85 and reports, two warns land at 0.70 and report,
+# three warns land at 0.55 and already escalate, and any critical escalates on its own
+# independent ground. **So the window these exist for is exactly two warns** — plus any
+# number of INFO flags, which cost nothing by design.
+#
+# Each is a pure function of accumulated state. No LLM call, no network, no corpus, no
+# model — which is why they are hermetically testable in a way the checks U7 originally
+# planned were not.
+
+
+class Objection(NamedTuple):
+    """One cross-agent contradiction, with what the Critic should do about it.
+
+    `severity` rather than a bare string because these need CRITICAL to escalate, and
+    `retryable` because a rework pass re-runs the pipeline and most of these cannot be
+    fixed by re-running anything — re-reading the same listing will not densify a thin
+    market or add a street number to an address that lacks one. Carrying the distinction
+    here keeps `agents/planner.route_after_critic` from having to infer it.
+    """
+
+    message: str
+    severity: Severity
+    retryable: bool = False
+
+
+def _kinds(state: DealState) -> frozenset[FlagKind]:
+    return frozenset(f.kind for f in state.flags)
+
+
+def _interaction_objections(state: DealState) -> list[Objection]:
+    """Contradictions that exist only in the *combination* of upstream disclosures.
+
+    **Not yet wired — `_consistency_objections()` is the seam, and U7.4 joins them.**
+    Landed separately so this can be reviewed as arithmetic over flag sets, before the
+    routing consequences of raising a CRITICAL from inside the Critic are taken on.
+
+    Ordered strongest first. Each returns at most one objection, and they are allowed to
+    co-occur: a deal that trips two of these has two independent reasons its rent
+    cross-check is not saying what it appears to say.
+    """
+    kinds = _kinds(state)
+    objections: list[Objection] = []
+
+    # The comp cross-check is the only independent check on the rent estimate in this
+    # system, so every interaction below is about when its verdict stops being readable.
+    if FlagKind.RENT_DIVERGES_FROM_COMPS not in kinds:
+        return objections
+
+    # I1 — the comp set was widened on an attribute the model prices on.
+    #
+    # `RELAXED_MATCH_CRITERIA` covers both relaxations the retrieval loop can make: it
+    # drops the square-footage band first, then loosens bedroom tolerance once the radius
+    # is at its ceiling. Both matter here for one reason, which is why the flag kind is
+    # sufficient and no split is needed: `config.RENT_MODEL_FEATURES` is
+    # ("bedrooms", "bathrooms", "square_feet"), so either relaxation widens the comp set
+    # along a dimension the model is pricing on. The comp median then describes a
+    # different population than the model predicted for, and a gap between them is the
+    # expected consequence of the relaxation rather than evidence about the estimate.
+    if FlagKind.RELAXED_MATCH_CRITERIA in kinds:
+        objections.append(
+            Objection(
+                "The comp set was widened on an attribute the rent estimate depends "
+                "on — bedrooms, bathrooms or floor area — so the comparable-implied "
+                "median describes a different kind of unit than the one being priced. "
+                "The divergence "
+                "between them is the expected consequence of that relaxation, not a "
+                "finding about the estimate — the rent figure has no usable independent "
+                "check on this deal.",
+                Severity.CRITICAL,
+            )
+        )
+
+    # I2 — the comp median is a point sample.
+    #
+    # Decision #15 measured Chicago's busiest coordinate carrying 150 listings whose
+    # rents span $760-$6,995, CV 48.7% against 49.7% for the whole metro. A median over
+    # comps clustered like that carries almost no locational information, so diverging
+    # from it is weak evidence in either direction.
+    if FlagKind.COMPS_SPATIALLY_CONCENTRATED in kinds:
+        objections.append(
+            Objection(
+                "The comparables cluster at one location, so their median is a point "
+                "sample rather than a market summary — a single coordinate in this "
+                "data can carry 150 listings whose rents span $760 to $6,995. "
+                "Divergence from a median that dispersed is weak evidence about the "
+                "estimate in either direction.",
+                Severity.CRITICAL,
+            )
+        )
+
+    # I3 — the comps moved and the model did not.
+    #
+    # Weaker than the two above, and the reason is worth stating rather than leaving to
+    # be rediscovered: the rent model is **location-blind below the county** (§2). Its
+    # features carry no market identifier and its anchor is county-level FMR, so the
+    # subject's coordinates do not affect the estimate at all — only which comps are
+    # retrieved. A centroid fallback therefore moves the comp set to the city's centre of
+    # listing density while leaving the estimate untouched. That degrades the comparison
+    # and tells you which branch of the divergence flag's own either/or is the likely one;
+    # it does not void it. WARN rather than CRITICAL for exactly that reason.
+    geocode_fallbacks = {
+        FlagKind.COORDINATES_FROM_CITY_CENTROID,
+        FlagKind.GEOCODER_SERVICE_UNAVAILABLE,
+    }
+    if kinds & geocode_fallbacks:
+        # Only the service-outage cause is worth a rework: re-running the Extractor
+        # re-attempts the Census call, and the same listing may resolve to a parcel on a
+        # later run. An address with no street number will not, however often it is
+        # retried. U7.1b split the flag kinds so this branch reads the cause instead of
+        # parsing the message.
+        retryable = FlagKind.GEOCODER_SERVICE_UNAVAILABLE in kinds
+        objections.append(
+            Objection(
+                "The comps were retrieved around the city's center of listing density "
+                "rather than around this property, while the rent model — which is "
+                "location-blind below the county — produced the same estimate it would "
+                "have for any address in this county. The divergence is therefore more "
+                "readable as the comps describing a different neighborhood than as the "
+                "estimate being wrong for this property."
+                + (
+                    " The geocoder was unreachable rather than the address being "
+                    "unresolvable, so a re-run may resolve it to a parcel."
+                    if retryable
+                    else ""
+                ),
+                Severity.WARN,
+                retryable=retryable,
+            )
+        )
+
+    return objections
 
 
 def critic_agent(state: DealState) -> dict:
