@@ -8,12 +8,15 @@ Split deliberately, because the two halves of this agent have different dependen
   `human_review` interrupt reachable at runtime rather than only in a test, and the
   escalation path is the whole point of wiring that node into the skeleton.
 - **Stubbed for U7: cross-agent consistency checking**, the part that sets
-  `critic_rejected` and drives the rework cycle. It cannot be written yet in any honest
-  form: the checks worth making compare a rent estimate against its comp set and a
-  scenario band against its base value, and neither the Valuation nor the Scenario
-  agent produces anything in this build. A consistency check with only one populated
-  input is a check that always passes, which §2's own argument rules out — a signal
-  that cannot fire conveys nothing.
+  `critic_rejected` and drives the rework cycle. In U2 it could not be written in any
+  honest form, because the checks worth making needed Valuation and Scenario output and
+  neither agent produced any. A consistency check with only one populated input is a
+  check that always passes, which §2's own argument rules out — a signal that cannot
+  fire conveys nothing.
+
+  **That precondition is now met.** U5 populates `rent_estimate` and `ValuationDetail`;
+  U6 populates `scenarios` and `ForecastDetail`. See `_consistency_objections()` below
+  for what U7 actually checks, which is not the list U2 anticipated.
 
 `_consistency_objections()` is left as a real function returning an empty list rather
 than being omitted, so the rework branch below is present, reachable, and testable by
@@ -76,14 +79,42 @@ def _consistency_objections(state: DealState) -> list[str]:
     """Cross-agent contradictions found in this run. **U7 populates this.**
 
     Returns an empty list today, so `critic_rejected` is never set and the rework cycle
-    never fires on its own in this build. That is accurate rather than convenient:
-    there is nothing yet to be inconsistent with.
+    never fires on its own in this build.
 
-    TODO(U7): implement the checks named in §1 — the rent estimate against the comp
-    set's own distribution, the scenario bands against the base value they branch from,
-    the value estimate against the listing price, and comp-source concentration (the
-    corpus is 91% RentDigs.com, so eight comps from one feed are not eight independent
-    observations — `Comp.listing_source` exists to make that detectable).
+    The four checks §1 originally named were reviewed against the built system while
+    planning U7, and **the list did not survive contact with it.** Recorded here rather
+    than silently replaced, because a TODO that names work the build has since made
+    impossible is worse than no TODO:
+
+    1. *Rent estimate against the comp set's distribution* — **already built, and not
+       here.** `agents/valuation_rent.py` raises `RENT_DIVERGES_FROM_COMPS` as its own
+       Observe step, using `ValuationDetail.comp_implied_rent_p25/median/p75`. The
+       Critic **consumes that flag** rather than recomputing it. Two agents deriving one
+       fact independently is two agents that can disagree about it.
+    2. *Value estimate against the listing price* — **dead.** Decision #15 made
+       `DealState.value_estimate` permanently `None`; nothing in this build writes it.
+       This TODO predates that decision.
+    3. *Scenario bands against the base they branch from* — **live, TODO(U7).** Both
+       `ForecastDetail.projection_base_price`/`_rent` and the `Scenario` bands are
+       populated by U6.
+    4. *Comp-source concentration* — **live, TODO(U7).** The corpus is 91%
+       RentDigs.com, so eight comps from one feed are not eight independent
+       observations; `Comp.listing_source` exists to make that detectable. Must not
+       double-count with `COMPS_SPATIALLY_CONCENTRATED`, which is a different
+       concentration and already fires.
+
+    TODO(U7): implement 3 and 4, plus two checks U2 did not anticipate because the state
+    they read did not exist yet — the forecast's projection base against the figures it
+    claims to project from, and comp attribute drift against the subject after
+    relaxation.
+
+    Two further comparisons — the listing's *stated* rents against `rent_estimate`, and
+    its asking price against `ValuationDetail.benchmark_median_sale_price` — are
+    deliberately **not** objections in U7. They ship as Summarizer disclosures instead,
+    because the rent one currently reports ~-29% on every demo deal: FMR is a
+    40th-percentile rent while the model predicts ~1.40x FMR, so the gap measures a
+    percentile mismatch rather than the deal. TODO(U8): promote both once Zillow ZORI
+    settles which baseline is right.
     """
     return []
 
@@ -111,11 +142,15 @@ def critic_agent(state: DealState) -> dict:
     # threshold is a judgment about *accumulated* uncertainty and is the right tool for
     # a pile of warnings; it is the wrong tool for a single disqualifying observation.
     #
-    # TODO(U7): decision #6 sets both the 0.60 threshold and the severity weights as
-    # PROVISIONAL. Confirm this rule when they are tuned — if the weights were retuned
-    # so that one critical flag falls clearly below the threshold, the two conditions
-    # would coincide and this one could fold back into the score. Keeping them separate
-    # is deliberate even then: it makes the guarantee independent of the weights.
+    # TODO(U8): decision #6 sets both the 0.60 threshold and the severity weights as
+    # PROVISIONAL, and **U8 is where they get tuned, not U7** — the eval batch is what
+    # exercises the range, and the five demo deals were calibrated to run clean, so they
+    # cannot. U7 lands the mechanism; U8 supplies the numbers.
+    #
+    # Confirm this rule when they are tuned — if the weights were retuned so that one
+    # critical flag falls clearly below the threshold, the two conditions would coincide
+    # and this one could fold back into the score. Keeping them separate is deliberate
+    # even then: it makes the guarantee independent of the weights.
     low_confidence = confidence < config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD
     has_critical = any(f.severity == Severity.CRITICAL for f in state.flags)
 

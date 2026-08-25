@@ -18,9 +18,16 @@ Conventions:
 
 ## U7 — Critic / Reviewer
 
-**Feeds Checkpoint 6.1.** Builds the half of `agents/critic.py` that U2 deliberately
-stubbed: cross-agent consistency checking, the objections that make the rework cycle fire
-on its own, and the tuning of decision #6.
+**Feeds Checkpoint 6.1** (due Aug 31, 2026 — this unit is pulled forward to land before
+it). Builds the half of `agents/critic.py` that U2 deliberately stubbed: cross-agent
+consistency checking, and the objections that make the rework cycle fire on its own.
+Decision #6's *mechanism* lands here; its **numbers do not** — see Q3.
+
+**Sequence, and why.** Checks first (U7.2, U7.3), then wiring (U7.4), because the wiring
+has nothing to carry until the checks exist. Disclosures (U7.5) come after the wiring
+even though they are independent of it, because U7.5 adds a sixth demo deal and U7.6 has
+to re-measure the §6 demo table — doing the fixture change first means measuring once
+rather than twice. U7.7 may not be built at all.
 
 ### Unit-level open questions
 
@@ -66,9 +73,9 @@ not grade the count of consistency checks. Consuming rather than duplicating is 
 rationale for criterion 6 (trade-offs: single source of truth over redundant validation),
 and the check inventory above supplies the guardrail section either way. The 6.1 exposure
 is not "how many checks" — it is that the escalation criteria and the evaluation metrics
-must be **stated and defensible**, which is U7.5 and U8.
+must be **stated and defensible**, which is U7.6 and U8.
 
-**Q4 — NEW, blocks U7.2. Measured Aug 24, 2026, before building anything.** Checks A and B
+**Q4 — NEW, blocks U7.5. Measured Aug 24, 2026, before building anything.** Checks A and B
 were both specified against fixtures that cannot test them, and in opposite directions.
 
 **B is already half-built and reads as inert.** `agents/summarizer.py:239–245` already
@@ -113,7 +120,7 @@ check by #16 and still unbuilt (OQ-6).
 
 **Recommendation, sized for the Aug 31 checkpoint:**
 
-1. **Build C, D and F as Critic checks now** (U7.3, U7.4). Their semantics are unambiguous
+1. **Build C, D and F as Critic checks now** (U7.2, U7.3). Their semantics are unambiguous
    and no fixture artifact touches them. These are what make `critic_rejected` reachable.
 2. **A and B are not Critic checks in U7. They are Summarizer disclosures.** This is not a
    new mechanism — it is the pattern B already follows: `summarizer.py:239–245` computes
@@ -158,12 +165,12 @@ search that does nothing, and the same call U6 made about `AppreciationTier`.
 
 **Q3 — ANSWERED Aug 24, 2026: land the mechanism in U7, leave the numbers to U8**, and
 record the split in §7's register. Decision #6's weights and the 0.60
-threshold are tuned against the eval batch — but **U8 builds that batch**. Either U7.4
+threshold are tuned against the eval batch — but **U8 builds that batch**. Either U7.6
 tunes against the five demo deals (weak, and they were calibrated to be clean), or it
 slips to U8. **Recommendation: slip the tuning to U8, land the mechanism in U7**, and say
 so in the register rather than tuning against inputs that cannot exercise the range.
 
-### U7.1 — Correct the U7 docstrings to the system that exists *(maintenance)*
+### U7.1 ✅ — Correct the U7 docstrings to the system that exists *(maintenance)*
 
 No logic. `agents/critic.py`'s module docstring and both `TODO(U7)` comments describe four
 checks and a `value_estimate` that #15 removed. Rewrite to Q1's findings — including that
@@ -171,24 +178,7 @@ rent-vs-comps is consumed, not reproduced — so the file stops advertising a de
 build abandoned. Lands first so the behavioural diffs that follow are read against an
 accurate description.
 
-### U7.2 — Disclosures: listing claims against derived estimates *(A + B)*
-
-**Not Critic checks — Summarizer disclosures**, per Q4. No flags, no objections, no effect
-on confidence or routing.
-
-- **A (new).** Render the listing's stated `unit_rents` against `rent_estimate` in the
-  valuation section. The report currently shows the estimate and never the claim, so a ~29%
-  gap is invisible today. Note the unit-mix problem: the estimate is per-unit for the
-  subject's bedroom count and `unit_rents` is a list — state the comparison basis rather
-  than leaving it implicit. Carry the disclosure that the baseline is unsettled pending
-  market-rent validation (OQ-6).
-- **B (exists).** `summarizer.py:239–245` already renders the price drift. Work here is the
-  **deliberately mispriced demo deal** that makes it non-trivial, plus handling
-  `benchmark_unavailable_reason` in the prose.
-- **Config.** A's threshold lands in `config.py` as `None` with a `TODO(U8)` naming ZORI, so
-  U8 promotes by setting a value.
-
-### U7.3 — Checks: forecast coherence *(C + D)*
+### U7.2 — Checks: forecast coherence *(C + D)*
 
 - **C.** `forecast_detail.projection_base_price` == `deal_terms.price` and
   `projection_base_rent` == `rent_estimate`. Exact equality against the bases #15 and #17
@@ -198,7 +188,7 @@ on confidence or routing.
   of +19.03%/yr printed beneath a basis block stating FY2024 had been screened out —
   19.03% *is* Chicago's FY2024 figure.
 
-### U7.4 — Checks: comp-set quality *(E + F)*
+### U7.3 — Checks: comp-set quality *(E + F)*
 
 - **F.** Comp-source concentration via `Comp.listing_source`. Eight comps from one feed are
   not eight independent observations; the corpus is 91% RentDigs.com. **Must not
@@ -209,9 +199,9 @@ on confidence or routing.
 
 Lowest-value pair of the three; cut here first if U7 runs long.
 
-### U7.5 — Wire the objections in, and make the rework cycle fire on its own
+### U7.4 — Wire the objections in, and make the rework cycle fire on its own
 
-Populate `_consistency_objections()` from U7.2–U7.4 and consume Valuation's
+Populate `_consistency_objections()` from U7.2 and U7.3 and consume Valuation's
 `RENT_DIVERGES_FROM_COMPS` rather than recomputing it. This is the behavioural change:
 `critic_rejected` becomes reachable and the `Critic → Planner` back edge carries traffic
 for the first time.
@@ -233,6 +223,23 @@ for the first time.
    purpose-built case, and U7.8's tests must construct one rather than assuming an
    existing demo deal will reach it.
 
+### U7.5 — Disclosures: listing claims against derived estimates *(A + B)*
+
+**Not Critic checks — Summarizer disclosures**, per Q4. No flags, no objections, no effect
+on confidence or routing.
+
+- **A (new).** Render the listing's stated `unit_rents` against `rent_estimate` in the
+  valuation section. The report currently shows the estimate and never the claim, so a ~29%
+  gap is invisible today. Note the unit-mix problem: the estimate is per-unit for the
+  subject's bedroom count and `unit_rents` is a list — state the comparison basis rather
+  than leaving it implicit. Carry the disclosure that the baseline is unsettled pending
+  market-rent validation (OQ-6).
+- **B (exists).** `summarizer.py:239–245` already renders the price drift. Work here is the
+  **deliberately mispriced demo deal** that makes it non-trivial, plus handling
+  `benchmark_unavailable_reason` in the prose.
+- **Config.** A's threshold lands in `config.py` as `None` with a `TODO(U8)` naming ZORI, so
+  U8 promotes by setting a value.
+
 ### U7.6 — Confidence weights and threshold *(decision #6)*
 
 Mechanism only, per Q3: make weights and threshold tunable and evidenced, leave the numbers
@@ -253,7 +260,7 @@ documentation change: retire #12's Critic half on evidence and remove the `TOT_*
 ### U7.8 — Close-out
 
 Extend `tests/test_flag_propagation.py` for `CRITIC_INCONSISTENCY`, `REWORK_LIMIT_REACHED`,
-and every new `FlagKind` U7.2–U7.4 adds; re-measure the §6 demo table; append to
+and every new `FlagKind` U7.2 and U7.3 add; re-measure the §6 demo table; append to
 [`history/changelog.md`](history/changelog.md); move decisions into §7's register with
 reasoning in [`history/decision_log.md`](history/decision_log.md); delete closed entries
 from [`open_questions.md`](open_questions.md).
