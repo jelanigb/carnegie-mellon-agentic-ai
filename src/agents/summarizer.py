@@ -205,8 +205,8 @@ def _build_status_section(stub_nodes: list[str]) -> list[str]:
         "> ⚠️ **Provisional build.** These agents ran as stubs or partial "
         "implementations and did not produce their full output: "
         + ", ".join(f"`{name}`" for name in unique)
-        + ". Sections fed by them are unbuilt, not empty. See "
-        "`docs/implementation_plan.md` §6 for the unit that implements each.",
+        + ". Sections fed by them are unbuilt, not empty — each is "
+        "scheduled for a later stage of this build.",
         "",
     ]
 

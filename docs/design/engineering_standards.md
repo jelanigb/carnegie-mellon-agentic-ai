@@ -39,6 +39,28 @@ in a focused session or across a fragmented week.
   gets raised for a decision rather than resolved by assumption. Such decisions are
   inexpensive to make deliberately and expensive to unwind once code depends on them.
 
+- **Reader-facing text carries no internal vocabulary** (added Aug 24, 2026). Section
+  numbers (§2), decision numbers (#15), unit numbers (U7), `config` constant names and
+  enum members are this repository's vocabulary, not the reader's. An investor reading
+  the report, or an audience watching the demo, has no way to resolve any of them — and
+  a citation the reader cannot follow is worse than no citation, because it looks like
+  evidence while supplying none.
+
+  **This applies to anything that reaches the report:** flag messages, objection text,
+  Summarizer prose. It explicitly does **not** apply to docstrings and comments, which
+  evolve alongside the implementation and are read by someone with the repository open.
+  Those should keep citing precisely — that is where the traceability lives.
+
+  The distinction is the audience, not the formality. Where a flag needs to explain the
+  reasoning behind a threshold, it states the reasoning: not *"config.RENT_MODEL_FEATURES
+  was relaxed"* but *"the comp set was widened on an attribute the rent estimate depends
+  on — bedrooms, bathrooms or floor area"*. The second is longer and says more.
+
+  Enforced for the Critic's objections by
+  `tests/test_critic_interactions.py::test_objection_text_carries_no_internal_vocabulary`,
+  which walks every reachable flag combination. Worth extending to the other agents'
+  messages when one of them next changes.
+
 - **Every unit closes by appending to `docs/changelog.md`** (added Aug 10, 2026). A `##`
   heading per date the work was done, and beneath it a table of
   `date added | unit | work done | related checkpoint`.
@@ -182,7 +204,8 @@ observed rather than anticipated: units were reaching implementation on assumpti
 had checked, and they were landing as single change sets too large to review in one pass.
 
 1. **Plan before coding.** The unit is decomposed into subsections in
-   [`../task_list.md`](../task_list.md), each scoped to be its own change set. Critical
+   [`../tasks/`](../tasks/), one file per unit, each subsection scoped to be its own
+   change set. Critical
    dependencies and open questions are raised at the *unit* level, naming the subsection
    they block, so they are answered up front rather than discovered mid-implementation.
    The plan is reviewed and approved before any code is written.
@@ -225,7 +248,7 @@ Both were caught, but both were caught late, and late is where redesign is expen
 
 - **One logical change per change set**, self-contained, accompanied by a summary of what
   changed and where the reviewer's attention is most warranted. A unit is decomposed into
-  commit-sized subsections in [`../task_list.md`](../task_list.md) *before* coding starts,
+  commit-sized subsections in [`../tasks/`](../tasks/) *before* coding starts,
   and each lands on its own. A diff spanning five loosely related files costs more review
   time than the batching saves.
 - **Maintenance lands separately from logic.** If a unit stops to extract enums, rename for

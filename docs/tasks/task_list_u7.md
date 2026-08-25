@@ -1,22 +1,8 @@
-# Task List
+# U7 — Critic / Reviewer — task list
 
-**Per-unit work breakdown, written before coding starts and approved before it does.**
-Part of the workflow in
-[`design/engineering_standards.md`](design/engineering_standards.md#how-a-unit-is-built).
-
-Conventions:
-
-- **Each `###` subsection is one change set** — one commit, reviewable on its own.
-- **Maintenance is its own subsection**, never folded into a behavioural one.
-- **Unit-level open questions come first** and name the subsection they block. Anything
-  that would change the design gets answered before that subsection starts, not during it.
-- A subsection may land the system in a **temporarily incomplete state** if the completing
-  subsection is named here.
-- Closed units are trimmed to a one-line pointer at the changelog once they land.
-
----
-
-## U7 — Critic / Reviewer
+> **Conventions for this file are in [`README.md`](README.md).** Section numbers (§1–§9)
+> and decision numbers (#1–#17) refer to
+> [`../implementation_plan.md`](../implementation_plan.md).
 
 **Feeds Checkpoint 6.1** (due Aug 31, 2026 — this unit is pulled forward to land before
 it). Builds the half of `agents/critic.py` that U2 deliberately stubbed: cross-agent
@@ -150,7 +136,7 @@ Does the Critic run a ToT search over its checks, per decision #12?
 independent." With Q1 resolving to two checks, both cheap and both local to state, **that
 premise may no longer hold** — a search over two cheap independent checks is decoration,
 and this project has an explicit standard against that
-([`open_questions.md`](open_questions.md) OQ-2, and the U6 precedent where
+([`open_questions.md`](../open_questions.md) OQ-2, and the U6 precedent where
 `scripts/forecast_evidence.py` had to *prove* the search was load-bearing).
 **Revised after Q1's enumeration.** With six candidate checks rather than two, and with
 their costs genuinely differing (A/C are arithmetic, B needs the benchmark, E needs
@@ -243,7 +229,7 @@ either way."*
   a service outage is awkward to trip from listing text alone. It may need injection
   rather than a synthetic listing.
 
-### U7.2 — Interaction checks: when disclosures compound *(the unit's substance)*
+### U7.2 ✅ — Interaction checks: when disclosures compound *(the unit's substance)*
 
 **Q5 resolved: C, D and F are retired on evidence. This replaces them.**
 
@@ -281,8 +267,31 @@ critical flag escalates regardless of score) rather than inventing a second esca
 ground. The deal escalates at 0.70, which is exactly the branch `critic.py` already has
 wording for: *"clears the threshold, but a critical-severity disclosure was raised."*
 
-**These escalate; they do not rework.** Re-running the pipeline cannot produce a better
-geocode or a denser market. See U7.4.
+**As built.** `Objection(message, severity, retryable)` NamedTuple plus
+`_interaction_objections(state)`, both in `agents/critic.py`. **Not wired** —
+`_consistency_objections()` is untouched and still returns `[]`, so the load-bearing
+bounded-cycle injection in `test_flag_propagation.py:525` keeps testing exactly what it
+tested. U7.4 joins them and updates that seam deliberately.
+
+Two design points settled while writing it:
+
+- **I1 needs no flag split.** `RELAXED_MATCH_CRITERIA` covers both relaxations the
+  retrieval loop makes — dropping the square-footage band and loosening bedroom tolerance
+  — and both matter for one reason: `config.RENT_MODEL_FEATURES` is
+  `("bedrooms", "bathrooms", "square_feet")`, so either widens the comp set along a
+  dimension the model prices on. The kind alone is sufficient, and the semantics are
+  tighter than the bedroom-specific version originally planned.
+- **`RELAXED_SEARCH_RADIUS` deliberately does not trigger I1.** Widening the radius leaves
+  the attribute filters intact, so the comp set still describes the same kind of unit.
+  Conflating them would fire I1 on ordinary thin-market deals. Asserted in a test.
+
+`tests/test_critic_interactions.py`, 8 cases, hermetic — no LLM, network, corpus or model.
+Kept out of `test_flag_propagation.py` on purpose: that suite proves a flag *survives* the
+pipeline, these prove a combination is *read* correctly. Different guarantee.
+
+**These escalate; they do not rework** — except I3's service-outage variant, which sets
+`retryable=True`. Re-running cannot densify a thin market or add a street number, but it
+can re-attempt a Census call. See U7.4.
 
 ### U7.3 — Check: comp attribute drift *(E — the one surviving attribute check)*
 
@@ -384,19 +393,6 @@ documentation change: retire #12's Critic half on evidence and remove the `TOT_*
 
 Extend `tests/test_flag_propagation.py` for `CRITIC_INCONSISTENCY`, `REWORK_LIMIT_REACHED`,
 and every new `FlagKind` U7.2 and U7.3 add; re-measure the §6 demo table; append to
-[`history/changelog.md`](history/changelog.md); move decisions into §7's register with
-reasoning in [`history/decision_log.md`](history/decision_log.md); delete closed entries
-from [`open_questions.md`](open_questions.md).
-
----
-
-## Maintenance — not tied to a unit
-
-### M1 — Name the decision at every citation site
-
-~50 code comments cite decisions bare (`decision #9`, `§7 decision #4`). A reader who does
-not already know what #9 was has to leave the file to find out. Append a short gloss at
-each site — `decision #9 (Planner topology)` — matching the names now in §7's register.
-Comment-only; no logic. Sites: `graph.py`, `config.py`, `state.py`, `critic.py`, `tot.py`,
-`planner.py`, `mcp_server.py`, `llm_client.py`, `fmr_history.py`, `geocoding.py`,
-`county_crosswalk.py`, `main.py`, and six scripts.
+[`history/changelog.md`](../history/changelog.md); move decisions into §7's register with
+reasoning in [`history/decision_log.md`](../history/decision_log.md); delete closed entries
+from [`open_questions.md`](../open_questions.md).

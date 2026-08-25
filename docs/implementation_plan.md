@@ -37,7 +37,8 @@ be wrong.
 ## Document map
 
 **Read every session:** this file and [`open_questions.md`](open_questions.md).
-**Read at unit start:** [`task_list.md`](task_list.md).
+**Read at unit start:** the current unit's file in [`tasks/`](tasks/) — for example
+[`tasks/task_list_u7.md`](tasks/task_list_u7.md).
 **Everything else is on demand**, and the folder says which kind it is — `design/` is what
 the system currently *is*, `history/` is *how it got that way*.
 
@@ -45,7 +46,7 @@ the system currently *is*, `history/` is *how it got that way*.
 | --- | --- | --- |
 | **`implementation_plan.md`** (this file) | §1 summary, §6 execution order and unit table, §7 decisions register, cut list, the hard constraint | Every session |
 | **`open_questions.md`** | Every unresolved question, grouped by system area, each naming the unit that must close it | Every session |
-| **`task_list.md`** | The current unit decomposed into commit-sized subsections, with its blocking questions stated up front | Starting or resuming a unit |
+| **`tasks/task_list_<unit>.md`** | That unit decomposed into commit-sized subsections, with its blocking questions stated up front. One file per unit, so a session loads only the unit it is on — [`tasks/README.md`](tasks/README.md) indexes them | Starting or resuming a unit |
 | `design/architecture.md` | §3 stack rationale, §4 repository structure, the design conventions node code must follow | Touching the graph or adding a node |
 | `design/state_schema.md` | §5 — `DealState` and every field, with provenance and reducer semantics | Adding, reading, or changing a state field |
 | `design/data_strategy.md` | §2 — Kaggle/Redfin vintage and category reconciliation, metro selection, sparsity, ZIP anchoring | Reasoning about any rent or price number |
@@ -163,7 +164,7 @@ below is scoped to roughly 2–3 hours of review — two per week, with the buff
 absorbing four. A corollary worth stating because ignoring it is expensive: a design
 decision deferred past the unit that needs it blocks implementation *and* consumes
 review capacity on re-establishing context. [`open_questions.md`](open_questions.md)
-and the per-unit breakdown in [`task_list.md`](task_list.md) exist to close those out
+and the per-unit breakdown in [`tasks/`](tasks/) exist to close those out
 before a unit starts rather than during it.
 
 ### The units
