@@ -305,55 +305,117 @@ that never relaxed**, which is what keeps it off the clean baseline. Threshold t
 `config.py`. Feeds I1 above rather than duplicating it: drift is the measurement, I1 is the
 consequence for the divergence signal.
 
-### U7.4 — Wire the objections in, and make the rework cycle fire on its own
+### U7.4 ✅ — Wire the objections in, and make the rework cycle fire on its own
 
-Populate `_consistency_objections()` from U7.2 and U7.3 and consume Valuation's
-`RENT_DIVERGES_FROM_COMPS` rather than recomputing it. This is the behavioural change:
-`critic_rejected` becomes reachable and the `Critic → Planner` back edge carries traffic
-for the first time.
+`_consistency_objections()` now returns `list[Objection]` and delegates to
+`_interaction_objections()`. The `Critic → Planner` back edge carries traffic for the
+first time.
 
-**Three things are mandatory here.**
+**`critic_rejected` changed meaning, and that is the substance of this change set.** It
+was `bool(objections)` — "something is wrong". It is now `any(o.retryable ...)` —
+"another pass could fix this". A rework re-runs the whole pipeline, so it is worth
+spending only where a second pass can change the input. A thin market stays thin; an
+address with no street number stays unresolvable; a comp set relaxed onto a different unit
+type will relax the same way again. Only an unreachable geocoder may answer next time.
+Non-retryable objections still escalate, through their severity.
 
-1. **Bounded-cycle regression tests.** `MAX_REWORKS` stops being theoretical.
-2. **One case genuinely warrants rework, and it is not obvious.**
-   `tools/geocoding.py:225–238` catches a `GeocodingError` — the Census *request* failing,
-   as distinct from running and finding no match — and falls through to the corpus
-   centroid. Both paths raise the same `COORDINATES_FROM_CITY_CENTROID` flag. U3 caught
-   this and logged the distinction to diagnostics, with the comment stating plainly that
-   *"the resulting flag says the same thing either way."*
+Measured end to end, `critic_agent` + `route_after_critic`:
 
-   That matters here: **a centroid fallback caused by a Census outage is retryable, and a
-   rework pass would re-run the Extractor and re-attempt the geocode.** A fallback caused
-   by an address with no street number is not retryable and should escalate. This is the
-   clearest case in the system where rework is the right response rather than escalation —
-   and the Critic cannot currently tell the two apart, because the flag does not carry the
-   cause. Either the flag gains a distinguishing detail, or rework is not offered here.
-3. **Decide which objections are worth a rework at all.** A rework re-runs the pipeline, so
-   an objection a second pass cannot possibly resolve — B, a mispriced listing — should
-   escalate rather than loop. Objections that warrant rework and objections that warrant
-   human review are different sets; conflating them spends the budget on deals it cannot
-   help.
-3. **Two defects in `critic.py` that block interaction checks**, both found while
-   designing U7.2 and neither visible from the plan:
-   - ✅ **Resolved in U7.1b** — the retryable case is now `GEOCODER_SERVICE_UNAVAILABLE`
-     and the unresolvable one stays `COORDINATES_FROM_CITY_CENTROID`, so the Critic can
-     branch without parsing message text.
-   - **`critic.py:155` reads `state.flags`**, the *incoming* accumulated list, not the
-     local `flags` list the Critic is building this pass. A CRITICAL the Critic raises
-     itself would not trigger its own escalation. U7.2's mechanism depends on this being
-     fixed.
-   - **`_DERIVED_KINDS` excludes only `LOW_CONFIDENCE_ESTIMATE` and
-     `REWORK_LIMIT_REACHED`.** `CRITIC_INCONSISTENCY` is not in it, so on a rework lap the
-     Critic's own objection would count against the score — the exact self-driving-down
-     defect that set exists to prevent. It should join.
-4. **Mind the routing precedence.** `planner.route_after_critic` checks
-   `needs_human_review` **before** `critic_rejected`, deliberately (a deal a human should
-   see reaches a human rather than being quietly re-run first). Consequence: a deal
-   carrying any critical flag escalates and **never reworks**. So the rework path is only
-   reachable for a deal with an objection, no critical flag, and confidence above
-   threshold — which is *none of the current demo deals*. Exercising this path needs a
-   purpose-built case, and U7.8's tests must construct one rather than assuming an
-   existing demo deal will reach it.
+| Flags present | Confidence | Route |
+| --- | --- | --- |
+| none | 1.00 | summarizer |
+| divergence alone | 0.85 | summarizer |
+| divergence + relaxed criteria (I1) | **0.70** | **human_review** |
+| divergence + concentrated comps (I2) | **0.70** | **human_review** |
+| divergence + centroid fallback (I3) | 0.70 | summarizer, with the objection disclosed |
+| divergence + geocoder outage (I3) | 0.70 | **planner — the rework path** |
+
+The two CRITICAL rows are the point: **0.70 clears the 0.60 threshold and they escalate
+anyway**, which is the compounding case a summed score cannot express.
+
+**Both defects fixed.** `has_critical` now reads `(*state.flags, *flags)`, so a CRITICAL
+the Critic raises triggers its own escalation — until now nothing it raised could.
+`CRITIC_INCONSISTENCY` joined `_DERIVED_KINDS`: an objection is a conclusion *about* other
+flags, so scoring it charges the same observation twice and compounds on every lap.
+
+**A third defect surfaced, and it mattered more than either.** `state.flags` is
+append-only across laps by design, and a rework re-runs every upstream agent, so each
+re-raises what it raised before. Summed naively, a deal scored 0.70, then **0.40** on lap
+one — which is below the 0.60 threshold, so `route_after_critic` sent it to human review
+and lap two never happened. `MAX_REWORKS = 2` was therefore effectively 1, and
+**`REWORK_LIMIT_REACHED` could not fire through the graph**: reaching it needs a retryable
+objection still standing at `rework_count >= MAX_REWORKS`, and the score collapsed one lap
+early every time. (Verified rather than reasoned: calling the Critic directly at lap two
+*does* raise it — the router is what never gets there.) The cycle was still bounded, but by
+an arithmetic accident rather than by the explicit counter §3 requires, and the two
+agreeing on the outcome is what kept it hidden. Latent since U2; only reachable because
+this change set made rework fire at all.
+
+`confidence_from_flags` now de-duplicates on `(source_agent, kind, detail)`. Not on kind
+alone — one retrieval pass can legitimately raise `RELAXED_MATCH_CRITERIA` twice for two
+different relaxations, and both should be charged. After the fix: 0.70 held flat across
+three laps, rework fired twice, `REWORK_LIMIT_REACHED` fired on the third.
+
+**Tests at 48.** Two regressions added, each falsified in the direction it guards — the
+decay test fails under a naive sum, the distinct-observations test fails under
+de-duplication by kind alone. The bounded-cycle injection in `test_flag_propagation.py`
+gained `retryable=True`, deliberately: injecting a non-retryable objection would now test
+the escalation route that test exists to exclude.
+
+**Still true, and U7.8 owes a case for it:** the rework path needs an objection, no
+critical flag, and confidence above threshold — which no current demo deal produces.
+
+### U7.4b — Force Extractor re-entry so a retryable objection can actually be retried
+
+**Defect found reviewing U7.4, after it was written. The rework path U7.4 built does
+nothing.**
+
+`planner_agent` adds the Extractor to the plan only `if not
+deal_terms_are_complete(state.deal_terms)`, and
+`config.REQUIRED_DEAL_FIELDS = ("full_address", "price", "unit_count")` — **coordinates
+are not among them.** Pass 1 populates all three, so on a rework lap the Extractor is
+skipped. Measured through the real Planner:
+
+```
+plan on first entry    : ['extractor', 'comps_retrieval', 'valuation_rent', 'scenario_forecast', 'critic']
+plan on rework re-entry: ['comps_retrieval', 'valuation_rent', 'scenario_forecast', 'critic']
+```
+
+So the single objection U7.4 marks `retryable` — I3 with `GEOCODER_SERVICE_UNAVAILABLE`,
+justified as *"re-running the Extractor re-attempts the Census call"* — **never re-attempts
+it.** The centroid coordinates persist, retrieval returns the same comps, the divergence is
+identical, and the same objection is raised again. The cycle burns both laps and escalates
+with nothing changed.
+
+That is exactly the failure the `retryable` distinction exists to prevent, and `critic.py`
+says so in its own words: looping on an unfixable objection *"burns the budget and arrives
+back here one full pipeline later with the same objection."* The one case marked retryable
+does precisely that.
+
+**Not a safety problem** — the cycle terminates and escalates correctly, which is why U7.4
+ships as-is. It is a *usefulness* problem: the back edge currently demonstrates nothing,
+which matters for Checkpoint 6.1's guardrail story and for 5.1's claim that the rework edge
+is this system's two-way communication.
+
+**Chosen fix: force Extractor re-entry.** Rejected the alternative — dropping `retryable`
+and letting I3-outage escalate like the others — because it is simpler but removes the only
+justification the back edge has.
+
+Deciding which optional steps run is squarely the Planner's job under #9 (*"its real
+degrees of freedom are which optional steps to skip, retry/rework routing, and
+escalation"*), so this does not cross the routing boundary the Critic is held to.
+
+Scope:
+
+- `planner_agent` includes the Extractor on a re-entry when the accumulated flags carry a
+  retryable geocode failure, in addition to the existing incompleteness test.
+- **Do not** add coordinates to `REQUIRED_DEAL_FIELDS`. It would not work — the centroid
+  fallback populates `latitude`/`longitude`, so completeness stays true — and it would
+  change first-pass behaviour for a question that is only about re-entry.
+- Watch the interaction with `planner_invocations` and `rework_count`: #9's invariant is
+  `planner_invocations == 1 + rework_count`, and this must not disturb it.
+- Test that a second pass with a now-reachable geocoder resolves to a parcel and clears the
+  objection, and that a *persistent* outage still terminates on `MAX_REWORKS`.
 
 ### U7.5 — Disclosures: listing claims against derived estimates *(A + B)*
 

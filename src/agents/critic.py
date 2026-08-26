@@ -53,7 +53,17 @@ AGENT = "critic"
 # flags to the accumulated list, and counting them would let the score drive itself down
 # on each lap of a cycle that exists to improve the deal. Confidence must be a function
 # of what the pipeline observed, not of what the Critic previously concluded about it.
-_DERIVED_KINDS = frozenset({FlagKind.LOW_CONFIDENCE_ESTIMATE, FlagKind.REWORK_LIMIT_REACHED})
+_DERIVED_KINDS = frozenset({
+    FlagKind.LOW_CONFIDENCE_ESTIMATE,
+    FlagKind.REWORK_LIMIT_REACHED,
+    # Added U7.4, and it belongs here for both of the reasons above at once. An
+    # objection is a conclusion *about* other flags, so counting it charges the same
+    # observation twice — the divergence and the relaxation behind it have already been
+    # paid for. And a rework lap re-raises it, so it would compound on a cycle whose
+    # whole purpose is to improve the deal. Objections escalate through the critical
+    # rule instead, which is a decision rather than an arithmetic contribution.
+    FlagKind.CRITIC_INCONSISTENCY,
+})
 
 
 def confidence_from_flags(state: DealState) -> float:
@@ -65,19 +75,44 @@ def confidence_from_flags(state: DealState) -> float:
     rather than a weakness, and charging them would make the score fall on runs where
     nothing went wrong.
 
-    The weights are PROVISIONAL and tuned in U7 — they live in `config` for exactly
+    The weights are PROVISIONAL and tuned in U8 — they live in `config` for exactly
     that reason (§8). The shape of the function is the U2 commitment; the numbers are
     not.
+
+    **Identical observations are counted once (U7.4).** `state.flags` is append-only
+    across rework laps, deliberately, so the raw run history stays inspectable — the same
+    reason the Summarizer de-duplicates `stub_nodes` at render time rather than in the
+    reducer. But a rework re-runs every upstream agent, and each re-raises the flags it
+    raised before, so a summed score would fall on every lap without anything about the
+    deal having changed. A deal does not get worse because the pipeline looked at it
+    twice.
+
+    Measured before this was added: a deal carrying two warn flags scored 0.70, then 0.40
+    on the first rework lap and 0.10 on the second. It escalated on collapsed confidence
+    before `MAX_REWORKS` was ever reached, which made `REWORK_LIMIT_REACHED` unreachable
+    and left the cycle bounded by an arithmetic accident rather than by the explicit
+    counter §3 requires. That the two happened to agree is exactly what makes this the
+    kind of defect worth finding deliberately.
+
+    De-duplication is on `(source_agent, kind, detail)`. Not on `kind` alone: one
+    retrieval pass can legitimately raise `RELAXED_MATCH_CRITERIA` twice for two
+    different relaxations, and those are two real observations that should both be
+    charged. Identical text from the same agent is the same observation reported again.
     """
-    penalty = sum(
-        config.FLAG_SEVERITY_PENALTY.get(f.severity, 0.0)
-        for f in state.flags
-        if f.kind not in _DERIVED_KINDS
-    )
+    seen: set[tuple[str, FlagKind, str]] = set()
+    penalty = 0.0
+    for f in state.flags:
+        if f.kind in _DERIVED_KINDS:
+            continue
+        signature = (f.source_agent, f.kind, f.detail)
+        if signature in seen:
+            continue
+        seen.add(signature)
+        penalty += config.FLAG_SEVERITY_PENALTY.get(f.severity, 0.0)
     return max(0.0, min(1.0, 1.0 - penalty))
 
 
-def _consistency_objections(state: DealState) -> list[str]:
+def _consistency_objections(state: DealState) -> list[Objection]:
     """Cross-agent contradictions found in this run. **U7 populates this.**
 
     Returns an empty list today, so `critic_rejected` is never set and the rework cycle
@@ -117,8 +152,12 @@ def _consistency_objections(state: DealState) -> list[str]:
     40th-percentile rent while the model predicts ~1.40x FMR, so the gap measures a
     percentile mismatch rather than the deal. TODO(U8): promote both once Zillow ZORI
     settles which baseline is right.
+
+    This stays the single seam the Critic calls and the tests substitute, even though it
+    currently delegates to one family of checks. TODO(U7.3) adds comp attribute drift
+    alongside `_interaction_objections`, and each family stays independently testable.
     """
-    return []
+    return _interaction_objections(state)
 
 
 # ---------------------------------------------------------------------------
@@ -274,11 +313,13 @@ def critic_agent(state: DealState) -> dict:
     objections = _consistency_objections(state)
     confidence = confidence_from_flags(state)
 
-    flags = []
-    for objection in objections:
-        flags.append(
-            flag(AGENT, FlagKind.CRITIC_INCONSISTENCY, objection, Severity.WARN)
-        )
+    # Each objection carries its own severity — an interaction that voids the rent
+    # cross-check is not the same weight as one that merely degrades it, and flattening
+    # them to WARN would discard the distinction U7.2 exists to draw.
+    flags = [
+        flag(AGENT, FlagKind.CRITIC_INCONSISTENCY, objection.message, objection.severity)
+        for objection in objections
+    ]
 
     # Escalate on either of two independent grounds. A critical flag is sufficient on
     # its own, and not only as a contributor to the score:
@@ -302,7 +343,14 @@ def critic_agent(state: DealState) -> dict:
     # and this one could fold back into the score. Keeping them separate is deliberate
     # even then: it makes the guarantee independent of the weights.
     low_confidence = confidence < config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD
-    has_critical = any(f.severity == Severity.CRITICAL for f in state.flags)
+    # Over the flags this pass *raises* as well as the ones it inherited. Reading only
+    # `state.flags` was a latent defect until U7.4: nothing the Critic raised could
+    # trigger the Critic's own escalation, so a CRITICAL objection would have set no
+    # route and reported as a normal result — the same class of miss as the U2 boundary
+    # case this rule was written for.
+    has_critical = any(
+        f.severity == Severity.CRITICAL for f in (*state.flags, *flags)
+    )
 
     if low_confidence or has_critical:
         reason = (
@@ -322,7 +370,15 @@ def critic_agent(state: DealState) -> dict:
             )
         )
 
-    rejected = bool(objections)
+    # `critic_rejected` means "another pass could fix this", not "something is wrong".
+    # The distinction is the whole reason `Objection.retryable` exists. A rework re-runs
+    # the pipeline, so it is worth spending only where a second pass can change the
+    # input: a geocoder that was unreachable may answer on the next call. It can do
+    # nothing about a thin market, a comp set relaxed onto a different unit type, or an
+    # address that has no street number — those are facts about the deal, and looping on
+    # them burns the budget and arrives back here one full pipeline later with the same
+    # objection. Non-retryable objections still escalate, through their severity.
+    rejected = any(objection.retryable for objection in objections)
     budget_exhausted = rejected and state.rework_count >= config.MAX_REWORKS
     if budget_exhausted:
         flags.append(

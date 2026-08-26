@@ -66,7 +66,7 @@ from agents import critic as critic_module
 from agents import extractor as extractor_module
 from agents import scenario_forecast as scenario_module
 from agents import valuation_rent as valuation_module
-from agents.critic import critic_agent
+from agents.critic import Objection, critic_agent
 from agents.extractor import FieldAssumption, ListingExtraction
 from agents.planner import route_after_critic
 from graph import build_graph
@@ -79,6 +79,7 @@ from state import (
     LocationPrecision,
     RentEstimateSource,
     Severity,
+    flag,
 )
 from tools import hud_fmr, zcta_crosswalk
 from tools.geocoding import GeocodeResult, GeocodeSource
@@ -492,6 +493,50 @@ def test_route_after_critic_escalates_rather_than_looping_forever():
     assert route_after_critic(escalate) == nodes.HUMAN_REVIEW
 
 
+def test_confidence_does_not_decay_across_rework_laps():
+    """The cycle must be bounded by its counter, not by the score collapsing.
+
+    `state.flags` is append-only across laps on purpose, and a rework re-runs every
+    upstream agent, so each re-raises what it raised before. Summed naively, a deal
+    carrying two warn flags scored 0.70, then 0.40 on the first lap and 0.10 on the
+    second — escalating on collapsed confidence before `MAX_REWORKS` was reached, which
+    made `REWORK_LIMIT_REACHED` unreachable. The cycle was still bounded, but by an
+    arithmetic accident rather than by the explicit counter §3 requires, and the two
+    agreeing is what would have kept it hidden.
+
+    A deal does not get worse because the pipeline looked at it twice.
+    """
+    accumulated = []
+    scores = []
+    for _ in range(3):
+        accumulated += [
+            flag("upstream", FlagKind.RENT_DIVERGES_FROM_COMPS, "same text", Severity.WARN),
+            flag("upstream", FlagKind.GEOCODER_SERVICE_UNAVAILABLE, "same text", Severity.WARN),
+        ]
+        scores.append(
+            critic_agent(DealState(raw_listing_text="x", flags=list(accumulated)))[
+                "confidence_score"
+            ]
+        )
+    assert scores == [0.70, 0.70, 0.70], scores
+
+
+def test_distinct_observations_of_one_kind_are_each_charged():
+    """The de-duplication must not over-reach.
+
+    One retrieval pass can raise `RELAXED_MATCH_CRITERIA` twice — it drops the
+    square-footage band first and loosens bedroom tolerance later — and those are two
+    real concessions, not one reported twice. De-duplicating on kind alone would charge
+    for one and silently forgive the other.
+    """
+    two_relaxations = [
+        flag("comps_retrieval", FlagKind.RELAXED_MATCH_CRITERIA, "dropped sqft band", Severity.WARN),
+        flag("comps_retrieval", FlagKind.RELAXED_MATCH_CRITERIA, "loosened bedrooms", Severity.WARN),
+    ]
+    result = critic_agent(DealState(raw_listing_text="x", flags=two_relaxations))
+    assert result["confidence_score"] == 0.70
+
+
 def test_rework_cycle_terminates_and_discloses_that_it_did(monkeypatch):
     """Drive the cycle to exhaustion through the real graph.
 
@@ -520,9 +565,21 @@ def test_rework_cycle_terminates_and_discloses_that_it_did(monkeypatch):
     by correctly reporting a degradation, so the rule is general: a test that isolates
     one route has to silence every *other* route that can escalate, and the list grows as
     the pipeline learns to disclose more.
+
+    **The injected objection gained `retryable=True` in U7.4**, and the change is
+    deliberate rather than mechanical. `critic_rejected` stopped meaning "an objection
+    exists" and started meaning "another pass could fix this", because a rework re-runs
+    the whole pipeline and most objections a second pass cannot change — a thin market
+    stays thin. A non-retryable objection now escalates instead of looping, so injecting
+    one here would test the escalation route this test exists to exclude. The guarantee
+    under test is unchanged: the cycle is bounded and says so when it ends.
     """
     monkeypatch.setattr(
-        critic_module, "_consistency_objections", lambda state: ["injected objection"]
+        critic_module,
+        "_consistency_objections",
+        lambda state: [
+            Objection("injected objection", Severity.WARN, retryable=True)
+        ],
     )
     monkeypatch.setattr(config, "HUMAN_REVIEW_CONFIDENCE_THRESHOLD", 0.0)
     monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
