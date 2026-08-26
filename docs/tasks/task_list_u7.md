@@ -200,6 +200,45 @@ determination is a real check, is uniquely the Critic's, and cannot fire on a cl
 
 **Needs a decision because it changes what U7 is**, not just what it contains.
 
+**Q6 — NEW, blocks nothing yet but affects every interaction check. Measured Aug 25, 2026,
+immediately after U7.4b made rework actually loop.**
+
+**Nothing in state distinguishes "raised this pass" from "ever raised."** `DealState.flags`
+carries an `operator.add` reducer, deliberately, so the raw run history stays inspectable.
+Every check in `_interaction_objections` reads that accumulated list as if it described the
+current pass.
+
+Demonstrated: pass 1 has a geocoder outage and a rent divergence. The rework re-runs
+extraction, **the geocoder answers, coordinates resolve to a parcel, and the divergence
+clears** — neither agent raises anything new. The Critic nevertheless raises I3 again, sets
+`critic_rejected=True`, loops again, and tells the reader *"the comps were retrieved around
+the city's center of listing density rather than around this property"* — which is now
+**false**.
+
+The loop still terminates on `MAX_REWORKS`, so this is not a safety problem. It is a
+correctness problem in reader-facing text, and it is the third time this unit has hit the
+same root cause: append-only flags read as current truth. The confidence-decay defect in
+U7.4 was the first, `_geocode_is_worth_retrying`'s documented staleness the second.
+
+**Three ways out:**
+
+1. **Pass-scope the flags.** Stamp each `Flag` with the `planner_invocations` value that
+   produced it, and have the Critic evaluate only the current pass. General, fixes all
+   three checks at once. **The wrinkle:** an agent skipped on a rework raises nothing, and
+   absence would then read as "cleared" when it means "not re-examined". Resolvable —
+   `state.plan` records which agents ran — but that is real logic, not a one-liner.
+2. **Record coordinate provenance on `DealTerms`.** A closed enum saying how the current
+   coordinates were derived. Narrow, cheap, and fixes I3 only; I1 and I2 keep the defect.
+3. **Accept and document.** Bounded by `MAX_REWORKS`, and every affected path escalates to
+   a human who sees the flag list. Cheapest, and it leaves a statement in the report that
+   is wrong.
+
+**Recommendation: (1), but not inside U7.** It is a §5 state-schema change and it touches
+every agent that raises a flag, which makes it its own unit of work rather than a
+subsection. For U7, take (3) *knowingly* — the affected text only appears on a rework lap,
+which by construction escalates to human review — and open (1) as scheduled work.
+**Needs a decision: this is a state-design call, not an implementation detail.**
+
 ### U7.1 ✅ — Correct the U7 docstrings to the system that exists *(maintenance)*
 
 No logic. `agents/critic.py`'s module docstring and both `TODO(U7)` comments describe four
@@ -365,7 +404,7 @@ the escalation route that test exists to exclude.
 **Still true, and U7.8 owes a case for it:** the rework path needs an objection, no
 critical flag, and confidence above threshold — which no current demo deal produces.
 
-### U7.4b — Force Extractor re-entry so a retryable objection can actually be retried
+### U7.4b ✅ — Force Extractor re-entry so a retryable objection can actually be retried
 
 **Defect found reviewing U7.4, after it was written. The rework path U7.4 built does
 nothing.**
@@ -416,6 +455,23 @@ Scope:
   `planner_invocations == 1 + rework_count`, and this must not disturb it.
 - Test that a second pass with a now-reachable geocoder resolves to a parcel and clears the
   objection, and that a *persistent* outage still terminates on `MAX_REWORKS`.
+
+**As built.** `_geocode_is_worth_retrying(state)` in `agents/planner.py`; extraction is
+re-planned when it or the incompleteness test says so. Measured:
+
+| Rework state | Extraction re-planned |
+| --- | --- |
+| no geocode flag | no |
+| `COORDINATES_FROM_CITY_CENTROID` (address unresolvable) | **no** — retrying a certainty |
+| `GEOCODER_SERVICE_UNAVAILABLE` (geocoder down) | **yes** |
+
+#9's invariant `planner_invocations == 1 + rework_count` verified to hold across all three.
+Two tests added, the first falsified against the old Planner. Tests at 50.
+
+The Planner docstring's claim that a rework "only needs comps re-run" was the written form
+of this defect and is corrected in place — U7.4 had built a rework path on the opposite
+assumption, and the code agreed with the docstring rather than with the plan.
+
 
 ### U7.5 — Disclosures: listing claims against derived estimates *(A + B)*
 

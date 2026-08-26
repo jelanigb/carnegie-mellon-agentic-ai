@@ -68,7 +68,7 @@ from agents import scenario_forecast as scenario_module
 from agents import valuation_rent as valuation_module
 from agents.critic import Objection, critic_agent
 from agents.extractor import FieldAssumption, ListingExtraction
-from agents.planner import route_after_critic
+from agents.planner import planner_agent, route_after_critic
 from graph import build_graph
 from state import (
     DealState,
@@ -618,6 +618,53 @@ def test_rework_cycle_terminates_and_discloses_that_it_did(monkeypatch):
     )
     assert result["status"] == DealStatus.NEEDS_REVIEW
     assert "rework_limit_reached" in result["report_markdown"]
+
+
+def test_a_downed_geocoder_makes_a_rework_re_plan_extraction():
+    """The rework path only means something if the step that could change the answer runs.
+
+    `REQUIRED_DEAL_FIELDS` holds no coordinate, so a deal whose address, price and unit
+    count were extracted on pass one is "complete" forever after. Before U7.4b that
+    skipped extraction on every rework lap — so the one objection the Critic marks
+    retryable, justified as re-attempting a Census call, re-attempted nothing and burned
+    the budget arriving back with the same objection.
+    """
+    settled = DealTerms(
+        full_address="123 Real St, Los Angeles, CA",
+        price=1_049_000,
+        unit_count=2,
+        latitude=LOS_ANGELES[0],
+        longitude=LOS_ANGELES[1],
+    )
+    state = DealState(
+        raw_listing_text="x",
+        deal_terms=settled,
+        planner_invocations=1,
+        flags=[flag("extractor", FlagKind.GEOCODER_SERVICE_UNAVAILABLE, "down", Severity.WARN)],
+    )
+    assert nodes.EXTRACTOR in planner_agent(state)["plan"]
+
+
+def test_an_unresolvable_address_does_not_re_plan_extraction():
+    """The other half of the U7.1b split, and the reason it was worth splitting.
+
+    An address with no street number resolves no better on the fifth attempt than on the
+    first, so re-planning extraction for it would spend the rework budget on a certainty.
+    """
+    settled = DealTerms(
+        full_address="Echo Park, Los Angeles, CA",
+        price=1_049_000,
+        unit_count=2,
+        latitude=LOS_ANGELES[0],
+        longitude=LOS_ANGELES[1],
+    )
+    state = DealState(
+        raw_listing_text="x",
+        deal_terms=settled,
+        planner_invocations=1,
+        flags=[flag("extractor", FlagKind.COORDINATES_FROM_CITY_CENTROID, "centroid", Severity.WARN)],
+    )
+    assert nodes.EXTRACTOR not in planner_agent(state)["plan"]
 
 
 def test_planner_invocation_invariant_holds_on_a_clean_run():

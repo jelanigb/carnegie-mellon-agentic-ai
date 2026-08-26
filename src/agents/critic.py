@@ -214,6 +214,24 @@ def _interaction_objections(state: DealState) -> list[Objection]:
     Ordered strongest first. Each returns at most one objection, and they are allowed to
     co-occur: a deal that trips two of these has two independent reasons its rent
     cross-check is not saying what it appears to say.
+
+    TODO(U8): **these read the accumulated flag list as if it described the current
+    pass, and on a rework lap it does not.** `DealState.flags` carries an `operator.add`
+    reducer so the raw run history stays inspectable, and nothing on a `Flag` says which
+    pass raised it. Measured: a rework that *succeeds* — the geocoder answers, coordinates
+    resolve to a parcel, the divergence clears, neither agent raises anything new — still
+    trips I3 from pass one's flags, sets `critic_rejected`, and tells the reader the comps
+    were drawn around a city centroid when they no longer were.
+
+    Accepted for U7 rather than fixed, deliberately: the loop is bounded by
+    `config.MAX_REWORKS`, and every path this can reach ends at human review, so the one
+    audience guaranteed to see the stale sentence also sees the flag list beside it. The
+    fix is to stamp each flag with the `planner_invocations` that produced it and evaluate
+    only the current pass — a §5 change touching every agent that raises a flag, which is
+    why it is scheduled at U8 and sits on §6's cut list at 2a rather than being taken here.
+    Note the wrinkle it has to handle: an agent skipped on a rework raises nothing, so
+    absence must not read as *cleared* when it means *not re-examined*. `state.plan`
+    records which agents ran.
     """
     kinds = _kinds(state)
     objections: list[Objection] = []

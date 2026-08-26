@@ -210,6 +210,21 @@ If the schedule slips, shed scope in this order rather than improvising:
    one unit that must not slip. Cutting it costs a validated value estimate, not a
    working one: demo deals stay calibrated against Redfin and FMR, and the rent model
    keeps real ground truth from the held-out corpus slice. Document the gap explicitly.
+2a. **Pass-scoped flags** (raised Aug 25, 2026 in U7; scheduled at U8). `DealState.flags`
+   is append-only by design, so nothing distinguishes *raised this pass* from *ever
+   raised*. Every Critic interaction check reads the accumulated list as current truth,
+   which means a rework that **succeeds** — the geocoder answers, the divergence clears —
+   still re-raises the objection it was sent back to fix, and tells the reader something
+   that is no longer true. Stamping each flag with the `planner_invocations` that produced
+   it fixes all of them at once.
+
+   Cut *after* the ground truth above and before the demo, on this reasoning: it is a
+   correctness problem in reader-facing text rather than in any number, it only surfaces
+   on a rework lap, and every rework lap ends at human review by construction — so a
+   person sees the full flag list and the stale sentence together. Real, bounded, and
+   visibly wrong to the one audience guaranteed to be looking. Cutting it costs precision
+   in a paragraph, not a wrong estimate. Detail in
+   [`tasks/task_list_u7.md`](tasks/task_list_u7.md) Q6; `TODO(U8)` at both sites.
 3. ~~**LLM rent fallback path**~~ — **taken Aug 21, 2026, ahead of any slip.** Documented
    as designed-but-unbuilt; Checkpoint 2.1 already anticipated this exact trade. Recorded
    here rather than struck out, because this item left the cut list by being *spent*, not

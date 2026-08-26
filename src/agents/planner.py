@@ -30,17 +30,26 @@ Reason/Act/Observe/Decide:
 **Exactly one step is currently optional**, and that is a property of this pipeline
 rather than a limitation of the mechanism. Extraction is skippable because a caller can
 supply structured `DealTerms` directly (`scripts/retrieval_evidence.py` does exactly
-this, and so does a rework pass that only needs comps re-run). Everything downstream is
-a hard data dependency and skipping it would produce an estimate with nothing under it.
-`plan` is a list rather than a boolean because adding a second optional step should mean
-adding a router, not rewriting the representation.
+this). Everything downstream is a hard data dependency and skipping it would produce an
+estimate with nothing under it. `plan` is a list rather than a boolean because adding a
+second optional step should mean adding a router, not rewriting the representation.
+
+**A rework pass is not automatically a comps-only pass** (corrected U7.4b). This
+docstring previously said a rework "only needs comps re-run", and U7.4 built a rework
+path on the opposite assumption — that re-entry re-attempts a geocode that failed on a
+transient outage. Both could not be true, and the code agreed with the docstring:
+`REQUIRED_DEAL_FIELDS` holds no coordinate, so a deal whose address, price and unit count
+were extracted on pass one skipped extraction on every later pass and re-attempted
+nothing. The rework burned its budget and escalated with the same objection it started
+with. Extraction is now re-planned when the accumulated flags say the geocoder was
+unreachable rather than the address unresolvable — see `_geocode_is_worth_retrying`.
 """
 
 from __future__ import annotations
 
 import config
 import nodes
-from state import DealState, DealTerms
+from state import DealState, DealTerms, FlagKind
 
 AGENT = "planner"
 
@@ -68,11 +77,36 @@ def deal_terms_are_complete(terms: DealTerms) -> bool:
     )
 
 
+def _geocode_is_worth_retrying(state: DealState) -> bool:
+    """True when a previous pass fell back to a city centroid because the Census
+    geocoder could not be reached.
+
+    The distinction this reads was built in U7.1b precisely so a routing decision could
+    be made on it: `GEOCODER_SERVICE_UNAVAILABLE` means the call failed and the address
+    was never tested, while `COORDINATES_FROM_CITY_CENTROID` means it was tested and had
+    nothing to resolve to. Only the first is worth another pass — an address with no
+    street number resolves no better on the fifth attempt than on the first.
+
+    TODO(U8): this reads the *accumulated* flags, so it stays true on later laps even
+    after a retry succeeds — extraction is then re-planned once more for a geocode that
+    already resolved. Harmless and bounded here: one cached model call and one geocode
+    per lap, capped by `config.MAX_REWORKS`. The same staleness has a sharper consequence
+    in `critic._interaction_objections`, where it puts a sentence in the report that is no
+    longer true; both are fixed by stamping each flag with the `planner_invocations` that
+    produced it. Scheduled at U8, §6 cut list 2a.
+    """
+    return any(f.kind is FlagKind.GEOCODER_SERVICE_UNAVAILABLE for f in state.flags)
+
+
 def planner_agent(state: DealState) -> dict:
     """Node function: returns a partial state update, never the whole state."""
     steps: list[str] = []
 
-    if not deal_terms_are_complete(state.deal_terms):
+    # Two independent reasons to extract: the terms are not all there yet, or they are
+    # but the coordinates behind them came from a geocoder that was down. The second is
+    # the whole justification for the Critic's rework path, which without this re-runs
+    # everything *except* the step that could change the answer.
+    if not deal_terms_are_complete(state.deal_terms) or _geocode_is_worth_retrying(state):
         steps.append(nodes.EXTRACTOR)
 
     steps.extend(_PIPELINE)

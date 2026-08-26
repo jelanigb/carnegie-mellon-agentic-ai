@@ -22,6 +22,16 @@ against the eval batch. **Do not re-derive:** a critical flag already escalates 
 ground, independent of the score (U2 finding 1) — that guarantee is deliberately separate
 from the weights *because* the weights were always going to move. `agents/critic.py:114`.
 
+### OQ-15 · U8, cut list 2a — pass-scoped flags
+`DealState.flags` is append-only, so nothing separates *raised this pass* from *ever
+raised*, and every Critic interaction check reads the accumulated list as current truth. A
+rework that succeeds still re-raises the objection it was sent back to fix. **Closes when**
+each flag is stamped with the `planner_invocations` that produced it and the Critic
+evaluates only the current pass — noting that an agent skipped on a rework raises nothing,
+so absence must not be read as *cleared* when it means *not re-examined*; `state.plan`
+records which agents ran. **Accepted knowingly for U7** — bounded by `MAX_REWORKS`, and
+every affected path escalates to a human. `agents/critic.py`, `agents/planner.py`.
+
 ### OQ-2 · decision #12 · U7 — which consistency checks, and the search over them
 Four checks are named in `agents/critic.py:82` but unbuilt. #12 adopted ToT here on the
 grounds that the checks differ in cost and are not independent. **Closes when** U7 defines
