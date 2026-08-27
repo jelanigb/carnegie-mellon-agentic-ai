@@ -85,6 +85,13 @@ class FlagKind(StrEnum):
     # the Cleveland demo returns 8 comps from a single coordinate. Distinct from
     # SPARSE_COMPS, which counts listings; this one counts locations.
     COMPS_SPATIALLY_CONCENTRATED = "comps_spatially_concentrated"
+    # Comps came back unlike the subject on an attribute the rent model prices on,
+    # because the retrieval loop relaxed the band that would have excluded them.
+    # Distinct from RELAXED_MATCH_CRITERIA, which records the *concession*: relaxing a
+    # filter permits dissimilar comps without guaranteeing them, and a set that relaxed
+    # but came back similar anyway is not degraded. This flag is the measured
+    # consequence, which is what the Critic's interaction check keys on.
+    COMPS_OUTSIDE_MATCH_CRITERIA = "comps_outside_match_criteria"
 
     # Geography resolution
     #

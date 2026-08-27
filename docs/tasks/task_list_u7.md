@@ -233,11 +233,80 @@ U7.4 was the first, `_geocode_is_worth_retrying`'s documented staleness the seco
    a human who sees the flag list. Cheapest, and it leaves a statement in the report that
    is wrong.
 
-**Recommendation: (1), but not inside U7.** It is a §5 state-schema change and it touches
-every agent that raises a flag, which makes it its own unit of work rather than a
-subsection. For U7, take (3) *knowingly* — the affected text only appears on a rework lap,
-which by construction escalates to human review — and open (1) as scheduled work.
-**Needs a decision: this is a state-design call, not an implementation detail.**
+**ANSWERED Aug 25, 2026: (3) now, (1) scheduled at U8 and placed on the cut list.** The
+right answer is (1), and taking it inside U7 would balloon a subsection into a §5 change
+touching every agent that raises a flag. So it is deferred with its cost stated rather than
+deferred quietly:
+
+- §6 cut list **item 2a**, between the public-record ground truth and the demo. Cutting it
+  costs precision in a paragraph, not a wrong estimate.
+- [`../open_questions.md`](../open_questions.md) **OQ-15**, with the skipped-agent wrinkle
+  recorded so whoever takes it does not rediscover it.
+- `TODO(U8)` at **both** sites — `critic._interaction_objections`, where the consequence is
+  a false sentence in the report, and `planner._geocode_is_worth_retrying`, where it is
+  one redundant re-plan per lap.
+
+The accepted cost, stated plainly: on a rework lap the report can carry an objection
+describing a condition that the rework already fixed. Bounded by `MAX_REWORKS`, and every
+such path ends at human review — so the audience that sees the stale sentence is the one
+audience also looking at the flag list beside it.
+
+**Q7 — NEW, raised Aug 25, 2026 by running U7.3 end to end. Two demo deals moved, and one
+of them was already broken before this unit touched it.**
+
+**Chicago now escalates.** It ran at 0.70 with eight disclosures; the drift flag is a third
+WARN and takes it to **0.55**, below the 0.60 threshold, so it routes to human review
+instead of reporting. The check is not wrong — three of eight comps are outside the band and
+one is 2,000 sqft against a 950 sqft subject — but Chicago was already one warning from the
+threshold, and this is the warning that tipped it.
+
+**The clean baseline is already gone, and U7 did not do it.** `decision_log.md` records Los
+Angeles at **1.00 confidence with 0 disclosures**, and §6's argument leans on it: *"a clean
+run raising no flags, escalating nothing, is what establishes that the other four rows mean
+something."* Measured today it is **0.70 with 4 disclosures** — `fmr_anchor_county_level`
+and `forecast_branches_near_tied` (both WARN, 0.15 each), plus two INFO. Those arrived with
+U5 and U6. The table was last measured in U3.
+
+**The sharper version of that: two WARN flags appear to fire on essentially every deal**, in
+which case they are not discriminating between deals at all — they are a constant −0.30
+offset that moves every subject 30% closer to escalation. That is this project's own
+"a signal that is always on conveys nothing" argument, applied to the confidence score
+rather than to a report line. It would also explain why one ordinary new disclosure was
+enough to tip Chicago.
+
+**Not fixed here, and deliberately.** Decision #6's weights and threshold are PROVISIONAL
+and Q3 already assigned their tuning to U8, where the eval batch can exercise the range.
+This is precisely the evidence U8 needs, so it is recorded rather than pre-empted. What U7
+owes is the re-measurement, which U7.8 already carries.
+
+**Resolved Aug 26, 2026 — accept the escalation, and close the question.** Chicago routes
+to human review, and that is the behaviour the demo shows. The comps did drift; a score
+that fell and an escalation that followed is the mechanism working, not a regression, and
+the demo keeps one clean reporting path (Los Angeles) plus a case that reports *and* one
+that stops — which is what the escalation path exists to demonstrate.
+
+Deliberately **not** carried as an open question. Nothing about it changes code before U8,
+and `open_questions.md` is loaded every session, so a register entry costs context every
+run to say "still true." What it needs instead is a measurement, and that is recorded where
+it will actually be read: `TODO(U8)` at `critic.confidence_from_flags`, the site whose
+numbers it would change.
+
+**The one thing U8 must measure**, stated so it does not have to be rediscovered: do
+`fmr_anchor_county_level` and `forecast_branches_near_tied` fire on *every* deal? Two data
+points is not evidence of that, only consistent with it. If they do, the tuning problem is
+not the weights — it is that two constant flags are spending 0.30 of a 0.40 budget, making
+the effective threshold 0.90 while the config says 0.60, and no third disclosure of any
+kind can land without escalating. Re-pricing warn flags downward would treat a symptom;
+demoting an always-on disclosure to INFO — which costs nothing by design and still prints —
+would treat the cause. The eval batch is what tells the two apart.
+
+Not resolved by raising `COMP_MAX_OUTSIDE_MATCH_SHARE` above 0.375 so Chicago passes:
+**rejected on the same grounds as check A's threshold** — tuning a production threshold to
+preserve a demo outcome inverts what the threshold is for, and this repo has caught itself
+on that class of error three times.
+
+U7.8 still owes the §6 re-measurement, which is a separate obligation from this one and
+predates it.
 
 ### U7.1 ✅ — Correct the U7 docstrings to the system that exists *(maintenance)*
 
@@ -332,17 +401,38 @@ pipeline, these prove a combination is *read* correctly. Different guarantee.
 `retryable=True`. Re-running cannot densify a thin market or add a street number, but it
 can re-attempt a Census call. See U7.4.
 
-### U7.3 — Check: comp attribute drift *(E — the one surviving attribute check)*
+### U7.3 ✅ — Comp attribute drift *(E — the one surviving attribute check)*
 
-The relaxation flags record *which tolerance was loosened* — "dropped the square-footage
-band", "loosened bedroom tolerance from ±0 to ±1" — but never the **realized drift** of the
-comps that came back. A reader is told the criteria widened, not that the returned set
-averages 1,400 sqft against a 950 sqft subject.
+**Built in `agents/comps_retrieval.py`, not in the Critic.** The three-question check placed
+it: that agent already holds both the subject terms and the returned comps, so putting it in
+the Critic would repeat exactly the mistake Q1 caught with rent-vs-comps. E was never
+genuinely cross-agent.
 
-Compares `state.comps` against `deal_terms`, so it is cross-agent. **Cannot fire on a deal
-that never relaxed**, which is what keeps it off the clean baseline. Threshold to
-`config.py`. Feeds I1 above rather than duplicating it: drift is the measurement, I1 is the
-consequence for the divergence signal.
+**The measure is a count, not a mean, and that was decided by measuring.** Against a 950 sqft
+subject and the unrelaxed ±25% band:
+
+| Case | Mean drift | Range | Outside the band |
+| --- | --- | --- | --- |
+| Los Angeles, no relaxation | +13.3% | 979–1,167 | **0 of 8** |
+| Chicago, sqft band dropped | +17.8% | 510–2,000 | **3 of 8** |
+
+Mean drift separates those two by 4.5pp while one set contains a 2,000 sqft comp for a 950
+sqft subject — the outliers cancel. A count of comps outside the band separates them
+cleanly, so the check is written on the count. `config.COMP_MAX_OUTSIDE_MATCH_SHARE = 0.25`
+admits one outlier in eight and discloses two; PROVISIONAL, tuned in U8.
+
+**Measured against the unrelaxed tolerances**, not whatever the loop relaxed them to — the
+question is what the relaxation admitted. Silent on attributes the subject does not state,
+because inventing a subject size to compare against would fabricate the very thing being
+detected.
+
+**I1 repointed to key on this flag** rather than on `RELAXED_MATCH_CRITERIA`, which the task
+list anticipated: *drift is the measurement, I1 is the consequence*. Relaxing a filter
+**permits** dissimilar comps without producing them, and a set that relaxed but came back
+similar is not degraded. A test asserts relaxation-without-drift raises no objection.
+
+Verified end to end: LA silent, Chicago raises it naming the 510–2,000 spread, Staten Island
+silent (no comps to measure). Tests at 51.
 
 ### U7.4 ✅ — Wire the objections in, and make the rework cycle fire on its own
 

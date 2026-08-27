@@ -65,6 +65,33 @@ def _distinct_locations(comps: "list") -> int:
     })
 
 
+def _outside_match_criteria(comps: list, subject) -> list:
+    """Comps that would not have qualified under the *unrelaxed* match criteria.
+
+    Measured against `config`'s original tolerances rather than whatever the loop
+    relaxed them to, because the question is what the relaxation admitted. A comp is
+    counted once however many attributes it misses on — the reader is being told the set
+    drifted, not audited attribute by attribute.
+
+    Silent on attributes the subject does not state: a listing with no square footage
+    cannot have its comps judged against it, and guessing a subject size in order to
+    have something to compare would invent the very thing the check exists to detect.
+    """
+    drifted = []
+    for comp in comps:
+        if subject.bedrooms is not None and comp.beds is not None:
+            if abs(comp.beds - subject.bedrooms) > config.COMP_MATCH_BEDROOM_TOLERANCE:
+                drifted.append(comp)
+                continue
+        if subject.square_footage and comp.square_feet:
+            tolerance = config.COMP_MATCH_SQFT_TOLERANCE_PCT
+            low = subject.square_footage * (1 - tolerance)
+            high = subject.square_footage * (1 + tolerance)
+            if not low <= comp.square_feet <= high:
+                drifted.append(comp)
+    return drifted
+
+
 def comps_retrieval_agent(state: DealState) -> dict:
     """Node function: returns a partial state update, never the whole state."""
     subject = state.deal_terms
@@ -198,6 +225,34 @@ def comps_retrieval_agent(state: DealState) -> dict:
                     f"than a street address. They are fewer independent observations "
                     f"than the comp count suggests, and reported distances are "
                     f"correspondingly approximate.",
+                    Severity.WARN,
+                )
+            )
+
+    # What the relaxation actually admitted, as distinct from the fact that it happened.
+    # Relaxing a filter permits dissimilar comps; it does not produce them. A set that
+    # dropped the square-footage band and came back similar anyway is not degraded, and
+    # flagging it would report a concession as though it were a consequence.
+    if comps:
+        drifted = _outside_match_criteria(comps, subject)
+        share = len(drifted) / len(comps)
+        if share > config.COMP_MAX_OUTSIDE_MATCH_SHARE:
+            sizes = sorted(c.square_feet for c in comps if c.square_feet)
+            spread = (
+                f" Sizes range from {sizes[0]:,.0f} to {sizes[-1]:,.0f} sq ft against a "
+                f"subject of {subject.square_footage:,.0f}."
+                if sizes and subject.square_footage
+                else ""
+            )
+            flags.append(
+                flag(
+                    AGENT,
+                    FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA,
+                    f"{len(drifted)} of {len(comps)} comparables fall outside the "
+                    f"bedroom count or size range originally searched for; the search "
+                    f"was widened to find enough of them.{spread} They are less "
+                    f"comparable to this property than the count suggests, and a rent "
+                    f"figure read against them inherits that.",
                     Severity.WARN,
                 )
             )

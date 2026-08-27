@@ -40,7 +40,7 @@ def test_no_objections_when_the_cross_check_did_not_diverge():
     """Every interaction here is about how to read a divergence. Without one there is
     nothing to misread, however degraded the comp set was."""
     assert _interaction_objections(_state()) == []
-    assert _interaction_objections(_state(FlagKind.RELAXED_MATCH_CRITERIA)) == []
+    assert _interaction_objections(_state(FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA)) == []
     assert _interaction_objections(_state(FlagKind.COMPS_SPATIALLY_CONCENTRATED)) == []
     assert _interaction_objections(_state(FlagKind.COORDINATES_FROM_CITY_CENTROID)) == []
 
@@ -56,9 +56,9 @@ def test_a_divergence_on_its_own_raises_nothing():
 # ---------------------------------------------------------------------------
 
 
-def test_relaxed_match_criteria_with_divergence_is_critical():
+def test_comps_outside_match_criteria_with_divergence_is_critical():
     objections = _interaction_objections(
-        _state(FlagKind.RENT_DIVERGES_FROM_COMPS, FlagKind.RELAXED_MATCH_CRITERIA)
+        _state(FlagKind.RENT_DIVERGES_FROM_COMPS, FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA)
     )
     assert len(objections) == 1
     assert objections[0].severity == Severity.CRITICAL
@@ -69,10 +69,23 @@ def test_relaxed_match_criteria_with_divergence_is_critical():
 
 def test_a_relaxed_radius_alone_is_not_a_relaxed_attribute():
     """Widening the radius keeps the attribute filters intact, so the comp set still
-    describes the same kind of unit. Only RELAXED_MATCH_CRITERIA touches a priced
-    feature, and conflating the two would fire I1 on ordinary thin-market deals."""
+    describes the same kind of unit. Conflating the two would fire I1 on ordinary
+    thin-market deals."""
     objections = _interaction_objections(
         _state(FlagKind.RENT_DIVERGES_FROM_COMPS, FlagKind.RELAXED_SEARCH_RADIUS)
+    )
+    assert objections == []
+
+
+def test_relaxation_without_measured_drift_is_not_an_objection():
+    """The repointing in U7.3, asserted.
+
+    `RELAXED_MATCH_CRITERIA` says the retrieval loop dropped a filter. It does not say
+    the comps that came back were unlike the subject — dropping a band permits that
+    without producing it. Only the measured consequence is an objection.
+    """
+    objections = _interaction_objections(
+        _state(FlagKind.RENT_DIVERGES_FROM_COMPS, FlagKind.RELAXED_MATCH_CRITERIA)
     )
     assert objections == []
 
@@ -137,7 +150,7 @@ def test_independent_reasons_accumulate_rather_than_collapsing():
     objections = _interaction_objections(
         _state(
             FlagKind.RENT_DIVERGES_FROM_COMPS,
-            FlagKind.RELAXED_MATCH_CRITERIA,
+            FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA,
             FlagKind.COMPS_SPATIALLY_CONCENTRATED,
             FlagKind.GEOCODER_SERVICE_UNAVAILABLE,
         )
@@ -172,7 +185,7 @@ def test_objection_text_carries_no_internal_vocabulary():
 
     every_kind = [
         FlagKind.RENT_DIVERGES_FROM_COMPS,
-        FlagKind.RELAXED_MATCH_CRITERIA,
+        FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA,
         FlagKind.COMPS_SPATIALLY_CONCENTRATED,
         FlagKind.COORDINATES_FROM_CITY_CENTROID,
         FlagKind.GEOCODER_SERVICE_UNAVAILABLE,

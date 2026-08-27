@@ -77,6 +77,25 @@ COMP_DISTANCE_DECIMALS = 1
 COMP_MATCH_BEDROOM_TOLERANCE = 0  # exact bed match before relaxation
 COMP_MATCH_SQFT_TOLERANCE_PCT = 0.25  # PROVISIONAL — tune in U4
 
+# Share of the returned comp set that may fall outside the *unrelaxed* match criteria
+# above before the drift is disclosed (U7.3).
+#
+# The relaxation loop already flags each concession it makes, but a concession is not the
+# same thing as a consequence: dropping the square-footage band permits dissimilar comps,
+# it does not guarantee them. What matters to a reader is how many actually came back
+# unlike the subject, which is only knowable after the final query returns.
+#
+# Measured on the demo subjects, both against a 950 sqft subject and a +/-25% band:
+#   Los Angeles, no relaxation      0 of 8 outside  (range 979-1167)
+#   Chicago, sqft band dropped      3 of 8 outside  (range 510-2000)
+# Mean drift barely separates those two — +13.3% against +17.8% — because one 2,000 sqft
+# comp and one 510 sqft comp pull in opposite directions. A count of comps outside the
+# band separates them cleanly, which is why the check is written on the count.
+#
+# 0.25 admits one outlier in a set of eight and discloses two. PROVISIONAL — tune in U8
+# against the eval batch, where a case can be built to sit either side of the line.
+COMP_MAX_OUTSIDE_MATCH_SHARE = 0.25
+
 
 # --------------------------------------------------------------------------
 # Critic / human review

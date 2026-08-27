@@ -241,17 +241,22 @@ def _interaction_objections(state: DealState) -> list[Objection]:
     if FlagKind.RENT_DIVERGES_FROM_COMPS not in kinds:
         return objections
 
-    # I1 — the comp set was widened on an attribute the model prices on.
+    # I1 — the comp set came back unlike the subject on an attribute the model prices on.
     #
-    # `RELAXED_MATCH_CRITERIA` covers both relaxations the retrieval loop can make: it
-    # drops the square-footage band first, then loosens bedroom tolerance once the radius
-    # is at its ceiling. Both matter here for one reason, which is why the flag kind is
-    # sufficient and no split is needed: `config.RENT_MODEL_FEATURES` is
-    # ("bedrooms", "bathrooms", "square_feet"), so either relaxation widens the comp set
-    # along a dimension the model is pricing on. The comp median then describes a
-    # different population than the model predicted for, and a gap between them is the
-    # expected consequence of the relaxation rather than evidence about the estimate.
-    if FlagKind.RELAXED_MATCH_CRITERIA in kinds:
+    # **Keys on the measured consequence, not on the concession** (repointed U7.3). This
+    # read `RELAXED_MATCH_CRITERIA` until the drift was actually measured, and that flag
+    # records only that the retrieval loop dropped a filter. Dropping one *permits*
+    # dissimilar comps without producing them: a set that relaxed and came back similar
+    # anyway is not degraded, and objecting to it would treat a concession as a result.
+    # `COMPS_OUTSIDE_MATCH_CRITERIA` is raised by the retrieval agent only when comps
+    # actually fell outside the bedroom or size band originally searched.
+    #
+    # Why it matters that the attribute is one the model prices on:
+    # `config.RENT_MODEL_FEATURES` is ("bedrooms", "bathrooms", "square_feet"), so the
+    # comp median then describes a different population than the model predicted for, and
+    # a gap between them is the expected consequence of the widening rather than evidence
+    # about the estimate.
+    if FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA in kinds:
         objections.append(
             Objection(
                 "The comp set was widened on an attribute the rent estimate depends "
