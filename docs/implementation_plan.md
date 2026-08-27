@@ -182,10 +182,9 @@ building them — including the ones that changed the design — are in
 | **U5** ✅ | Rent model: FMR-normalized regression on the #4 shortlist, holdout MAE, Valuation agent, `rent_anchored_to_fmr` / `fmr_unavailable_for_county` / `fmr_bedroom_cap_exceeded` flags. **LLM fallback descoped** — cut-list item 3 taken in advance, shipping as a documented gap | — | [Rent & valuation](history/decision_log.md#rent--valuation) |
 | **U6** ✅ | Scenario/Forecast: beam search over an **enumerated** hypothesis space — 4 framings, then 9 band pairings — with an LLM evaluator pulling evidence through the MCP tool registry in-process. Rent growth and price appreciation forecast **separately** (#16), projected 5 years from the **asking price** (#15) | **4.1** | [Forecasting](history/decision_log.md#forecasting--reasoning) |
 | **U7** ⬜ | Critic: cross-agent consistency checks, confidence scoring, bounded rework cycle, human-review escalation via `interrupt()` | **6.1** | [open questions](open_questions.md#orchestration--control-flow) |
-| **U8** ⬜ | Eval harness: 8–10 synthetic listings each engineered to trip a *specific* flag, **plus the New York sparse-comps case run against real data**; batch runner → results table | **6.1** + report | [open questions](open_questions.md#evaluation--demo) |
+| **U8** ⬜ | Eval harness: 8–10 synthetic listings each engineered to trip a *specific* flag, **plus the New York sparse-comps case run against real data**; batch runner → results table. **Absorbs U10** — the demo deals run through the same batch, so the end-to-end evidence is a harness output rather than a separate pass | **6.1** + report + video | [open questions](open_questions.md#evaluation--demo) |
 | **U9** ⬜ | Summarizer polish + Streamlit demo app | report + video | — |
-| **U10** ⬜ | End-to-end runs across all three metros; capture traces, screenshots, diagrams | report + video | — |
-| — | **Week 7 — code frozen.** Final report + 8–10 min video | **7.1** | — |
+| — | **Code frozen Sept 4, 2026.** Final report + 8–10 min video, due Sept 7 | **7.1** | — |
 
 ### Notes on the sequence
 
@@ -194,6 +193,16 @@ direct payoff of ordering by dependency: the coordination design gets described 
 running graph and real traces rather than from a design sketch. Each weekly checkpoint
 asks for a written design update alongside a working agent update, so building the
 capability before writing about it improves both halves of the submission.
+
+**U10 folded into U8 — Aug 26, 2026.** U10 was end-to-end runs across the three metros
+capturing traces, screenshots and diagrams; U8 is already a batch runner over engineered
+listings. Running the demo deals through the same harness produces the same artifacts from
+one code path instead of two, and it removes the failure mode where the demo evidence and
+the evaluation evidence are generated differently and disagree. Taken to buy schedule under
+the Sept 4 freeze, but it is the better structure regardless: **the demo becomes a row set
+in the evaluation, not a separate performance.** The absorbed scope, so it is not lost when
+U8 is planned: per-metro runs across all three metros, LangSmith traces captured, demo
+screenshots, and the graph diagram generated from the compiled graph.
 
 ### Cut list, in order
 
@@ -233,19 +242,34 @@ If the schedule slips, shed scope in this order rather than improvising:
 5. **Critic rework-loop depth** — reduce to single-pass review with escalation,
    keeping the cycle in the graph but capping `MAX_REWORKS = 1`.
 
-**Never cut:** the flag propagation test (U2), the eval harness (U8), or the Week 7
-report reserve.
+**Never cut:** the flag propagation test (U2), the eval harness (U8), or the report and
+video reserve at the end.
 
 ### The hard constraint
 
-**Week 7 is reserved entirely for the report and video, with the code frozen.** The
-realistic failure mode for a fixed-deadline project like this is arriving at the final
-week still integrating, and shipping a rushed write-up of a system nobody has time to
-evaluate. A frozen build a week out guarantees there is something coherent to measure,
-document, and demonstrate. Any unit unfinished at that point ships as-is and is
-documented explicitly as future work — stating a known limitation is better engineering
-communication than concealing it, and it is consistent with the Transparent Degradation
-principle the system itself implements.
+**Code freezes Fri Sept 4, 2026. The final weekend is the report and the video.**
+
+The realistic failure mode for a fixed-deadline project like this is arriving at the end
+still integrating, and shipping a rushed write-up of a system nobody has time to evaluate.
+A frozen build guarantees there is something coherent to measure, document, and
+demonstrate. Any unit unfinished at that point **ships as-is and is documented explicitly
+as future work** — stating a known limitation is better engineering communication than
+concealing it, and it is consistent with the Transparent Degradation principle the system
+itself implements.
+
+**Revised Aug 26, 2026, by the architect.** Two things changed at once. The submission
+date moved earlier than this plan had recorded, and the reserve this section originally
+claimed — a full frozen week — was written into the plan during its first drafting rather
+than decided. It is now sized deliberately: **nine days of build (Aug 26 – Sept 4), then
+the weekend for the write-up.** That is a smaller reserve than the original text asserted,
+taken with the deadline nearer, and it is a judgment about this build rather than a
+general rule: U7 is mid-flight, U8's harness is the evaluation evidence and cannot be cut,
+and the report is largely assembled from artifacts those two units produce rather than
+written from scratch.
+
+**Streamlit stays in scope** (cut-list item 4), decided the same day. It is the demo
+surface, and the fallback — a terminal recording plus traces — is available late if the
+schedule forces it, which is precisely what makes it safe to keep rather than shed early.
 
 ---
 

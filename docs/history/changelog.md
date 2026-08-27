@@ -9,7 +9,7 @@ which names every decision and links to its full reasoning in
 project and when to read it.
 
 **Chronological record of code changes.**
-Author: Jelani Gould-Bailey · Last updated: Aug 24, 2026
+Author: Jelani Gould-Bailey · Last updated: Aug 26, 2026
 
 ## Why this file exists
 
@@ -36,6 +36,10 @@ rows. The unit of a row is the change, not the file.
 
 ## Conventions
 
+- **A row lands with its commit, not at unit close** (changed Aug 26, 2026 — reasoning in
+  [`../design/engineering_standards.md`](../design/engineering_standards.md) §8). A unit is
+  six to eight change sets now, and a log written at the end is a reconstruction from
+  `git log`, which is the work this file exists to prevent.
 - `##` heading per date the work was **done**. Newest date first.
 - **Date added** is when the row was written, which is the same day for work logged as
   it lands and a later date for anything backfilled. Rows are ordered newest-first by
@@ -49,6 +53,37 @@ rows. The unit of a row is the change, not the file.
   uses.
 
 ---
+
+## Aug 26, 2026 — U7.3: comp drift, and what it cost the demo baseline
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Aug 26, 2026 | maintenance | **U10 folded into U8.** U10 was end-to-end runs across the three metros capturing traces, screenshots and diagrams; U8 is already a batch runner over engineered listings. The demo deals now run through the same harness, so the end-to-end evidence is a harness output rather than a separate pass — one code path instead of two, and no failure mode where the demo evidence and the evaluation evidence are generated differently and disagree. Taken to buy schedule under the Sept 4 freeze, kept because it is the better structure: **the demo becomes a row set in the evaluation, not a separate performance.** §6 unit table, `open_questions.md` OQ-14 | maintenance |
+| Aug 26, 2026 | maintenance | **Changelog rule changed: log at commit, not at unit close.** `design/engineering_standards.md` §8, `CLAUDE.md`, and the conventions in this file. The original rule dates to Aug 10, when a unit *was* a change set and the two moments were the same; *How a unit is built* broke that. Measured at the time of the change: U7 had five commits landed across three days and zero rows, recoverable only because the reasoning was still in `tasks/task_list_u7.md`. Closing a unit becomes a review of rows that already exist rather than a reconstruction | maintenance |
+| Aug 26, 2026 | maintenance | **Schedule constraint resized; §6 "The hard constraint" revised.** The submission date moved earlier than the plan recorded, and the full frozen week the section asserted was written during first drafting rather than decided. Now nine days of build to a **Sept 4 code freeze**, with the final weekend for the report and video. Streamlit stays in scope — cut-list item 4 is kept rather than taken, because its fallback is available late, which is what makes it safe to hold | maintenance |
+| Aug 26, 2026 | U7.3 | **Comp drift measured against the criteria originally searched for.** `agents/comps_retrieval.py` `_outside_match_criteria` (new), `FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA`, `config.COMP_MAX_OUTSIDE_MATCH_SHARE = 0.25`. Built in Retrieval rather than the Critic because that agent already holds both the subject terms and the comps it returned — putting it in the Critic would have repeated the mistake Q1 caught. **Mean drift was measured first and rejected as the statistic**: it separates Los Angeles from Chicago by 4.5pp (+13.3% vs +17.8%) while one set holds a 2,000 sq ft comp against a 950 sq ft subject, because the outliers cancel. Counting comps outside the *unrelaxed* band separates them 0-of-8 against 3-of-8. Critic interaction check I1 repointed onto this flag from `RELAXED_MATCH_CRITERIA`, which records only that criteria were loosened — relaxing a filter permits dissimilar comps without producing them | 6.1 |
+| Aug 26, 2026 | U7.3 (finding) | **The clean demo baseline was already gone, and U7 did not do it.** `history/decision_log.md` records Los Angeles at 1.00 confidence with 0 disclosures; measured today it is 0.70 with 4, and Chicago has moved 0.85 → 0.55 and now escalates to human review. `fmr_anchor_county_level` and `forecast_branches_near_tied` arrived with U5 and U6, after that table was last measured in U3. The table is now marked stale in place rather than rewritten, because §6's argument leans on the row it invalidates: *a clean run raising no flags is what establishes that the other rows mean something*. Full re-measurement is U7.8's | 6.1 |
+| Aug 26, 2026 | U7.3 (finding) | **`TODO(U8)` on `critic.confidence_from_flags`: the score may be spending its budget before it reads the deal.** Two warn flags were raised on every deal measured. If that holds across the eval batch, 0.30 of the 0.40 between a clean run and the escalation threshold is committed before anything deal-specific is observed — an effective threshold of 0.90 while `config` says 0.60, which is why one ordinary new disclosure was enough to tip Chicago. Recorded, not fixed: the correct repair depends on which reading is true, and only U8's batch tells them apart. Re-pricing warn treats a symptom; an unconditional disclosure is reporting a mechanism rather than a weakness, which is already this file's definition of info severity. `config.py`'s three PROVISIONAL notes retargeted from U7 to U8 to match | 6.1 |
+
+## Aug 25, 2026 — U7.4: two defects the rework cycle was hiding
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Aug 25, 2026 | U7.4 | **Confidence no longer decays across rework laps.** `agents/critic.py` `confidence_from_flags` de-duplicates on `(source_agent, kind, detail)`. `DealState.flags` is append-only by design so raw history stays inspectable, but a rework re-runs every upstream agent and each re-raises what it raised before: a deal carrying two warn flags scored 0.70, then 0.40, then 0.10 without anything about the deal changing. **A deal does not get worse because the pipeline looked at it twice.** It escalated on collapsed confidence before `MAX_REWORKS` was reached, which left the cycle bounded by an arithmetic accident rather than the explicit counter §3 requires. De-duplication is deliberately *not* on `kind` alone — one retrieval pass can raise `RELAXED_MATCH_CRITERIA` twice for two different relaxations, and those are two real observations. `FlagKind.CRITIC_INCONSISTENCY` added to `_DERIVED_KINDS` | 6.1 |
+| Aug 25, 2026 | U7.4 | **The Critic's own critical flags could not trigger the Critic's own escalation.** `agents/critic.py` — `has_critical` now reads the flags this pass raises as well as those it inherited. A CRITICAL objection would have set no route and reported as a normal result: the same class of miss as the U2 boundary case the critical-flag rule was written for | 6.1 |
+| Aug 25, 2026 | U7.4b | **A rework skipped the Extractor, so the retryable geocode failure was never retried.** `agents/planner.py` `_geocode_is_worth_retrying` (new). `REQUIRED_DEAL_FIELDS` carries no coordinate, so `deal_terms_are_complete` returned true and the rework re-ran only the steps that could not fix the problem — the retry path existed and did nothing. The Planner docstring claimed a rework "only needs comps re-run"; corrected to the system that exists | 6.1 |
+| Aug 25, 2026 | U7.4b | **Q6 accepted rather than fixed: nothing distinguishes *raised this pass* from *ever raised*.** A rework that succeeds still re-raises the objection it was sent back to fix, so the report can describe a condition already repaired. Scheduled as §6 cut-list item 2a and `open_questions.md` OQ-15, with `TODO(U8)` at both sites — `critic._interaction_objections` and `planner._geocode_is_worth_retrying`. Accepted because it is wrong text rather than a wrong number, it surfaces only on a rework lap, and every rework lap ends at human review by construction, so the one audience guaranteed to see the stale sentence is also looking at the flag list beside it | 6.1 |
+
+## Aug 24, 2026 — U7.1 and U7.2: the Critic's cross-agent checks
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Aug 26, 2026 | U7.2 | **Cross-agent interaction objections — the Critic's first live output.** `agents/critic.py` `_interaction_objections` (new) and the `Objection` NamedTuple carrying `message`, `severity` and `retryable`, so `planner.route_after_critic` does not have to infer whether a rework can fix anything. Three checks, all gated on `RENT_DIVERGES_FROM_COMPS` and each a pure function of accumulated state: comps outside the match criteria, spatially concentrated comps, and geocode fallback. They exist to say something a sum cannot — *this measurement does not mean what it appears to mean* — where the confidence score can only ever say *more doubt*. `tests/test_critic_interactions.py` (new), hermetic | 6.1 |
+| Aug 26, 2026 | U7.1b | **An unreachable geocoder is now disclosed as distinct from an unresolvable address.** `tools/geocoding.py` `GeocodeResult.primary_unavailable`, propagated through `city_centroid`; `FlagKind.GEOCODER_SERVICE_UNAVAILABLE`; `agents/extractor.py` branches on it. One is worth retrying and one is not, and collapsing them meant the rework cycle could not tell. `GeocodeSource` deliberately gains no third member — the fallback used is still the centroid; what changed is why | 6.1 |
+| Aug 26, 2026 | maintenance | **Internal vocabulary removed from reader-facing text, and the rule written down.** `design/engineering_standards.md` §8 and `CLAUDE.md`: flag messages, objection text and Summarizer prose reach an investor or a demo audience who cannot resolve a section number, a decision number, a unit label or a `config` constant name. Docstrings and comments are the opposite and should cite precisely. `agents/critic.py` objection text and `agents/summarizer.py` cleaned accordingly; a test walks all 31 flag-set combinations against a banned-pattern regex, and caught a violation introduced in the same change set | maintenance |
+| Aug 26, 2026 | maintenance | **"Can it fail? Is it already made? Would it fire on the clean baseline?" added to `design/engineering_standards.md` §8.** U7's planning pass proposed eight consistency checks and measurement killed six: one compared a field against the value it is assigned from three lines earlier, two were already computed and rendered by the Summarizer, and three would have fired on the run that is supposed to raise nothing. The pass had verified that each check's input fields *existed*, which establishes only that a comparison is expressible. The project's own *a check that cannot fail is not a check* standard, moved one step earlier — to the plan rather than the result | maintenance |
+| Aug 26, 2026 | U7.1 | **`agents/critic.py`'s module docstring and `TODO(U7)` comments corrected to the system that exists.** They described four consistency checks and a `value_estimate` that decision #15 made permanently `None`. Landed first, with no logic, so the behavioural diffs that follow are read against an accurate file | maintenance |
+
 
 ## Aug 24, 2026 — documentation restructure
 

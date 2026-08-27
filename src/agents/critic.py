@@ -99,6 +99,25 @@ def confidence_from_flags(state: DealState) -> float:
     different relaxations, and those are two real observations that should both be
     charged. Identical text from the same agent is the same observation reported again.
     """
+    # TODO(U8): the budget this function has to spend may already be committed before a
+    # deal is read. Measured Aug 26, 2026 across two demo deals: `fmr_anchor_county_level`
+    # and `forecast_branches_near_tied` (warn, 0.15 each) were raised on both. Both arrived
+    # with U5 and U6, after the last time the §6 demo table was measured. If they fire on
+    # *every* deal — two runs are consistent with that, not evidence of it — then 0.30 of
+    # the 0.40 separating a clean run from `HUMAN_REVIEW_CONFIDENCE_THRESHOLD` is spent
+    # before anything deal-specific is observed, and the effective threshold is 0.90 while
+    # `config` says 0.60. Only one further warn flag of any kind can land before a deal
+    # escalates. That is what took `chicago` from 0.70 to 0.55 and into human review when
+    # U7.3 added one ordinary disclosure (accepted, not a regression: the comps did drift).
+    #
+    # Deferred to U8 rather than fixed here because the fix depends on which reading is
+    # true and only the eval batch exercises the range — the five demo deals were
+    # calibrated to run clean. Re-pricing warn downward treats a symptom and moves every
+    # deal at once. If instead a disclosure is genuinely unconditional, it is reporting a
+    # *mechanism* rather than a weakness, which is the definition this docstring already
+    # gives for info severity — it would cost nothing and still print. What it takes: run
+    # the eval batch, count each FlagKind's incidence across it, and demote or re-price on
+    # that evidence. A penalty that every deal pays is not discriminating between deals.
     seen: set[tuple[str, FlagKind, str]] = set()
     penalty = 0.0
     for f in state.flags:

@@ -61,9 +61,23 @@ in a focused session or across a fragmented week.
   which walks every reachable flag combination. Worth extending to the other agents'
   messages when one of them next changes.
 
-- **Every unit closes by appending to `docs/changelog.md`** (added Aug 10, 2026). A `##`
-  heading per date the work was done, and beneath it a table of
+- **Every commit appends to [`../history/changelog.md`](../history/changelog.md)** (added
+  Aug 10, 2026 as *every unit closes by appending*; **changed Aug 26, 2026** — see below).
+  A `##` heading per date the work was done, and beneath it a table of
   `date added | unit | work done | related checkpoint`.
+
+  **Revised Aug 26, 2026: log at commit, not at unit close.** The original rule was
+  written when a unit *was* a change set, so "at close" and "at commit" named the same
+  moment. *How a unit is built* broke that: a unit is now six to eight commits, and
+  deferring the log to the end means reconstructing all of them from `git log` — which is
+  the exact work this file exists to prevent, merely moved later. Measured when the rule
+  was changed: U7 had five commits landed across three days and **zero** rows. They were
+  recoverable only because the reasoning was still sitting in `tasks/task_list_u7.md`;
+  without that, the rows would have said "changed `critic.py`."
+
+  Closing a unit is still a step, but it becomes a **review** of rows that already exist
+  rather than a reconstruction — check that each subsection is represented, that findings
+  which changed the design are among them, and that the checkpoint column is right.
 
   This exists because of §6's central sequencing decision. Ordering the build by
   dependency and technical risk instead of by the syllabus calendar is the right call and
@@ -71,7 +85,7 @@ in a focused session or across a fragmented week.
   unit order is decoupled from checkpoint order, nothing maps shipped code back to the
   requirement it satisfies. U4 shipped before U2; code feeding Checkpoint 6.1 exists
   before 4.1 and 5.1 are due. Reconstructing that mapping from git history at report time
-  is exactly the sort of late, avoidable work the Week 7 freeze exists to prevent.
+  is exactly the sort of late, avoidable work the code freeze exists to prevent.
 
   Three rules keep the file useful as it grows:
 
@@ -94,11 +108,10 @@ in a focused session or across a fragmented week.
   also mean this document grows a log section on every unit, and it is already long
   enough that new material competes with existing material for attention.
 
-  Written as part of finishing the unit, alongside the updates to this document — not as
-  a later reconciliation pass, which is the form of this task that reliably does not
-  happen. When something is backfilled anyway, the `date added` column records when the
-  row was written, so a retroactive entry is visibly retroactive rather than quietly
-  folded into the original day's record.
+  Written with the change set it describes — not as a later reconciliation pass, which is
+  the form of this task that reliably does not happen. When something is backfilled anyway,
+  the `date added` column records when the row was written, so a retroactive entry is
+  visibly retroactive rather than quietly folded into the original day's record.
 
 - **An evidence artifact must state what its check could have returned had the system
   been behaving well** (added Aug 9, 2026). A verification whose negative result was
@@ -214,7 +227,11 @@ had checked, and they were landing as single change sets too large to review in 
    that depends on it starts. This is the same discipline §7's register applies to
    decisions, moved one level earlier.
 3. **Land in reviewable pieces.** See *Change management* below.
-4. **Close the unit.** Append to [`../history/changelog.md`](../history/changelog.md);
+4. **Log every commit as it lands.** A [`../history/changelog.md`](../history/changelog.md)
+   row goes in with the change set, not at the end of the unit — the reasoning is cheap to
+   write while it is still live and expensive to reconstruct afterward. See *Change
+   management* above.
+5. **Close the unit.** Review the changelog rows the unit produced rather than writing them;
    move any decision taken during the build into §7's register with its reasoning in
    [`../history/decision_log.md`](../history/decision_log.md); delete anything from
    [`../open_questions.md`](../open_questions.md) that the unit closed.

@@ -127,7 +127,7 @@ uncaptured run is not a failure mode. **Not a build blocker.** It *is* a blocker
 Checkpoint 5.1's trace evidence, and free-tier traces expire after 14 days — so set it up
 close to the write-up, not long before. No key present in `ignore/` as of Aug 24, 2026.
 
-### OQ-14 · U7, U9, U10 — checkpoint criteria as build artifacts
+### OQ-14 · U7, U9 — checkpoint criteria as build artifacts
 Where a checkpoint publishes completion criteria, the unit is specified to *produce* each
 one rather than write it up afterward. U4 did this (see the acceptance-criteria table in
 [`history/decision_log.md`](history/decision_log.md#retrieval)). **Apply the same treatment

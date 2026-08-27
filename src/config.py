@@ -102,19 +102,22 @@ COMP_MAX_OUTSIDE_MATCH_SHARE = 0.25
 # --------------------------------------------------------------------------
 
 # Below this confidence, the deal routes to human review instead of the Summarizer.
-HUMAN_REVIEW_CONFIDENCE_THRESHOLD = 0.60  # PROVISIONAL — tune in U7
+HUMAN_REVIEW_CONFIDENCE_THRESHOLD = 0.60  # PROVISIONAL — tune in U8
 
 # Bounds the Critic -> Planner rework cycle. §3 requires every cycle to be bounded by
 # an explicit counter in state rather than by LangGraph's recursion_limit, so that
 # exhaustion escalates gracefully instead of raising.
-MAX_REWORKS = 2  # PROVISIONAL — tune in U7
+MAX_REWORKS = 2  # PROVISIONAL — tune in U8
 
 # Severity weights used when aggregating flags into a confidence score.
+# Before re-pricing these, read the TODO(U8) on `critic.confidence_from_flags`: two warn
+# flags were observed on every deal measured so far, and if that holds the problem is
+# which severity those two carry, not what warn costs.
 FLAG_SEVERITY_PENALTY = {
     "info": 0.0,
     "warn": 0.15,
     "critical": 0.40,
-}  # PROVISIONAL — tune in U7
+}  # PROVISIONAL — tune in U8
 
 
 # --------------------------------------------------------------------------

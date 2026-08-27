@@ -833,6 +833,23 @@ Tottenville, in a denser part of the island, so a centroid fallback would have q
 turned the thin-market case into a different market. The real address keeps the case
 measuring what §2 says it measures.
 
+**⚠️ This table is stale as of Aug 26, 2026, and the Los Angeles row no longer holds.**
+Spot-measured while running U7.3: Los Angeles now reports at **0.70 with 4 disclosures**,
+not 1.00 with 0. Two warn flags that did not exist when this was measured —
+`fmr_anchor_county_level` (U5) and `forecast_branches_near_tied` (U6) — now fire on it,
+alongside two info flags that cost nothing. Chicago has moved further, from 0.85 to
+**0.55**, and escalates to human review rather than reporting. Nothing regressed: each of
+those flags is disclosing something true that the system could not observe in U3.
+
+What did break is the *argument*. "A clean run raising no flags is what establishes that
+the other four rows mean something" was load-bearing, and there is no longer a run that
+raises no flags. U7.8 owes a full re-measurement of both this table and §6's; until then,
+read the rows above as U3-era history rather than as current behaviour. The open question
+underneath — whether those two warns fire on genuinely every deal, in which case they are a
+constant offset rather than a signal — is carried as `TODO(U8)` on
+`critic.confidence_from_flags` and is the reason the demo baseline is being re-established
+rather than restored.
+
 **`coord-conflict` escalates at confidence 0.60 — exactly the boundary** where U2's
 escalation defect lived. It escalates on the critical-flag rule rather than on the score,
 which is the independent guarantee finding 1 established, now exercised by a case that
