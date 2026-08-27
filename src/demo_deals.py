@@ -88,6 +88,19 @@ class DemoDeal:
     # docstring on Staten Island.
     price_basis: Optional[str] = None
     rent_basis: Optional[str] = None
+
+    # A deliberate, stated offset from `price_basis`. `None` means the asking price is
+    # calibrated *to* the basis and the verification script holds it there.
+    #
+    # This exists so a listing can be mispriced on purpose without the provenance
+    # becoming a lie. Every other deal is priced at its metro median because that is the
+    # only defensible figure available; the consequence, recorded in U7's Q4, is that the
+    # report's asking-price-versus-benchmark disclosure reads 0% on every one of them — a
+    # real check this repository's own fixtures could not exercise. Stating the premium
+    # keeps the price re-derivable from a live source while making the check mean
+    # something.
+    price_premium_to_basis: Optional[float] = None
+
     notes: str = ""
 
 
@@ -179,6 +192,31 @@ DEMO_DEALS: dict[str, DemoDeal] = {
         notes=(
             "Address verified to resolve through neither the Census geocoder nor the "
             "corpus centroid. Figures are illustrative by necessity."
+        ),
+    ),
+    "overpriced": DemoDeal(
+        key="overpriced",
+        listing=(
+            "For sale: 1801 N Vermont Ave, Los Angeles, CA 90027. Los Feliz 2-unit "
+            "property, each unit 2 bed / 1 bath, approx 950 sq ft per unit. Strong "
+            "rental history, excellent walkability, tremendous upside for the right "
+            "buyer. Current tenants pay $2,800 and $2,900 per month. Asking $1,625,000."
+        ),
+        price=1_625_000,
+        unit_rents=(2_800, 2_900),
+        price_basis="redfin_metro_median:Los Angeles",
+        # ~55% above the metro median, deliberately. Everything else about this listing
+        # is ordinary — same market, same unit mix, same FMR-anchored rents as the Los
+        # Angeles deal — so the asking price is the only thing that moved, and the
+        # report's price-versus-benchmark disclosure is the only place it shows up.
+        price_premium_to_basis=0.55,
+        rent_basis="hud_fmr:2",
+        notes=(
+            "Deliberately mispriced. Exists because every other demo listing is "
+            "calibrated to the same benchmark the report reads its asking price "
+            "against, so the disclosure reads 0% on all of them and cannot be seen to "
+            "work. Read as a fixture for that check, not as a claim that Los Feliz "
+            "trades at this price."
         ),
     ),
     "coord-conflict": DemoDeal(

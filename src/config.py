@@ -110,9 +110,10 @@ HUMAN_REVIEW_CONFIDENCE_THRESHOLD = 0.60  # PROVISIONAL — tune in U8
 MAX_REWORKS = 2  # PROVISIONAL — tune in U8
 
 # Severity weights used when aggregating flags into a confidence score.
-# Before re-pricing these, read the TODO(U8) on `critic.confidence_from_flags`: two warn
-# flags were observed on every deal measured so far, and if that holds the problem is
-# which severity those two carry, not what warn costs.
+# Before re-pricing these, read the TODO(U8) on `critic.confidence_from_flags`: every deal
+# measured so far carried exactly two warn flags before anything deal-specific was
+# observed, and if that floor is real the problem is which severity those flags carry, not
+# what a warn costs.
 FLAG_SEVERITY_PENALTY = {
     "info": 0.0,
     "warn": 0.15,
@@ -404,6 +405,24 @@ RENT_COMP_CROSSCHECK_MIN_COMPS = 3
 # and revisit the whole check if a ZIP-level anchor lands (docs/design/data_sources.md, "The
 # sub-metro gap"). `scripts/valuation_evidence.py --diagnose-divergence` reproduces it.
 RENT_COMP_DIVERGENCE_THRESHOLD_PCT = 0.30
+
+# How far the listing's **stated** rents may sit from the modelled rent before the report
+# calls the gap out rather than only reporting it. `None` means the comparison is always
+# rendered and never editorialized, which is the shipped state.
+#
+# TODO(U8): set a number, or delete this and the emphasis it gates. It is None rather than
+# tuned because the gap measured on the demo listings is ~-29% on all three (Aug 24, 2026:
+# Los Angeles -28.8%, Chicago -29.0%, Staten Island -26.8%), and that offset is structural
+# rather than a property of any listing. FMR is a 40th-percentile rent; the corpus the rent
+# model learned from rents at ~1.40x FMR; #11 calibrated these listings to FMR itself. A
+# threshold placed against those three numbers would be measuring this repository's own
+# fixtures, which is the error the three-question check in §8 exists to catch.
+#
+# Settling it needs an independently observed market-rent series — Zillow ZORI, adopted in
+# #16 and still unbuilt (OQ-6). If ZORI says the market rents near 1.40x FMR, the model is
+# right and these listings are genuinely below market; if it says otherwise, the model
+# over-predicts and the threshold belongs on the model rather than on the listing.
+RENT_CLAIM_DIVERGENCE_DISCLOSURE_THRESHOLD = None
 
 
 # --------------------------------------------------------------------------

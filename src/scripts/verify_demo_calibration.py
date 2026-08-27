@@ -90,10 +90,18 @@ def check_price(deal: DemoDeal) -> list[str]:
         return [f"  price      FAIL — Redfin extract has no metro {metro!r}"]
 
     drift = (deal.price - median) / median
-    verdict = "ok" if abs(drift) <= PRICE_TOLERANCE else "OUT OF TOLERANCE"
+    # A deal may declare a deliberate premium over its basis. The check is then whether
+    # the price still sits where the deal *says* it sits — the provenance is the claim
+    # being verified, and an intentional offset is part of the claim rather than a
+    # failure of it.
+    expected = deal.price_premium_to_basis or 0.0
+    verdict = "ok" if abs(drift - expected) <= PRICE_TOLERANCE else "OUT OF TOLERANCE"
+    against = (
+        f"   (declared {expected:+.0%} premium)" if deal.price_premium_to_basis else ""
+    )
     return [
         f"  price      ${deal.price:>12,.0f}   vs Redfin {metro} median "
-        f"${median:,.0f}   {drift:+.1%}   {verdict}"
+        f"${median:,.0f}   {drift:+.1%}{against}   {verdict}"
     ]
 
 

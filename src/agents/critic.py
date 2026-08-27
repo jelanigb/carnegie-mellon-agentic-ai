@@ -100,15 +100,19 @@ def confidence_from_flags(state: DealState) -> float:
     charged. Identical text from the same agent is the same observation reported again.
     """
     # TODO(U8): the budget this function has to spend may already be committed before a
-    # deal is read. Measured Aug 26, 2026 across two demo deals: `fmr_anchor_county_level`
-    # and `forecast_branches_near_tied` (warn, 0.15 each) were raised on both. Both arrived
-    # with U5 and U6, after the last time the §6 demo table was measured. If they fire on
-    # *every* deal — two runs are consistent with that, not evidence of it — then 0.30 of
-    # the 0.40 separating a clean run from `HUMAN_REVIEW_CONFIDENCE_THRESHOLD` is spent
-    # before anything deal-specific is observed, and the effective threshold is 0.90 while
-    # `config` says 0.60. Only one further warn flag of any kind can land before a deal
-    # escalates. That is what took `chicago` from 0.70 to 0.55 and into human review when
-    # U7.3 added one ordinary disclosure (accepted, not a regression: the comps did drift).
+    # deal is read. Measured across three demo deals, Aug 26, 2026: each carried **exactly
+    # two warn flags** before anything deal-specific was observed, so each started from
+    # 0.70 rather than 1.00. The pair is not fixed — `los-angeles` and `chicago` raised
+    # `fmr_anchor_county_level` and `forecast_branches_near_tied`; `overpriced` raised
+    # `fmr_anchor_county_level` and `comps_spatially_concentrated` and no near-tie at all.
+    # **Which makes the floor the finding rather than the pair.** Three deals is not proof
+    # of a floor, but if one holds, 0.30 of the 0.40 separating a clean run from
+    # `HUMAN_REVIEW_CONFIDENCE_THRESHOLD` is spent before the deal is read, the effective
+    # threshold is 0.90 while `config` says 0.60, and exactly one further warn of any kind
+    # can land before escalation. That is what took `chicago` from 0.70 to 0.55 and into
+    # human review when U7.3 added one ordinary disclosure (accepted, not a regression:
+    # the comps did drift). All three flags arrived in U5/U6, after the §6 demo table was
+    # last measured.
     #
     # Deferred to U8 rather than fixed here because the fix depends on which reading is
     # true and only the eval batch exercises the range — the five demo deals were

@@ -73,6 +73,13 @@ def _money(value: float | None) -> str:
     return f"${value:,.0f}" if value is not None else "—"
 
 
+def _join(items: list[str]) -> str:
+    """Render a list the way a sentence reads it: "a", "a and b", "a, b and c"."""
+    if len(items) <= 1:
+        return "".join(items)
+    return f"{', '.join(items[:-1])} and {items[-1]}"
+
+
 def _flag_section(flags: list[Flag]) -> list[str]:
     """Every flag, grouped by severity, most severe first."""
     if not flags:
@@ -315,6 +322,141 @@ def _rent_basis_section(state: DealState, detail) -> list[str]:
     return lines
 
 
+def _stated_rent_section(state: DealState, detail) -> list[str]:
+    """The listing's own rent claim, set against the rent this system derived.
+
+    **The only place in the report where what the seller asserts meets what the system
+    worked out independently.** Every other comparison in this section sets one derived
+    figure against another — the model against the comps, the asking price against a metro
+    median. Until this section existed the report rendered `rent_estimate` and never
+    `deal_terms.unit_rents`, so a reader could not see that the two disagreed by roughly
+    a third. That is a Transparent Degradation gap: the system held both numbers and
+    showed one.
+
+    Rendered whenever a rent estimate exists, **including when the listing stated no rents
+    at all**, for the same reason `_rent_basis_section` renders its cross-check when the
+    cross-check did not run. A report that shows a comparison only where it is favourable
+    shows its working only on the runs where the working looked good.
+
+    **No flag, no objection, no effect on confidence or routing** — this is a disclosure,
+    not a check (Q4). The reason is measured rather than cautious: the gap is ~-29% on all
+    three demo listings, and it is structural. `rent_estimate` is anchored to FMR, a
+    40th-percentile administrative rent, while the corpus the model learned from rents at
+    roughly 1.40x that anchor — so the model predicts market-typical rent, and #11
+    calibrated these listings to the anchor itself. Raising an objection from that would
+    charge the deal for a property of the fixtures. Whether the offset belongs to the
+    market or to the corpus is genuinely unsettled and needs an independently observed
+    market-rent series to answer (OQ-6, #16), which is why
+    `config.RENT_CLAIM_DIVERGENCE_DISCLOSURE_THRESHOLD` ships as `None`.
+
+    Reason/Act/Observe/Decide is the Summarizer's, not this helper's: it renders, and
+    decides only how much to say.
+    """
+    if state.rent_estimate is None:
+        return []
+
+    terms = state.deal_terms
+    lines = ["### The listing's stated rents", ""]
+
+    if not terms.unit_rents:
+        lines.extend([
+            "**The listing states no per-unit rents.** The estimate above therefore "
+            "stands on the model and the comps alone, with nothing from the seller to "
+            "read it against — no claim to corroborate it, and none to contradict it.",
+            "",
+        ])
+        return lines
+
+    rents = list(terms.unit_rents)
+    stated_avg = sum(rents) / len(rents)
+    stated_total = sum(rents)
+    rendered = _join(list(_money(r) for r in rents))
+
+    # The unit basis is stated rather than assumed. `rent_estimate` is one figure for one
+    # bedroom count; `unit_rents` is a list that may describe units of different sizes,
+    # and averaging across a mixed set compares two different things. Naming the basis
+    # lets a reader see when it does not hold instead of discovering it later.
+    per_unit_basis = (
+        f"a {terms.bedrooms}-bedroom unit" if terms.bedrooms is not None
+        else "the subject's unit type"
+    )
+    lines.append(
+        f"The listing states {rendered} per month across "
+        f"{len(rents)} unit{'s' if len(rents) != 1 else ''} — an average of "
+        f"**{_money(stated_avg)}** per unit, **{_money(stated_total)}/mo** in total."
+    )
+
+    gap = (stated_avg - state.rent_estimate) / state.rent_estimate
+    side = "above" if gap >= 0 else "below"
+    # Multiply the figure the reader is shown, not the one behind it. `rent_estimate`
+    # carries cents; rendering the per-unit figure from the raw value and the total from
+    # the raw value produces $4,075 and $8,151, and a reader who checks the arithmetic
+    # finds it off by a dollar. The precision lost is below the resolution of a number
+    # printed to the dollar and carrying a $524 error band.
+    per_unit = round(state.rent_estimate)
+    estimate_total = (
+        f", or **{_money(per_unit * len(rents))}/mo** across {len(rents)} units"
+    )
+    lines.append("")
+    lines.append(
+        f"This system estimates **{_money(per_unit)}/mo** for "
+        f"{per_unit_basis}{estimate_total}. The stated rents sit "
+        f"**{abs(gap):.0%} {side}** that estimate."
+    )
+
+    # A stated-rent count that disagrees with the stated unit count means the average
+    # above describes only part of the property. Said here rather than left for a reader
+    # to notice by comparing two numbers in different sections.
+    if terms.unit_count is not None and terms.unit_count != len(rents):
+        lines.append("")
+        lines.append(
+            f"**The listing gives {terms.unit_count} units but rents for "
+            f"{len(rents)}.** The average and total above cover only the units with a "
+            f"stated rent, so the total understates the property's rent roll."
+        )
+
+    threshold = config.RENT_CLAIM_DIVERGENCE_DISCLOSURE_THRESHOLD
+    if threshold is not None and abs(gap) >= threshold:
+        lines.append("")
+        lines.append(
+            f"**This gap is larger than this report treats as ordinary.** Read the "
+            f"estimate and the stated rents as two claims in disagreement rather than "
+            f"as one figure with a margin around it."
+        )
+
+    # The caveat is direction-dependent, and getting that wrong would be worse than
+    # omitting it. The estimate is anchored to a benchmark that sits below typical market
+    # rents while the corpus behind the model sits above it, so the estimate leans high:
+    # stated rents *below* it are the expected shape and say little, and stated rents
+    # *above* it run against that lean and say more.
+    if gap < 0:
+        lines.extend([
+            "",
+            "> **A gap in this direction is expected and is not on its own evidence "
+            "that the property is under-rented.** The estimate is anchored to a federal "
+            "affordability benchmark that sits below typical market rents by design, "
+            "while the listings the model learned from rent well above that benchmark — "
+            "so the estimate leans toward market-typical rent, and these figures sit "
+            "nearer the benchmark. Which of the two better describes this local market "
+            "is not something this project's data can settle; doing so would take an "
+            "independently observed market-rent series, which is named as future work.",
+            "",
+        ])
+    else:
+        lines.extend([
+            "",
+            "> **Stated rents above the estimate run against the direction this system "
+            "tends to err.** The estimate is anchored to a federal affordability "
+            "benchmark that sits below typical market rents, while the listings the "
+            "model learned from rent well above it, so the estimate already leans "
+            "toward the higher of the two. Rents stated above it are therefore worth "
+            "verifying against leases rather than taken from the listing — the usual "
+            "explanations are short-term or furnished tenancies, rents including "
+            "utilities or parking, or figures that are asking rather than collected.",
+            "",
+        ])
+    return lines
+
 def _findings_section(state: DealState) -> list[str]:
     terms = state.deal_terms
     lines = ["## Findings", ""]
@@ -373,6 +515,9 @@ def _findings_section(state: DealState) -> list[str]:
     lines.append("")
     lines.extend(_benchmark_section(state, detail))
     lines.extend(_rent_basis_section(state, detail))
+    # After the basis, deliberately: the gap is only interpretable once the reader knows
+    # the estimate's error band and whether the comps corroborated it.
+    lines.extend(_stated_rent_section(state, detail))
 
     lines.extend(_scenario_section(state))
 

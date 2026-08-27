@@ -563,7 +563,7 @@ of this defect and is corrected in place — U7.4 had built a rework path on the
 assumption, and the code agreed with the docstring rather than with the plan.
 
 
-### U7.5 — Disclosures: listing claims against derived estimates *(A + B)*
+### U7.5 ✅ — Disclosures: listing claims against derived estimates *(A + B)*
 
 **Not Critic checks — Summarizer disclosures**, per Q4. No flags, no objections, no effect
 on confidence or routing.
@@ -579,6 +579,34 @@ on confidence or routing.
   `benchmark_unavailable_reason` in the prose.
 - **Config.** A's threshold lands in `config.py` as `None` with a `TODO(U8)` naming ZORI, so
   U8 promotes by setting a value.
+
+**Built Aug 26, 2026.** Four notes on what changed against the plan.
+
+**`benchmark_unavailable_reason` was already handled.** `summarizer.py:_benchmark_section`
+already falls back to it, and its three producer strings in `valuation_rent.py` already
+carry no internal vocabulary. The three-question check caught it before any code was
+written — the second time in this unit a planned item turned out to be already built, which
+is the pattern that question exists for.
+
+**The caveat had to become direction-dependent.** The structural offset explains stated
+rents that fall *below* the estimate; printing that same explanation over a listing whose
+rents sit *above* it would excuse the one case actually worth questioning. Rents above the
+estimate now get the opposite treatment — verify against leases, with the usual
+explanations named (short-term or furnished tenancies, rents including utilities, asking
+rather than collected figures). Caught by rendering the case, not by reading the code.
+
+**The mispriced deal needed a `price_premium_to_basis` field**, not just a number.
+`scripts/verify_demo_calibration.py` re-derives every committed figure from live sources,
+so a deliberately-off price would have read as calibration drift. Declaring the premium
+keeps the price re-derivable while making the check mean something: the verifier now tests
+that the price sits where the deal *says* it sits. Measured +54.9% against a declared +55%.
+
+**A third measurement weakens Q7's specific claim and strengthens its general one.**
+`overpriced` runs at 0.70 with four disclosures — but its two warn flags are
+`fmr_anchor_county_level` and `comps_spatially_concentrated`, and it raises no near-tie at
+all. So it is *not* the same two flags on every deal. What has held across all three is the
+**count**: two warns before anything deal-specific is observed. The floor is the finding,
+not the pair. `TODO(U8)` and the `config.py` note corrected to say so.
 
 ### U7.6 — Confidence weights and threshold *(decision #6)*
 
