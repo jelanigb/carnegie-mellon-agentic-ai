@@ -54,6 +54,12 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Aug 28, 2026 — U8 planning: stale premises corrected before they were built on
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Aug 28, 2026 | U8 | **Ablation docstring corrected to the past tense.** `scripts/retrieval_ablation_llm.py` — its model-selection note asserted in the present tense that `config.MODEL_*` "still holds the unverified placeholders", a premise decision #8 closed on Aug 16. Kept as dated history rather than deleted, and the locally-named models left alone: running two sizes is a property of the ablation, not of the pipeline's model choice | maintenance |
+
 ## Aug 27, 2026 — U7.6–U7.8: the confidence mechanism evidenced, the ToT half retired, the unit closed
 
 | Date added | Unit | Work done | Related checkpoint |

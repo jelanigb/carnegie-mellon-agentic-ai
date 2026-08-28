@@ -213,12 +213,30 @@ If the schedule slips, shed scope in this order rather than improvising:
    deferred). Roughly 17% of rent error is available to model form alone, measured, with
    no new data and no new features. Deferred anyway; the probe and the two reasons are in
    [`history/decision_log.md`](history/decision_log.md#rent--valuation).
-2. **Public-record for-sale ground truth** (decision #11) — the county-assessor dataset
-   that would let the *value* estimate be scored rather than only demonstrated. Cut
-   before the LLM fallback because it is a new data source arriving late, attached to the
-   one unit that must not slip. Cutting it costs a validated value estimate, not a
-   working one: demo deals stay calibrated against Redfin and FMR, and the rent model
-   keeps real ground truth from the held-out corpus slice. Document the gap explicitly.
+2. **Public-record for-sale ground truth** (decision #11) — the county-assessor dataset.
+   Cut before the LLM fallback because it is a new data source arriving late, attached to
+   the one unit that must not slip.
+
+   **Taken Aug 28, 2026 at U8.8, and respecified — this item's stated cost was stale.**
+   It read "cutting it costs a validated value estimate", which describes something the
+   system stopped producing three units ago: **#15 made `value_estimate` permanently
+   `None`** in U6. There is no value estimate to validate. Nor can assessor data score the
+   demo deals' asking prices, because those listings are synthetic — the property is not
+   for sale and #11 set the asking price *from* the Redfin metro median, so there is no
+   real asking price and no real sale to score it against.
+
+   What the dataset can actually deliver is a **sub-metro sale-price benchmark** replacing
+   the metro median in `ValuationDetail.benchmark_median_sale_price` — the price-side
+   counterpart to the ZIP-resolution rent anchoring that already landed, and what makes
+   #15's labelled benchmark local rather than metro-wide. Real value, and a different one
+   from the value this list priced.
+
+   **Its risk is unchanged and is managed by date rather than by position.** It is the one
+   item in U8 whose cost is not bounded in advance — an address-to-parcel join is the same
+   class of work that produced U3's geocoding tier fallbacks — so it is scheduled *behind*
+   the harness core with a **drop-dead of Mon Sept 1**. If the join is not working by then
+   the cut is taken with three days in hand and the gap is written up.
+   [`tasks/task_list_u8.md`](tasks/task_list_u8.md) Q3.
 2a. **Pass-scoped flags** (raised Aug 25, 2026 in U7; scheduled at U8). `DealState.flags`
    is append-only by design, so nothing distinguishes *raised this pass* from *ever
    raised*. Every Critic interaction check reads the accumulated list as current truth,
@@ -234,6 +252,16 @@ If the schedule slips, shed scope in this order rather than improvising:
    visibly wrong to the one audience guaranteed to be looking. Cutting it costs precision
    in a paragraph, not a wrong estimate. Detail in
    [`tasks/task_list_u7.md`](tasks/task_list_u7.md) Q6; `TODO(U8)` at both sites.
+
+   **Taken Aug 28, 2026 at U8.5, and this item's cost was overstated.** "A §5 change
+   touching every agent that raises a flag" reads as expensive and was never measured.
+   Measured: **37 `flag()` call sites across five agents, every one inside a node function
+   that already holds `state`**, plus six helper functions that would take a pass index as
+   an argument, against a single central `state.flag()` constructor. That is one mechanical
+   commit plus the Critic's per-pass filter. It stays on this list at this position as the
+   record of the judgment, but the judgment was made against a price roughly an order of
+   magnitude too high, and the lesson generalizes: **a cut-list item whose cost was
+   estimated rather than measured should be re-measured before it is spent.**
 3. ~~**LLM rent fallback path**~~ — **taken Aug 21, 2026, ahead of any slip.** Documented
    as designed-but-unbuilt; Checkpoint 2.1 already anticipated this exact trade. Recorded
    here rather than struck out, because this item left the cut list by being *spent*, not
@@ -298,12 +326,12 @@ Each decision has a stable number. Code comments and the other documents cite th
 | 8 | OpenRouter model per role | Models & infra | U3 → U9 | 🟨 **PART OPEN** — `nvidia/nemotron-3-nano-30b-a3b`, paid variant. Critic half closed in U7: the checks that shipped are pure functions, so the Critic makes no model call and `MODEL_CRITIC` is untested by construction. Summarizer role revisits at U9 |
 | 9 | Planner topology — pre-flight vs. supervisor | Orchestration | U2 | ✅ Pre-flight + rework re-entry; one back edge, asserted on every diagram export |
 | 10 | Geocoding source for `latitude`/`longitude` | Geography | U3 | ✅ Census Geocoder + corpus-centroid fallback; county now resolved by point-in-polygon |
-| 11 | Grounding for demo and evaluation deal terms | Data & sources | U3 → **U8** | 🟨 **PART OPEN** — demo listings calibrated against Redfin + FMR; public-record ground truth planned, on the cut list → [open](open_questions.md#data--sources) |
+| 11 | Grounding for demo and evaluation deal terms | Data & sources | U3 → **U8** | 🟨 **PART OPEN** — demo listings calibrated against Redfin + FMR; public-record data **taken Aug 28, 2026 at U8.8**, respecified as a sub-metro price *benchmark* rather than ground truth (#15 removed the value estimate it was to score), drop-dead Sept 1 → [open](open_questions.md#data--sources) |
 | 12 | Tree-of-Thought scope | Forecasting | U6 → **U7** | ✅ Selective ToT — Scenario/Forecast only. Critic half retired on evidence (U7.7): the checks that shipped are pure deterministic functions, nothing to search over |
 | 13 | MCP adoption | Models & infra | U6 | ✅ Read-only reference server; adopted for portability and a second consumer, not capability. CrewAI declined |
 | 14 | ToT branch-state persistence | Forecasting | U6 | ✅ Compact ledger in state, full tree to `eval/results/` behind a flag |
 | 15 | Property-level value estimate | Rent & valuation | U6 | ✅ Not produced. `value_estimate` stays `None`; metro median carried as a labelled benchmark |
-| 16 | Rent-growth source | Forecasting | U6 | ✅ Rent from HUD FMR history, price from Redfin — forecast separately (pooled r = −0.309) |
+| 16 | Rent-growth source | Forecasting | U6 | ✅ Rent from HUD FMR history, price from Redfin — forecast separately (pooled r = −0.309). **Its ZORI half is now scheduled: U8.0**, after two units with no unit at all → [open](open_questions.md#forecasting--reasoning) |
 | 17 | ToT structure at build time | Forecasting | U6 | ✅ Enumerate the space, do not sample it; pipeline stays deterministic |
 
 

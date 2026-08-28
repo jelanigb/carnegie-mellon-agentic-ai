@@ -10,7 +10,7 @@ at the start of every session, so it is kept short on purpose — an entry that 
 close it and what closing it looks like. `OQ-n` numbers are stable handles for
 conversation; they are not decision numbers.
 
-Last reviewed: Aug 27, 2026 — at U7 close (U7.8).
+Last reviewed: Aug 28, 2026 — at U8 planning ([`tasks/task_list_u8.md`](tasks/task_list_u8.md)).
 
 ---
 
@@ -36,6 +36,14 @@ evaluates only the current pass — noting that an agent skipped on a rework rai
 so absence must not be read as *cleared* when it means *not re-examined*; `state.plan`
 records which agents ran. **Accepted knowingly for U7** — bounded by `MAX_REWORKS`, and
 every affected path escalates to a human. `agents/critic.py`, `agents/planner.py`.
+
+**Taken Aug 28, 2026 at U8.5, and the cut list's price on it was wrong.** §6 described it
+as "a §5 change touching every agent that raises a flag", which was estimated rather than
+measured. Measured: **37 `flag()` sites across five agents, every one inside a node
+function that already holds `state`**, six helpers that would take a pass index as an
+argument, one central `state.flag()` constructor — one mechanical commit plus the Critic
+filter. It lands *before* U8.6, because the eval batch contains rework laps and a stale
+objection in a published results table is worse than the same sentence in one demo report.
 
 ---
 
@@ -67,22 +75,45 @@ known-correct branch to tune against. Note the framing-level values are already 
 cases found by inspection (`TOT_FRAMING_BEAM_WIDTH = 1`, `TOT_FRAMING_PRUNE_THRESHOLD = 0.0`)
 — treat those as findings, not defaults. `config.py:663`.
 
-### OQ-6 · deferred, no unit — Zillow ZORI as the independent rent check
+### OQ-6 · **U8.0** — Zillow ZORI as the independent rent check
 #16 adopted ZORI as the validation series and it has not been built. It is the only
 available test of **the rent model's largest unverified assumption** — that rent-to-FMR
 structure is stable across the ~7 years between corpus and today. **Closes when** a ZORI
 pull lands and the ratio is measured at both ends. `config.py:430`.
 
+**Scheduled Aug 28, 2026 — first in U8, not last.** It had no unit for two units. It moves
+to the *front* on dependency rather than on enthusiasm: three deferred items are gated on
+this one number (promoting Critic checks A and B at `agents/critic.py:187`, the stated-rent
+emphasis threshold at `config.py:413`, and by extension what the eval batch scores), and a
+measurement that can change what U8.6 tunes has to land before the tuning. **Source
+verified reachable the same day** — ZIP-level, monthly from 2015-01, carrying `CountyName`,
+so the ratio can be measured at both ends of the vintage gap and joined to FMR at the
+anchor's own grain. **The measurement can veto as well as unlock:** ~1.0 means the rent
+model over-predicts and A must *not* be promoted; ~1.4 means the model is right and A gets
+a threshold above #11's known calibration offset. Both are results.
+
 ---
 
 ## Data & sources
 
-### OQ-7 · decision #11 · U8, cut list position 2 — public-record for-sale ground truth
+### OQ-7 · decision #11 · **U8.8, drop-dead Mon Sept 1** — public-record sub-metro price benchmark
 County assessor open data (Cook, LA County, NYC) is chosen, admissible under §8's "public"
-definition, and unbuilt. It is what would let the *value* estimate be scored rather than
-only demonstrated. **Closes when** U8 ingests it — or, if cut, when the gap is written up
-explicitly. Cut before the LLM fallback deliberately: it attaches a new data source to the
-one unit that must not slip.
+definition, and unbuilt. **Closes when** U8.8 ingests it — or, if cut at the drop-dead
+date, when the gap is written up explicitly.
+
+**Respecified Aug 28, 2026, because this entry's own premise was stale.** It read "what
+would let the *value* estimate be scored" — but **#15 made `value_estimate` permanently
+`None`** in U6, so there is no value estimate to score. Nor can assessor data score the
+demo deals' asking prices: those listings are synthetic, and #11 set the asking price
+*from* the Redfin metro median, so there is no real asking price and no real sale to score
+it against. What the dataset actually delivers is a **sub-metro sale-price benchmark**
+replacing the metro median in `ValuationDetail.benchmark_median_sale_price` — the
+price-side counterpart to ZIP-resolution rent anchoring, and what makes check B local.
+
+**Taken rather than cut, with the risk carried by a date.** It is the one U8 item whose
+cost is not bounded in advance — an address-to-parcel join is the same class of work as
+U3's geocoding tiers — so it sits *behind* the harness core, and the cut, if taken, is
+taken Sept 1 with three days in hand rather than on the freeze morning.
 
 ---
 

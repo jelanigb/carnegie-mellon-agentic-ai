@@ -136,12 +136,21 @@ in a focused session or across a fragmented week.
   | ~~`TODO(U3)`~~ | `extractor.py` | ✅ **closed Aug 16, 2026** — geocoding is called as an ordinary extraction step. The paired fixture update was resolved differently than planned: stubbing the Extractor's outbound calls makes the fixture's address inert, so the "move it to an ungeocodable address" half was unnecessary rather than done |
   | ~~`TODO(U5)`~~ | `state.py`, `build_comps_index.py` | ✅ **closed Aug 22, 2026** — `listed_epoch` indexed and decoded to `Comp.listed_date`. Landed in the same re-index as `location_precision`, since both are metadata changes and a corpus rebuild is the cost either way |
   | ~~`TODO(U5)`~~ | `county_crosswalk.py` | ✅ **moot as of Aug 15, 2026** — the principal-county approximation this described is gone; `county_fips` now resolves the exact county from the subject's coordinates. `FlagKind.COUNTY_FROM_PRINCIPAL_COUNTY` removed rather than left unraisable |
-  | `TODO(U7)` | `critic.py` | Cross-agent consistency checks — `_consistency_objections()` returns empty until then |
-  | `TODO(U7)` | `critic.py` | Confirm the critical-flag escalation rule when the severity weights are tuned (§6, finding 1) |
+  | ~~`TODO(U7)`~~ | `critic.py` | ✅ **closed Aug 27, 2026** — cross-agent consistency checks built as three *interaction* checks (U7.2) and wired (U7.4); `_consistency_objections()` no longer returns empty. The four checks this named did not survive contact with the built system — see `agents/critic.py` for the accounting |
+  | ~~`TODO(U7)`~~ | `critic.py` | ➡️ **became `TODO(U8)` Aug 27, 2026** — confirming the critical-flag escalation rule requires the tuned weights, and #6's numbers were deliberately left to U8's eval batch. Now at `critic.py:393` |
   | ~~`TODO(U2)`~~ | `hud_fmr.py` | ✅ **cleared Aug 10, 2026** — writes are atomic; the residual concurrency limit is documented on `_DiskCache` as accepted |
+  | `TODO(U8)` | `critic.py` ×4, `config.py` ×4, `planner.py` | **U8's backlog, nine sites** — #6's threshold and severity weights (`critic.py:393`, `config.py:113`), pass-scoped flags (`critic.py:252`, `planner.py:90`), promoting checks A and B once ZORI settles the rent/FMR baseline (`critic.py:187`), the stated-rent emphasis threshold (`config.py:413`), leave-one-metro-out evaluation (`config.py:309`), and confirming something still trips the rent-comp divergence flag (`config.py:386`). Planned per subsection in [`../tasks/task_list_u8.md`](../tasks/task_list_u8.md) |
+  | `TODO(cut-list)` | `valuation_rent.py`, `config.py` | Rent-model feature engineering and model form (§6 item 1a, ~17% of error available to model form alone) and the descoped LLM rent fallback (item 3, taken Aug 21) |
   | `TODO(security)` | `hud_fmr.py`, `llm_client.py` | Whether to drop on-disk credential fallbacks in favour of env-var-only |
   | `TODO(security)` | `diagnostics.py` | Full error text to stdout deliberately includes the account identifier the report strips. Correct for a terminal, wrong for a recording — and Week 7's deliverable is a terminal capture. Redact that one field, or gate verbosity behind an env var defaulting quiet before recording |
-  | `TODO(geography)` | `county_crosswalk.py` | New England town-based FMR verified for Boston only, not the other five states |
+  | `TODO(geography)` | `county_crosswalk.py`, `config.py` | New England town-based FMR verified for Boston only, not the other five states |
+
+  **This table is reviewed at unit close, and was found stale at U8 planning (Aug 28,
+  2026).** It carried two `TODO(U7)` rows as open after U7 shipped, and listed none of the
+  nine `TODO(U8)` or three `TODO(cut-list)` sites that existed in the tree. The inventory's
+  whole value is that `grep -rn "TODO(U8)" src/` and this table agree; when they do not,
+  the table is the one that misleads, because it is the one a reader consults instead of
+  grepping. Regenerate it against a grep rather than editing it from memory.
 
 ### Testing
 

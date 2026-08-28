@@ -24,12 +24,21 @@ comp exist?" therefore gets a checked answer rather than an asserted one.
 
 Model selection note (decision #8, docs/implementation_plan.md §7)
 -----------------------------------------------------------------
-config.MODEL_* still holds the unverified placeholders that TODO(U3) warns about, and
-that TODO turned out to be correct: `meta-llama/llama-3.3-70b-instruct:free` no longer
-exists on OpenRouter's free tier (the model is present, but paid-only; there is no free
-Llama variant at all as of Aug 9, 2026). Rather than silently repoint config.py — §8
-requires decisions of that kind to be raised, not resolved by assumption — the models
-used here are named locally and verified live at run time.
+**As of Aug 9, 2026**, when this script was written, `config.MODEL_*` still held the
+unverified placeholders that `TODO(U3)` warned about, and that TODO turned out to be
+correct: `meta-llama/llama-3.3-70b-instruct:free` no longer exists on OpenRouter's free
+tier (the model is present, but paid-only; there is no free Llama variant at all). Rather
+than silently repoint config.py — §8 requires decisions of that kind to be raised, not
+resolved by assumption — the models used here are named locally and verified live at run
+time.
+
+**That premise closed on Aug 16, 2026 and this note is kept as history, corrected to the
+past tense (Aug 28, 2026).** Decision #8 settled `config.MODEL_*` on a real model across
+four bake-off passes and `verify_models_live()` now guards the IDs at launch, so the
+sentence above described the tree accurately when written and stopped doing so a week
+later. The local model names are **not** changed to follow config: this script's ablation
+runs two models of deliberately different sizes, which is a property of the experiment
+rather than of the pipeline's model choice.
 
 Two are run, not one, and deliberately of different sizes. A single small model
 fabricating is weak evidence, since it invites the reply that a better model would not.
