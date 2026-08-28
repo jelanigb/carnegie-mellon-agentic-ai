@@ -58,7 +58,8 @@ rows. The unit of a row is the change, not the file.
 
 | Date added | Unit | Work done | Related checkpoint |
 | --- | --- | --- | --- |
-| Aug 28, 2026 | U8 | **Ablation docstring corrected to the past tense.** `scripts/retrieval_ablation_llm.py` — its model-selection note asserted in the present tense that `config.MODEL_*` "still holds the unverified placeholders", a premise decision #8 closed on Aug 16. Kept as dated history rather than deleted, and the locally-named models left alone: running two sizes is a property of the ablation, not of the pipeline's model choice | maintenance |
+| Aug 28, 2026 | U8.0 | **ZORI, the independent rent check (#16, OQ-6).** `tools/zori.py` — loader for Zillow's ZIP-level Observed Rent Index, with month columns identified by date-parseability rather than by a negative identity set; `scripts/zori_evidence.py` — measures rent/FMR at the corpus vintage and today over the ZIP-anchored training rows, weighting the FMR denominator by the corpus's own bedroom mix at both ends; `config.py` — vintage month, display minimum, and the 12-month substitution limit. **Finds the ratio moved −11.8%, and decomposes which side moved: FMR +51.9% against market rent +33.5%** | report, 6.1 |
+| Aug 28, 2026 | U8.0 | **Ablation docstring corrected to the past tense.** `scripts/retrieval_ablation_llm.py` — its model-selection note asserted in the present tense that `config.MODEL_*` "still holds the unverified placeholders", a premise decision #8 closed on Aug 16. Kept as dated history rather than deleted, and the locally-named models left alone: running two sizes is a property of the ablation, not of the pipeline's model choice | maintenance |
 
 ## Aug 27, 2026 — U7.6–U7.8: the confidence mechanism evidenced, the ToT half retired, the unit closed
 

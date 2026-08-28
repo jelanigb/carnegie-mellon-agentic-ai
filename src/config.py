@@ -424,6 +424,32 @@ RENT_COMP_DIVERGENCE_THRESHOLD_PCT = 0.30
 # over-predicts and the threshold belongs on the model rather than on the listing.
 RENT_CLAIM_DIVERGENCE_DISCLOSURE_THRESHOLD = None
 
+# --- ZORI comparison (U8.0, OQ-6) -----------------------------------------
+# The month read as "the corpus vintage" and the bedroom counts the mix-weighted FMR
+# denominator is built from. See tools/zori.py for why the denominator has to be
+# mix-weighted at all: ZORI is one figure per ZIP across unit types, FMR is per bedroom.
+#
+# 2019-06 rather than the corpus's exact median listing date: ZORI is monthly and the
+# corpus spans ~2018-09 to 2019-09, so any single month is an approximation of a window.
+# Mid-window is chosen over an endpoint because the comparison is a level read, and an
+# endpoint would carry whatever trend ran through the year.
+ZORI_VINTAGE_MONTH = "2019-06-30"
+
+# A ZCTA needs this many corpus rows before it gets its own printed row. Below it the
+# corpus mean is a handful of listings and the bedroom mix it supplies is not a mix. This
+# governs the *display* only: the aggregate is row-weighted across every covered ZCTA, so
+# a thin ZCTA still contributes in proportion to its evidence instead of being discarded
+# by a cutoff that exists for readability.
+ZORI_MIN_CORPUS_ROWS_PER_ZCTA = 30
+
+# How far the vintage read may be substituted when a ZCTA's ZORI series starts after
+# ZORI_VINTAGE_MONTH. ZORI coverage begins when Zillow has enough listings in a ZIP, so
+# thinner ZIPs start later. 12 months rather than unlimited because the comparison is a
+# level read against a fixed corpus window: a 2021 substitution is being read as if it
+# were 2019 and lands on the far side of the 2021-22 rent surge, which would import the
+# surge into the "before" figure and understate the drift being measured.
+ZORI_MAX_VINTAGE_SUBSTITUTION_MONTHS = 12
+
 
 # --------------------------------------------------------------------------
 # Scenario / Forecast agent (U6 - agents/scenario_forecast.py)

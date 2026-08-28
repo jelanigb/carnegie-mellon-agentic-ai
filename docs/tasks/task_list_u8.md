@@ -98,30 +98,59 @@ it forfeits the ability to say the numbers were chosen against evidence.
 above is fixed before the first run rather than after seeing a disagreement — the rule is
 what separates tuning from fitting, and a rule written afterwards is not a rule.
 
-### Q2 — blocks U8.4. What shape does the New York rent-error disclosure take, and where does the number live?
+### Q2 — ANSWERED Aug 28, 2026: render always + flag when elevated (C), from per-metro holdout residuals (2). Blocks U8.4.
 
 OQ-3 is a disclosure requirement, not a modelling problem: New York predicts at ~$1,065 MAE
 against the trio's ~$518, no shortlist fixes it, and `INDEXED_MARKETS` still admits a Staten
 Island subject to the rent model. Two sub-decisions:
 
-**(a) New `FlagKind`, or widen an existing one?** Recommend **new** — the reader's response
-differs from every rent flag that exists. `RENT_ESTIMATE_UNAVAILABLE` means there is no
-number; `RENT_DIVERGES_FROM_COMPS` means two of our own inputs disagree. This one means
-*there is an estimate, it is the system's ordinary output, and it is twice as wrong here as
-the number quoted in the report's accuracy section*. Folding it into an existing kind costs
-the reader exactly the thing they needed.
+**(a) What the system does — taken: C, render always *and* flag when elevated.** A new
+`FlagKind` raised by the Valuation agent when the subject's market is measurably worse,
+*plus* the per-market error rendered on every report so a reader in a good market can see
+what good looks like. This is the U7.5 pattern — the Summarizer renders the number
+unconditionally, the flag fires only when it crosses the line — and the two halves buy
+different things: the disclosure lets a reader compare markets, the flag makes the system's
+noticing **assertable** by a test and countable by U8.1's census.
 
-**(b) Where does the per-market error come from?** Recommend the **leave-one-metro-out run
-that OQ-12 already asks for** (`config.py:309`), which makes OQ-3 and OQ-12's first half one
-measurement rather than two. The resulting per-metro MAE table is committed to `config.py`
-next to the script that re-derives it — the same committed-value-plus-proving-script
-arrangement `county_crosswalk.py`, `demo_deals.py` and `verify_metro_selection.py` all use.
+A new kind rather than widening an existing one, because the reader's response differs from
+every rent flag that exists. `RENT_ESTIMATE_UNAVAILABLE` means there is no number;
+`RENT_DIVERGES_FROM_COMPS` means two of our own inputs disagree. This one means *there is an
+estimate, it is the system's ordinary output, and it is twice as wrong here as the figure
+quoted in the report's accuracy section.*
 
-**A caveat that has to be stated with it.** Leave-one-metro-out answers a *more demanding*
-question than the shipped holdout does (does the model transfer to a market it never saw),
-so its MAE is not comparable to the reported holdout MAE and the report must not print them
-in one column. The flag's threshold should be set against the in-sample per-metro error;
-the LOMO run is the transfer evidence, reported separately.
+**Rejected: D, refusing the estimate in high-error markets.** $1,065 MAE is degraded, not
+useless, and refusing destroys information a reader could weigh. §2 designates New York as
+the case grounded in real market thinness — it should degrade **visibly, not vanish**.
+
+**(b) Where the number comes from — taken: per-metro breakdown of the existing holdout
+residuals. This corrects what this plan first proposed.** The first draft said the number
+should come from the leave-one-metro-out run OQ-12 asks for, on the reasoning that it folds
+two open items into one measurement. That is tidy and **wrong on substance**: LOMO measures
+*transfer to a market the model never saw*, and **New York is in the training set**. A
+Staten Island subject is not in the LOMO situation, so a LOMO figure would overstate the
+error this flag exists to disclose.
+
+The per-metro holdout breakdown is the number a subject in that market actually faces, it
+is nearly free (the fit already exists — this is a groupby over residuals already computed),
+and because it comes from the same split as the headline MAE the report can put both in one
+sentence honestly: *"±$518 overall, ±$1,065 in New York."* **Report `n` beside each figure**
+— per-metro holdout slices may be thin, and a MAE over forty rows should not be presented
+like a MAE over five thousand.
+
+**Consequence, stated rather than glossed: U8.4 no longer closes OQ-12's first half.**
+`config.py:309`'s leave-one-metro-out request is a *transfer* question and stays open. It is
+a real limitation of the reported MAE and is worth having, but it is not this flag's
+instrument, and folding it in to close two items at once would have put the wrong number in
+a reader-facing disclosure. Reclassified to the U8.9 report artifacts if the schedule holds,
+otherwise carried forward.
+
+**(c) Where the number is stored.** `mae_dollars_by_metro` on `TrainingReport`, which
+**already travels with the model artifact** (`tools/model/rent_model.py:443` — *"The report
+travels with the model on purpose"*). No new machinery, and it cannot drift from the model
+it describes, which a hand-copied `config.py` table silently can. The **threshold** for
+raising the flag stays in `config.py`, where tunables live. That split respects §8's
+"config is the only home for tunable parameters" without putting a *measured* model property
+there.
 
 ### Q3 — ANSWERED Aug 28, 2026: taken, at U8.8, behind a drop-dead date. Reframed on what it can actually deliver.
 
@@ -219,7 +248,7 @@ which rows exercised a model and which replayed one.
 
 ## Subsections
 
-### U8.0 — ZORI: measure the rent/FMR ratio, then decide (OQ-6, #16)
+### U8.0 ✅ — ZORI: measure the rent/FMR ratio, then decide (OQ-6, #16)
 
 **First, because its result changes what U8.6 is tuning** (Q5). A script —
 `scripts/zori_evidence.py` — pulling Zillow's ZORI series for the ZIPs the three inference
@@ -254,6 +283,49 @@ The promotion of checks A and B, and the disposition of `config.py:413`, follow 
 number rather than preceding it. If this lands inconclusive, the fallback stands unchanged:
 `config.py:413` is deleted, `critic.py:187` becomes a stated limitation, and both are
 recorded in U8.10 as closed on evidence rather than deferred again.
+
+---
+
+**Built Aug 28, 2026. The assumption does not hold, and the reason is not the one either
+branch anticipated.** Measured over 64 ZCTAs and 912 ZIP-anchored corpus rows:
+
+| | |
+| --- | --- |
+| ZORI / FMR at 2019-06 | **1.186** |
+| ZORI / FMR today | **1.046** |
+| Drift over the gap | **−11.8%** |
+| Corpus rent / FMR (same date) | 1.341 — the corpus sits ~13% above its own market |
+
+**The decomposition is the finding, and it was not in the plan.** A ratio can fall two
+ways, and the two call for opposite responses, so the script splits it rather than
+asserting it: **market rent rose +33.5% while the FMR schedule rose +51.9%.** The ratio
+fell because **the denominator outran the market by 18.5 points** — not because rents
+stalled. This was added after a first run reported only the drift, which would have been
+read as "rents fell relative to FMR" and is close to the opposite of what happened.
+
+**It corroborates something the system already measured from the other side.**
+`config.py`'s cohort-shift screen found FY2023 (+5.10pp) and FY2024 (+7.48pp) moving
+every area in the FMR panel together, and could not attribute it — *"whether HUD changed
+its methodology or the 2021-22 market surge reached an administrative series two years
+late is not determinable from FMR alone."* An independent market series now says FMR rose
+half again as fast as the market it prices. That is the attribution the screen deferred.
+
+**Consequence for the rent model, which is the point of having measured it.** The model
+learned rent ≈ 1.34× FMR from 2018-19 and multiplies it by *today's* FMR, but today's
+market rents at ≈1.05× FMR. **The shipped model therefore over-predicts rent by roughly a
+third** — and §2's "a ratio ages more slowly than a dollar level" holds only while the
+reference series tracks the market.
+
+**Q5's veto branch is the one that fired: checks A and B must NOT be promoted (U8.7).** The
+~−29% stated-vs-modelled gap on the demo listings is substantially the *model's* error, not
+the deal's, so an objection raised from it would blame the listing for the model's drift.
+
+**Bounds on the claim, stated rather than buried:** ZIP-anchored rows only (1,105 of 5,686
+the model trains on, since a county-anchored ratio has a different denominator); 188 rows
+excluded because their ZORI series begins more than 12 months after the vintage month; and
+ZORI's unit mix is not the corpus's, which is why the *level* comparison is labelled
+indicative while the *stability* one is not — the same construction at both ends cancels a
+constant mix bias out of the difference, but not out of the level.
 
 ### U8.1 — The harness: case schema, batch runner, results table, coverage census
 
@@ -308,15 +380,25 @@ The handful of kinds that genuinely originate in the Extractor need it to run. R
 `LLM_CACHE_MODE=read_write`, commit the recordings to `eval/data/llm_recordings/`, and run
 the batch under `replay` so a miss is a hard error rather than a live call.
 
-### U8.4 — New York rent error: the disclosure and the case (OQ-3, OQ-12a)
+### U8.4 — New York rent error: the disclosure and the case (OQ-3)
 
-Per Q2: leave-one-metro-out fit → per-metro MAE table committed to `config.py` with the
-script that re-derives it → new `FlagKind` raised by the Valuation agent when the subject's
-market is one the model is measurably worse in → an eval case that trips it, and the
-Staten Island case run against real data as §6 specifies.
+Per Q2 (C + 2). Four pieces, in order:
 
-Closes OQ-3 and the first half of OQ-12. Today the Staten Island error is disclosed by
-accident — that deal escalates for having zero comps — and an accident is not a check.
+1. **Measure.** Per-metro breakdown of the existing holdout residuals, with `n` per metro,
+   onto `TrainingReport.mae_dollars_by_metro` so it travels with the artifact.
+2. **Flag.** A new `FlagKind` raised by the Valuation agent when the subject's market
+   exceeds `config`'s threshold — the tunable half, in config; the measured half, in the
+   artifact.
+3. **Render.** The Summarizer prints the market's error on every report, not only a flagged
+   one, so a reader can see what good looks like.
+4. **Case.** An eval case that trips the flag, plus the Staten Island case run against real
+   data as §6 specifies.
+
+**Closes OQ-3. Does *not* close OQ-12's first half** — see Q2(b); LOMO answers a transfer
+question this flag does not ask.
+
+Today the Staten Island error is disclosed by accident — that deal escalates for having
+zero comps — and an accident is not a check.
 
 ### U8.5 — Pass-scoped flags (OQ-15, cut-list 2a)
 
@@ -394,8 +476,10 @@ settled state in §7's register with reasoning in
 [`open_questions.md`](../open_questions.md) — and, where a question is *retargeted* rather
 than closed, say so with its reason, per U7.8's precedent.
 
-**Six open questions can close here** — OQ-1 (#6 tuned), OQ-3, OQ-6, OQ-12 (both halves),
-OQ-15, and OQ-7 either as built or as a written gap. That would be the largest single
+**Five open questions can close here** — OQ-1 (#6 tuned), OQ-3, OQ-6, OQ-15, and OQ-7
+either as built or as a written gap. **OQ-12's first half does not close** (Q2(b)): its
+leave-one-metro-out run is a transfer question that U8.4's flag does not ask. Its second
+half — confirming something still trips the rent-comp divergence flag — closes at U8.2. That would be the largest single
 close in the project, which is also the reason to review each one against what actually
 shipped rather than against this plan.
 

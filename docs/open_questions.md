@@ -148,10 +148,23 @@ account identifier). Raise before any public demo.
 
 ## Evaluation & demo
 
-### OQ-12 · U8 — two flags that need an eval case
-`config.py:286` wants a leave-one-metro-out run as evaluation rather than the current
-in-sample split; `config.py:363` needs confirmation that anything still trips the flag it
+### OQ-12 · U8 — two items, and they separated at U8 planning
+`config.py:309` wants a leave-one-metro-out run as evaluation rather than the current
+in-sample split; `config.py:386` needs confirmation that anything still trips the flag it
 guards. Both are `TODO(U8)` at the site.
+
+**Split Aug 28, 2026.** The second half closes at **U8.2** — a case built to sit on the far
+side of the divergence line, which U8.1's coverage census requires anyway since a flag
+nothing can raise would corrupt it.
+
+**The first half was nearly closed by accident and should not be.** U8.4's New York
+disclosure (OQ-3) needs a per-market error figure, and folding LOMO into it looked like one
+run closing two items. It is the wrong instrument: **LOMO measures transfer to a market the
+model never saw, and New York is in the training set**, so a LOMO figure would overstate the
+error a Staten Island subject actually faces. U8.4 uses a per-metro breakdown of the
+existing holdout residuals instead. LOMO stays open as what it always was — a *transfer*
+measurement and a real limitation of the reported MAE — scheduled to U8.9's report artifacts
+if the schedule holds. [`tasks/task_list_u8.md`](tasks/task_list_u8.md) Q2(b).
 
 ### OQ-13 · no unit — LangSmith account
 Wiring is done and env-driven; every run prints whether tracing is on, so a silently
