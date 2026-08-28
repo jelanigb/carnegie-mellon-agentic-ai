@@ -99,29 +99,27 @@ def confidence_from_flags(state: DealState) -> float:
     different relaxations, and those are two real observations that should both be
     charged. Identical text from the same agent is the same observation reported again.
     """
-    # TODO(U8): the budget this function has to spend may already be committed before a
-    # deal is read. Measured across three demo deals, Aug 26, 2026: each carried **exactly
-    # two warn flags** before anything deal-specific was observed, so each started from
-    # 0.70 rather than 1.00. The pair is not fixed — `los-angeles` and `chicago` raised
-    # `fmr_anchor_county_level` and `forecast_branches_near_tied`; `overpriced` raised
-    # `fmr_anchor_county_level` and `comps_spatially_concentrated` and no near-tie at all.
-    # **Which makes the floor the finding rather than the pair.** Three deals is not proof
-    # of a floor, but if one holds, 0.30 of the 0.40 separating a clean run from
-    # `HUMAN_REVIEW_CONFIDENCE_THRESHOLD` is spent before the deal is read, the effective
-    # threshold is 0.90 while `config` says 0.60, and exactly one further warn of any kind
-    # can land before escalation. That is what took `chicago` from 0.70 to 0.55 and into
-    # human review when U7.3 added one ordinary disclosure (accepted, not a regression:
-    # the comps did drift). All three flags arrived in U5/U6, after the §6 demo table was
-    # last measured.
+    # TODO(U8): superseded, Aug 27, 2026 — this previously claimed a "two-warn floor"
+    # from a three-deal sample. `scripts/confidence_evidence.py` (U7.6) measured all six
+    # demo deals and it does not generalize: **no warn-severity flag is common to every
+    # deal.** `fmr_anchor_county_level` fires on `los-angeles`, `overpriced` and
+    # `coord-conflict` — not because every deal pays it, but because those three are the
+    # deals sited in the one demo county with no HUD Small Area FMR. `chicago`'s county
+    # has one, so it never raises that flag at all; the earlier note claiming it did was
+    # wrong. `forecast_branches_near_tied` fires on `los-angeles` and `chicago` only, a
+    # genuine ToT near-tie rather than a constant. `chicago` reaches 0.55 and escalates
+    # on three deal-specific warns (search-radius relaxation, comps outside the match
+    # band, and the near-tie) — not on any pair every deal shares.
     #
-    # Deferred to U8 rather than fixed here because the fix depends on which reading is
-    # true and only the eval batch exercises the range — the five demo deals were
-    # calibrated to run clean. Re-pricing warn downward treats a symptom and moves every
-    # deal at once. If instead a disclosure is genuinely unconditional, it is reporting a
-    # *mechanism* rather than a weakness, which is the definition this docstring already
-    # gives for info severity — it would cost nothing and still print. What it takes: run
-    # the eval batch, count each FlagKind's incidence across it, and demote or re-price on
-    # that evidence. A penalty that every deal pays is not discriminating between deals.
+    # What is still open for U8: three of six demo deals sharing one county's FMR-anchor
+    # warn is a fact about the demo set (§2's Los Angeles / Chicago / Cleveland trio,
+    # reused across deals), not evidence about real-world deal distribution. The eval
+    # batch, sampled across counties rather than reusing one three times, is what would
+    # show whether that skew is a demo-set artifact or a real one worth re-pricing. Also
+    # open: no demo deal currently isolates the critical-flag escalation rule from the
+    # score — every deal carrying a critical flag already sits below threshold anyway —
+    # so that rule is proven only by
+    # `test_a_single_critical_flag_escalates_regardless_of_score`, not by any live run.
     seen: set[tuple[str, FlagKind, str]] = set()
     penalty = 0.0
     for f in state.flags:
@@ -138,13 +136,10 @@ def confidence_from_flags(state: DealState) -> float:
 def _consistency_objections(state: DealState) -> list[Objection]:
     """Cross-agent contradictions found in this run. **U7 populates this.**
 
-    Returns an empty list today, so `critic_rejected` is never set and the rework cycle
-    never fires on its own in this build.
-
     The four checks §1 originally named were reviewed against the built system while
-    planning U7, and **the list did not survive contact with it.** Recorded here rather
-    than silently replaced, because a TODO that names work the build has since made
-    impossible is worse than no TODO:
+    planning U7, and **the list did not survive contact with it** (Q5,
+    `docs/tasks/task_list_u7.md`). Recorded here rather than silently replaced, because a
+    TODO that names work the build has since made impossible is worse than no TODO:
 
     1. *Rent estimate against the comp set's distribution* — **already built, and not
        here.** `agents/valuation_rent.py` raises `RENT_DIVERGES_FROM_COMPS` as its own
@@ -154,31 +149,37 @@ def _consistency_objections(state: DealState) -> list[Objection]:
     2. *Value estimate against the listing price* — **dead.** Decision #15 made
        `DealState.value_estimate` permanently `None`; nothing in this build writes it.
        This TODO predates that decision.
-    3. *Scenario bands against the base they branch from* — **live, TODO(U7).** Both
-       `ForecastDetail.projection_base_price`/`_rent` and the `Scenario` bands are
-       populated by U6.
-    4. *Comp-source concentration* — **live, TODO(U7).** The corpus is 91%
-       RentDigs.com, so eight comps from one feed are not eight independent
-       observations; `Comp.listing_source` exists to make that detectable. Must not
-       double-count with `COMPS_SPATIALLY_CONCENTRATED`, which is a different
-       concentration and already fires.
+    3. *Scenario bands against the base they branch from* — **retired on evidence
+       (Q5).** `agents/scenario_forecast.py` assigns `projection_base_price`/`_rent`
+       directly from `deal_terms.price`/`rent_estimate`, and the Planner always re-runs
+       Scenario whenever Extractor re-runs, so the check would compare a field to the
+       variable it was assigned from. Cannot fail by construction.
+    4. *Comp-source concentration* — **retired on evidence (Q5).** Already built, and
+       not here either: `agents/summarizer.py` renders it as a disclosure at a 0.75
+       threshold. Promoting it to an objection fires on both dense demo deals, including
+       the clean `los-angeles` baseline — it would flag the system's own healthy case.
 
-    TODO(U7): implement 3 and 4, plus two checks U2 did not anticipate because the state
-    they read did not exist yet — the forecast's projection base against the figures it
-    claims to project from, and comp attribute drift against the subject after
-    relaxation.
+    **What replaced 3 and 4**, per Q5: the Critic is the one node that sees every
+    agent's flags at once, and judging whether a *combination* of disclosures changes
+    what the result means is work only it can do. `_interaction_objections()` below
+    builds three such checks (I1–I3, U7.2). The fourth surviving check from §1's
+    original four — comp attribute drift — is built in `agents/comps_retrieval.py`
+    instead (U7.3, raised as `FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA`): that agent already
+    holds both the subject terms and the returned comps, so putting the check here would
+    repeat the mistake check 1 above already avoids. I1 keys on that flag directly rather
+    than on `RELAXED_MATCH_CRITERIA` — a relaxation only *permits* dissimilar comps, and
+    the measured drift is what makes the objection real.
 
     Two further comparisons — the listing's *stated* rents against `rent_estimate`, and
     its asking price against `ValuationDetail.benchmark_median_sale_price` — are
-    deliberately **not** objections in U7. They ship as Summarizer disclosures instead,
-    because the rent one currently reports ~-29% on every demo deal: FMR is a
+    deliberately **not** objections in U7. They ship as Summarizer disclosures instead
+    (U7.5), because the rent one currently reports ~-29% on every demo deal: FMR is a
     40th-percentile rent while the model predicts ~1.40x FMR, so the gap measures a
     percentile mismatch rather than the deal. TODO(U8): promote both once Zillow ZORI
     settles which baseline is right.
 
-    This stays the single seam the Critic calls and the tests substitute, even though it
-    currently delegates to one family of checks. TODO(U7.3) adds comp attribute drift
-    alongside `_interaction_objections`, and each family stays independently testable.
+    This stays the single seam the Critic calls and the tests substitute, even though
+    every surviving check it delegates to is one family, `_interaction_objections()`.
     """
     return _interaction_objections(state)
 

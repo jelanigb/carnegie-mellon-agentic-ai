@@ -608,7 +608,7 @@ all. So it is *not* the same two flags on every deal. What has held across all t
 **count**: two warns before anything deal-specific is observed. The floor is the finding,
 not the pair. `TODO(U8)` and the `config.py` note corrected to say so.
 
-### U7.6 — Confidence weights and threshold *(decision #6)*
+### U7.6 ✅ — Confidence weights and threshold *(decision #6)*
 
 Mechanism only, per Q3: make weights and threshold tunable and evidenced, leave the numbers
 to U8. **Do not re-derive the critical-flag escalation rule** — it is deliberately
@@ -618,6 +618,37 @@ independent of the weights (OQ-1, and the comment in `critic.py`). Evidence scri
 Note the new checks change the score's inputs, so the existing provisional weights will
 produce different confidence on the same deals than they do today. Expect the demo table
 in §6 to move; re-measure it rather than assuming it held.
+
+**Built Aug 27, 2026.** The "tunable" half was already built — `config.FLAG_SEVERITY_PENALTY`,
+`HUMAN_REVIEW_CONFIDENCE_THRESHOLD`, the critical-independent-of-score rule, and the
+rework-lap dedup all landed in U2/U7.4 and are already covered by hermetic tests
+(`test_a_single_critical_flag_escalates_regardless_of_score`,
+`test_confidence_does_not_decay_across_rework_laps`). What was missing was the evidence.
+
+`scripts/confidence_evidence.py` runs the real compiled graph — real LLM extraction, real
+geocoding, real Chroma retrieval, real HUD FMR, real rent model, real ToT forecast — across
+all six demo deals and reports the flag/penalty breakdown and escalation reasoning per
+deal. Two findings correct the record rather than confirm it:
+
+- **The "two-warn floor" `TODO(U8)` claim (three deals, Aug 26) does not generalize to
+  six.** No warn-severity flag is common to every deal. `fmr_anchor_county_level` fires on
+  the three LA-county deals (`los-angeles`, `overpriced`, `coord-conflict`) because that
+  county has no HUD Small Area FMR, and not on `chicago`, whose county has one — a
+  per-county HUD-coverage fact, not something every deal pays. The Aug 26 note had also
+  claimed `chicago` raised that flag; two independent live runs (Aug 27) show it does not.
+  Both `critic.py`'s and `config.py`'s `TODO(U8)` comments corrected in place.
+- **No demo deal currently isolates the critical-flag-independent-of-score rule.** Every
+  deal carrying a critical flag already sits below threshold on the score alone
+  (`decision_log.md`'s "`coord-conflict` escalates at exactly 0.60" is itself now stale —
+  measured at 0.05, part of what U7.8 owes a re-measurement of). The rule is real and
+  proven by the hermetic test above, but not by any live demo run today — named as a
+  question for U8's eval-case design, not resolved here.
+
+Separately, and landed as its own change: `_consistency_objections()`'s docstring
+(`agents/critic.py`) still described checks 3 (scenario-base) and 4 (comp-concentration) as
+"live, TODO(U7)" after Q5 had already retired both in favor of the interaction checks and
+E — a leftover from before U7.2/U7.3 landed that never got corrected. Rewritten to match
+what actually shipped.
 
 ### U7.7 — ToT over the checks *(gated on Q2 — may not be built)*
 

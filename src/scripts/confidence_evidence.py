@@ -1,0 +1,234 @@
+"""Evidence for U7.6 — the confidence-weight mechanism, on the real pipeline.
+
+A script rather than a test, per §8's split. Two hermetic tests already prove the
+mechanism's arithmetic in isolation, with a fake flag schedule built to exercise the
+exact case each is named for:
+
+  * `tests/test_flag_propagation.py::test_a_single_critical_flag_escalates_regardless_of_score`
+    — a lone critical flag, nothing else, confidence lands exactly at the threshold and
+    escalates anyway.
+  * `tests/test_flag_propagation.py::test_confidence_does_not_decay_across_rework_laps`
+    — a duplicated flag from a rework lap is charged once, not twice.
+
+What neither test can show is **how today's actual system distributes across that
+mechanism** — real LLM extraction, real geocoding, real Chroma retrieval, real HUD FMR,
+real rent model, real ToT forecast, run on the six demo deals `main.py` ships. That is
+what this script measures, and it is not decoration: `critic.confidence_from_flags`
+carries a `TODO(U8)` claiming a "two-warn floor" — every deal checked so far (three, as
+of Aug 26, 2026) paid 0.30 of the 0.40 separating a clean run from
+`config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD` before anything deal-specific was observed.
+Whether that holds, and whether the critical-flag rule is currently exercised by any real
+deal independent of a low score, are both empirical questions this script answers rather
+than assumes. Per U7.6: mechanism is not touched here — only measured. The severity
+weights and threshold stay `config.PROVISIONAL`, tuned in U8 against the eval batch.
+
+**What this check could have returned, stated up front so the finding is falsifiable:**
+
+  * The floor could hold across all six deals, strengthening the case that two of the
+    three severity levels are already committed before a deal is read.
+  * It could fail to hold, in which case the three-deal measurement was reading a
+    property of *which* deals were sampled rather than a property of the mechanism.
+  * Every deal carrying a critical flag could also already sit below threshold on the
+    score alone, in which case the critical-independent-of-score rule — real, and the
+    fix for the U2 boundary defect `critic.py` documents — is not currently exercised by
+    any live demo run, only by the hermetic test built for it.
+
+Run: .venv/bin/python scripts/confidence_evidence.py
+     .venv/bin/python scripts/confidence_evidence.py --deal chicago
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+from uuid import uuid4
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import config
+from agents.critic import _DERIVED_KINDS, confidence_from_flags
+from demo_deals import DEMO_DEALS, DemoDeal
+from graph import build_graph
+from state import DealState, DealTerms, Severity
+from tools.llm_client import LlmError, verify_models_live
+
+
+def _check_models() -> None:
+    """Fail before the first (real, billed) call rather than partway into six deals."""
+    try:
+        verified = verify_models_live()
+    except LlmError as exc:
+        raise SystemExit(f"Model check failed: {exc}")
+    print(f"Model check OK — {', '.join(sorted(verified))}\n")
+
+
+def _run_deal(deal: DemoDeal) -> dict:
+    """One deal, end to end, through the real compiled graph.
+
+    `build_graph()` defaults to an in-memory checkpointer, so no state persists between
+    deals or between runs of this script — appropriate here, where every run is meant to
+    start clean, unlike `main.py`'s SQLite checkpointer, which exists so a paused thread
+    can be resumed.
+
+    A deal that escalates pauses at `human_review` and `invoke` returns the state
+    accumulated up to that point plus an `__interrupt__` key, not a finished report —
+    exactly what this script needs, since the Critic already ran. No resume is issued;
+    this script never needs a rendered report, only what the Critic wrote to state.
+    """
+    terms = DealTerms()
+    if deal.supplied_coords is not None:
+        terms.latitude, terms.longitude = deal.supplied_coords
+    state = DealState(raw_listing_text=deal.listing, deal_terms=terms)
+    graph = build_graph()
+    thread_id = f"confidence-evidence-{deal.key}-{uuid4().hex[:8]}"
+    return graph.invoke(state, {"configurable": {"thread_id": thread_id}})
+
+
+def _contributing_flags(flags: list) -> list[tuple]:
+    """The flags that actually fed the score: derived kinds excluded, duplicates folded.
+
+    Mirrors `confidence_from_flags`'s own filter exactly (imported, not re-typed) so this
+    table can never silently drift from what the function it is reporting on actually
+    does.
+    """
+    seen: set[tuple[str, str, str]] = set()
+    rows = []
+    for f in flags:
+        if f.kind in _DERIVED_KINDS:
+            continue
+        signature = (f.source_agent, f.kind, f.detail)
+        if signature in seen:
+            continue
+        seen.add(signature)
+        penalty = config.FLAG_SEVERITY_PENALTY.get(f.severity, 0.0)
+        rows.append((f.severity, f.source_agent, f.kind, penalty))
+    return rows
+
+
+def _print_deal(key: str, result: dict) -> None:
+    print("=" * 78)
+    print(key)
+    print("=" * 78)
+
+    flags = result["flags"]
+    contributing = _contributing_flags(flags)
+    confidence = result["confidence_score"]
+
+    # Independent recomputation, on the full post-Critic flag list. If this ever
+    # disagrees with what `critic_agent` actually returned, the derived-kind exclusion
+    # has stopped doing its job — a rework lap would compound rather than hold steady,
+    # which is exactly the U7.4 defect the exclusion exists to prevent.
+    recomputed = confidence_from_flags(SimpleNamespace(flags=flags))
+    if abs(recomputed - confidence) > 1e-9:
+        print(
+            f"  ** MISMATCH ** critic reported {confidence:.4f}, recomputed from the "
+            f"final flag list gives {recomputed:.4f} — the derived-kind exclusion did "
+            f"not hold on this deal."
+        )
+
+    if not contributing:
+        print("  no flags fed the score")
+    for severity, source_agent, kind, penalty in contributing:
+        print(f"  {severity:9s} {source_agent:18s} {kind:32s} -{penalty:.2f}")
+
+    penalty_total = sum(p for *_rest, p in contributing)
+    print(f"  confidence: 1.00 - {penalty_total:.2f} = {confidence:.2f}  "
+          f"(threshold {config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD:.2f})")
+
+    low_confidence = confidence < config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD
+    has_critical = any(f.severity == Severity.CRITICAL for f in flags)
+    if not result["needs_human_review"]:
+        print("  -> reports normally")
+    elif low_confidence and has_critical:
+        print(
+            "  -> escalates: BOTH grounds present (score below threshold, and a "
+            "critical flag) — this deal cannot isolate which rule is doing the work"
+        )
+    elif has_critical:
+        print(
+            "  -> escalates on the CRITICAL-FLAG rule alone — confidence clears the "
+            "threshold, demonstrating the rule is independent of the score"
+        )
+    else:
+        print("  -> escalates on the SCORE alone")
+
+    if result["critic_rejected"]:
+        print(
+            f"  critic_rejected=True — rework requested "
+            f"(rework_count={result['rework_count']})"
+        )
+    print()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--deal", choices=sorted(DEMO_DEALS), help="run one demo deal")
+    args = parser.parse_args()
+
+    _check_models()
+
+    keys = [args.deal] if args.deal else list(DEMO_DEALS)
+    results = {}
+    for key in keys:
+        results[key] = _run_deal(DEMO_DEALS[key])
+        _print_deal(key, results[key])
+
+    if len(results) < 2:
+        return
+
+    print("=" * 78)
+    print("Across all six demo deals")
+    print("=" * 78)
+
+    warn_kind_sets = []
+    isolates_critical_rule = 0
+    for key, result in results.items():
+        flags = result["flags"]
+        warn_kinds = {
+            f.kind for f in flags
+            if f.severity == Severity.WARN and f.kind not in _DERIVED_KINDS
+        }
+        warn_kind_sets.append(warn_kinds)
+        confidence = result["confidence_score"]
+        has_critical = any(f.severity == Severity.CRITICAL for f in flags)
+        if has_critical and confidence >= config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD:
+            isolates_critical_rule += 1
+
+    common_warns = set.intersection(*warn_kind_sets) if warn_kind_sets else set()
+    if common_warns:
+        print(
+            f"  Warn-severity flags common to every deal: "
+            f"{', '.join(sorted(common_warns))}"
+        )
+        print("  The TODO(U8) 'floor' claim holds on this six-deal set.")
+    else:
+        print(
+            "  No warn-severity flag is common to all six deals — the 'floor' claim "
+            "measured on three deals does not generalize to six. The FMR "
+            "county-anchor warn, for example, fires on the three Los Angeles-county "
+            "deals (los-angeles, overpriced, coord-conflict) because that county has "
+            "no HUD Small Area FMR, and not on chicago, which has one; it is a "
+            "per-county HUD-coverage fact, not a property every deal shares."
+        )
+
+    if isolates_critical_rule:
+        print(
+            f"  {isolates_critical_rule} of 6 deals escalate on the critical-flag rule "
+            f"alone (confidence at or above threshold with a critical flag present)."
+        )
+    else:
+        print(
+            "  0 of 6 deals isolate the critical-flag rule: every deal carrying a "
+            "critical flag already sits below threshold on the score alone. The rule "
+            "is real (`agents/critic.py`, decision #6) and proven by "
+            "`test_a_single_critical_flag_escalates_regardless_of_score`, but no "
+            "current demo deal exercises it independent of the score — worth naming "
+            "for U8's eval-case design if the rule needs a live case, not only a "
+            "hermetic one."
+        )
+
+
+if __name__ == "__main__":
+    main()

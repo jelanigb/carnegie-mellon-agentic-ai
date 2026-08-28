@@ -9,7 +9,7 @@ which names every decision and links to its full reasoning in
 project and when to read it.
 
 **Chronological record of code changes.**
-Author: Jelani Gould-Bailey · Last updated: Aug 26, 2026
+Author: Jelani Gould-Bailey · Last updated: Aug 27, 2026
 
 ## Why this file exists
 
@@ -53,6 +53,15 @@ rows. The unit of a row is the change, not the file.
   uses.
 
 ---
+
+## Aug 27, 2026 — U7.6: the confidence-weight mechanism, evidenced
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Aug 27, 2026 | U7.6 | **Evidence script for decision #6's mechanism.** `scripts/confidence_evidence.py` runs the real compiled graph (real LLM extraction, geocoding, Chroma retrieval, HUD FMR, rent model, ToT forecast — not hand-built agent calls, since the Critic's score depends on every upstream agent's real flags in the real Planner order) across all six demo deals, and reports the per-deal flag/penalty breakdown and which escalation rule fired. The weight-tunability half of decision #6 was already built in U2/U7.4 and already covered by `test_a_single_critical_flag_escalates_regardless_of_score` and `test_confidence_does_not_decay_across_rework_laps`; this closes the "evidenced" half, per Q3 mechanism-only scope | 6.1 |
+| Aug 27, 2026 | U7.6 (finding) | **The "two-warn floor" claimed from a three-deal sample does not hold across all six.** No warn-severity flag is common to every demo deal. `fmr_anchor_county_level` fires on the three Los Angeles-county deals because that county has no HUD Small Area FMR, and not on `chicago`, whose county has one — a per-county HUD-coverage fact, not a constant every deal pays. The prior note's claim that `chicago` raised that flag is also contradicted by two independent live runs. `critic.py`'s and `config.py`'s `TODO(U8)` comments corrected in place; `chicago`'s 0.55 now attributed to three deal-specific warns rather than an unconditional pair | 6.1 |
+| Aug 27, 2026 | U7.6 (finding) | **No demo deal currently isolates the critical-flag-independent-of-score escalation rule.** Every deal carrying a critical flag already sits below threshold on the score alone — `coord-conflict`, which `decision_log.md` records escalating at exactly 0.60 on the critical rule, now measures 0.05. The rule is real (decision #6, U2's boundary-case fix) and still proven by the hermetic test above; it is simply not exercised live by any current demo deal. Recorded rather than fixed — a question for U8's eval-case design, not this unit's to resolve | 6.1 |
+| Aug 27, 2026 | maintenance | **`_consistency_objections()`'s docstring corrected to what U7 actually shipped.** `agents/critic.py` — it still described checks 3 (scenario-base) and 4 (comp-concentration) as "live, TODO(U7)" after Q5 (Aug 24) had already retired both: 3 is unfalsifiable by construction, 4 is already built in the Summarizer. Rewritten to point to the interaction checks (I1–I3, U7.2) and comp attribute drift (E, U7.3, built in `agents/comps_retrieval.py`) that replaced them, and to drop the stale claim that the function returns an empty list — it has not since U7.4 wired it | — |
 
 ## Aug 26, 2026 — U7.3: comp drift, and what it cost the demo baseline
 

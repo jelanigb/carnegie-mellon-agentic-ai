@@ -110,10 +110,10 @@ HUMAN_REVIEW_CONFIDENCE_THRESHOLD = 0.60  # PROVISIONAL — tune in U8
 MAX_REWORKS = 2  # PROVISIONAL — tune in U8
 
 # Severity weights used when aggregating flags into a confidence score.
-# Before re-pricing these, read the TODO(U8) on `critic.confidence_from_flags`: every deal
-# measured so far carried exactly two warn flags before anything deal-specific was
-# observed, and if that floor is real the problem is which severity those flags carry, not
-# what a warn costs.
+# Before re-pricing these, read the TODO(U8) on `critic.confidence_from_flags`:
+# `scripts/confidence_evidence.py` (U7.6) measured no warn flag common to all six demo
+# deals, so a "floor" every deal pays is not what's happening — the shared warns a
+# smaller sample suggested track which county a deal is sited in, not the mechanism.
 FLAG_SEVERITY_PENALTY = {
     "info": 0.0,
     "warn": 0.15,
