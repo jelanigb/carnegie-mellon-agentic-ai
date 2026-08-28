@@ -1,8 +1,11 @@
 """Beam search over an enumerated hypothesis space (§7 decisions #12, #14).
 
 The search half of this project's Tree-of-Thought work, kept separate from the domain
-logic that uses it. Two consumers by design: the Scenario/Forecast agent (U6) and the
-Critic's cross-agent consistency checks (U7, decision #12).
+logic that uses it. One consumer: the Scenario/Forecast agent (U6). Decision #12
+reserved a second — the Critic's cross-agent consistency checks — but that half was
+retired on evidence in U7.7: the checks that shipped (`agents/critic.py`,
+`agents/comps_retrieval.py`) are pure functions over accumulated flags, with no
+generated candidates and nothing to search over. See `history/decision_log.md` #12.
 
 **Candidates are enumerated, not sampled, and that is a measured choice rather than a
 simplification.** The Tree-of-Thought paper offers two ways to produce thoughts - sample
@@ -19,9 +22,9 @@ Three consequences follow, all of them improvements:
     enumerated options, not to produce numbers.
   * **The branching factor is data-determined** rather than tuned. It is a property of
     how many treatments the evidence supports, not a knob.
-  * **The pipeline stays deterministic end to end.** `config.TOT_TEMPERATURE` exists for
-    a sampling step this design does not have; the evaluator scores at
-    `config.LLM_TEMPERATURE` (0.0) like every other node.
+  * **The pipeline stays deterministic end to end.** There is no sampling step for a
+    temperature to govern; the evaluator scores at `config.LLM_TEMPERATURE` (0.0) like
+    every other node.
 
 **Pruning is recorded, never silent.** Every candidate leaves a ledger row whether it
 survived or not, because the failure this design most needs to defend against is an

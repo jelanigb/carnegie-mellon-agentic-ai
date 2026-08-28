@@ -40,11 +40,12 @@ Run it directly for stdio transport:
 
     .venv/bin/python mcp_server.py
 
-TODO(U6): add a `query_comps` tool once the ToT evaluator's comp-distribution check is
-specified. Deferred rather than built now because it would load Chroma and the embedding
-model at server start — seconds of latency and ~100MB of memory for a tool no current
-consumer calls. It becomes worth paying for when `_consistency_objections`'s rent-vs-comp
-check (TODO(U7)) needs it.
+**No `query_comps` tool.** A U6 TODO deferred one pending a Critic rent-vs-comp check
+that might need it. That check was never built in the Critic — Q1 (U7) resolved that the
+Critic consumes `RENT_DIVERGES_FROM_COMPS` from `agents/valuation_rent.py` rather than
+re-deriving it, and U7.7 retired decision #12's Critic ToT half entirely on evidence: the
+checks that shipped are pure functions over `state.flags`, with no LLM evaluator to call
+a tool in the first place. `docs/history/decision_log.md` #12.
 """
 
 from __future__ import annotations

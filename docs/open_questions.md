@@ -10,7 +10,7 @@ at the start of every session, so it is kept short on purpose — an entry that 
 close it and what closing it looks like. `OQ-n` numbers are stable handles for
 conversation; they are not decision numbers.
 
-Last reviewed: Aug 24, 2026 — before U7.
+Last reviewed: Aug 27, 2026 — after U7.7.
 
 ---
 
@@ -31,12 +31,6 @@ evaluates only the current pass — noting that an agent skipped on a rework rai
 so absence must not be read as *cleared* when it means *not re-examined*; `state.plan`
 records which agents ran. **Accepted knowingly for U7** — bounded by `MAX_REWORKS`, and
 every affected path escalates to a human. `agents/critic.py`, `agents/planner.py`.
-
-### OQ-2 · decision #12 · U7 — which consistency checks, and the search over them
-Four checks are named in `agents/critic.py:82` but unbuilt. #12 adopted ToT here on the
-grounds that the checks differ in cost and are not independent. **Closes when** U7 defines
-the check set and its search space. **Blocking for U7** — it decides whether the Critic
-makes an LLM call at all, which OQ-5 and OQ-7 both depend on.
 
 ---
 
@@ -62,7 +56,7 @@ split. `config.py:272`, `agents/valuation_rent.py:78`.
 by reading output, not by tuning. **Closes when** U8's synthetic cases supply a
 known-correct branch to tune against. Note the framing-level values are already special
 cases found by inspection (`TOT_FRAMING_BEAM_WIDTH = 1`, `TOT_FRAMING_PRUNE_THRESHOLD = 0.0`)
-— treat those as findings, not defaults. `config.py:675`.
+— treat those as findings, not defaults. `config.py:663`.
 
 ### OQ-6 · deferred, no unit — Zillow ZORI as the independent rent check
 #16 adopted ZORI as the validation series and it has not been built. It is the only
@@ -96,21 +90,19 @@ county-subdivision layer is built. `tools/county_crosswalk.py:44`, `config.py:18
 
 ## Models & infrastructure
 
-### OQ-9 · decision #8 · U7/U9 — Critic and Summarizer model roles
-Both currently hold the extraction model's value, and neither makes an LLM call yet, so the
-setting is untested rather than chosen. **Closes when** each role first calls a model —
-U7 for the Critic (see OQ-2), U9 for the Summarizer.
+### OQ-9 · decision #8 · U9 — Summarizer model role
+Holds the extraction model's value and makes no LLM call yet, so the setting is untested
+rather than chosen. **Closes when** the Summarizer first calls a model, U9. **The Critic
+half is resolved, not open:** decision #12's Critic ToT half was retired on evidence in
+U7.7 — the checks that shipped are pure functions over `state.flags`, so the Critic makes
+no LLM call in this design and `config.MODEL_CRITIC` stays untested by construction, not
+by omission.
 
 ### OQ-10 · `TODO(security)` · no unit — the on-disk token fallback
 Keys fall back to plaintext files in `ignore/` when the env var is unset. **The question is
 whether to drop the fallback and require the env var.** Affects `tools/hud_fmr.py:24`,
 `tools/llm_client.py:41`, and `tools/diagnostics.py:36` (which deliberately prints the
 account identifier). Raise before any public demo.
-
-### OQ-11 · U6 leftover → U7 — `query_comps` as an MCP tool
-`mcp_server.py:43` notes the tool was not added because the ToT evaluator's
-comp-distribution check did not need it. **The Critic's check (OQ-2) may.** Decide when
-OQ-2 does.
 
 ---
 

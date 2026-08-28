@@ -670,9 +670,22 @@ between. Two nodes fail that test in the other direction:
   `TODO(U7)` differ in cost and are not independent, so running all of them on every deal
   spends the expensive ones on deals that do not need them.
 
+  > **Retired at build time (Aug 27, 2026, U7.7).** The premise held while the checks were
+  > still the four named in U2's `TODO(U7)`. Q5 (`docs/tasks/task_list_u7.md`) found six
+  > of eight candidate checks dead, already built elsewhere, or structurally impossible
+  > to fail, and replaced them with interaction checks over the accumulated flag list
+  > (U7.2) and a comp-attribute-drift check owned by `agents/comps_retrieval.py` (U7.3).
+  > What shipped are pure functions of `state.flags` — no LLM call, no generated
+  > candidates, and therefore nothing for a beam search to select between. The premise
+  > this bullet argued from (differing cost, non-independence) no longer describes what
+  > the Critic checks, so decision #12's Critic half is retired on evidence rather than
+  > built: `agents/critic.py` never imports `tools/tot.py`. `TOT_TEMPERATURE`, the one
+  > constant retained solely for this consumer, is removed; the rest of the ToT block in
+  > `config.py` now documents Scenario/Forecast as its sole consumer.
+
 Structure and parameters are specified in the Checkpoint 4.1 response. New `config.py`
 constants (`TOT_BRANCHING_FACTOR`, `TOT_MAX_DEPTH`, `TOT_BEAM_WIDTH`,
-`TOT_PRUNE_THRESHOLD`, `TOT_TEMPERATURE`) are **provisional and tuned in U8**, where
+`TOT_PRUNE_THRESHOLD`) are **provisional and tuned in U8**, where
 synthetic cases have a known-correct branch. Search strategy is **beam search**: BFS at
 *b*=5 over depth 3 is 125 leaf evaluations for a three-output forecast, and DFS commits
 to a framing before comparing it — reintroducing the premature commitment ToT exists to

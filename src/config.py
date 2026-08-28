@@ -582,7 +582,7 @@ MODEL_SCENARIO = "nvidia/nemotron-3-nano-30b-a3b"
 
 LLM_TIMEOUT_SECONDS = 90
 LLM_MAX_RETRIES = 3
-LLM_TEMPERATURE = 0.0  # deterministic everywhere; see TOT_TEMPERATURE
+LLM_TEMPERATURE = 0.0  # deterministic everywhere
 
 
 # --------------------------------------------------------------------------
@@ -643,11 +643,16 @@ LANGSMITH_ENABLED = os.environ.get("LANGSMITH_TRACING", "").lower() == "true"
 
 
 # --------------------------------------------------------------------------
-# Tree-of-Thought reasoning (§7 decisions #12, #14 — U6/U7)
+# Tree-of-Thought reasoning (§7 decisions #12, #14 — U6)
 # --------------------------------------------------------------------------
-# Applied inside two nodes only: Scenario/Forecast (U6) and the Critic's cross-agent
-# consistency checks (U7). The rest of the pipeline is ordered by data dependency, so
-# there is nothing there to search over.
+# Applied inside one node: Scenario/Forecast (U6). The rest of the pipeline is ordered
+# by data dependency, so there is nothing there to search over.
+#
+# Decision #12 originally reserved a second consumer, the Critic's cross-agent
+# consistency checks (U7). **Retired on evidence, U7.7:** the checks that shipped in
+# U7.2/U7.3 (`agents/critic.py:_interaction_objections`, the comp-drift check in
+# `agents/comps_retrieval.py`) are pure functions over `state.flags` — no LLM call, no
+# generated candidates, nothing to search over. See `history/decision_log.md` #12.
 #
 # Every value below is PROVISIONAL and tuned in U8, where the eval harness supplies
 # synthetic cases whose correct branch is known by construction. They are named here
@@ -705,19 +710,6 @@ TOT_PRUNE_THRESHOLD = 0.40
 # conservative growth assumption rather than by arbitrary ordering. For an investment
 # tool the cost of being wrong is not symmetric.
 TOT_TIE_EPSILON = 0.05
-
-# **Currently unused, and kept deliberately rather than by oversight.** This was the
-# sampling temperature for hypothesis generation, and the documented exception to
-# LLM_TEMPERATURE = 0.0 above. U6 enumerates its hypothesis space instead of sampling it
-# (decision #17), so nothing reads this and the whole pipeline runs deterministic —
-# the exception the comment on LLM_TEMPERATURE describes no longer exists in the
-# Scenario node.
-#
-# Retained because the Critic's search (U7, decision #12) is unbuilt and its space is
-# not yet known to be enumerable: candidate objections are generated rather than drawn
-# from a fixed lattice, which is the case sampling exists for. If U7 also enumerates,
-# delete this and the LLM_TEMPERATURE comment together.
-TOT_TEMPERATURE = 0.7  # unused by the built system; see above
 
 # Write the complete reasoning tree to EVAL_RESULTS_DIR. Off in production runs, where
 # the ledger on state is enough to disclose; on for eval runs, which need to reconstruct

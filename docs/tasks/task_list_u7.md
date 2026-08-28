@@ -650,11 +650,22 @@ Separately, and landed as its own change: `_consistency_objections()`'s docstrin
 E — a leftover from before U7.2/U7.3 landed that never got corrected. Rewritten to match
 what actually shipped.
 
-### U7.7 — ToT over the checks *(gated on Q2 — may not be built)*
+### U7.7 ✅ — ToT over the checks *(gated on Q2 — may not be built)*
 
-Only if measurement shows the search changes an outcome. If it does not, this becomes a
-documentation change: retire #12's Critic half on evidence and remove the `TOT_*` constants
-`config.py:675` retains solely for it.
+**Retired on evidence, Aug 27, 2026 — the documentation-change branch.** Q2 asked
+whether the search would change an outcome; what U7.2/U7.3 actually shipped answers a
+stronger question first. `_interaction_objections()` (`agents/critic.py`) and the
+comp-drift check (`agents/comps_retrieval.py`) are pure functions over `state.flags` —
+no LLM call, no generated candidates. There is no search space for a beam search to
+operate on, so "does the search change an outcome" does not apply; there is no search to
+run in the first place. `agents/critic.py` never imports `tools/tot.py`, confirmed by
+grep.
+
+Decision #12's Critic half moved from ⬜ unbuilt to retired-on-evidence in §7's register;
+full reasoning in `history/decision_log.md` #12. `config.TOT_TEMPERATURE` — the one
+constant retained solely for this consumer — is removed, along with the stale "two
+consumers" framing in `config.py`'s ToT block comment and `tools/tot.py`'s module
+docstring. Closes `open_questions.md` OQ-2.
 
 ### U7.8 — Close-out
 
