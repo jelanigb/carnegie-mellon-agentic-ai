@@ -667,10 +667,41 @@ constant retained solely for this consumer — is removed, along with the stale 
 consumers" framing in `config.py`'s ToT block comment and `tools/tot.py`'s module
 docstring. Closes `open_questions.md` OQ-2.
 
-### U7.8 — Close-out
+### U7.8 ✅ — Close-out
 
 Extend `tests/test_flag_propagation.py` for `CRITIC_INCONSISTENCY`, `REWORK_LIMIT_REACHED`,
 and every new `FlagKind` U7.2 and U7.3 add; re-measure the §6 demo table; append to
 [`history/changelog.md`](../history/changelog.md); move decisions into §7's register with
 reasoning in [`history/decision_log.md`](../history/decision_log.md); delete closed entries
 from [`open_questions.md`](../open_questions.md).
+
+**Built Aug 27, 2026.** Three notes on what changed against the plan.
+
+**`REWORK_LIMIT_REACHED` was already covered, weakly.** The bounded-cycle case asserted
+`"rework_limit_reached" in report_markdown` — a substring match on the *kind*, which the
+Summarizer prints from the enum. The detail is the only place the reader learns how many
+passes were spent, so the assertion moved to `assert_reaches_report`. Three tests added,
+each falsified in the direction it guards: the comp-drift case fails when
+`COMP_MAX_OUTSIDE_MATCH_SHARE` is loosened, the interaction case fails when `has_critical`
+is reverted to reading `state.flags` alone, and the negative case fails when the
+divergence precondition is removed from `_interaction_objections`. Tests at 60.
+
+**The demo table is now re-derived rather than transcribed.**
+`scripts/confidence_evidence.py` prints it from the same live run that produces the
+confidence evidence, plus the `--no-retrieval` ablation as a seventh invocation. The U3
+table went stale across two units because refreshing it meant seven runs and a hand-typed
+table.
+
+**The re-measurement corrected U7.6's own finding, one day old.** U7.6 concluded from the
+six deals that no live run isolates the critical-flag-independent-of-score rule. The
+ablation invocation does — 0.60 with a single critical flag, the exact boundary the U2
+defect sat on. It is a live case for the rule but not a *deal*, so U8 still owes an eval
+case that reaches the boundary through a property of the listing. `critic.py`'s `TODO(U8)`
+corrected in place.
+
+**Nothing was deleted from `open_questions.md`, and that is the honest outcome.** OQ-1
+(#6's numbers) and OQ-3 (New York rent error) were labelled U7 or U7/U8 and are retargeted
+to U8 with U7's half stated as closed; OQ-14's 6.1 half is discharged and its 5.1 half
+stands. A question retargeted with its reason recorded is not the same as one closed, and
+collapsing the two would be exactly the kind of quiet degradation this system is built to
+refuse.

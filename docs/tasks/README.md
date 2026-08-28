@@ -7,7 +7,7 @@ need.
 
 | File | Unit | Status |
 | --- | --- | --- |
-| [`task_list_u7.md`](task_list_u7.md) | U7 — Critic / Reviewer | **in progress** |
+| [`task_list_u7.md`](task_list_u7.md) | U7 — Critic / Reviewer | ✅ complete (Aug 27, 2026) |
 | [`maintenance.md`](maintenance.md) | Not tied to a unit | standing |
 
 Units U1–U6 predate this workflow and have no task file; what they built is in

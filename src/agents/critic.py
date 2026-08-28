@@ -1,28 +1,32 @@
-"""Critic/Reviewer agent — **PARTIAL in U2**. Cross-agent checks are U7.
+"""Critic/Reviewer agent — **complete as of U7**.
 
-Split deliberately, because the two halves of this agent have different dependencies:
+Built in two passes, because its two halves had different dependencies:
 
-- **Built now: flag aggregation into a confidence score, and the human-review
-  escalation decision.** These depend only on `state.flags` and on weights that already
-  live in `config.FLAG_SEVERITY_PENALTY`. Building them in U2 is what makes the
-  `human_review` interrupt reachable at runtime rather than only in a test, and the
-  escalation path is the whole point of wiring that node into the skeleton.
-- **Stubbed for U7: cross-agent consistency checking**, the part that sets
-  `critic_rejected` and drives the rework cycle. In U2 it could not be written in any
-  honest form, because the checks worth making needed Valuation and Scenario output and
-  neither agent produced any. A consistency check with only one populated input is a
-  check that always passes, which §2's own argument rules out — a signal that cannot
-  fire conveys nothing.
+- **U2: flag aggregation into a confidence score, and the human-review escalation
+  decision.** These depend only on `state.flags` and on weights that live in
+  `config.FLAG_SEVERITY_PENALTY`. Building them first is what made the `human_review`
+  interrupt reachable at runtime rather than only in a test.
+- **U7: cross-agent consistency checking**, the part that sets `critic_rejected` and
+  drives the rework cycle. In U2 it could not be written in any honest form, because the
+  checks worth making needed Valuation and Scenario output and neither agent produced
+  any. A consistency check with only one populated input is a check that always passes,
+  which §2's own argument rules out — a signal that cannot fire conveys nothing. U5
+  populates `rent_estimate` and `ValuationDetail`; U6 populates `scenarios` and
+  `ForecastDetail`.
 
-  **That precondition is now met.** U5 populates `rent_estimate` and `ValuationDetail`;
-  U6 populates `scenarios` and `ForecastDetail`. See `_consistency_objections()` below
-  for what U7 actually checks, which is not the list U2 anticipated.
+**What U7 checks is not the list U2 anticipated**, and the reason is worth carrying at
+the top of this file: of the four checks named in U2's `TODO(U7)`, one was already built
+in the agent that owns its inputs, one was made dead by decision #15, and two could not
+fail by construction. See `_consistency_objections()` for the full accounting. What
+replaced them is the one judgment no other agent can make — **whether a *combination* of
+disclosures changes what the result means** — because this is the only node that sees
+every agent's flags at once. `confidence_from_flags` is a sum, and a sum can only say
+*more doubt*.
 
-`_consistency_objections()` is left as a real function returning an empty list rather
-than being omitted, so the rework branch below is present, reachable, and testable by
-substituting that one function. The cycle is proven bounded in
-`tests/test_flag_propagation.py` that way, which is the U2 obligation; U7 supplies the
-objections that make it fire on its own.
+`_consistency_objections()` stays the single seam this agent calls and the tests
+substitute, as it was when it returned an empty list in U2. That is what kept the rework
+branch present, reachable, and provably bounded in `tests/test_flag_propagation.py`
+before there was anything to object to.
 
 Reason/Act/Observe/Decide:
 
@@ -115,11 +119,16 @@ def confidence_from_flags(state: DealState) -> float:
     # warn is a fact about the demo set (§2's Los Angeles / Chicago / Cleveland trio,
     # reused across deals), not evidence about real-world deal distribution. The eval
     # batch, sampled across counties rather than reusing one three times, is what would
-    # show whether that skew is a demo-set artifact or a real one worth re-pricing. Also
-    # open: no demo deal currently isolates the critical-flag escalation rule from the
-    # score — every deal carrying a critical flag already sits below threshold anyway —
-    # so that rule is proven only by
-    # `test_a_single_critical_flag_escalates_regardless_of_score`, not by any live run.
+    # show whether that skew is a demo-set artifact or a real one worth re-pricing.
+    #
+    # Also open, and narrowed by the U7.8 re-measurement: no demo *deal* isolates the
+    # critical-flag escalation rule from the score — every deal carrying a critical flag
+    # already sits below threshold anyway. One live invocation does, though:
+    # `main.py --deal chicago --no-retrieval` lands at exactly 0.60 with a single
+    # critical `retrieval_disabled` flag, so the score does not escalate it and this rule
+    # does. That is the boundary the U2 defect sat on. It is a live case for the rule but
+    # not a *deal* — only the ablation flag raises that kind — so U8 still owes an eval
+    # case that reaches the boundary through a property of the listing itself.
     seen: set[tuple[str, FlagKind, str]] = set()
     penalty = 0.0
     for f in state.flags:
@@ -134,7 +143,7 @@ def confidence_from_flags(state: DealState) -> float:
 
 
 def _consistency_objections(state: DealState) -> list[Objection]:
-    """Cross-agent contradictions found in this run. **U7 populates this.**
+    """Cross-agent contradictions found in this run. **Populated in U7.**
 
     The four checks §1 originally named were reviewed against the built system while
     planning U7, and **the list did not survive contact with it** (Q5,
@@ -231,9 +240,10 @@ def _kinds(state: DealState) -> frozenset[FlagKind]:
 def _interaction_objections(state: DealState) -> list[Objection]:
     """Contradictions that exist only in the *combination* of upstream disclosures.
 
-    **Not yet wired — `_consistency_objections()` is the seam, and U7.4 joins them.**
-    Landed separately so this can be reviewed as arithmetic over flag sets, before the
-    routing consequences of raising a CRITICAL from inside the Critic are taken on.
+    Reached through `_consistency_objections()`, which is the seam the graph calls and
+    the tests substitute. These landed one change set ahead of that wiring on purpose, so
+    they could be reviewed as arithmetic over flag sets before the routing consequences
+    of raising a CRITICAL from inside the Critic were taken on.
 
     Ordered strongest first. Each returns at most one objection, and they are allowed to
     co-occur: a deal that trips two of these has two independent reasons its rent

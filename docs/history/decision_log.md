@@ -27,7 +27,7 @@ and its date, so a chronological or by-unit lookup still works via search.
 - [Retrieval](#retrieval) — #5, and U4's design and ablation record
 - [Rent & valuation](#rent--valuation) — #15, and the deferred model-form probe
 - [Forecasting & reasoning](#forecasting--reasoning) — #12, #13, #14, #16, #17
-- [Orchestration & control flow](#orchestration--control-flow) — #1, #6, #9, and U2's findings
+- [Orchestration & control flow](#orchestration--control-flow) — #1, #6, #9, U2's findings, and U7's Critic record
 - [Models & infrastructure](#models--infrastructure) — #8, #13, and the free-tier accounting
 - [Evaluation & demo](#evaluation--demo) — #3, and U8's standing
 - [Appendix — build inventory](#appendix--build-inventory-as-of-u6)
@@ -846,27 +846,18 @@ Tottenville, in a denser part of the island, so a centroid fallback would have q
 turned the thin-market case into a different market. The real address keeps the case
 measuring what §2 says it measures.
 
-**⚠️ This table is stale as of Aug 26, 2026, and the Los Angeles row no longer holds.**
-Spot-measured while running U7.3: Los Angeles now reports at **0.70 with 4 disclosures**,
-not 1.00 with 0. Two warn flags that did not exist when this was measured —
-`fmr_anchor_county_level` (U5) and `forecast_branches_near_tied` (U6) — now fire on it,
-alongside two info flags that cost nothing. Chicago has moved further, from 0.85 to
-**0.55**, and escalates to human review rather than reporting. Nothing regressed: each of
-those flags is disclosing something true that the system could not observe in U3.
-
-What did break is the *argument*. "A clean run raising no flags is what establishes that
-the other four rows mean something" was load-bearing, and there is no longer a run that
-raises no flags. U7.8 owes a full re-measurement of both this table and §6's; until then,
-read the rows above as U3-era history rather than as current behaviour. The open question
-underneath — whether those two warns fire on genuinely every deal, in which case they are a
-constant offset rather than a signal — is carried as `TODO(U8)` on
-`critic.confidence_from_flags` and is the reason the demo baseline is being re-established
-rather than restored.
-
 **`coord-conflict` escalates at confidence 0.60 — exactly the boundary** where U2's
 escalation defect lived. It escalates on the critical-flag rule rather than on the score,
 which is the independent guarantee finding 1 established, now exercised by a case that
-arrives at that number honestly instead of by construction.
+arrives at that number honestly instead of by construction. *(U3-era. It measures 0.05
+today — see the U7.8 re-measurement below, where the boundary case has moved to the
+ablation row.)*
+
+**⚠️ Everything above this line is U3-era history. Superseded by the U7.8
+re-measurement at the end of this section**, which is the current behaviour of the
+system. The two tables are kept rather than overwritten because the *movement* between
+them is the finding: every number that changed did so because the system learned to
+disclose something it could not observe in U3.
 
 **Three findings, each of which changed the build.**
 
@@ -955,6 +946,155 @@ class as accepted rather than left as an open item — the loss is one cache mis
 env-driven (`tools/tracing.py`), and every run prints whether tracing is on, so a run
 believed to be captured and silently not captured is not a failure mode here. Traces
 themselves need the account.
+
+
+### U7 · Aug 24–27, 2026 — what the Critic actually checks
+
+**The four checks §1 named for the Critic did not survive contact with the built
+system**, and that is the unit's central finding rather than an inconvenience discovered
+along the way. Reviewed one at a time against the code, before writing any:
+
+| Check named in U2's `TODO(U7)` | Verdict |
+| --- | --- |
+| Rent estimate vs. the comp set's distribution | **Already built, and not in the Critic.** `agents/valuation_rent.py` raises `RENT_DIVERGES_FROM_COMPS` as its own Observe step. The Critic consumes that flag |
+| Value estimate vs. listing price | **Dead.** Decision #15 made `value_estimate` permanently `None`; the TODO predates it |
+| Scenario bands vs. the base they branch from | **Retired on evidence.** `agents/scenario_forecast.py` assigns the projection base directly from `deal_terms.price` / `rent_estimate` — the check would compare a field to the variable it was assigned from, and cannot fail by construction |
+| Comp-source concentration | **Retired on evidence.** Already rendered as a Summarizer disclosure; promoted to an objection it fires on both dense demo deals, including the clean `los-angeles` baseline — it would object to the system's healthy case |
+
+**The placement rule that came out of it, stated so it does not have to be
+re-derived: a check belongs to the agent that already holds both of its inputs.** Two
+agents deriving one fact independently is two agents that can disagree about it in one
+report. That rule is what moved comp-attribute drift out of the Critic and into
+`agents/comps_retrieval.py`, which already holds the subject terms and the comps it
+returned, and what keeps rent-vs-comps in Valuation.
+
+**What is left for the Critic is the one thing no other agent can do: read the
+*combination*.** Every other agent flags its own step; the Critic is the only node that
+sees all of those flags at once, and a combination can say something a sum cannot.
+`confidence_from_flags` is a sum, and a sum only ever says *more doubt* — an interaction
+says **this measurement does not mean what it appears to mean.** Three shipped (U7.2), all
+keyed on `RENT_DIVERGES_FROM_COMPS`, because the comp cross-check is the only independent
+check on the rent estimate this system has and each interaction is about when its verdict
+stops being readable: comps that drifted onto a different unit type (CRITICAL), comps
+clustered at a single coordinate (CRITICAL), and comps retrieved around a city centroid
+while the location-blind rent model did not move (WARN).
+
+**Where the window for those checks is, arithmetically.** With the provisional weights
+(info 0.00, warn 0.15, critical 0.40) against a 0.60 threshold: one warn reports at 0.85,
+two report at 0.70, three escalate at 0.55 on their own, and any critical escalates on
+its independent ground. **So an interaction check only ever changes an outcome in the
+two-warn window** — which is precisely where a deal looks ordinary and is not.
+
+**`critic_rejected` changed meaning, and that is the substance of U7.4.** It was
+`bool(objections)` — *something is wrong*. It is now `any(o.retryable ...)` — *another
+pass could fix this*. A rework re-runs the entire pipeline, so it is worth spending only
+where a second pass can change the input: a thin market stays thin, an address with no
+street number stays unresolvable, and a comp set relaxed onto a different unit type will
+relax the same way again. Only an unreachable geocoder may answer next time.
+Non-retryable objections still escalate, through their severity.
+
+**Three defects surfaced only because the back edge started carrying traffic**, and each
+had been latent since U2:
+
+1. **Nothing the Critic raised could trigger the Critic's own escalation.** `has_critical`
+   read `state.flags` and not the flags being returned, so a CRITICAL objection set no
+   route and would have reported as a normal result.
+2. **Confidence decayed across rework laps.** `state.flags` is append-only by design and a
+   rework re-runs every upstream agent, so a deal scored 0.70, then 0.40, then 0.10
+   without anything about it changing — escalating on collapsed confidence before
+   `MAX_REWORKS` was reached, which made `REWORK_LIMIT_REACHED` unreachable through the
+   graph. **The cycle was bounded by an arithmetic accident rather than by the explicit
+   counter §3 requires, and the two agreeing on the outcome is what kept it hidden.**
+   Fixed by de-duplicating on `(source_agent, kind, detail)` — not on kind alone, because
+   one retrieval pass can raise `RELAXED_MATCH_CRITERIA` twice for two real concessions.
+3. **The rework path re-ran everything except the step that could fix the problem.**
+   `REQUIRED_DEAL_FIELDS` carries no coordinate, so a deal complete on pass one skipped
+   the Extractor on every later lap — and the single objection marked `retryable`, whose
+   justification was *re-running the Extractor re-attempts the Census call*, re-attempted
+   nothing. That is exactly the failure the retryable distinction exists to prevent.
+
+The three share a shape worth naming: **a guardrail that has never fired has not been
+tested, however carefully it was written.** All three were correct-looking code, and all
+three were found by making the cycle actually run.
+
+**Decision #6 splits: the mechanism landed in U7, the numbers did not.** The weights and
+threshold live in `config`, the critical-flag rule is independent of both, rework laps no
+longer decay the score, and `scripts/confidence_evidence.py` measures the whole thing on
+the real pipeline. What U7 deliberately did **not** do is tune the numbers: the demo deals
+were calibrated to run clean and cannot exercise the range, so tuning against them would
+be fitting the threshold to the fixtures — the same error rejected three times elsewhere
+in this build. That work moves to U8's eval batch, and #6 stays part-open until it lands.
+
+**Decision #12's Critic half is retired on evidence** (U7.7) — the checks that shipped are
+pure functions over `state.flags`, so there is no search space for a beam search to
+operate on. Reasoning under [#12](#12-13-14--u6u7--aug-18-2026--tot-scope-mcp-adoption-and-branch-state-persistence)
+above. **Decision #8's Critic half is closed by the same fact**: the Critic makes no LLM
+call in this design, so `config.MODEL_CRITIC` is untested by construction rather than by
+omission, and only the Summarizer's model role stays open for U9.
+
+
+### Re-measured Aug 27, 2026 (U7.8) — the demo baseline, re-established
+
+**Re-derived rather than transcribed.** `scripts/confidence_evidence.py` now prints these
+rows from the same live run that produces the confidence evidence — real LLM extraction,
+geocoding, Chroma retrieval, HUD FMR, rent model and ToT forecast — and runs the U4
+ablation as a seventh invocation. The U3 table went stale across two units' worth of new
+flags (U5's FMR anchoring, U6's forecast) because refreshing it meant seven runs and a
+hand-typed table; it is now one command.
+
+**Disclosures counts every flag on the final state, including the ones the Critic itself
+raises.** The U2 and U3 versions of this table never said which they counted, which is
+part of why these rows cannot be read as a row-for-row diff against them.
+
+| `main.py --deal` | Comps | Confidence | Disclosures | Outcome |
+| --- | --- | --- | --- | --- |
+| `los-angeles` | 8 | 0.70 | 4 (2 info, 2 warn) | reports normally |
+| `chicago` | 8 | 0.55 | 9 (5 info, 4 warn) | pauses at `human_review` |
+| `staten-island` | 0 | 0.00 | 8 (2 info, 4 warn, 2 critical) | pauses at `human_review` |
+| `no-geography` | 0 | 0.00 | 5 (1 warn, 4 critical) | pauses at `human_review` |
+| `overpriced` | 8 | 0.70 | 4 (2 info, 2 warn) | reports normally |
+| `coord-conflict` | 8 | 0.05 | 5 (1 info, 2 warn, 2 critical) | pauses at `human_review` |
+| `chicago --no-retrieval` | 0 | 0.60 | 6 (4 info, 1 warn, 1 critical) | pauses at `human_review` |
+
+**The baseline argument is re-based, not restored.** There is no longer a run that raises
+zero flags, and there will not be one again: `los-angeles` pays
+`fmr_anchor_county_level` because Los Angeles County publishes no Small Area FMR, and
+that is a fact about HUD rather than about the deal. What the demo set still has — and
+what the original argument actually needed — is **a case that reports normally, a case
+that stops, and the difference between them being legible**. `los-angeles` and
+`overpriced` report at 0.70 with no critical flag and a full comp set; `chicago` stops at
+0.55; the three degraded cases stop at 0.05 and below with critical flags naming what
+failed. The clean row is now *the clean reporting path* rather than *the flagless run*.
+
+**`chicago` escalating was accepted deliberately, not tuned away** (Aug 26, 2026, by the
+architect). It escalates on the score alone, on three deal-specific warns — a widened
+search radius, comps that came back outside the size band, and a near-tied forecast — and
+the comps genuinely did drift. Raising `COMP_MAX_OUTSIDE_MATCH_SHARE` until Chicago
+passed was rejected on the grounds that tuning a production threshold to preserve a demo
+outcome inverts what the threshold is for.
+
+**The critical-flag rule is exercised live after all — by the ablation, not by a deal.**
+U7.6 concluded from the six deals that no live run isolates it. Adding the seventh
+invocation shows `chicago --no-retrieval` sitting at exactly **0.60 with one critical
+flag**: `retrieval_disabled` costs 0.40, `0.60 < 0.60` is false, so the score does not
+escalate it and the critical-flag rule does. That is the same arithmetic boundary the U2
+defect sat on, now landing on the correct side of it. It is a live case for the rule
+rather than a hermetic one — but it is not a *deal*: only the `--no-retrieval` flag can
+raise that flag, so U8 still owes an eval case that reaches the boundary through a
+property of the listing. The script checks this rather than asserting it, so the sentence
+cannot outlive the fact.
+
+**Two rows raise one kind twice, and both are correct.** `staten-island` carries
+`relaxed_search_radius` twice (two separate widenings) and `forecast_unavailable` twice —
+a WARN for the price side having no Redfin series, then a CRITICAL for the search ending
+with no surviving hypothesis. The U7.4 de-duplication is on `(source_agent, kind, detail)`
+precisely so distinct observations that share a kind are each charged. Worth naming for
+U8 anyway: a reader seeing one kind listed twice has to read both details to learn they
+are different events, and 0.55 of that deal's penalty comes from a pair that looks like
+one condition reported twice.
+
+**What has not moved:** Staten Island still finds zero comps, and `no-geography` still
+resolves through neither geocoding tier. Both are the cases §2 selected them to be.
 
 
 ### Prerequisite reading — U2-era process note

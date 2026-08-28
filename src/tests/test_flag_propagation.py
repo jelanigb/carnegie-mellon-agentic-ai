@@ -25,6 +25,13 @@ break, rather than around the modules that implement it:
   6. Each of U3's extraction and geography degradation paths reaches the report — added
      when the Extractor became real, since every one of them is a *new* way for a flag
      to be raised and therefore a new way for one to be lost.
+  7. The Critic's *own* flags reach the report (U7). Every case above raises its flag
+     upstream of the Critic, so all of them would still pass if nothing the Critic
+     itself raised ever survived — and until U7.4 that was literally true of
+     escalation, where `has_critical` read only the inherited list and a CRITICAL the
+     Critic raised set no route. A flag raised by the last node before the Summarizer
+     travels the shortest path in the system, which is exactly why it is the one nobody
+     checks.
 
 **Why these tests make no network calls, and how (U3).** A must-never-fail test should
 fail only when the thing it tests is broken. The real Extractor has three outbound
@@ -112,6 +119,13 @@ EXTRACTION_MISSING_PRICE = ListingExtraction(
 )
 
 LOS_ANGELES = (34.0522, -118.2437)
+# Logan Square, the Chicago demo subject's neighborhood. Its own constant for the same
+# reason CLEVELAND has one: it is the market where the corpus is dense enough to return
+# a full comp set but not dense enough to return a *similar* one, which is the case the
+# comp-drift disclosure exists for. Same coordinates as subject B in
+# `scripts/retrieval_evidence.py`, so the hermetic case and the live evidence run are
+# measuring the same point.
+CHICAGO = (41.9227, -87.6982)
 # Cleveland's demo subject. Retained as its own constant because it is the corpus's
 # worst-positioned market — 2% of its rows carry a street address — so it is the point
 # that exercises the spatial-concentration disclosure. See Comp.location_precision.
@@ -197,6 +211,21 @@ def run_deal(listing: str = LISTING_MISSING_PRICE, terms: DealTerms | None = Non
     if "__interrupt__" in result:
         result = graph.invoke(Command(resume="[test] released"), invoke_config)
     return result
+
+
+def priced_cleanly(monkeypatch) -> None:
+    """Make the Extractor raise nothing at all, so the case owns its own flag list.
+
+    The autouse fixture withholds the price on purpose — most cases here want a real
+    upstream flag to follow through the pipeline. The U7 interaction cases want the
+    opposite: their whole subject is the confidence score, and an extra warn from the
+    Extractor moves a deliberately-two-warn deal to three and escalates it on the score
+    before the rule under test is reached. Found by measuring, not by reading: the case
+    below first ran at 0.55 rather than 0.70.
+    """
+    priced = EXTRACTION_MISSING_PRICE.model_copy(deep=True, update={"price": 1_150_000.0})
+    monkeypatch.setattr(extractor_module, "_extract_terms", lambda text: (priced, 1))
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
 
 
 # LA County: state FIPS 06 + county FIPS 037 + HUD's "99999" county placeholder. The
@@ -611,10 +640,15 @@ def test_rework_cycle_terminates_and_discloses_that_it_did(monkeypatch):
     # Decision #9's stated invariant, asserted rather than read off a trace.
     assert result["planner_invocations"] == 1 + result["rework_count"]
 
-    kinds = {f.kind for f in result["flags"]}
-    assert FlagKind.REWORK_LIMIT_REACHED in kinds, (
-        "The cycle terminated but did not disclose why. A bound that escalates "
-        "silently loses the reason, which is the same failure as dropping a flag."
+    # Through `assert_reaches_report` rather than a substring check on the kind (U7.8):
+    # the kind is a label the Summarizer prints from the enum, while the *detail* is the
+    # only place the reader learns how many passes were spent and that the loop stopped
+    # deliberately. A report that names the kind and drops the sentence would satisfy
+    # propagation while losing the reason, which is the failure this case is about.
+    raised = assert_reaches_report(result, FlagKind.REWORK_LIMIT_REACHED)
+    assert raised.severity == Severity.WARN
+    assert str(config.MAX_REWORKS) in raised.detail, (
+        "The disclosure should say how much budget was spent, not merely that some was."
     )
     assert result["status"] == DealStatus.NEEDS_REVIEW
     assert "rework_limit_reached" in result["report_markdown"]
@@ -1095,6 +1129,61 @@ def test_an_adequately_spread_comp_set_raises_nothing(monkeypatch):
     not _corpus_available(),
     reason="Chroma index not built; run scripts/build_comps_index.py",
 )
+def test_comps_admitted_by_a_relaxed_search_are_disclosed(monkeypatch):
+    """A comp set that came back *unlike* the subject must say so (U7.3).
+
+    Chicago is the case, and it is a real one rather than a constructed one: the corpus
+    is dense enough there to return a full eight comps but not dense enough to return
+    eight similar ones, so the retrieval loop drops the square-footage band and the set
+    that comes back spans 510 to 2,000 sq ft against a 950 sq ft subject.
+
+    Distinct from `RELAXED_MATCH_CRITERIA`, which is also raised on this run and records
+    only the *concession*. Relaxing a filter permits dissimilar comps without producing
+    them; this flag is the measured consequence, and it is the one the Critic's I1
+    interaction keys on. Asserting both here pins that distinction end to end — if the
+    drift check were ever collapsed back into the relaxation flag, this case goes red.
+
+    No county is stubbed, so no rent figure is produced and the deal escalates on that
+    ground. That is deliberate: this case is about a retrieval flag surviving to the
+    report, and giving it Los Angeles FMR schedules to reach a rent estimate would put a
+    fixture from one county on a subject in another.
+    """
+    extraction = EXTRACTION_MISSING_PRICE.model_copy(
+        deep=True,
+        update={
+            "price": 499_000.0,
+            "full_address": "2500 N Kedzie Blvd, Chicago, IL 60647",
+            "street_address": "2500 N Kedzie Blvd",
+            "city": "Chicago",
+            "state": "IL",
+            "zip_code": "60647",
+        },
+    )
+    monkeypatch.setattr(extractor_module, "_extract_terms", lambda text: (extraction, 1))
+    monkeypatch.setattr(
+        extractor_module,
+        "geocode",
+        lambda *a, **k: parcel_at(*CHICAGO, matched_address="2500 N KEDZIE BLVD, CHICAGO, IL, 60647"),
+    )
+
+    result = run_deal()
+
+    assert not flags_of_kind(result, FlagKind.SPARSE_COMPS), (
+        "This case is only meaningful while the comp count itself is adequate — "
+        "a thin set is already covered by the sparsity disclosure."
+    )
+    raised = assert_reaches_report(result, FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA)
+    assert raised.severity == Severity.WARN
+    assert flags_of_kind(result, FlagKind.RELAXED_MATCH_CRITERIA), (
+        "The concession and its consequence are separate observations, and this case "
+        "exists partly to hold them apart."
+    )
+
+
+@pytest.mark.skipif(
+    not _corpus_available(),
+    reason="Chroma index not built; run scripts/build_comps_index.py",
+)
 def test_comps_carry_their_location_precision_and_vintage(monkeypatch):
     """Every retrieved comp reports how well it is located and when it was listed.
 
@@ -1395,4 +1484,138 @@ def test_a_county_without_small_area_fmr_says_the_anchor_is_coarse(monkeypatch):
     assert result.get("fmr_anchor_used") == FakeFmrClient.SCHEDULES[2026]["Two-Bedroom"]
     assert result.get("rent_estimate") is not None, (
         "A coarse anchor is a disclosure, not a reason to refuse an estimate."
+    )
+
+
+# --------------------------------------------------------------------------
+# 8. U7 — the Critic's own flags
+#
+# Everything above raises its flag upstream of the Critic and asks whether it survives.
+# These ask the narrower question the U7 checks introduced: a flag raised by the *last*
+# node before the Summarizer travels the shortest path in the system, and until U7.4
+# nothing the Critic raised could even trigger the Critic's own escalation.
+# --------------------------------------------------------------------------
+
+
+def test_an_interaction_objection_reaches_the_report_and_escalates(monkeypatch):
+    """The Critic's cross-agent objection is a flag like any other, and must survive.
+
+    Two upstream disclosures that are individually ordinary — the comp set drifted onto
+    a different kind of unit, and the modelled rent diverges from that set's median —
+    combine into a statement neither agent could make on its own: the only independent
+    check on the rent estimate is not readable on this deal. `_interaction_objections`
+    proves that arithmetic hermetically in `test_critic_interactions.py`; this proves the
+    conclusion reaches a reader.
+
+    **The confidence score is what makes this case worth running through the graph.**
+    Two warns land at 0.70, which *clears* the 0.60 threshold — so the deal escalates on
+    the critical-flag rule alone, over a flag the Critic raised in the same pass. That
+    path existed only on paper until U7.4: `has_critical` read `state.flags` and not the
+    flags being returned, so a CRITICAL objection set no route and reported as a normal
+    result.
+
+    The two upstream flags are injected at the node boundary rather than obtained from
+    the real agents, for this file's usual reason — the combination needs a corpus, a
+    trained model and an FMR schedule to arise naturally, and this case is about what the
+    Critic does with it, not about reproducing it. `test_critic_interactions.py` covers
+    the check itself; the grounded runs above cover each input flag arising for real.
+    """
+    priced_cleanly(monkeypatch)
+    monkeypatch.setitem(
+        graph_module.NODE_FUNCTIONS,
+        nodes.COMPS_RETRIEVAL,
+        lambda state: {
+            "comps": [],
+            "flags": [
+                flag(
+                    nodes.COMPS_RETRIEVAL,
+                    FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA,
+                    "[test] 3 of 8 comparables fall outside the size range searched for.",
+                    Severity.WARN,
+                )
+            ],
+        },
+    )
+    monkeypatch.setitem(
+        graph_module.NODE_FUNCTIONS,
+        nodes.VALUATION_RENT,
+        lambda state: {
+            "flags": [
+                flag(
+                    nodes.VALUATION_RENT,
+                    FlagKind.RENT_DIVERGES_FROM_COMPS,
+                    "[test] The modelled rent sits above the comparable-implied median.",
+                    Severity.WARN,
+                )
+            ]
+        },
+    )
+    # Silenced for the reason the rework case documents at length: an agent correctly
+    # reporting a degradation of its own would escalate this deal on a different ground
+    # and leave the case measuring nothing. With no rent estimate there is no forecast.
+    monkeypatch.setitem(graph_module.NODE_FUNCTIONS, nodes.SCENARIO_FORECAST, lambda state: {})
+
+    result = run_deal()
+
+    raised = assert_reaches_report(result, FlagKind.CRITIC_INCONSISTENCY)
+    assert raised.severity == Severity.CRITICAL
+    assert raised.source_agent == nodes.CRITIC
+    assert result["confidence_score"] == 0.70, (
+        "Two warns and a derived objection: the objection must not be charged to the "
+        "score as well, or the same observation is paid for twice."
+    )
+    assert result["confidence_score"] >= config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD, (
+        "The point of this case is escalation *above* the threshold. If the weights "
+        "move far enough that the score alone escalates, the case stops testing the "
+        "critical-flag rule and needs re-pitching rather than re-baselining."
+    )
+    assert result["status"] == DealStatus.NEEDS_REVIEW
+    assert result["rework_count"] == 0, (
+        "A comp set relaxed onto a different unit type will relax the same way on a "
+        "second pass, so this objection escalates rather than reworking."
+    )
+
+
+def test_a_report_carries_no_objection_when_the_disclosures_do_not_combine(monkeypatch):
+    """The negative case, without which the flag above proves nothing.
+
+    Same two-warn shape, same score of 0.70, one difference: the divergence flag is
+    absent, so there is no cross-check whose readability could be in question. §8's
+    standard for a threshold applies to an interaction as well — a check that fired on
+    any two disclosures would be indistinguishable from no check, and would tell a reader
+    nothing when it appeared.
+    """
+    priced_cleanly(monkeypatch)
+    monkeypatch.setitem(
+        graph_module.NODE_FUNCTIONS,
+        nodes.COMPS_RETRIEVAL,
+        lambda state: {
+            "comps": [],
+            "flags": [
+                flag(
+                    nodes.COMPS_RETRIEVAL,
+                    FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA,
+                    "[test] 3 of 8 comparables fall outside the size range searched for.",
+                    Severity.WARN,
+                ),
+                flag(
+                    nodes.COMPS_RETRIEVAL,
+                    FlagKind.RELAXED_SEARCH_RADIUS,
+                    "[test] Widened to 4.0 mi to find enough comparables.",
+                    Severity.WARN,
+                ),
+            ],
+        },
+    )
+    monkeypatch.setitem(graph_module.NODE_FUNCTIONS, nodes.VALUATION_RENT, lambda state: {})
+    monkeypatch.setitem(graph_module.NODE_FUNCTIONS, nodes.SCENARIO_FORECAST, lambda state: {})
+
+    result = run_deal()
+
+    assert not flags_of_kind(result, FlagKind.CRITIC_INCONSISTENCY)
+    assert result["confidence_score"] == 0.70
+    assert result["status"] == DealStatus.COMPLETE, (
+        "Two ordinary warns above the threshold report normally. If this deal "
+        "escalates, the interaction check has started firing on the accumulation "
+        "rather than on the combination."
     )

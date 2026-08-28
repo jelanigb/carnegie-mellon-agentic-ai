@@ -10,17 +10,22 @@ at the start of every session, so it is kept short on purpose — an entry that 
 close it and what closing it looks like. `OQ-n` numbers are stable handles for
 conversation; they are not decision numbers.
 
-Last reviewed: Aug 27, 2026 — after U7.7.
+Last reviewed: Aug 27, 2026 — at U7 close (U7.8).
 
 ---
 
 ## Orchestration & control flow
 
-### OQ-1 · decision #6 · U7 — confidence threshold and severity weights
-Both are provisional: threshold 0.60, weights unmeasured. **Closes when** U7 tunes them
-against the eval batch. **Do not re-derive:** a critical flag already escalates on its own
-ground, independent of the score (U2 finding 1) — that guarantee is deliberately separate
-from the weights *because* the weights were always going to move. `agents/critic.py:114`.
+### OQ-1 · decision #6 · U8 — confidence threshold and severity weights
+**The mechanism half closed in U7** (weights and threshold in `config`, critical-flag
+escalation independent of the score, no decay across rework laps, all measured on the real
+pipeline by `scripts/confidence_evidence.py`). **The numbers did not, deliberately:** the
+demo deals were calibrated to run clean, so tuning against them would fit the threshold to
+the fixtures. **Closes when** U8 tunes threshold 0.60 and the severity weights against the
+eval batch. **Do not re-derive:** a critical flag already escalates on its own ground,
+independent of the score (U2 finding 1) — that guarantee is deliberately separate from the
+weights *because* the weights were always going to move. What U8 should measure first is
+recorded as `TODO(U8)` at `critic.confidence_from_flags`.
 
 ### OQ-15 · U8, cut list 2a — pass-scoped flags
 `DealState.flags` is append-only, so nothing separates *raised this pass* from *ever
@@ -36,11 +41,15 @@ every affected path escalates to a human. `agents/critic.py`, `agents/planner.py
 
 ## Rent & valuation
 
-### OQ-3 · U7/U8 — New York rents predict at roughly twice the trio's error
+### OQ-3 · U8 — New York rents predict at roughly twice the trio's error
 ~$1,065 MAE against ~$518, under every training set tested; no shortlist fixes it. New York
 is in `build_comps_index.INDEXED_MARKETS`, so a Staten Island subject reaches the rent model
 and gets an estimate half as reliable as a Los Angeles one. **This is a disclosure
 requirement, not a modelling problem** — it needs a flag, and U8 needs a case that trips it.
+**Retargeted from U7/U8 to U8 on Aug 27, 2026:** U7 planned no subsection for it and built
+none, so carrying U7 in the label overstated what was scheduled. The `staten-island` demo
+deal reaches human review today for a different reason — zero comps — which means the
+error is disclosed on that one deal by accident rather than by a check.
 
 ### OQ-4 · cut list 1a — rent-model feature engineering and model form
 Measured: ~17% of rent error is available to model form alone, no new data. Deferred
@@ -119,8 +128,13 @@ uncaptured run is not a failure mode. **Not a build blocker.** It *is* a blocker
 Checkpoint 5.1's trace evidence, and free-tier traces expire after 14 days — so set it up
 close to the write-up, not long before. No key present in `ignore/` as of Aug 24, 2026.
 
-### OQ-14 · U7, U9 — checkpoint criteria as build artifacts
+### OQ-14 · U9 — checkpoint criteria as build artifacts
 Where a checkpoint publishes completion criteria, the unit is specified to *produce* each
 one rather than write it up afterward. U4 did this (see the acceptance-criteria table in
 [`history/decision_log.md`](history/decision_log.md#retrieval)). **Apply the same treatment
-to 5.1 and 6.1** as their criteria are published.
+to 5.1** as its criteria are published. **6.1's half is discharged (U7.8):** the unit's
+evidence exists as build artifacts rather than as write-up —
+`scripts/confidence_evidence.py` for the confidence mechanism and the re-derived demo
+table, `tests/test_critic_interactions.py` for the interaction checks, and
+`tests/test_flag_propagation.py` for the rework cycle terminating and disclosing that it
+did.

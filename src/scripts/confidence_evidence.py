@@ -33,8 +33,17 @@ weights and threshold stay `config.PROVISIONAL`, tuned in U8 against the eval ba
     fix for the U2 boundary defect `critic.py` documents — is not currently exercised by
     any live demo run, only by the hermetic test built for it.
 
+**It also re-derives the demo table (U7.8).** `history/decision_log.md` carries a
+`main.py --deal` table — comps, confidence, disclosures, outcome — that U2 measured, U3
+re-measured, and that went stale when U5 and U6 added flags nothing re-ran against it.
+A table transcribed by hand goes stale the same way a second time, so the rows are
+printed here, from the same live run that produces everything above, and the ablation
+row (`chicago --no-retrieval`) with it. Re-measuring is then one command rather than
+seven, which is the difference between a table that gets refreshed and one that does not.
+
 Run: .venv/bin/python scripts/confidence_evidence.py
      .venv/bin/python scripts/confidence_evidence.py --deal chicago
+     .venv/bin/python scripts/confidence_evidence.py --no-table   # skip the ablation run
 """
 
 from __future__ import annotations
@@ -107,6 +116,40 @@ def _contributing_flags(flags: list) -> list[tuple]:
     return rows
 
 
+def _disclosure_summary(flags: list) -> str:
+    """`4 (2 info, 2 warn)` — every flag on the final state, by severity.
+
+    **Every** flag, including the ones the Critic itself raises. The U2/U3 versions of
+    this table never said which it counted, which is part of why a re-measurement cannot
+    just be compared against them row for row. Stated here so the next re-measurement is
+    comparing the same quantity.
+    """
+    order = (Severity.INFO, Severity.WARN, Severity.CRITICAL)
+    counts = {s: sum(1 for f in flags if f.severity == s) for s in order}
+    parts = [f"{n} {s}" for s, n in counts.items() if n]
+    return f"{len(flags)}" + (f" ({', '.join(parts)})" if parts else "")
+
+
+def _outcome(result: dict) -> str:
+    return "pauses at `human_review`" if result["needs_human_review"] else "reports normally"
+
+
+def _print_demo_table(rows: list[tuple[str, dict]]) -> None:
+    """The demo table, as markdown, ready to paste into `history/decision_log.md`."""
+    print("=" * 78)
+    print("Demo table (U7.8 re-measurement)")
+    print("=" * 78)
+    print()
+    print("| `main.py --deal` | Comps | Confidence | Disclosures | Outcome |")
+    print("| --- | --- | --- | --- | --- |")
+    for label, result in rows:
+        print(
+            f"| `{label}` | {len(result['comps'])} | {result['confidence_score']:.2f} | "
+            f"{_disclosure_summary(result['flags'])} | {_outcome(result)} |"
+        )
+    print()
+
+
 def _print_deal(key: str, result: dict) -> None:
     print("=" * 78)
     print(key)
@@ -115,6 +158,7 @@ def _print_deal(key: str, result: dict) -> None:
     flags = result["flags"]
     contributing = _contributing_flags(flags)
     confidence = result["confidence_score"]
+    print(f"  comps: {len(result['comps'])}   disclosures: {_disclosure_summary(flags)}")
 
     # Independent recomputation, on the full post-Critic flag list. If this ever
     # disagrees with what `critic_agent` actually returned, the derived-kind exclusion
@@ -165,6 +209,11 @@ def _print_deal(key: str, result: dict) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--deal", choices=sorted(DEMO_DEALS), help="run one demo deal")
+    parser.add_argument(
+        "--no-table",
+        action="store_true",
+        help="skip the demo table, and with it the extra ungrounded ablation run",
+    )
     args = parser.parse_args()
 
     _check_models()
@@ -177,6 +226,23 @@ def main() -> None:
 
     if len(results) < 2:
         return
+
+    # The ablation row, run last and deliberately: it mutates the module-level
+    # `RETRIEVAL_ENABLED` the way `main.py --no-retrieval` does, and every grounded deal
+    # above has already finished by the time it does. Restored afterwards regardless, so
+    # an import of this module cannot leave retrieval off for whatever runs next.
+    ablation = None
+    if not args.no_table:
+        grounded = config.RETRIEVAL_ENABLED
+        try:
+            config.RETRIEVAL_ENABLED = False
+            ablation = _run_deal(DEMO_DEALS["chicago"])
+        finally:
+            config.RETRIEVAL_ENABLED = grounded
+        _print_deal("chicago --no-retrieval (U4 ablation)", ablation)
+        _print_demo_table(
+            [*results.items(), ("chicago --no-retrieval", ablation)]
+        )
 
     print("=" * 78)
     print("Across all six demo deals")
@@ -223,11 +289,34 @@ def main() -> None:
             "  0 of 6 deals isolate the critical-flag rule: every deal carrying a "
             "critical flag already sits below threshold on the score alone. The rule "
             "is real (`agents/critic.py`, decision #6) and proven by "
-            "`test_a_single_critical_flag_escalates_regardless_of_score`, but no "
-            "current demo deal exercises it independent of the score — worth naming "
-            "for U8's eval-case design if the rule needs a live case, not only a "
-            "hermetic one."
+            "`test_a_single_critical_flag_escalates_regardless_of_score`."
         )
+
+    # The ablation is a `main.py` invocation rather than a seventh deal, so it is kept
+    # out of the six-deal statistics above — but it is a live run, and U7.6 concluded
+    # from the six alone that *nothing* live exercised the critical-flag rule. It does.
+    # Checked rather than asserted, so the sentence cannot outlive the fact.
+    if ablation is not None:
+        ablation_isolates = (
+            any(f.severity == Severity.CRITICAL for f in ablation["flags"])
+            and ablation["confidence_score"] >= config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD
+        )
+        if ablation_isolates:
+            print(
+                f"  The `chicago --no-retrieval` ablation DOES isolate the rule: one "
+                f"critical flag and nothing else, confidence "
+                f"{ablation['confidence_score']:.2f} against a "
+                f"{config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD:.2f} threshold — the same "
+                f"boundary the U2 defect sat on, now escalating because the rule is "
+                f"independent of the score. It is a live case for the rule, though not "
+                f"a *deal*: the critical flag is `retrieval_disabled`, which only the "
+                f"ablation flag can raise."
+            )
+        else:
+            print(
+                "  The `chicago --no-retrieval` ablation does not isolate the rule "
+                "either — its score now falls below the threshold on its own."
+            )
 
 
 if __name__ == "__main__":
