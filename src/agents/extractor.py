@@ -221,7 +221,7 @@ def _supplied_coordinates(terms: DealTerms) -> Optional[tuple[float, float]]:
 
 
 def _resolve_geography(
-    terms: DealTerms, supplied: Optional[tuple[float, float]]
+    terms: DealTerms, supplied_lat_long: Optional[tuple[float, float]]
 ) -> list[Flag]:
     """Fill `terms.latitude/longitude/county_fips` in place; return what to disclose.
 
@@ -241,8 +241,9 @@ def _resolve_geography(
     3. **The address resolved only to a city centroid.** Used and disclosed as the
        city-level approximation it is. The conflict check deliberately does *not* run
        against a centroid: a centroid is an admission that the address could not be
-       placed, not a competing claim about where it is, so comparing one to supplied
-       coordinates would manufacture conflicts out of ordinary metro-scale distance.
+       placed, not a competing claim about where it is, so comparing one to the
+       caller's coordinates would manufacture conflicts out of ordinary metro-scale
+       distance.
     4. **Nothing resolved.** No coordinates, critical flag, and comp retrieval
        short-circuits downstream.
     """
@@ -258,16 +259,20 @@ def _resolve_geography(
 
     if parcel is not None:
         terms.latitude, terms.longitude = parcel.latitude, parcel.longitude
-        if supplied is not None:
-            miles = haversine_miles(supplied[0], supplied[1], parcel.latitude, parcel.longitude)
+        if supplied_lat_long is not None:
+            miles = haversine_miles(
+                supplied_lat_long[0], supplied_lat_long[1],
+                parcel.latitude, parcel.longitude,
+            )
             if miles > config.COORDINATE_CONFLICT_THRESHOLD_MILES:
                 flags.append(
                     flag(
                         AGENT,
                         FlagKind.SUPPLIED_COORDINATES_CONFLICT,
-                        f"Caller-supplied coordinates ({supplied[0]:.5f}, "
-                        f"{supplied[1]:.5f}) sit {miles:.2f} mi from the geocode of the "
-                        f"listing's own address, {parcel.matched_address} "
+                        f"Caller-supplied coordinates "
+                        f"({supplied_lat_long[0]:.5f}, {supplied_lat_long[1]:.5f}) "
+                        f"sit {miles:.2f} mi from the geocode of the listing's own "
+                        f"address, {parcel.matched_address} "
                         f"({parcel.latitude:.5f}, {parcel.longitude:.5f}) — beyond the "
                         f"{config.COORDINATE_CONFLICT_THRESHOLD_MILES:.2f} mi tolerance. "
                         f"These describe different locations, and which one was intended "
@@ -278,8 +283,8 @@ def _resolve_geography(
                         Severity.CRITICAL,
                     )
                 )
-    elif supplied is not None:
-        terms.latitude, terms.longitude = supplied
+    elif supplied_lat_long is not None:
+        terms.latitude, terms.longitude = supplied_lat_long
         flags.append(
             flag(
                 AGENT,
@@ -380,7 +385,7 @@ def extractor_agent(state: DealState) -> dict:
         terms = state.deal_terms.model_copy(deep=True)
         if terms.latitude is None or terms.longitude is None:
             # Nothing known: geocode the address, which also resolves the county.
-            flags = _resolve_geography(terms, supplied=None)
+            flags = _resolve_geography(terms, supplied_lat_long=None)
         else:
             # **Coordinates known, county not.** The caller placed the property; only the
             # FMR lookup key is missing. Geocoding here would be worse than useless — it
