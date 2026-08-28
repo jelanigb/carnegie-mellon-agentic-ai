@@ -1,9 +1,22 @@
 # `eval/` — the evaluation harness (U8) and the data it runs on
 
-The harness itself is **U8** and is not built yet. This directory and the mechanism
-behind it landed early, during U3, because both are useful to every unit in between:
-recorded model responses make a development loop fast and an evaluation reproducible,
-and neither benefit has to wait for the cases to be written.
+**The harness landed Aug 28, 2026 (U8.1):** `cases.py` holds the case type and the case
+set, `runner.py` executes the batch through the real compiled graph and writes
+`results/results.md`. The directory and the recording mechanism predate it — they landed
+during U3, because both are useful to every unit in between: recorded model responses make
+a development loop fast and an evaluation reproducible, and neither benefit had to wait for
+the cases to be written.
+
+```bash
+.venv/bin/python -m eval.runner                 # every case
+.venv/bin/python -m eval.runner --tier golden   # no model calls
+.venv/bin/python -m eval.runner --case chicago
+```
+
+**A case declares what the system should do with it, before the run.** That is what makes
+the batch usable for tuning decision #6 rather than only for demonstration, and `cases.py`
+carries the reasoning — including why a demo deal's *measured* outcome is kept separate
+from an engineered case's *predicted* one, and why only the second may be scored.
 
 See `docs/implementation_plan.md` §6 for what U8 is for, and §8 of
 `docs/engineering_standards.md` for why this is one of the two test suites that never
@@ -13,6 +26,8 @@ gets cut.
 
 | Path | Contents | In git? |
 | --- | --- | --- |
+| `cases.py` | **The case set** and the `EvalCase` type. | Yes |
+| `runner.py` | **The batch runner**, results table and flag-coverage census. | Yes |
 | `data/` | **Inputs.** Golden `DealTerms` fixtures and the synthetic listings they came from. | Yes |
 | `data/llm_recordings/` | **Inputs.** Recorded model responses, replayed by `tools/llm_cache.py` in `replay` mode. | Yes |
 | `results/` | **Outputs.** Result tables produced by a harness run. | Yes |
