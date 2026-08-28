@@ -400,6 +400,40 @@ question this flag does not ask.
 Today the Staten Island error is disclosed by accident — that deal escalates for having
 zero comps — and an accident is not a check.
 
+### U8.4b — The rent-drift correction (U8.0's consequence)
+
+**Taken Aug 28, 2026 by the architect, on U8.0's finding.** The model learned rent ≈ 1.3–1.7×
+FMR from a 2018-19 corpus and multiplies it by today's FMR, but the FMR schedule has risen
++51.9% against market rent's +33.5% since then. **The shipped rent estimate reads high**, in
+a range measured at roughly 15–35% depending on subset and on whether the corpus's premium
+over the whole-market index persists.
+
+**The correction is applied per-ZCTA at prediction time, not by retraining.** Retraining
+changes nothing — the corpus is still 2018-19 and a refit reproduces the same ratio. The
+model's predicted ratio is multiplied by the subject ZCTA's own measured
+`(ZORI/FMR today) ÷ (ZORI/FMR at the corpus vintage)`.
+
+**Per-ZCTA rather than one global scalar, because the drift is not uniform:** U8.0 measured
+it ranging from **+3.6% to −20%** across ZCTAs. A single factor would be right on average
+and wrong nearly everywhere. Worth stating plainly, because it explains why this is not the
+cheap option it looks like: **a per-ZCTA correction factor is re-anchoring on ZORI, just
+expressed at prediction time instead of at training time.** The structural version is
+§6 cut-list item 6.
+
+Ships with a flag disclosing that the correction was applied and by how much — a corrected
+estimate that does not say it was corrected is less inspectable than an uncorrected one.
+Falls back to the uncorrected estimate, flagged, where the subject's ZCTA has no ZORI
+coverage at both ends.
+
+**Sequenced here, before U8.5 and U8.6, and that is not cosmetic.** The correction changes
+every rent estimate, which moves `RENT_DIVERGES_FROM_COMPS`, which changes the flag sets the
+eval batch produces, which is what U8.6 tunes confidence against. Tuning first would tune
+against numbers this subsection then invalidates.
+
+**New runtime dependency, stated because it is a real architectural cost:** every rent
+estimate now depends on a ZORI-derived table. It is a committed lookup rather than a live
+fetch, and it needs a refresh path and a staleness disclosure of its own.
+
 ### U8.5 — Pass-scoped flags (OQ-15, cut-list 2a)
 
 Per Q4. Stamp each `Flag` with the `planner_invocations` that raised it; the Critic's
@@ -421,21 +455,24 @@ note names the same batch.
 `scripts/confidence_evidence.py` already does this in one command; a moved weight with a
 stale table would republish the exact staleness U7.8 fixed.
 
-### U8.7 — Act on U8.0's number: checks A and B, and `config.py:413`
+### U8.7 — Checks A and B, and `config.py:413` — **the veto branch fired**
 
-Whichever branch U8.0 lands on (Q5). Promotion means A and B become
-`_interaction_objections()` entries with a threshold set above #11's calibration offset;
-the veto branch means the finding is written up against the **rent model** rather than the
-deal, and `critic.py:187` closes as a stated limitation. `config.py:413` gets a number or
-is deleted.
+**Settled by U8.0's measurement: A and B are NOT promoted.** Q5 framed this as a branch and
+the branch resolved against promotion. The ~−29% stated-versus-modelled gap on the demo
+listings is substantially *the model's own drift*, not a property of any deal, so an
+objection raised from it would blame the listing for the anchor's error. `critic.py:187`
+closes as a stated limitation naming the measurement, and `config.py:413` is deleted along
+with the emphasis it gates — the stated-rent disclosure stays unconditional.
+
+**Note what U8.4b does to this gap, and re-measure rather than assume.** Correcting the
+estimate downward moves the stated-versus-modelled comparison toward zero on every demo
+deal. The number in `config.py:413`'s comment (~−29% on all three) will not survive
+U8.4b, so this subsection deletes a constant whose justifying measurement has itself
+changed — which is a reason to re-run the comparison here, not a reason to skip it.
 
 Kept separate from U8.0 deliberately: measuring and acting on a measurement are different
 change sets, and folding them would make it impossible to review the number independently
-of the conclusion drawn from it.
-
-**Lands after U8.6 only if it does not move confidence.** If A and B promote, they change
-what the batch scores, and U8.6 must be re-run against the promoted checks — one command,
-but it has to actually happen rather than be assumed.
+of the conclusion drawn from it. Safe after U8.6, because nothing here moves confidence.
 
 ### U8.8 — Public-record sub-metro price benchmark (OQ-7, #11) — drop-dead Mon Sept 1
 

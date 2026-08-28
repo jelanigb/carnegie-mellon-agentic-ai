@@ -81,7 +81,21 @@ available test of **the rent model's largest unverified assumption** — that re
 structure is stable across the ~7 years between corpus and today. **Closes when** a ZORI
 pull lands and the ratio is measured at both ends. `config.py:430`.
 
-**Scheduled Aug 28, 2026 — first in U8, not last.** It had no unit for two units. It moves
+**BUILT Aug 28, 2026 (U8.0). The assumption does not hold.** ZORI/FMR fell from 1.186 at
+the corpus vintage to 1.046 today — **−11.8%** — and the decomposition says why: **market
+rent rose +33.5% while the FMR schedule rose +51.9%.** The denominator outran the market by
+18.5 points. So **the shipped rent model over-predicts**, by roughly 15–35% depending on
+subset. This also supplies the attribution `config.py`'s cohort-shift screen explicitly
+deferred as undeterminable from FMR alone.
+
+**Closes as measured, but opens two follow-ons rather than none:** U8.4b applies a per-ZCTA
+correction at prediction time, and §6 cut-list item 6 carries re-anchoring the model on ZORI
+outright — supported by measurement (ZORI covers 5,662 of 5,686 corpus ZIPs and normalizes
+geography better, per-city mean spread 0.172 against FMR's 0.257) but costing a U5 rewrite
+and 27% of training rows. Q5's veto branch fired: checks A and B are **not** promoted.
+Reproduce both with `scripts/zori_evidence.py` and `--anchor-comparison`.
+
+**Why it ran first, recorded because the reasoning generalizes.** It had no unit for two units. It moves
 to the *front* on dependency rather than on enthusiasm: three deferred items are gated on
 this one number (promoting Critic checks A and B at `agents/critic.py:187`, the stated-rent
 emphasis threshold at `config.py:413`, and by extension what the eval batch scores), and a

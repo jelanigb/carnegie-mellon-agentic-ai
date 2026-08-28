@@ -59,6 +59,7 @@ negative result was structurally guaranteed proves nothing):
 Run:
     .venv/bin/python scripts/zori_evidence.py --download   # first time; ~10 MB
     .venv/bin/python scripts/zori_evidence.py
+    .venv/bin/python scripts/zori_evidence.py --anchor-comparison
 """
 
 from __future__ import annotations
@@ -251,10 +252,84 @@ def _report(rows: list[dict], dropped: dict[str, int]) -> None:
     print("measurement of it — the populations differ in ways no weighting here fixes.")
 
 
+def _anchor_comparison() -> None:
+    """Would ZORI be a better anchor than FMR? The evidence for §6's cut-list item 6.
+
+    Separate from the drift measurement above and reported separately, because it asks a
+    different question. The drift asks *has the FMR anchor moved*; this asks *should the
+    anchor be FMR at all*. The second only became worth asking once the first found drift.
+
+    **The premise this had to test first was coverage**, and the expectation going in was
+    wrong. ZIP-level FMR anchors only ~1,100 of the corpus's rows, because HUD's Small Area
+    schedules do not cover every county, so ZORI was assumed to be similarly sparse. It is
+    not: it covers essentially every ZIP the corpus occupies, and the binding constraint is
+    when each ZIP's series *begins* rather than whether it exists.
+
+    Two measures, because they disagree and the disagreement is the finding:
+
+      * **Dispersion of the ratio itself.** A tighter ratio is an easier target to learn.
+      * **Dispersion of the per-city means.** This is what an anchor is *for* — carrying
+        the location signal so the model does not have to. `RENT_MODEL_FEATURES` holds no
+        market identifier by design, so whatever the anchor fails to absorb here is error
+        the model structurally cannot recover. §2's "location-blind below the county".
+    """
+    frame, _ = rent_model.build_training_frame()
+    panel = zori.load()
+    covered = set(panel["zip"])
+
+    print(f"Corpus rows FMR anchors:            {len(frame):>6,}")
+    in_zori = frame["zcta"].astype("string").isin(covered)
+    print(f"  ... whose ZIP appears in ZORI:    {int(in_zori.sum()):>6,}  "
+          f"({in_zori.mean():.0%})")
+
+    # Anchor each row at its OWN listing month rather than a fixed date: a 2018 listing
+    # and a 2019 one face different markets, and pinning both to one month would import
+    # that year's trend into the ratio as noise.
+    listed = pd.to_datetime(pd.to_numeric(frame["time"], errors="coerce"), unit="s")
+    frame["month"] = listed.dt.to_period("M").dt.to_timestamp("M").dt.strftime("%Y-%m-%d")
+    series = {str(z): zori.series_for_zip(panel, str(z))
+              for z in frame["zcta"].dropna().unique()}
+
+    def anchor(row):
+        one = series.get(str(row["zcta"]))
+        if one is None or row["month"] not in one.index:
+            return float("nan")
+        value = one[row["month"]]
+        return float("nan") if pd.isna(value) else float(value)
+
+    frame["zori"] = frame.apply(anchor, axis=1)
+    usable = frame[frame["zori"].notna() & (frame["zori"] > 0)].copy()
+    print(f"  ... AND observed at its own month:{len(usable):>6,}  "
+          f"({len(usable) / len(frame):.0%})  <- what ZORI-anchoring would train on")
+
+    usable["rent_to_zori"] = usable["price"] / usable["zori"]
+    usable = usable[usable["rent_to_zori"].between(
+        config.RENT_MODEL_MIN_RATIO, config.RENT_MODEL_MAX_RATIO)]
+
+    print(f"\nOn the {len(usable):,} rows both anchors can price:\n")
+    print(f"{'anchor':<12} {'mean':>7} {'median':>7} {'CV':>7}   {'per-city mean sd':>16}")
+    print("-" * 56)
+    for name, column in (("rent/FMR", "rent_to_fmr"), ("rent/ZORI", "rent_to_zori")):
+        values = usable[column]
+        by_city = usable.groupby(["state", "cityname"])[column]
+        means = by_city.mean()[by_city.size() >= 50]
+        print(f"{name:<12} {values.mean():>7.3f} {values.median():>7.3f} "
+              f"{values.std() / values.mean():>6.1%}   {means.std():>16.3f}")
+
+    print("\nThe two measures disagree, and both readings are in the answer:")
+    print("  * ZORI's ratio is the *looser* one, so it is not an easier target to learn.")
+    print("  * ZORI's per-city means are the *tighter* ones, so it absorbs more of the")
+    print("    location signal the model has no feature for. That is the property an")
+    print("    anchor exists to supply, which is why this is a cut-list item and not a")
+    print("    closed case against.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--download", action="store_true",
                         help="Fetch the ZORI CSV to data/ before running.")
+    parser.add_argument("--anchor-comparison", action="store_true",
+                        help="Compare FMR and ZORI as anchors (§6 cut-list item 6).")
     args = parser.parse_args()
 
     if args.download:
@@ -264,6 +339,10 @@ def main() -> None:
     panel = zori.load()
     months = zori.month_columns(panel)
     print(f"ZORI: {len(panel):,} ZIPs, {months[0][:7]} to {months[-1][:7]}\n")
+
+    if args.anchor_comparison:
+        _anchor_comparison()
+        return
 
     frame = _corpus_side()
     current = _current_denominators(frame)

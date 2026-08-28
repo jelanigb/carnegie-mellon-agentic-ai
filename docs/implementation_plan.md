@@ -270,6 +270,32 @@ If the schedule slips, shed scope in this order rather than improvising:
 5. **Critic rework-loop depth** — reduce to single-pass review with escalation,
    keeping the cycle in the graph but capping `MAX_REWORKS = 1`.
 
+6. **Re-anchor the rent model on ZORI instead of FMR** (added Aug 28, 2026, on U8.0's
+   finding). U8.0 measured the FMR schedule rising +51.9% against market rent's +33.5%
+   since the corpus vintage, so the ratio the model learned is anchored to a series that
+   has drifted ~18 points away from the market it prices. U8 takes the per-ZCTA
+   *correction* (U8.4b); this item is the structural fix the correction stands in for.
+
+   **The evidence is measured, and it is genuinely mixed** —
+   `scripts/zori_evidence.py --anchor-comparison`, on the 4,144 rows both anchors can
+   price. ZORI covers essentially every ZIP the corpus occupies (5,662 of 5,686) and
+   4,147 rows carry an observation at their own listing month, against ZIP-level FMR's
+   ~1,100 — so coverage, the reason this was assumed impossible, is not the obstacle.
+   But the ratio it produces is *looser* (CV 36.3% against 33.1%), so it is not an easier
+   target to learn. What it does better is absorb location: per-city mean ratios spread
+   0.172 against FMR's 0.257. Since `RENT_MODEL_FEATURES` carries no market identifier by
+   design, whatever the anchor fails to absorb is error the model structurally cannot
+   recover — which is §2's "location-blind below the county" limitation, and the property
+   an anchor exists to supply.
+
+   **Its cost is a U5 rewrite**: the model, the Valuation agent, `RENT_ANCHORED_TO_FMR`,
+   #11's demo calibration, and the reasoning in §2 and #16 all assume the FMR anchor. It
+   also drops 27% of the training rows. **Placed last deliberately, and the position means
+   what the list says it means — it is shed last, not first.** That is a deliberate choice
+   by the architect (Aug 28, 2026) rather than an oversight about where speculative scope
+   normally belongs: this is the only item on the list that fixes a *measured* defect in a
+   number the report publishes, and the rest fix gaps in scope.
+
 **Never cut:** the flag propagation test (U2), the eval harness (U8), or the report and
 video reserve at the end.
 
@@ -331,7 +357,7 @@ Each decision has a stable number. Code comments and the other documents cite th
 | 13 | MCP adoption | Models & infra | U6 | ✅ Read-only reference server; adopted for portability and a second consumer, not capability. CrewAI declined |
 | 14 | ToT branch-state persistence | Forecasting | U6 | ✅ Compact ledger in state, full tree to `eval/results/` behind a flag |
 | 15 | Property-level value estimate | Rent & valuation | U6 | ✅ Not produced. `value_estimate` stays `None`; metro median carried as a labelled benchmark |
-| 16 | Rent-growth source | Forecasting | U6 | ✅ Rent from HUD FMR history, price from Redfin — forecast separately (pooled r = −0.309). **Its ZORI half is now scheduled: U8.0**, after two units with no unit at all → [open](open_questions.md#forecasting--reasoning) |
+| 16 | Rent-growth source | Forecasting | U6 | ✅ Rent from HUD FMR history, price from Redfin — forecast separately (pooled r = −0.309). **Its ZORI half built Aug 28, 2026 (U8.0) and found the anchor drifting**: FMR +51.9% against market rent +33.5% since the corpus vintage, so the model over-predicts. Corrected per-ZCTA at U8.4b; re-anchoring is cut-list item 6 |
 | 17 | ToT structure at build time | Forecasting | U6 | ✅ Enumerate the space, do not sample it; pipeline stays deterministic |
 
 
