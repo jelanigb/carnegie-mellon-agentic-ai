@@ -18,7 +18,7 @@ cannot anchor produces *no rent figure*, never a fallback one.
 
 **What is deliberately not built here.**
 
-- **The LLM fallback path** (`FlagKind.LLM_RENT_FALLBACK_USED`) — §6's cut list item 3,
+- **The LLM fallback path** — §6's cut list item 3,
   descoped Aug 21, 2026 in advance rather than abandoned mid-build. `RentEstimateSource`
   still carries `LLM_FALLBACK` as a member, so the seam is typed and unused rather than
   absent. See `TODO(cut-list)` below for what taking it would cost.
@@ -78,7 +78,9 @@ AGENT = "valuation_rent"
 # TODO(cut-list): the LLM fallback estimator (§6 cut list, item 3) is descoped, not
 # designed away. It would sit here, after the ratio path has failed to anchor: prompt a
 # model for a rent figure with the comp set as context, write it with
-# `RentEstimateSource.LLM_FALLBACK`, and raise `FlagKind.LLM_RENT_FALLBACK_USED`. What
+# `RentEstimateSource.LLM_FALLBACK`, and raise a flag kind that would have to be re-added
+# to `FlagKind` — it was removed Aug 28, 2026 once U8.1's coverage census showed it was the
+# one member nothing in the build could raise (see `state.FlagKind`). What
 # it costs is not the call — `tools/llm_client.call_with_schema` already does the hard
 # part — but the evaluation: an unanchored LLM figure is exactly the failure mode §2
 # exists to prevent, so shipping one needs the ungrounded-vs-grounded comparison

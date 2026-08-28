@@ -128,7 +128,18 @@ class FlagKind(StrEnum):
     # FMR_UNAVAILABLE_FOR_COUNTY, which means no anchor at all: this one means the
     # estimate exists but cannot see below the county line.
     FMR_ANCHOR_COUNTY_LEVEL = "fmr_anchor_county_level"
-    LLM_RENT_FALLBACK_USED = "llm_rent_fallback_used"
+    # LLM_RENT_FALLBACK_USED lived here until Aug 28, 2026 (U8.1b). Removed on the same
+    # rule that retired COUNTY_FROM_PRINCIPAL_COUNTY above, and found by the mechanism
+    # that rule was written for: U8.1's coverage census reported it as the one kind no
+    # case can raise, because §6's cut list item 3 was taken and the fallback estimator
+    # was never built. A member nothing can raise corrupts the census in the pessimistic
+    # direction — it reads as a degradation path the harness failed to exercise, when it
+    # is a path the build does not have.
+    #
+    # `RentEstimateSource.LLM_FALLBACK` deliberately stays: that seam is typed-and-unused
+    # on purpose (see agents/valuation_rent.py), and it is a different enum, read for
+    # provenance rather than compared against a coverage claim. Re-add this member with
+    # the estimator if item 3 is ever un-taken.
     # The rent estimate could not be produced at all, for a reason that is not the
     # county lookup. One kind rather than three (no trained model / features the
     # Extractor never resolved / a predicted ratio outside the plausible band) because
