@@ -367,6 +367,40 @@ def _extraction_failed(
 
 def extractor_agent(state: DealState) -> dict:
     """Node function: returns a partial state update, never the whole state."""
+    # **Geography-only path (U8.1b).** The Planner routes here when the terms are already
+    # complete but nothing has geocoded them — a caller supplying structured terms, or a
+    # golden eval fixture. Parsing is not what that deal needs, and running the model over
+    # a listing whose fields are already known would spend a call to re-derive them,
+    # risk a *worse* parse than the caller supplied, and make the golden eval tier
+    # depend on a model it is defined not to call.
+    #
+    # `_resolve_geography` is called on the caller's own terms rather than on a re-parse,
+    # so what the caller supplied is what gets geocoded and what the report later cites.
+    if state.deal_terms.is_complete() and state.deal_terms.geography_is_incomplete():
+        terms = state.deal_terms.model_copy(deep=True)
+        if terms.latitude is None or terms.longitude is None:
+            # Nothing known: geocode the address, which also resolves the county.
+            flags = _resolve_geography(terms, supplied=None)
+        else:
+            # **Coordinates known, county not.** The caller placed the property; only the
+            # FMR lookup key is missing. Geocoding here would be worse than useless — it
+            # would re-derive a point the caller already gave, and any disagreement would
+            # raise a coordinate conflict against coordinates nobody disputed.
+            #
+            # `county_fips_from_point` is a point-in-polygon join against local geometry,
+            # so this path stays network-free, which is what lets the eval harness's
+            # golden tier keep the property `eval/README.md` defines it by.
+            #
+            # No flag on failure, deliberately: an unresolved county surfaces as
+            # `FMR_UNAVAILABLE_FOR_COUNTY` in the Valuation agent, which is the agent that
+            # knows what the absence costs. Raising one here too would disclose the same
+            # gap twice in the same report.
+            terms.county_fips = county_crosswalk.lookup_county_fips(
+                terms.latitude, terms.longitude
+            )
+            flags = []
+        return {"deal_terms": terms, "flags": flags}
+
     try:
         extraction, attempts = _extract_terms(state.raw_listing_text)
     except SchemaValidationExhausted as exc:

@@ -274,6 +274,59 @@ class DealTerms(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
+    def is_complete(self) -> bool:
+        """True when every field in `config.REQUIRED_DEAL_FIELDS` is populated.
+
+        Lives on the type rather than in an agent because two agents now ask it — the
+        Planner, to decide whether extraction is needed at all, and the Extractor, to
+        decide whether it needs the *model* or only the geocoder (U8.1b). Putting it in
+        one of them would have made the other import an agent, inverting the dependency
+        the graph's topology sets up.
+
+        The field list stays in `config` precisely so "what counts as complete" is
+        tunable without touching an agent (§8). Names are looked up by `getattr`, so a
+        typo in the config tuple surfaces here at the first run rather than as a
+        silently-always-incomplete deal.
+
+        **`config` is imported inside the method, not at module scope, and that is
+        deliberate.** This module imports nothing from the project — it is the schema
+        every other module depends on, and a schema that reaches back into configuration
+        at import time makes the dependency run both ways. Keeping the import local means
+        `state.py` still loads on its own, while the one method that genuinely needs a
+        tunable can read it.
+        """
+        import config
+
+        return all(
+            getattr(self, field_name) is not None
+            for field_name in config.REQUIRED_DEAL_FIELDS
+        )
+
+    def geography_is_incomplete(self) -> bool:
+        """True when a deal still needs a geography step, whatever else it has.
+
+        Two distinct gaps, reached by different callers. **No coordinates** is a caller
+        who supplied structured terms and left placement to the system. **Coordinates but
+        no county** is a caller who knows where the property is but not which HUD entity
+        prices it — a lookup key rather than a location.
+
+        Both were silent until U8.1b: `config.REQUIRED_DEAL_FIELDS` covers neither, so a
+        complete-looking deal skipped extraction and reached the Valuation agent with no
+        FMR anchor — disclosing `FMR_UNAVAILABLE_FOR_COUNTY` as though HUD published no
+        schedule for the county, rather than as though nobody had looked one up. Those
+        read the same in a report and mean entirely different things.
+
+        Here rather than in either agent for the same reason as `is_complete()` above:
+        the Planner asks it to route, the Extractor asks it to decide which geography
+        step to run, and whichever agent owned it the other would have had to import an
+        agent.
+        """
+        return (
+            self.latitude is None
+            or self.longitude is None
+            or self.county_fips is None
+        )
+
 
 class Comp(BaseModel):
     """A retrieved comparable listing.

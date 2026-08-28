@@ -66,15 +66,12 @@ _PIPELINE: tuple[str, ...] = (
 def deal_terms_are_complete(terms: DealTerms) -> bool:
     """True when every field in `config.REQUIRED_DEAL_FIELDS` is populated.
 
-    The field list lives in config precisely so that "what counts as complete" is
-    tunable without touching an agent (§8). Names are looked up by `getattr`, so a
-    typo in the config tuple surfaces here as an `AttributeError` at the first run
-    rather than as a silently-always-incomplete deal.
+    Kept as a named function here, delegating to `DealTerms.is_complete()`, because the
+    routing decision it expresses is the Planner's and reads better at the call site as a
+    sentence about the deal. The predicate itself moved to `state.DealTerms` in U8.1b,
+    once the Extractor needed it too — see that method for why.
     """
-    return all(
-        getattr(terms, field_name) is not None
-        for field_name in config.REQUIRED_DEAL_FIELDS
-    )
+    return terms.is_complete()
 
 
 def _geocode_is_worth_retrying(state: DealState) -> bool:
@@ -102,11 +99,45 @@ def planner_agent(state: DealState) -> dict:
     """Node function: returns a partial state update, never the whole state."""
     steps: list[str] = []
 
-    # Two independent reasons to extract: the terms are not all there yet, or they are
-    # but the coordinates behind them came from a geocoder that was down. The second is
-    # the whole justification for the Critic's rework path, which without this re-runs
-    # everything *except* the step that could change the answer.
-    if not deal_terms_are_complete(state.deal_terms) or _geocode_is_worth_retrying(state):
+    # Three independent reasons to route through the Extractor node:
+    #
+    #   1. The terms are not all there yet — the ordinary case.
+    #   2. They are, but the coordinates behind them came from a geocoder that was down.
+    #      This is the whole justification for the Critic's rework path, which without it
+    #      re-runs everything *except* the step that could change the answer.
+    #   3. They are, and the geography behind them is incomplete — no coordinates, or
+    #      coordinates with no county resolved. Both leave the FMR anchor unreachable.
+    #
+    # **Reason 3 was a real gap, found by the eval harness and fixed Aug 28, 2026
+    # (U8.1b).** `config.REQUIRED_DEAL_FIELDS` does not include coordinates, and
+    # reasonably so — a listing that reaches the Extractor has them derived from its
+    # address as an ordinary step (#10). But a caller supplying complete structured terms
+    # skipped this node entirely, so nothing ever derived them, and the deal arrived at
+    # comp retrieval with nowhere to search. The run then degraded on *geography* while
+    # looking like an ordinary result, which is precisely the silent failure Transparent
+    # Degradation exists to refuse.
+    #
+    # Latent rather than active until now — `main.py` always supplies raw text — which is
+    # why it survived to U8. The Extractor makes no model call on this path; see
+    # `extractor_agent`.
+    # **First pass only**, and the qualifier is load-bearing. Without it this reads
+    # "geography is incomplete", which stays true forever for an address that was tried
+    # and could not be resolved — so every rework lap would re-plan extraction for a
+    # geocode that already failed on its merits. That is precisely the distinction U7.1b
+    # drew and `_geocode_is_worth_retrying` exists to police: a *service outage* is worth
+    # another attempt, an address with nothing to resolve to is not. This clause is about
+    # geography never having been *attempted*; later laps are that function's business.
+    #
+    # Caught by `test_an_unresolvable_address_does_not_re_plan_extraction`, which is the
+    # test that exists for exactly this mistake.
+    needs_geocode = (
+        state.planner_invocations == 0 and state.deal_terms.geography_is_incomplete()
+    )
+    if (
+        not deal_terms_are_complete(state.deal_terms)
+        or _geocode_is_worth_retrying(state)
+        or needs_geocode
+    ):
         steps.append(nodes.EXTRACTOR)
 
     steps.extend(_PIPELINE)
