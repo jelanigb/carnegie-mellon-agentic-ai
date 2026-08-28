@@ -327,7 +327,7 @@ ZORI's unit mix is not the corpus's, which is why the *level* comparison is labe
 indicative while the *stability* one is not — the same construction at both ends cancels a
 constant mix bias out of the difference, but not out of the level.
 
-### U8.1 — The harness: case schema, batch runner, results table, coverage census
+### U8.1 ✅ — The harness: case schema, batch runner, results table, coverage census
 
 `eval/cases.py` (the case type and the case set) and `eval/runner.py` (batch execution and
 tabulation). The runner invokes the **real compiled graph** per case, exactly as
@@ -350,28 +350,140 @@ a row set in the evaluation rather than a separate pass.
 **Ships incomplete on purpose.** The census will report a large uncovered set until U8.2
 fills it; that is the measurement U8.2 is designed against.
 
+---
+
+**Built Aug 28, 2026.** `eval/cases.py`, `eval/runner.py`, output at
+`eval/results/results.md`. Three notes.
+
+**All seven live rows reproduce the U7.8 table exactly** — comps, confidence, severity
+counts and outcome. That is a regression pass on a published table *and* the evidence that
+the runner exercises the same code path `main.py` does rather than a rearrangement of it.
+
+**The verdict instrument is split in two, which was not in the plan.** Q1's design has each
+case declare `reports` or `escalates` before the run, and the threshold scored on agreement.
+But the demo deals' outcomes are already measured and published, so declaring them as
+"intended" would hand U8.6 seven agreements transcribed from the answer key. `EvalCase`
+therefore carries `verdict_source`: `PREDICTED` verdicts are claims made in advance and are
+the only ones `scoring_cases()` returns for U8.6; `BASELINE` verdicts are prior
+measurements, making those rows regression checks. The batch currently reports **0 scoring
+cases and 7 baselines**, and says so rather than reporting 7/7 as if it meant something.
+
+**The census found a different gap than this plan guessed, which is the payoff for ordering
+it first.** 17 of 29 kinds covered, 11 uncovered, 1 unreachable. The U8.2 table below was
+written from assumption and was wrong in both directions — `anomalous_period_included` is
+already covered, and six kinds it never named are not. Corrected below from the measurement.
+
+One trap caught while building, worth review attention: a golden fixture that satisfies
+`REQUIRED_DEAL_FIELDS` but omits coordinates skips the Extractor *and* therefore the
+geocoder, so it degrades on geography rather than on its target — and still produces a
+plausible-looking row. `EvalCase.__post_init__` rejects it at import.
+
+### U8.1b ✅ — Two defects the census surfaced *(taken Aug 28, 2026 by the architect)*
+
+Both were found by building U8.1 rather than by reading code, and neither is an eval-only
+problem.
+
+**1. `FlagKind.LLM_RENT_FALLBACK_USED` deleted.** The census reported it as the one kind no
+case can raise: §6's cut list item 3 was taken and the fallback estimator was never built.
+Removed on the rule `state.FlagKind` already wrote down when it retired
+`COUNTY_FROM_PRINCIPAL_COUNTY` — *"a kind nothing can ever raise would corrupt that
+comparison"* — so the member violated a standard this repository had already set for
+itself. `RentEstimateSource.LLM_FALLBACK` stays: it is a different enum, read for
+provenance rather than compared against a coverage claim, and `valuation_rent.py` keeps
+that seam typed-and-unused on purpose. `UNREACHABLE_BY_ANY_CASE` is now empty, and the
+mechanism stays for the next such member. **FlagKind: 29 → 28.**
+
+**2. Complete terms with no coordinates skipped the geocoder — a production defect, not an
+eval artifact.** `REQUIRED_DEAL_FIELDS` does not include coordinates, reasonably, since a
+listing reaching the Extractor has them derived from its address (#10). But a caller
+supplying complete structured terms skipped the Extractor node entirely, so **nothing ever
+derived them**, and the deal arrived at comp retrieval with nowhere to search — degrading on
+*geography* while looking like an ordinary result. Latent until now only because `main.py`
+always supplies raw text.
+
+Fixed on both sides, and without spending a model call: the Planner gains a third reason to
+route through the Extractor (terms complete, geography incomplete), and `extractor_agent`
+takes a **geography-only path** that skips `_extract_terms`. Verified: a fixture with parsed
+address components geocodes to a parcel with **zero flags and no model call**.
+
+**The defect had a second half, found while starting U8.2.** `county_fips` is derived only
+inside `_resolve_geography`, so a caller supplying *coordinates* and complete terms still
+reached the Valuation agent with no FMR anchor — and the report then said
+`FMR_UNAVAILABLE_FOR_COUNTY`, which reads as *HUD publishes no schedule for this county*
+when the truth was *nobody looked one up*. Those are different facts and a reader cannot
+tell them apart.
+
+So the geography path branches: no coordinates → geocode (which also resolves the county);
+coordinates but no county → **resolve the county alone**, via the local point-in-polygon
+join, with no geocode. Geocoding there would re-derive a point the caller already gave and
+risk raising a coordinate conflict against coordinates nobody disputed. The county join is
+network-free, so the golden tier keeps the property `eval/README.md` defines it by, and
+fixtures do not have to hand-carry FIPS codes.
+
+**One regression caught by the existing suite, and it was the right test to fail.**
+Expressing the Planner's condition as "geography is incomplete" made it true *forever* for
+an address that was tried and could not be resolved, so every rework lap re-planned
+extraction for a geocode that had already failed on its merits — exactly the distinction
+U7.1b drew between a retryable service outage and an unresolvable address. Restricted to
+the first pass; later laps stay `_geocode_is_worth_retrying`'s business.
+`test_an_unresolvable_address_does_not_re_plan_extraction` exists for this mistake and
+caught it.
+
+Two predicates moved onto `state.DealTerms` as part of this — `is_complete()` and
+`geography_is_incomplete()` — because two agents now ask each, and leaving either in an
+agent would have made the other import an agent, inverting the dependency the graph's
+topology sets up. The Planner reaching into the Extractor for a predicate was written and
+reverted during this change set; recorded because the pull toward it is structural, not a
+slip. `config` is imported inside
+the method rather than at `state.py`'s module scope, so the schema module every other
+module depends on still loads without reaching back into configuration.
+
+**The harness guard stays as well, and is not made redundant by the fix.** Geocoding is a
+Census API call, so a fixture relying on runtime geocoding would put a network dependency
+in the golden tier that `eval/README.md` defines as fast and reproducible. Fixtures supply
+coordinates; the production path resolves them. Different jobs.
+
+All 60 tests pass.
+
 ### U8.2 — The engineered cases (tier 1: golden fixtures)
 
 8–10 cases, each targeting one kind the census reports uncovered, supplied as complete
 `DealTerms` so the pre-flight Planner (#9) routes past extraction — no new mechanism
 needed, per `eval/README.md`.
 
-Known targets before the census runs, each with a reason the demo set cannot reach it:
+**The eleven uncovered kinds, measured by U8.1 rather than assumed.** The list this
+section first carried was written from assumption and got it wrong in both directions: it
+named `ANOMALOUS_PERIOD_INCLUDED`, which the demo set already covers, and missed six kinds
+entirely. Replaced with the census output:
 
-| Target | Why no demo deal reaches it |
-| --- | --- |
-| `FMR_BEDROOM_CAP_EXCEEDED` | Needs a bedroom count above HUD's published schedule |
-| `RENT_ESTIMATE_UNAVAILABLE` | Needs a predicted ratio outside the plausible band |
-| `ANOMALOUS_PERIOD_INCLUDED` | Needs a subject whose Redfin series spans 2020–22 unscreened |
-| `RENT_COMP_DIVERGENCE_THRESHOLD_PCT` (Q5) | Silent on all three inference markets by design since ZIP anchoring |
-| The critical-flag escalation boundary | U7.8: reached live only by the `--no-retrieval` flag, never by a property of a listing |
-| `EXTRACTION_RETRY_EXHAUSTED` / `EXTRACTION_UNAVAILABLE` | Extraction-originated — tier 2, U8.3 |
+| Uncovered kind | Route to a case | Tier |
+| --- | --- | --- |
+| `unresolved_field` | A listing that omits a required field | replay (U8.3) |
+| `assumed_field_value` | A listing the Extractor must infer from | replay (U8.3) |
+| `extraction_retry_exhausted` | Recorded responses that never validate | replay (U8.3) |
+| `extraction_unavailable` | No model reached at all | replay (U8.3) |
+| `geocoder_service_unavailable` | Census call fails — distinct from an unresolvable address | replay (U8.3) |
+| `coordinates_from_city_centroid` | An address that resolves to nothing but whose city does | replay (U8.3) |
+| `fmr_bedroom_cap_exceeded` | Bedroom count above HUD's published schedule | golden |
+| `rent_estimate_unavailable` | A predicted ratio outside the plausible band | golden |
+| `rent_diverges_from_comps` | **Closes OQ-12's second half** — `config.py:386` went from firing on 2 of 5 subjects to 0 of 5 and needs a case on the far side of the line | golden |
+| `critic_inconsistency` | An I1/I2/I3 interaction combination (U7.2) | golden |
+| `rework_limit_reached` | A retryable objection that survives `MAX_REWORKS` laps | golden |
+
+Plus one target that is not a flag kind: **the critical-flag escalation boundary reached
+through a property of a listing.** U7.8 found it reached live only by the `--no-retrieval`
+switch, which is not a deal.
+
+**Six of the eleven are extraction- or geography-originated, so they are U8.3's tier-2
+cases rather than golden fixtures** — which also means U8.3 is larger relative to U8.2 than
+this plan assumed when it called tier 2 "the handful of flags".
 
 **Per §8, the coverage census must state what it could have returned.** Some kinds are
 unraisable by construction and the census has to say which and why, rather than reporting
-them as gaps: `LLM_RENT_FALLBACK_USED` cannot fire at all (cut-list item 3, taken —
-the estimator was never built), and `RETRIEVAL_DISABLED` is reachable only through the
-ablation flag, not through any listing. A census that silently counts an unbuildable kind
+them as gaps. `RETRIEVAL_DISABLED` is reachable only through the ablation flag rather than
+through any listing, and is covered by the ablation case. **The one genuinely unraisable
+kind was deleted rather than excused — see U8.1b** — so the exclusion table is empty and the
+census is exact. A census that silently counts an unbuildable kind
 as an uncovered gap is the same overstatement in the other direction.
 
 ### U8.3 — Recorded extractions (tier 2)
