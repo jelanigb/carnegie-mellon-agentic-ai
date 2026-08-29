@@ -694,7 +694,7 @@ entirely; both were wrong (a ZIP-match miss reaches the same flag through the fa
 U8.2b's fix already distinguishes) and are corrected in `eval/cases.py` to state what was
 actually measured rather than what seemed likely.
 
-### U8.4 — New York rent error: the disclosure and the case (OQ-3)
+### U8.4 ✅ — New York rent error: the disclosure and the case (OQ-3)
 
 Per Q2 (C + 2). Four pieces, in order:
 
@@ -713,6 +713,64 @@ question this flag does not ask.
 
 Today the Staten Island error is disclosed by accident — that deal escalates for having
 zero comps — and an accident is not a check.
+
+---
+
+**Built Aug 29, 2026.** All four pieces landed; measured against real HUD/Census calls and
+the real comp index throughout, not mocked.
+
+**Measure.** `tools/model/rent_model.py`'s `train()` already computed the holdout residuals
+this needed — the change was carrying `df.index` through the existing `train_test_split`
+call so the test rows could be traced back to `state`/`cityname` afterward. Grouped by
+`config.INDEXED_MARKETS`, whose own docstring already named it "the inference trio plus New
+York" — exactly the four markets OQ-3 asks about, with no new config needed for the
+grouping itself. Matched the way `scripts/metro_shortlist_ablation.py`'s module docstring
+already documented as correct, rather than repeating the `ignore_index` bug it exists to
+avoid. Measured on today's retrain: overall $524.03; **Chicago $492.14, Los Angeles
+$530.46, Cleveland $452.49 — all within 1.1x of the overall figure — against New York's
+$1,048.38, at 2.00x.** Consistent with the $518/$1,065 figures OQ-3 and U8's planning
+carried forward from `scripts/metro_shortlist_ablation.py`'s original measurement.
+
+**Flag.** `FlagKind.RENT_ESTIMATE_MARKET_ERROR_ELEVATED`, WARN severity. The threshold is a
+*ratio* to the model's own overall holdout MAE rather than a fixed dollar figure —
+`config.RENT_MODEL_METRO_ERROR_RATIO_THRESHOLD = 1.5` — so a retrain does not silently
+invalidate it. Set on the one measurement above, with wide margin on both sides (trio tops
+out at 1.1x; New York sits at 2.00x), and marked `PROVISIONAL` for U8.6 alongside
+`RENT_COMP_DIVERGENCE_THRESHOLD_PCT` and `COMP_MAX_OUTSIDE_MATCH_SHARE` — this repository
+already has a place for a threshold set on one clean measurement and revisited once the
+batch exists to tune against, and this joins it rather than inventing a second category.
+`agents/valuation_rent.py`'s `_attach_metro_error` resolves the subject's market the same
+way `_attach_benchmark` already resolves a Redfin metro (`kaggle_data.city_matches` against
+the same `INDEXED_MARKETS` grouping the measurement used, so the two cannot drift apart),
+and runs immediately after `_attach_model_provenance` — independent of whether the county,
+the FMR lookup, or the estimate itself later fails, mirroring `_attach_benchmark`'s own
+independence and satisfying Q2(a)'s "render always" on its own by construction.
+
+**Render.** Both the "Estimated rent" table cell and the "How the rent figure was reached"
+narrative in `agents/summarizer.py` print the subject's market figure whenever it resolves,
+flagged or not — confirmed on live runs of all three inference-trio demos plus
+`staten-island`: Los Angeles and Chicago each read "in line with the figure above," New
+York reads "materially worse … see the disclosure below."
+
+**Case.** The `staten-island` demo needed no new work — it already carries real coordinates
+in a real New York county and picked up the new flag automatically once the model was
+retrained (disclosures 8 → 9, confidence unchanged at 0.00 on zero comps, verdict
+unchanged). But that is the disclosure firing by the same accident OQ-3 named — zero comps,
+not a market property — so a second case was added to show it firing where the accident
+does not apply: **`ny-bedstuy-triplex`**, a fixture at a real, Census-geocoded
+Bedford-Stuyvesant address (40.672786, -73.950302) chosen specifically because it returns a
+real comp set (8 comps) rather than reproducing Staten Island's zero. Declared `reports` per
+the mechanical rule — both its targets (`RENT_ESTIMATE_MARKET_ERROR_ELEVATED` and the
+incidental `COMPS_SPATIALLY_CONCENTRATED`, a genuine property of this corpus location, not
+engineered) are warn-severity — and measured `escalates` once New York's standing
+county-anchor warn stacks with the other two. A second tuning signal alongside
+`chicago-five-bedroom`, by the same triage rule: the target fired as designed, so this is
+evidence for U8.6, not a broken case. Recorded once with `--record`, reproduces identically
+under replay.
+
+**Batch re-run after the retrain: coverage 27 → 28 of 29 kinds** (only `rework_limit_reached`
+remains, unchanged from U8.3); **7/7 published baselines still match**; **12/14 predicted
+verdicts agree**, the two disagreements being the tuning signals above.
 
 ### U8.4b — The rent-drift correction (U8.0's consequence)
 
