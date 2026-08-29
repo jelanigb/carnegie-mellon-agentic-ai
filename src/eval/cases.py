@@ -115,9 +115,31 @@ class Fault(StrEnum):
     the flag directly, so the case still tests the branch that chooses between
     `GEOCODER_SERVICE_UNAVAILABLE` and `COORDINATES_FROM_CITY_CENTROID` rather than
     asserting the outcome of it.
+
+    **`LLM_UNAVAILABLE`, added U8.3, for the same class of reason.**
+    `FlagKind.EXTRACTION_UNAVAILABLE` is raised when `agents.extractor._extract_terms`
+    never receives a response at all — `tools.llm_client.LlmClient.complete` raises
+    `LlmError` before there is anything to validate, let alone record. A recording is a
+    replay of a *response*; there is no response here to replay, so the two mechanisms
+    that cover every other extraction flag (a real listing, a recorded call) both come up
+    empty for this one, which is exactly `Fault`'s admission criterion.
+
+    Patched one layer above the raw transport call, same as `GEOCODER_OUTAGE`:
+    `LlmClient.complete` is the primary call (`geocode_census`'s analogue), so the
+    Extractor's own `except LlmError` branch still does the deciding. The patch is
+    class-level rather than per-instance because `_extract_terms` builds a fresh
+    `LlmClient()` per call and there is no instance to reach beforehand.
+
+    Left unrestricted rather than expired after one call: `agents.scenario_forecast` also
+    builds an `LlmClient` and would hit the same patched method later in the same run.
+    That is not a leak to guard against — it is the honest consequence of the model
+    actually being down. `scenario_forecast` already catches `LlmError` and raises its own
+    `FORECAST_UNAVAILABLE`, so the row shows a real, gracefully-degraded multi-flag outage
+    rather than a run that dies partway through.
     """
 
     GEOCODER_OUTAGE = "geocoder_outage"
+    LLM_UNAVAILABLE = "llm_unavailable"
 
 
 @dataclass(frozen=True)
@@ -155,16 +177,17 @@ class EvalCase:
             )
         if self.terms is not None:
             self._check_golden_fixture()
-        if self.injects is Fault.GEOCODER_OUTAGE and self.terms is not None:
-            # A fixture supplies coordinates (enforced above), so U8.1b's geography path
-            # takes the county-only branch and the geocoder is never called — the
-            # injection would be a silent no-op and the case would report a clean pass
-            # for a failure that never happened. Rejected at import for the same reason
-            # `_check_golden_fixture` is: the run would still produce a plausible row.
+        if self.injects is not None and self.terms is not None:
+            # A fixture supplies its terms directly, so U8.1b's geography path takes the
+            # county-only branch and the Extractor never calls the model or the geocoder
+            # at all — either injection would be a silent no-op and the case would report
+            # a clean pass for a failure that never happened. Rejected at import for the
+            # same reason `_check_golden_fixture` is: the run would still produce a
+            # plausible row.
             raise ValueError(
-                f"Case {self.key!r}: a geocoder outage needs the geocoder to be called, "
-                f"so this case must supply `listing` rather than `terms`. A fixture "
-                f"carries its own coordinates and never reaches the geocoder at all."
+                f"Case {self.key!r}: a declared fault needs the seam it patches to "
+                f"actually be reached, so this case must supply `listing` rather than "
+                f"`terms`. A fixture skips the Extractor entirely."
             )
 
     def _check_golden_fixture(self) -> None:
@@ -296,6 +319,18 @@ def demo_cases() -> list[EvalCase]:
 # escalating cases can be scored 100% by a threshold of 1.0, so agreement would measure
 # nothing. `la-ordinary-duplex` and `chicago-uptown-duplex` are what make the agreement
 # figure two-sided.
+
+# Shared with `scripts/record_retry_exhausted_fixture.py`, which hand-authors that
+# case's recordings against this exact text — see `chicago-retry-exhausted` below and
+# that script's module docstring for why a live `--record` run cannot make them. A
+# module constant rather than two copies is what keeps the case and its recordings from
+# being able to drift apart: the recorded cache keys are hashes of this string, so an
+# edit here without a re-run of that script turns every committed recording into a
+# `CacheMiss`.
+RETRY_EXHAUSTED_LISTING = (
+    "For sale: 3310 W Belmont Ave, Chicago, IL 60618. Well-maintained 2-unit building, "
+    "2 bed / 1 bath per unit, approx 1,000 sq ft each. Asking $475,000."
+)
 
 ENGINEERED_CASES: list[EvalCase] = [
     # --- The control -------------------------------------------------------
@@ -470,6 +505,128 @@ ENGINEERED_CASES: list[EvalCase] = [
             "1 bath per unit, approx 950 sq ft each. Vintage details, rear porches, "
             "shared laundry in the basement. Current tenants pay $1,800 and $1,850 per "
             "month. Asking $530,000."
+        ),
+    ),
+
+    # --- Recorded extractions (U8.3): the kinds that genuinely originate in the ------
+    # --- Extractor or in geography resolution, so the model or the geocoder has to ---
+    # --- actually run rather than being skipped by a golden fixture. -----------------
+    #
+    # Five of the six kinds U8.2's census routed here; the sixth, geocoder_service_
+    # unavailable, closed in U8.2 itself via Fault.GEOCODER_OUTAGE and needed no further
+    # case. See eval/README.md's "Recording and replaying" section for the mechanics.
+    EvalCase(
+        key="la-unpriced-triplex",
+        tier=Tier.REPLAY,
+        verdict=Verdict.REPORTS,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.UNRESOLVED_FIELD,),
+        note=(
+            "The listing states the address, unit count and every physical attribute, "
+            "but never states a price — 'contact listing agent' is the only thing said "
+            "about it. Predicted to report: `unit_count` is given as '3-unit', which "
+            "the extraction system prompt's rule 3a treats as stated rather than "
+            "inferred, so this case does not also trip `assumed_field_value` — the two "
+            "warns measured (`unresolved_field` plus `fmr_anchor_county_level`, this "
+            "ZIP's Small Area schedule not matching and falling through to the county "
+            "figure) sit well under threshold either way. **Sited in Los Angeles rather "
+            "than Cleveland deliberately** — a first attempt at Cleveland reproduced "
+            "(across three re-runs, so structural rather than a network flake) the same "
+            "comp-concentration critical objection `cleveland-triplex` already "
+            "evidences, which would have buried this flag's own cost under a confound "
+            "this case was not built to measure."
+        ),
+        listing=(
+            "For sale: 3400 S Vermont Ave, Los Angeles, CA 90089. 3-unit building, 2 "
+            "bed / 1 bath per unit, approx 900 sq ft each. New roof in 2023, updated "
+            "electrical panel. Current tenants pay $1,450/month per unit. Contact "
+            "listing agent for price."
+        ),
+    ),
+    EvalCase(
+        key="la-duplex-near-usc",
+        tier=Tier.REPLAY,
+        verdict=Verdict.REPORTS,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.ASSUMED_FIELD_VALUE,),
+        note=(
+            "'Duplex' names a building type but no number, so the extraction system "
+            "prompt's rule 3 requires the model to infer unit_count=2 and record the "
+            "basis rather than read it. Predicted to report: two warns measured "
+            "(`assumed_field_value` plus `fmr_anchor_county_level` — this ZIP's Small "
+            "Area schedule did not match, the same fall-through `la-unpriced-triplex` "
+            "hits a few blocks over), both well under threshold."
+        ),
+        listing=(
+            "For sale: 1425 W Adams Blvd, Los Angeles, CA 90007. Charming duplex near "
+            "USC, each unit 2 bed / 1 bath, approx 850 sq ft. Long-term tenants, rent "
+            "roll available on request. Asking $780,000."
+        ),
+    ),
+    EvalCase(
+        key="chicago-retry-exhausted",
+        tier=Tier.REPLAY,
+        verdict=Verdict.ESCALATES,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.EXTRACTION_RETRY_EXHAUSTED,),
+        note=(
+            "**Recordings for this case are hand-authored, not live-recorded** — see "
+            "`scripts/record_retry_exhausted_fixture.py` for why: `ListingExtraction` "
+            "has no required fields, so an ordinary model response validates and "
+            "provoking three organic failures on demand is not reproducible. The three "
+            "committed responses are real cache entries under the real prompts "
+            "`call_with_schema`'s retry loop generates; nothing about replay is "
+            "special-cased for this case. Predicted to escalate: retry exhaustion is "
+            "critical-severity, independent of the score, and no deal terms survive it."
+        ),
+        listing=RETRY_EXHAUSTED_LISTING,
+    ),
+    EvalCase(
+        key="cleveland-model-outage",
+        tier=Tier.REPLAY,
+        verdict=Verdict.ESCALATES,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.EXTRACTION_UNAVAILABLE,),
+        injects=Fault.LLM_UNAVAILABLE,
+        note=(
+            "**A simulated model outage, declared by the case** — see "
+            "`Fault.LLM_UNAVAILABLE`. Nothing about this listing is engineered; the "
+            "content is unreachable in this run regardless of what it says. Predicted "
+            "to escalate: an unreachable model is critical-severity and no deal terms "
+            "are extracted. The same patched outage also reaches "
+            "`scenario_forecast`'s later calls, so this row is expected to carry a "
+            "second critical disclosure (`forecast_unavailable`) — the honest "
+            "consequence of the model actually being down for the whole run, not a "
+            "second target this case claims to isolate."
+        ),
+        listing=(
+            "For sale: 1840 Coventry Rd, Cleveland, OH 44118. 2-unit building, 2 bed / "
+            "1 bath per unit, approx 950 sq ft each. Asking $310,000."
+        ),
+    ),
+    EvalCase(
+        key="chicago-unmatched-street",
+        tier=Tier.REPLAY,
+        verdict=Verdict.REPORTS,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.COORDINATES_FROM_CITY_CENTROID,),
+        note=(
+            "**The one U8.3 case that keeps a real network dependency on every run.** "
+            "`coordinates_from_city_centroid` fires when the Census geocoder runs and "
+            "cleanly finds no match — a naturally-reachable path, unlike the outage "
+            "cases above, so `Fault` (reserved for paths nothing else can reach) does "
+            "not apply. Verified live before this case was written: "
+            "`geocode_census('99999 Nonexistent Fantasy Ln', 'Chicago', 'IL', None)` "
+            "returns `None` (no match, not an error), and Chicago is well represented "
+            "in the corpus so the centroid fallback resolves. Predicted to report: two "
+            "warns measured (`coordinates_from_city_centroid` plus "
+            "`comps_spatially_concentrated` — even Chicago's density collapses somewhat "
+            "when comps are drawn from one fixed centroid rather than the property "
+            "itself), both well under threshold."
+        ),
+        listing=(
+            "For sale: 99999 Nonexistent Fantasy Ln, Chicago, IL. 2-unit building, 2 "
+            "bed / 1 bath per unit, approx 1,050 sq ft each. Asking $410,000."
         ),
     ),
 ]

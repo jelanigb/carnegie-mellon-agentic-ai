@@ -61,6 +61,19 @@ say so rather than implying every row exercised the full system end to end — a
 one live end-to-end run belongs alongside it, so "works against a real model" is
 demonstrated rather than assumed.
 
+**"No model calls" is scoped to the LLM specifically, not to network access generally —
+worth stating because tier 2 does not otherwise look offline.** Any replay case whose
+listing carries a real address reaches `agents.extractor._resolve_geography`, which calls
+the live Census geocoder: only `LLM_CACHE_MODE` is overridden for these tiers, and
+geocoding was never behind that cache (`tools/geocoding.py` deliberately has none — see
+its module docstring). Most of the time this is a fast, reliable call whose outcome does
+not matter to the case, but `coordinates_from_city_centroid` (U8.3) is the first case
+whose *target* depends on it: it needs Census to run and cleanly find no match, verified
+live before the case was written rather than assumed stable. `Fault.GEOCODER_OUTAGE`
+exists for the different, non-reproducible-on-demand case — a request that fails
+outright — and does not apply here, because a clean no-match is a naturally-reachable
+path in the first place.
+
 **That sentence was wrong from U8.1 until U8.2, and the correction is worth keeping rather
 than quietly editing.** It read "no model calls at all", which was true of the *Extractor*
 and false of the run. `agents/scenario_forecast` builds an `LlmClient` and calls it twice
@@ -95,6 +108,15 @@ properties make that honest rather than a fixture quietly patching a module:
    raises, and the pipeline's own branch decides that this is a service outage rather than
    an unresolvable address. Nothing forces a flag, so the branch under test still runs.
 
+`Fault.EXTRACTION_UNAVAILABLE`'s sibling, added U8.3, is the same reasoning applied to the
+model rather than the geocoder: `FlagKind.EXTRACTION_UNAVAILABLE` needs
+`LlmClient.complete` to fail before there is a response, so there is nothing a recording
+could ever replay. `Fault.LLM_UNAVAILABLE` patches `LlmClient.complete` at the class —
+`_extract_terms` builds a fresh instance per call — and stays patched for the rest of the
+case rather than being unwound after one call, so a later `LlmClient` (`scenario_forecast`
+builds its own) hits the same outage. That is not scope creep; it is what an actually-down
+model does to every later call in the same run.
+
 ## Recording and replaying
 
 ```bash
@@ -109,3 +131,14 @@ A `CacheMiss` under `replay` means a prompt changed since the recordings were ma
 correct responses are to re-record deliberately or to fix the prompt — never to fall
 through to a live call, which would mix fresh samples into a result set presented as
 reproducible and report the mixture as one number.
+
+**One case's recordings are hand-authored rather than recorded from a live call.**
+`FlagKind.EXTRACTION_RETRY_EXHAUSTED` needs three straight schema-validation failures, and
+`ListingExtraction` has no required fields — an ordinary or even a fairly odd model
+response validates, so provoking the failure live and on demand is not a property this
+harness can assert. `scripts/record_retry_exhausted_fixture.py` writes the three cache
+entries directly, using the real prompt-construction code so the keys match what
+`call_with_schema`'s retry loop will actually look up, and verifying each response against
+the real schema before writing it. This is not a lesser form of evidence than a recorded
+live call — the cache does not distinguish the two — but it is a different one, and the
+case's note says so.

@@ -445,7 +445,7 @@ coordinates; the production path resolves them. Different jobs.
 
 All 60 tests pass.
 
-### U8.2 — The engineered cases (tier 1: golden fixtures)
+### U8.2 — The engineered cases (golden fixtures, plus one declared fault)
 
 8–10 cases, each targeting one kind the census reports uncovered, supplied as complete
 `DealTerms` so the pre-flight Planner (#9) routes past extraction — no new mechanism
@@ -486,11 +486,213 @@ kind was deleted rather than excused — see U8.1b** — so the exclusion table 
 census is exact. A census that silently counts an unbuildable kind
 as an uncovered gap is the same overstatement in the other direction.
 
+---
+
+**Built Aug 28, 2026. Eight cases, five of the eleven kinds closed, and two harness
+properties that were asserted rather than enforced.**
+
+**Two mechanism gaps were found before the first case was written, and both were taken by
+the architect rather than worked around.**
+
+*One — the golden tier was making live model calls, roughly four per case.*
+`eval/README.md` claimed tier 1 and 2 make "no model calls at all", which was true of the
+Extractor and false of the run: `agents/scenario_forecast` builds an `LlmClient` and calls
+it twice per Tree-of-Thought level whatever tier the case is, so a golden fixture skips the
+parse and not the pipeline. Every golden row was therefore live, quota-dependent, ~30
+seconds, and unreproducible from a fresh clone — and `config.EVAL_RECORDINGS_DIR` had been
+defined since U3 with **nothing in the repository reading it**. `runner._case_environment`
+now points the cache at the committed store and replays for both offline tiers, with
+`--record` to re-record deliberately. The property is enforced rather than asserted.
+
+*Two — `REWORK_LIMIT_REACHED` is not reachable by any fixture or any recording.* A rework
+needs an objection the Critic marks retryable; exactly one is, and it is gated on
+`GEOCODER_SERVICE_UNAVAILABLE`, which is raised only when the Census *request itself*
+fails. A golden fixture carries coordinates and never calls the geocoder; a replay case
+calls it and it succeeds, because replay covers model calls and not HTTP generally. So
+`EvalCase.injects` declares a simulated fault, entering at the same seam a real outage
+does — the request raises and the pipeline's own branch decides outage-versus-unresolvable
+— and the injection prints in the results table's tier column so a reader can tell a
+simulated failure from a real one.
+
+**The cases.** Eight, across all three inference metros rather than one, because
+`critic.confidence_from_flags`'s `TODO(U8)` notes that three of six demo deals share one
+county's FMR-anchor warn and asks the batch to show whether that skew is an artifact.
+Fixtures in `eval/data/golden_fixtures.py`, each naming what is engineered and what is
+real; cases in `eval/cases.py`.
+
+**Verdicts are derived from the target flag's severity and the shipped escalation rule,
+from nothing else** — a CRITICAL target escalates, a lone WARN reports, an INFO costs
+nothing. That derivation is mechanical and checkable against `config.FLAG_SEVERITY_PENALTY`,
+and it does not consult what the case did when it ran. It has to be stated that way because
+the fixtures *were* run during design — confirming a case trips its target at all requires
+it — so "written before the run" needed a sharper meaning than a promise.
+
+**Two cases predict `reports`, deliberately.** A batch of nothing but escalating cases is
+scored 100% by a threshold of 1.0, so the agreement figure would measure nothing.
+
+**Measured on the full batch (`eval/results/results.md`): coverage 17 → 22 of 28 kinds,
+verdict agreement 7 of 8, and all 7 published baselines still reproduce the U7.8 table**
+after both the harness changes and U8.2b's flag fix — which is the regression evidence those
+rows exist for. Five kinds closed: the FMR bedroom cap, the refused rent estimate, the
+rent-comp divergence (**closing OQ-12's second half**), the Critic's interaction objection
+by two different routes, and the geocoder outage. Six remain: five extraction-originated,
+which are U8.3's, and `REWORK_LIMIT_REACHED`, below.
+
+**The above-threshold marker earns its place immediately, and negatively.** It flags
+exactly one row — `chicago--no-retrieval`, the ablation — so the published table now shows
+what U7.8 could only state: the critical-flag escalation rule is still reached only by a
+switch, never by a property of a listing. `chicago-uptown-oversized` was built to change
+that and does not.
+
+**Result: 6 of 7 golden verdicts agree, and the disagreement is the instrument working.**
+`chicago-five-bedroom` targets an info-severity disclosure, so the derivation says
+*reports*; it escalates at 0.10, because a five-bedroom subject also empties the comp set.
+The target fired, so the triage rule fixed in advance classes it as a **tuning signal**
+rather than a broken case. Transcribing the observed outcome as the intention would have
+produced 7/7 and hidden the only finding the batch has so far produced.
+
+**`REWORK_LIMIT_REACHED` is still uncovered, and that is a measured result rather than a
+failure to search.** `planner.route_after_critic` checks escalation *before* rework, so the
+retry path is reachable only through a narrow window — exactly two warn-severity
+disclosures, no critical, on every lap. Two live attempts and a grid search over 9 indexed
+markets × 16 configurations found no listing in it:
+
+- **Cleveland** diverged as needed but its comps collapse onto one coordinate, which is a
+  *critical* objection; it escalated at lap 0 and never reworked.
+- **Chicago** avoided the critical, but drawing comps from the city centroid removed the
+  divergence, so nothing objected at all. The grid confirms this is structural rather than
+  bad luck: divergence and comp dispersion trade off directly, because both are driven by
+  how thin the matching supply is. Every Chicago configuration that diverges past the
+  threshold also concentrates past it.
+- **Los Angeles and Cleveland** are excluded arithmetically before any fixture is written —
+  both pay the county-anchoring warn, making three warns and escalating on score alone.
+- **The only six hits were in New York, and U8.2b closes them.** Every one is in a county
+  that gains the county-anchoring warn once the FMR-resolution defect below is fixed —
+  three warns, window shut.
+
+So the honest resolution is not a cleverer fixture. **It is a question: should a critical
+objection preempt a retry that might have cleared it?** Today it does, unconditionally.
+Raised against U8.5, which already reworks how the Critic reads flags per pass.
+
+**One more input for U8.6, noted while it is fresh.** `chicago-uptown-oversized` was built
+to isolate the critical-flag escalation rule from the score and measured 0.70 during design;
+it pinned at **0.55** once recorded, because a forecast near-tie disclosure appeared. Same
+root cause as the rework difficulty — a warn-severity flag whose firing is decided by the
+branch scorer rather than by the deal. Whatever U8.6 concludes about `MAX_REWORKS`, that
+flag's contribution to confidence is worth pricing separately. **The escalation boundary is
+therefore not isolated by any case**, and U7.8's request for one is carried forward rather
+than met.
+
+### U8.2b — The FMR anchor was labelled ZIP-resolution in every New York county
+
+**Taken Aug 28, 2026 by the architect, as its own commit.** Found by U8.2's case work, and
+a production defect rather than an eval artifact.
+
+`tools/hud_fmr`'s `used_msa_fallback` answers two different questions depending on which
+response shape HUD returned. For a county *with* Small Area FMRs it means "a ZIP was asked
+for and none matched". For a county with **no** ZIP-level schedule at all HUD returns a
+single flat record, there is no fallback to record, and the field is `False`.
+`agents/valuation_rent.py` read it alone, so the second case was recorded as *ZIP
+resolution*.
+
+**Measured: all five New York counties** — New York, Kings, Queens, Bronx, Richmond —
+return the flat shape. Every New York subject therefore recorded `fmr_resolution = "zip"`
+against a county-wide figure with no ZIP to name, `agents/summarizer.py:489` printed a bare
+"(ZIP)" beside the anchor, and `FMR_ANCHOR_COUNTY_LEVEL` was **suppressed** — a
+warn-severity disclosure missing from every New York report, worth 0.15 of confidence
+wherever the score is not already floored. The `staten-island` demo is not the case that
+shows it: that deal sits at 0.00 on zero comps, so it absorbs the difference and its
+verdict is unchanged. What the demo shows is the *disclosure* half — the report gained the
+sentence it should always have carried. §2 designates New York as the market grounded in
+real thinness, and this made it the one market that did not say so. It also sits directly underneath U8.4, which exists to disclose New York's rent
+error and would have been built on a report that already misstated the anchor.
+
+Fixed by requiring both halves: an anchor is ZIP-resolution only where HUD published a
+schedule (`is_safmr`) *and* a ZIP matched.
+
+**The flag's own message was wrong in the other direction, and is fixed with it.** It
+asserted that HUD publishes no ZIP-level schedule — true for New York, false for Los
+Angeles, which has 474 ZIP schedules for FY2026 and is county-anchored for an unrelated
+reason: the model's training rows there were county-anchored, and mixing the two would
+multiply a county-relative ratio by a ZIP-level figure. One flag kind still, on this file's
+own rule that the reader's response decides — it is the same response either way — but the
+sentence naming the cause now branches, because a fixed sentence was false of half the
+deals that saw it.
+
 ### U8.3 — Recorded extractions (tier 2)
 
 The handful of kinds that genuinely originate in the Extractor need it to run. Record with
 `LLM_CACHE_MODE=read_write`, commit the recordings to `eval/data/llm_recordings/`, and run
 the batch under `replay` so a miss is a hard error rather than a live call.
+
+---
+
+**Built Aug 29, 2026.** Five cases in `eval/cases.py`, closing the five kinds U8.2's
+census attributed here (the sixth, `geocoder_service_unavailable`, had already closed in
+U8.2 via `Fault.GEOCODER_OUTAGE`). **Coverage: 22 → 27 of 28 kinds. `rework_limit_reached`
+is the one kind left, and U8.2 already found why** — the retry window needs exactly two
+warn-severity disclosures and no critical on every lap, and every indexed market either
+escalates first (a critical present) or never diverges enough to draw the retryable
+objection at all. Left to U8.5, which is where the question it raises (*should a critical
+objection preempt a retry that might have cleared it?*) belongs. All 7 published baselines
+still reproduce the U7.8 table exactly, and 12 of 13 predicted verdicts agree — the one
+mismatch is U8.2's `chicago-five-bedroom`, untouched by this subsection.
+
+**Two of the five needed a new mechanism; the other three were ordinary `--record` runs**
+against a listing built to trip one kind cleanly (a stated-not-inferred unit count with no
+price; a bare "duplex" with no numeral; a real city, corpus-covered, with a street Census
+cannot match).
+
+**`extraction_unavailable` has no response to record, so `Fault` gained a second member.**
+`Fault.LLM_UNAVAILABLE` patches `tools.llm_client.LlmClient.complete` at the class — the
+same one-layer-above-transport seam `GEOCODER_OUTAGE` patches `geocode_census` at, chosen
+for the same reason: `_extract_terms` builds a fresh `LlmClient()` per call, so there is no
+instance to patch ahead of time, and patching here leaves the Extractor's own `except
+LlmError` branch doing the deciding rather than a directly-forced flag. **Left unrestricted
+for the rest of the case deliberately**, not scoped to the one call: `scenario_forecast`
+builds its own `LlmClient` later in the same run and hits the same patch, which is the
+honest behaviour of a model that is actually down — it already catches `LlmError` and
+raises its own critical `forecast_unavailable`, so the row shows a real multi-flag
+cascade (measured: 1 warn, 4 critical) rather than a run that dies partway through.
+
+**`extraction_retry_exhausted` needed responses that are guaranteed to fail validation,
+and no live model can be asked for that on demand.** `ListingExtraction` has no required
+fields — every one is `Optional` — so an ordinary or even a fairly odd model response
+*validates*. `scripts/record_retry_exhausted_fixture.py` hand-authors the three recordings
+instead: it reproduces `call_with_schema`'s exact prompt and retry-prompt construction
+using the real `_EXTRACTION_PROMPT`, `_EXTRACTION_SYSTEM` and schema, chooses three
+responses that fail for three different reasons (outright refusal, then two JSON objects
+with type-coercion failures), and verifies each against the real schema before writing it
+— so a response that would have accidentally validated fails the script rather than
+committing silently. No live call happens; determinism comes from Pydantic validation
+being the same function on every run, not from a model's mood. Reproduced clean across
+three replay runs.
+
+**`coordinates_from_city_centroid` is the harness's first case with a real, standing
+network dependency.** The path it targets fires only when the Census geocoder *runs and
+cleanly finds no match* — a naturally-reachable path, unlike an outage, so `Fault` (built
+for paths nothing else can reach) does not apply and should not. Verified live before the
+case was written: `geocode_census('99999 Nonexistent Fantasy Ln', 'Chicago', 'IL', None)`
+returns `None`, and Chicago's corpus coverage resolves the centroid fallback. `eval/
+README.md`'s "no model calls" claim for tiers 1–2 is unaffected — it was always scoped to
+the LLM, and every replay case with a real address already calls the live geocoder; this
+is simply the first case whose target *depends* on that call's outcome rather than
+incidentally making it.
+
+**One case was re-sited mid-build, and the reason is worth keeping.** The `unresolved_field`
+case first ran in Cleveland and escalated at 0.40 with a critical `critic_inconsistency` —
+reproduced identically across three re-runs, so structural rather than a network flake.
+Cleveland's comps collapsing onto one coordinate is exactly what `cleveland-triplex`
+(U8.2) already evidences; sited there, this case would have measured that confound
+instead of the flag it targets. Moved to Los Angeles, where it lands cleanly at 0.70 on
+two warns (`unresolved_field` plus `fmr_anchor_county_level`, this ZIP's Small Area
+schedule not matching). Worth stating plainly: **any replay-tier case with a real, valid
+address inherits a live Census call**, and that call's outcome is part of the case's
+result whether or not geography is the target. Two case notes originally guessed Los
+Angeles County's Small Area coverage would keep `fmr_anchor_county_level` off these rows
+entirely; both were wrong (a ZIP-match miss reaches the same flag through the fallback
+U8.2b's fix already distinguishes) and are corrected in `eval/cases.py` to state what was
+actually measured rather than what seemed likely.
 
 ### U8.4 — New York rent error: the disclosure and the case (OQ-3)
 

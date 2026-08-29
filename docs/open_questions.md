@@ -37,6 +37,9 @@ so absence must not be read as *cleared* when it means *not re-examined*; `state
 records which agents ran. **Accepted knowingly for U7** — bounded by `MAX_REWORKS`, and
 every affected path escalates to a human. `agents/critic.py`, `agents/planner.py`.
 
+**Related, and raised Aug 28, 2026 by U8.2 — see OQ-16 below.** The same subsection now
+also owns the question of whether escalation should preempt a retry at all.
+
 **Taken Aug 28, 2026 at U8.5, and the cut list's price on it was wrong.** §6 described it
 as "a §5 change touching every agent that raises a flag", which was estimated rather than
 measured. Measured: **37 `flag()` sites across five agents, every one inside a node
@@ -44,6 +47,34 @@ function that already holds `state`**, six helpers that would take a pass index 
 argument, one central `state.flag()` constructor — one mechanical commit plus the Critic
 filter. It lands *before* U8.6, because the eval batch contains rework laps and a stale
 objection in a published results table is worse than the same sentence in one demo report.
+
+**Note for whoever builds it: the batch does not currently contain a rework lap.** See
+OQ-16 — nothing in it reworks, so the pass-scoping change has no eval row exercising it and
+`tests/` is the only place it can be asserted until OQ-16 is settled.
+
+### OQ-16 · U8.5 — should a critical objection preempt a retry that could clear it?
+**Raised Aug 28, 2026 by U8.2, from a measurement rather than a reading.**
+`planner.route_after_critic` checks escalation before rework, unconditionally. So a retry is
+only ever spent on a deal degraded enough to draw a retryable objection and clean enough not
+to be escalated first — **exactly two warn-severity disclosures, no critical, on every lap.**
+U8.2 searched for a listing in that window across 9 indexed markets × 16 configurations and
+**found none**, so `FlagKind.REWORK_LIMIT_REACHED` is uncovered and the bounded-retry path is
+unexercised by the batch that exists to exercise every path.
+
+The window is empty for structural reasons, not for want of searching: divergence and comp
+dispersion trade off directly (both track how thin the matching supply is), so every
+configuration that diverges enough to object also concentrates enough to raise a *critical*
+objection; Los Angeles and Cleveland are excluded before any fixture is written because the
+county-anchoring warn already makes three; and the only six candidates were in New York,
+which U8.2b's fix moves into the same excluded set.
+
+**Closes when** U8.5 decides one of: leave it, and state in the report that the retry path is
+reachable in principle but not by any listing this build can be shown; or reorder so a
+*retryable* objection is spent before escalation, on the argument that a pass which could
+clear the objection should be taken before a human is asked; or make the fault injection
+richer so the path is exercised without a listing. **The first is a legitimate answer** — the
+cycle is bounded and every path ends at human review — but it should be chosen rather than
+inherited. `agents/planner.py:181`, [`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.2.
 
 ---
 
@@ -170,6 +201,14 @@ guards. Both are `TODO(U8)` at the site.
 **Split Aug 28, 2026.** The second half closes at **U8.2** — a case built to sit on the far
 side of the divergence line, which U8.1's coverage census requires anyway since a flag
 nothing can raise would corrupt it.
+
+**Second half CLOSED Aug 28, 2026 at U8.2.** `chicago-uptown-duplex` trips it, and how it
+does so matters more than that it does: **nothing about the property is engineered.** An
+ordinary two-bedroom duplex whose comps match it on bedrooms and floor area, in a market
+whose ZIP-level rents are high, still puts the model 48% above the comp median. The flag is
+detecting a genuine disagreement between the two inputs rather than a manufactured one, so
+it is available as a signal rather than dead. `config.py:386` may keep its threshold; the
+`TODO(U8)` there is cleared at U8.M.
 
 **The first half was nearly closed by accident and should not be.** U8.4's New York
 disclosure (OQ-3) needs a per-market error figure, and folding LOMO into it looked like one

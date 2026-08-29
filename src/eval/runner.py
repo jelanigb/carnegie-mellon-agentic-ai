@@ -45,6 +45,7 @@ from graph import build_graph
 from state import DealState, DealTerms, FlagKind, Severity
 from tools import geocoding
 from tools.llm_cache import CacheMode
+from tools.llm_client import LlmClient, LlmError
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 
@@ -157,13 +158,18 @@ def _case_environment(case: EvalCase, record: bool) -> Iterator[None]:
     recording raises `CacheMiss`, which is the honest failure — it means a prompt drifted
     since the batch was recorded, and re-recording is a decision rather than a fallback.
 
-    **3. Declared fault injection (U8.2).** See `cases.Fault` for why this exists and why
-    it is a named, declared field rather than a fixture that quietly patches something.
+    **3. Declared fault injection (U8.2, extended U8.3).** See `cases.Fault` for why this
+    exists and why it is a named, declared field rather than a fixture that quietly
+    patches something. `GEOCODER_OUTAGE` patches `geocoding.geocode_census`;
+    `LLM_UNAVAILABLE` patches `LlmClient.complete` at the class, since `_extract_terms`
+    builds a fresh instance per call and there is no instance to reach beforehand. Both
+    patches are unwound in the same `finally` as everything else here.
     """
     previous_retrieval = config.RETRIEVAL_ENABLED
     previous_cache_dir = config.LLM_CACHE_DIR
     previous_cache_mode = config.LLM_CACHE_MODE
     previous_geocode_census = geocoding.geocode_census
+    previous_llm_complete = LlmClient.complete
 
     config.RETRIEVAL_ENABLED = case.retrieval_enabled
     if case.tier is not Tier.LIVE:
@@ -185,6 +191,21 @@ def _case_environment(case: EvalCase, record: bool) -> Iterator[None]:
         # to exercise.
         geocoding.geocode_census = _unreachable
 
+    if case.injects is Fault.LLM_UNAVAILABLE:
+        def _unreachable_complete(*args, **kwargs):
+            raise LlmError(
+                f"[eval fault injection, case {case.key!r}] simulated model outage. "
+                f"Declared by the case, not a real network failure."
+            )
+
+        # Patched at the class, not an instance: `_extract_terms` (and
+        # `scenario_forecast._make_scorer`) each build their own `LlmClient()`, so there
+        # is no shared instance to patch. `self.complete(...)` resolves through the class
+        # either way, so every instance created for the rest of this case sees the fault
+        # — including scenario_forecast's later calls, which is the honest behaviour of a
+        # model that is actually down (see `Fault.LLM_UNAVAILABLE`'s docstring).
+        LlmClient.complete = _unreachable_complete
+
     try:
         yield
     finally:
@@ -192,6 +213,7 @@ def _case_environment(case: EvalCase, record: bool) -> Iterator[None]:
         config.LLM_CACHE_DIR = previous_cache_dir
         config.LLM_CACHE_MODE = previous_cache_mode
         geocoding.geocode_census = previous_geocode_census
+        LlmClient.complete = previous_llm_complete
 
 
 def run_case(case: EvalCase, record: bool = False) -> CaseResult:
