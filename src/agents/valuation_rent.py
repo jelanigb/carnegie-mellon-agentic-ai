@@ -390,22 +390,61 @@ def valuation_rent_agent(state: DealState) -> dict:
 
     subject_fmr = float(anchor["rent"])
     detail.fmr_year = anchor["year"]
-    # `used_msa_fallback` is True when HUD had no Small Area FMR for this ZIP and the
-    # county-wide figure was used instead.
-    detail.fmr_resolution = "county" if anchor["used_msa_fallback"] else "zip"
-    detail.fmr_zip = None if anchor["used_msa_fallback"] else subject_zip
+    # **An anchor is ZIP-resolution only if HUD published a Small Area schedule for this
+    # county *and* a ZIP in it matched.** Both halves are needed, and reading only the
+    # second was a defect (fixed U8.2b, found by U8.2's case work).
+    #
+    # `used_msa_fallback` answers two different questions depending on what HUD returned,
+    # and `tools/hud_fmr.get_fmr` is where the two shapes are normalized. For a county
+    # *with* Small Area FMRs it means "a ZIP was asked for and none matched, so the
+    # MSA-level row was used" — a genuine fallback. For a county with **no** Small Area
+    # schedule at all, HUD returns a single flat record, there is no fallback to record,
+    # and the field is `False`.
+    #
+    # Reading it alone therefore inverted the disclosure in exactly the counties that
+    # most need it. **Measured Aug 28, 2026: all five New York counties** — New York,
+    # Kings, Queens, Bronx and Richmond — return the flat shape, so every New York
+    # subject recorded `fmr_resolution = "zip"` against a county-wide figure with
+    # `fmr_zip` unset. `agents/summarizer.py` then printed a bare "(ZIP)" beside the
+    # anchor, claiming sub-county precision the estimate does not have, and the
+    # county-level disclosure below was suppressed — worth 0.15 of confidence on every
+    # New York deal, including the `staten-island` demo. §2 designates New York as the
+    # market grounded in real thinness; this made it the one market that did not say so.
+    #
+    # `is_safmr` is the half that was missing: it reports which response shape HUD sent,
+    # which is precisely "does this county have ZIP-level schedules at all".
+    zip_anchored = anchor["is_safmr"] and not anchor["used_msa_fallback"]
+    detail.fmr_resolution = "zip" if zip_anchored else "county"
+    detail.fmr_zip = subject_zip if zip_anchored else None
 
-    if detail.fmr_resolution == "county":
+    if not zip_anchored:
+        # **The consequence is identical; the cause is not, and the message says which
+        # (U8.2b).** One flag kind rather than two, on the rule this file already applies
+        # elsewhere: a reader's response to both is the same — treat the figure as
+        # describing the county, not the address. But the sentence naming the cause has
+        # to be true of the deal in front of them, and a single fixed sentence was not.
+        # It asserted that HUD publishes no ZIP-level schedule, which is right for a New
+        # York subject and wrong for a Los Angeles one: Los Angeles County has 474 ZIP
+        # schedules for FY2026 and is county-anchored anyway, because the model's
+        # training rows there were county-anchored and mixing the two would multiply a
+        # county-relative ratio by a ZIP-level figure.
+        cause = (
+            "HUD publishes no ZIP-level rent schedule for this county, so the "
+            "county-wide figure is the only one available"
+            if not anchor["is_safmr"]
+            else "the rent model's own training data for this county was measured "
+                 "against county-wide rents, so a ZIP-level figure could not be "
+                 "combined with it without mixing two different baselines"
+        )
         flags.append(
             flag(
                 AGENT,
                 FlagKind.FMR_ANCHOR_COUNTY_LEVEL,
                 f"This estimate is anchored to the county-wide Fair Market Rent for "
-                f"{terms.county_fips}, because HUD publishes no Small Area (ZIP-level) "
-                f"FMR there. Within counties that do have them, ZIP schedules span "
-                f"roughly 2x, so a county anchor cannot distinguish an expensive "
-                f"neighborhood from a cheap one — the estimate describes the county's "
-                f"rent level, not this address's.",
+                f"{terms.county_fips}, because {cause}. Where ZIP-level schedules are "
+                f"used, they span roughly 2x within a single county, so a county anchor "
+                f"cannot distinguish an expensive neighborhood from a cheap one — the "
+                f"estimate describes the county's rent level, not this address's.",
                 Severity.WARN,
             )
         )
