@@ -57,6 +57,7 @@ from enum import StrEnum
 from typing import Optional
 
 from demo_deals import DEMO_DEALS
+from eval.data import golden_fixtures
 from state import DealTerms, FlagKind
 
 
@@ -83,6 +84,42 @@ class Tier(StrEnum):
     LIVE = "live"
 
 
+class Fault(StrEnum):
+    """An external failure a case asks the harness to simulate. **Declared, never hidden.**
+
+    Added U8.2, for one kind the batch could not otherwise reach at all.
+    `FlagKind.REWORK_LIMIT_REACHED` needs an objection the Critic marks `retryable`, and
+    exactly one objection is ever marked so: the I3 branch in
+    `agents/critic._interaction_objections`, gated on `GEOCODER_SERVICE_UNAVAILABLE`. That
+    flag is raised only when the Census *request itself fails*
+    (`tools/geocoding.geocode`) — not when it runs and finds no match, which is the
+    distinction U7.1b built precisely so the rework cycle could be spent on an outage and
+    not on an address that will never resolve.
+
+    Neither tier can produce that. A golden fixture supplies coordinates, so U8.1b's
+    geography path takes the county-only branch and never calls the geocoder; a replay case
+    calls it and it succeeds, because `LLM_CACHE_MODE=replay` covers *model* calls and the
+    Census lookup is an ordinary HTTP request. So the outage can be injected or it can go
+    unexercised, and leaving the system's only bounded-retry path untested through the unit
+    that tunes `MAX_REWORKS` is the worse of the two.
+
+    **A field on the case rather than a fixture that quietly patches something**, and that
+    is the whole design. The injection appears in the case definition, in the results
+    table, and in the report, so a reader can see that the row exercised a *simulated*
+    outage rather than a real one. A harness that patches a module inside a fixture would
+    produce the identical row and let it read as a naturally-occurring failure — which is
+    the same class of overstatement `verdict_source` exists to prevent one row over.
+
+    The patch enters through the same door a real outage does: `geocode_census` raises
+    `GeocodingError`, `geocode()` catches it and sets `primary_unavailable`. Nothing forces
+    the flag directly, so the case still tests the branch that chooses between
+    `GEOCODER_SERVICE_UNAVAILABLE` and `COORDINATES_FROM_CITY_CENTROID` rather than
+    asserting the outcome of it.
+    """
+
+    GEOCODER_OUTAGE = "geocoder_outage"
+
+
 @dataclass(frozen=True)
 class EvalCase:
     """One listing, one claim about it, and the flag it was built to trip."""
@@ -107,6 +144,8 @@ class EvalCase:
     # The U4 ablation switch. A case rather than a command-line flag, so the ungrounded
     # run is a row in the same table as every grounded one.
     retrieval_enabled: bool = True
+    # An external failure the harness simulates for this case, or None. See `Fault`.
+    injects: Optional[Fault] = None
 
     def __post_init__(self) -> None:
         if (self.listing is None) == (self.terms is None):
@@ -116,6 +155,17 @@ class EvalCase:
             )
         if self.terms is not None:
             self._check_golden_fixture()
+        if self.injects is Fault.GEOCODER_OUTAGE and self.terms is not None:
+            # A fixture supplies coordinates (enforced above), so U8.1b's geography path
+            # takes the county-only branch and the geocoder is never called — the
+            # injection would be a silent no-op and the case would report a clean pass
+            # for a failure that never happened. Rejected at import for the same reason
+            # `_check_golden_fixture` is: the run would still produce a plausible row.
+            raise ValueError(
+                f"Case {self.key!r}: a geocoder outage needs the geocoder to be called, "
+                f"so this case must supply `listing` rather than `terms`. A fixture "
+                f"carries its own coordinates and never reaches the geocoder at all."
+            )
 
     def _check_golden_fixture(self) -> None:
         """A skipped Extractor is also a skipped geocoder, and that trap is silent.
@@ -215,10 +265,214 @@ def demo_cases() -> list[EvalCase]:
 # The engineered cases (U8.2)
 # --------------------------------------------------------------------------
 #
-# Deliberately empty until U8.2. U8.1's coverage census runs against the demo set alone
-# first, so U8.2's fixtures are designed against a *measured* gap rather than an assumed
-# one — the same ordering the metro-selection work used, and for the same reason.
-ENGINEERED_CASES: list[EvalCase] = []
+# Written against U8.1's *measured* coverage gap rather than an assumed one, which is why
+# the harness was built before the cases. The list the plan first carried was written from
+# assumption and was wrong in both directions — it named a kind the demo set already
+# covers and missed six it does not.
+#
+# **How each verdict was derived, and why that is not the same as having run the case.**
+# Q1 requires the verdict to be a claim made in advance, because reading the system's
+# output and recording it as the intention produces a perfect score and proves nothing.
+# The fixtures below *were* run while they were being designed — that is what it takes to
+# confirm a case trips the kind it targets at all — so "written before the run" needs to
+# mean something more precise than a promise.
+#
+# It means this: **every verdict below is derived from the target flag's severity and the
+# shipped escalation rule, and from nothing else.** A CRITICAL target escalates, because
+# `agents/critic.critic_agent` escalates on a critical flag independently of the score. A
+# lone WARN target costs 0.15 against a 0.60 threshold, so it reports. An INFO target costs
+# nothing, so it reports. That derivation is mechanical, it can be checked by a reader
+# against `config.FLAG_SEVERITY_PENALTY`, and it does not consult what the case actually
+# did.
+#
+# The two are allowed to disagree, and one of them does before this file is ever run —
+# `chicago-five-bedroom`, whose target is INFO and which escalates anyway. That is the
+# instrument working. The triage rule was fixed in advance and applies unchanged: the
+# target fired, so the disagreement is a **tuning signal**, not a broken case. Recording
+# the observed outcome as the intended one would have hidden exactly the finding the batch
+# exists to produce.
+#
+# **Two cases predict `reports`, and that is deliberate.** A batch of nothing but
+# escalating cases can be scored 100% by a threshold of 1.0, so agreement would measure
+# nothing. `la-ordinary-duplex` and `chicago-uptown-duplex` are what make the agreement
+# figure two-sided.
+
+ENGINEERED_CASES: list[EvalCase] = [
+    # --- The control -------------------------------------------------------
+    EvalCase(
+        key="la-ordinary-duplex",
+        tier=Tier.GOLDEN,
+        verdict=Verdict.REPORTS,
+        verdict_source=VerdictSource.PREDICTED,
+        note=(
+            "The control. An ordinary two-bedroom duplex in the densest indexed market, "
+            "targeting nothing. Without at least one case that should not escalate, a "
+            "threshold of 1.0 would score perfectly and the agreement figure would be "
+            "measuring only how many cases were built to fail."
+        ),
+        terms=golden_fixtures.LA_ORDINARY.terms,
+    ),
+
+    # --- Valuation ---------------------------------------------------------
+    EvalCase(
+        key="la-oversized-loft",
+        tier=Tier.GOLDEN,
+        verdict=Verdict.ESCALATES,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.RENT_ESTIMATE_UNAVAILABLE,),
+        note=(
+            "Two bedrooms across 5,000 sq ft drives the predicted rent-to-FMR ratio "
+            "outside the band the model's own training set was bounded to, so the "
+            "estimate is refused rather than reported. Escalates because the refusal is "
+            "critical-severity: there is no rent figure, and a report without one is not "
+            "an ordinary result."
+        ),
+        terms=golden_fixtures.LA_OVERSIZED_LOFT.terms,
+    ),
+    EvalCase(
+        key="chicago-five-bedroom",
+        tier=Tier.GOLDEN,
+        verdict=Verdict.REPORTS,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.FMR_BEDROOM_CAP_EXCEEDED,),
+        note=(
+            "Five bedrooms per unit, past the top of HUD's published schedule, so the "
+            "anchor is substituted and disclosed. Predicted to **report**: that "
+            "disclosure is info-severity and costs the confidence score nothing by "
+            "design. Sited in Cook County, which publishes Small Area FMRs, so the "
+            "county-level anchoring warning that three of the six demo deals share is "
+            "absent here and cannot account for the outcome either way."
+        ),
+        terms=golden_fixtures.CHI_FIVE_BEDROOM.terms,
+    ),
+    EvalCase(
+        key="chicago-uptown-duplex",
+        tier=Tier.GOLDEN,
+        verdict=Verdict.REPORTS,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.RENT_DIVERGES_FROM_COMPS,),
+        note=(
+            "**Closes the open question about whether anything still trips the rent-comp "
+            "divergence check** — it moved from firing on two of five subjects to none "
+            "when ZIP-resolution anchoring landed, and a flag nothing can raise would "
+            "corrupt the coverage claim. Nothing about this property is engineered: an "
+            "ordinary two-bedroom duplex whose comps match it on bedrooms and floor area, "
+            "in a market whose ZIP-level Fair Market Rent is high. The disagreement is "
+            "between the model and the comps alone, which is the only form in which this "
+            "flag says anything. Predicted to report: one warn-severity disclosure sits "
+            "well above the threshold."
+        ),
+        terms=golden_fixtures.CHI_UPTOWN_ORDINARY.terms,
+    ),
+
+    # --- Critic interaction checks (U7.2's I1 and I3) ----------------------
+    #
+    # Two cases rather than one, because the Critic's interaction checks are three
+    # separate judgments and a single case would exercise whichever fired first. These
+    # reach the same flag kind by different routes, which is what makes a failure in
+    # either of them localizable.
+    EvalCase(
+        key="la-three-bedroom-comp-drift",
+        tier=Tier.GOLDEN,
+        verdict=Verdict.ESCALATES,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA, FlagKind.CRITIC_INCONSISTENCY),
+        note=(
+            "The comp set is widened to find eight three-bedroom units and comes back "
+            "unlike the subject on an attribute the rent estimate prices on, so the "
+            "comparable-implied median describes a different kind of unit than the one "
+            "being priced. Escalates because that objection is critical-severity: the "
+            "rent figure has no usable independent check on this deal."
+        ),
+        terms=golden_fixtures.LA_THREE_BEDROOM.terms,
+    ),
+
+    # --- The critical-flag escalation rule, isolated -----------------------
+    EvalCase(
+        key="chicago-uptown-oversized",
+        tier=Tier.GOLDEN,
+        verdict=Verdict.ESCALATES,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.CRITIC_INCONSISTENCY,),
+        note=(
+            "**The case that isolates the critical-disclosure rule from the confidence "
+            "score.** A critical disclosure sends a deal to a human on its own ground, "
+            "not only by dragging the score down, and until now nothing demonstrated the "
+            "difference: every demo deal carrying a critical disclosure already sat below "
+            "the threshold anyway, and the one run that separated them was reached by "
+            "switching retrieval off rather than by any property of a listing. This "
+            "listing reaches it — a large but ordinary two-bedroom unit in a market where "
+            "the comp set can be filled without widening the search area, so the deal "
+            "carries few enough disclosures to clear the threshold comfortably and is "
+            "escalated anyway. If the two grounds were ever collapsed into one, this is "
+            "the row that would change."
+        ),
+        terms=golden_fixtures.CHI_UPTOWN_OVERSIZED.terms,
+    ),
+    EvalCase(
+        key="cleveland-triplex",
+        tier=Tier.GOLDEN,
+        verdict=Verdict.ESCALATES,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.COMPS_SPATIALLY_CONCENTRATED, FlagKind.CRITIC_INCONSISTENCY),
+        note=(
+            "The same objection reached the other way. Nothing about this triplex is "
+            "unusual; the market is. Cleveland is the one indexed metro where the comp "
+            "set collapses onto a single coordinate, so the median that disagrees with "
+            "the estimate is a point sample rather than a market summary. Escalates on "
+            "the objection's severity, not on the score."
+        ),
+        terms=golden_fixtures.CLE_ORDINARY.terms,
+    ),
+
+    # --- The rework cycle, under a declared outage -------------------------
+    #
+    # The one case in this set that is not a golden fixture, and the reason is structural
+    # rather than a preference: see `Fault`. A rework needs a *retryable* objection, the
+    # only retryable objection is gated on the geocoder having been unreachable, and a
+    # fixture that carries its own coordinates never calls the geocoder at all. So this
+    # case supplies a listing, lets extraction and geography actually run, and declares
+    # the outage it simulates.
+    EvalCase(
+        key="chicago-geocoder-outage",
+        tier=Tier.REPLAY,
+        verdict=Verdict.REPORTS,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.GEOCODER_SERVICE_UNAVAILABLE,),
+        injects=Fault.GEOCODER_OUTAGE,
+        note=(
+            "**A simulated address-lookup outage, declared by the case rather than "
+            "waiting for a real one.** The address is never tested, so comparables are "
+            "drawn around the city's centre of listing density instead of around the "
+            "property. Predicted to report: the disclosure is warn-severity and one warn "
+            "sits well above the threshold. That the system keeps working, says what "
+            "happened, and does not escalate is the correct behaviour for a service "
+            "that was briefly unreachable.\n\n"
+            "**This case also carried a second target, `rework_limit_reached`, and "
+            "failed to reach it. The claim is withdrawn rather than quietly rewritten, "
+            "because how it failed is the finding.** The retry path is the one "
+            "degradation a second pass can fix, so an outage is the natural way to "
+            "exercise it. But escalation is checked *before* rework, so a retry is only "
+            "ever spent on a deal that is degraded enough to draw an objection and clean "
+            "enough not to be escalated first — exactly two warn-severity disclosures, "
+            "no critical, on every lap. Two attempts and a search across every indexed "
+            "market found no listing in that window. A Cleveland version drew the "
+            "objection but its comparables collapse onto one coordinate, which is "
+            "critical, so it escalated at once and never reworked. This Chicago version "
+            "avoids the critical, but moving the comparables to the city centre removes "
+            "the disagreement that would have raised the objection at all — and that "
+            "trade is structural, since both are driven by how thin the matching supply "
+            "is. See `docs/tasks/task_list_u8.md` §U8.2 for the measurement and the "
+            "question it raises."
+        ),
+        listing=(
+            "For sale: 5100 N Kenmore Ave, Chicago, IL 60640. Uptown two-flat, 2 bed / "
+            "1 bath per unit, approx 950 sq ft each. Vintage details, rear porches, "
+            "shared laundry in the basement. Current tenants pay $1,800 and $1,850 per "
+            "month. Asking $530,000."
+        ),
+    ),
+]
 
 
 def all_cases() -> list[EvalCase]:
