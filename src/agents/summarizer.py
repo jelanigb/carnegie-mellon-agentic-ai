@@ -290,6 +290,28 @@ def _rent_basis_section(state: DealState, detail) -> list[str]:
         )
         lines.append("")
 
+        # Rendered whenever the subject's market resolves to one of the four this
+        # breakdown covers, whether or not the gap crossed the flag's threshold (Q2(a)):
+        # a reader in a market that is not elevated should still see what "not elevated"
+        # looks like next to the one that is.
+        if (detail.subject_metro and detail.subject_metro_mae_dollars is not None
+                and detail.subject_metro_mae_n is not None):
+            lines.append(
+                f"That figure is the model's error averaged across every market it was "
+                f"trained on. In **{detail.subject_metro}** specifically, the same "
+                f"held-out measurement missed by "
+                f"**{_money(detail.subject_metro_mae_dollars)}/mo** "
+                f"(n={detail.subject_metro_mae_n} held-out listings) — "
+                + (
+                    "materially worse than the figure above, see the disclosure below."
+                    if detail.subject_metro_mae_dollars
+                    > config.RENT_MODEL_METRO_ERROR_RATIO_THRESHOLD
+                    * detail.model_holdout_mae_dollars
+                    else "in line with the figure above."
+                )
+            )
+            lines.append("")
+
     if detail.comp_implied_rent_median is not None:
         direction = "above" if (detail.divergence_pct or 0) >= 0 else "below"
         at_zip = (
@@ -477,7 +499,14 @@ def _findings_section(state: DealState) -> list[str]:
         # decisions, and the second one is what this model actually supports.
         value = f"{_money(state.rent_estimate)}/mo per unit"
         if detail and detail.model_holdout_mae_dollars is not None:
-            value += f" ± {_money(detail.model_holdout_mae_dollars)}"
+            value += f" ± {_money(detail.model_holdout_mae_dollars)} overall"
+            # Rendered whenever the subject's market resolves, elevated or not — Q2(a):
+            # the point is a reader in a good market can see what good looks like too.
+            if (detail.subject_metro and detail.subject_metro_mae_dollars is not None):
+                value += (
+                    f", ± {_money(detail.subject_metro_mae_dollars)} in "
+                    f"{detail.subject_metro}"
+                )
         basis = str(state.rent_estimate_source or "unspecified")
         if state.rent_estimate_ratio_to_fmr is not None and state.fmr_anchor_used is not None:
             year = f"FY{detail.fmr_year} " if detail and detail.fmr_year else ""
