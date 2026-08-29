@@ -539,8 +539,8 @@ def test_confidence_does_not_decay_across_rework_laps():
     scores = []
     for _ in range(3):
         accumulated += [
-            flag("upstream", FlagKind.RENT_DIVERGES_FROM_COMPS, "same text", Severity.WARN),
-            flag("upstream", FlagKind.GEOCODER_SERVICE_UNAVAILABLE, "same text", Severity.WARN),
+            flag("upstream", FlagKind.RENT_DIVERGES_FROM_COMPS, "same text", Severity.WARN, 1),
+            flag("upstream", FlagKind.GEOCODER_SERVICE_UNAVAILABLE, "same text", Severity.WARN, 1),
         ]
         scores.append(
             critic_agent(DealState(raw_listing_text="x", flags=list(accumulated)))[
@@ -559,8 +559,8 @@ def test_distinct_observations_of_one_kind_are_each_charged():
     for one and silently forgive the other.
     """
     two_relaxations = [
-        flag("comps_retrieval", FlagKind.RELAXED_MATCH_CRITERIA, "dropped sqft band", Severity.WARN),
-        flag("comps_retrieval", FlagKind.RELAXED_MATCH_CRITERIA, "loosened bedrooms", Severity.WARN),
+        flag("comps_retrieval", FlagKind.RELAXED_MATCH_CRITERIA, "dropped sqft band", Severity.WARN, 1),
+        flag("comps_retrieval", FlagKind.RELAXED_MATCH_CRITERIA, "loosened bedrooms", Severity.WARN, 1),
     ]
     result = critic_agent(DealState(raw_listing_text="x", flags=two_relaxations))
     assert result["confidence_score"] == 0.70
@@ -674,7 +674,7 @@ def test_a_downed_geocoder_makes_a_rework_re_plan_extraction():
         raw_listing_text="x",
         deal_terms=settled,
         planner_invocations=1,
-        flags=[flag("extractor", FlagKind.GEOCODER_SERVICE_UNAVAILABLE, "down", Severity.WARN)],
+        flags=[flag("extractor", FlagKind.GEOCODER_SERVICE_UNAVAILABLE, "down", Severity.WARN, 1)],
     )
     assert nodes.EXTRACTOR in planner_agent(state)["plan"]
 
@@ -696,7 +696,36 @@ def test_an_unresolvable_address_does_not_re_plan_extraction():
         raw_listing_text="x",
         deal_terms=settled,
         planner_invocations=1,
-        flags=[flag("extractor", FlagKind.COORDINATES_FROM_CITY_CENTROID, "centroid", Severity.WARN)],
+        flags=[flag("extractor", FlagKind.COORDINATES_FROM_CITY_CENTROID, "centroid", Severity.WARN, 1)],
+    )
+    assert nodes.EXTRACTOR not in planner_agent(state)["plan"]
+
+
+def test_a_geocoder_outage_two_laps_ago_no_longer_re_plans_extraction():
+    """U8.5/OQ-15's fix to `_geocode_is_worth_retrying`, asserted directly.
+
+    Before U8.5 this read the *accumulated* flags, so a `GEOCODER_SERVICE_UNAVAILABLE`
+    from a pass that already retried and moved on would still trigger another re-plan on
+    every later lap. Pass 1's outage is stale by the time pass 2 has already completed —
+    the flag is stamped `planner_invocations=1` while `state.planner_invocations=2`,
+    i.e. two passes have run since — so this must not re-plan extraction a third time.
+    """
+    settled = DealTerms(
+        full_address="123 Real St, Los Angeles, CA",
+        price=1_049_000,
+        unit_count=2,
+        latitude=LOS_ANGELES[0],
+        longitude=LOS_ANGELES[1],
+    )
+    state = DealState(
+        raw_listing_text="x",
+        deal_terms=settled,
+        planner_invocations=2,
+        flags=[
+            flag(
+                "extractor", FlagKind.GEOCODER_SERVICE_UNAVAILABLE, "stale outage", Severity.WARN, 1
+            )
+        ],
     )
     assert nodes.EXTRACTOR not in planner_agent(state)["plan"]
 
@@ -1532,6 +1561,7 @@ def test_an_interaction_objection_reaches_the_report_and_escalates(monkeypatch):
                     FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA,
                     "[test] 3 of 8 comparables fall outside the size range searched for.",
                     Severity.WARN,
+                    state.planner_invocations,
                 )
             ],
         },
@@ -1546,6 +1576,7 @@ def test_an_interaction_objection_reaches_the_report_and_escalates(monkeypatch):
                     FlagKind.RENT_DIVERGES_FROM_COMPS,
                     "[test] The modelled rent sits above the comparable-implied median.",
                     Severity.WARN,
+                    state.planner_invocations,
                 )
             ]
         },
@@ -1597,12 +1628,14 @@ def test_a_report_carries_no_objection_when_the_disclosures_do_not_combine(monke
                     FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA,
                     "[test] 3 of 8 comparables fall outside the size range searched for.",
                     Severity.WARN,
+                    state.planner_invocations,
                 ),
                 flag(
                     nodes.COMPS_RETRIEVAL,
                     FlagKind.RELAXED_SEARCH_RADIUS,
                     "[test] Widened to 4.0 mi to find enough comparables.",
                     Severity.WARN,
+                    state.planner_invocations,
                 ),
             ],
         },

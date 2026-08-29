@@ -84,15 +84,21 @@ def _geocode_is_worth_retrying(state: DealState) -> bool:
     nothing to resolve to. Only the first is worth another pass — an address with no
     street number resolves no better on the fifth attempt than on the first.
 
-    TODO(U8): this reads the *accumulated* flags, so it stays true on later laps even
-    after a retry succeeds — extraction is then re-planned once more for a geocode that
-    already resolved. Harmless and bounded here: one cached model call and one geocode
-    per lap, capped by `config.MAX_REWORKS`. The same staleness has a sharper consequence
-    in `critic._interaction_objections`, where it puts a sentence in the report that is no
-    longer true; both are fixed by stamping each flag with the `planner_invocations` that
-    produced it. Scheduled at U8, §6 cut list 2a.
+    **Reads only the pass that just completed (U8.5/OQ-15).** This used to read the
+    *accumulated* flags, so it stayed true on later laps even after a retry succeeded —
+    extraction was then re-planned once more for a geocode that had already resolved.
+    Called from `planner_agent` before that pass's re-entry increments
+    `planner_invocations`, so `state.planner_invocations` here still names the pass that
+    just finished; filtering to it is what makes a resolved geocode stop re-triggering
+    extraction. The same staleness had a sharper consequence in
+    `critic._interaction_objections`, where it put a sentence in the report that was no
+    longer true — see `critic._kinds`, fixed by the same flag stamp.
     """
-    return any(f.kind is FlagKind.GEOCODER_SERVICE_UNAVAILABLE for f in state.flags)
+    return any(
+        f.kind is FlagKind.GEOCODER_SERVICE_UNAVAILABLE
+        and f.planner_invocations == state.planner_invocations
+        for f in state.flags
+    )
 
 
 def planner_agent(state: DealState) -> dict:

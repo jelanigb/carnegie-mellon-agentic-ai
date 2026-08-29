@@ -221,7 +221,9 @@ def _supplied_coordinates(terms: DealTerms) -> Optional[tuple[float, float]]:
 
 
 def _resolve_geography(
-    terms: DealTerms, supplied_lat_long: Optional[tuple[float, float]]
+    terms: DealTerms,
+    supplied_lat_long: Optional[tuple[float, float]],
+    planner_invocations: int,
 ) -> list[Flag]:
     """Fill `terms.latitude/longitude/county_fips` in place; return what to disclose.
 
@@ -281,6 +283,7 @@ def _resolve_geography(
                         f"were the intended location, this analysis is of the wrong "
                         f"property.",
                         Severity.CRITICAL,
+                        planner_invocations,
                     )
                 )
     elif supplied_lat_long is not None:
@@ -294,6 +297,7 @@ def _resolve_geography(
                 "checked against it. If the address is wrong, nothing here would "
                 "detect that.",
                 Severity.WARN,
+                planner_invocations,
             )
         )
     elif resolved is not None:
@@ -316,6 +320,7 @@ def _resolve_geography(
                     f"outage rather than a problem with the address — the same listing "
                     f"may resolve to a parcel on a later run.",
                     Severity.WARN,
+                    planner_invocations,
                 )
             )
         else:
@@ -326,6 +331,7 @@ def _resolve_geography(
                     f"The address could not be resolved to a parcel; coordinates fall "
                     f"back to {resolved.matched_address}. {consequence}",
                     Severity.WARN,
+                    planner_invocations,
                 )
             )
     else:
@@ -337,6 +343,7 @@ def _resolve_geography(
                 "the Census geocoder or the corpus city centroid, and none were "
                 "supplied. Comparable retrieval requires coordinates and cannot run.",
                 Severity.CRITICAL,
+                planner_invocations,
             )
         )
 
@@ -366,7 +373,7 @@ def _extraction_failed(
     """
     return {
         "extraction_attempts": state.extraction_attempts + attempts,
-        "flags": [flag(AGENT, kind, detail, Severity.CRITICAL)],
+        "flags": [state.flag(AGENT, kind, detail, Severity.CRITICAL)],
     }
 
 
@@ -385,7 +392,9 @@ def extractor_agent(state: DealState) -> dict:
         terms = state.deal_terms.model_copy(deep=True)
         if terms.latitude is None or terms.longitude is None:
             # Nothing known: geocode the address, which also resolves the county.
-            flags = _resolve_geography(terms, supplied_lat_long=None)
+            flags = _resolve_geography(
+                terms, supplied_lat_long=None, planner_invocations=state.planner_invocations
+            )
         else:
             # **Coordinates known, county not.** The caller placed the property; only the
             # FMR lookup key is missing. Geocoding here would be worse than useless — it
@@ -447,12 +456,14 @@ def extractor_agent(state: DealState) -> dict:
         **extraction.model_dump(exclude={"assumptions", "clarifying_questions"})
     )
 
-    flags = _resolve_geography(terms, _supplied_coordinates(state.deal_terms))
+    flags = _resolve_geography(
+        terms, _supplied_coordinates(state.deal_terms), state.planner_invocations
+    )
     questions: list[str] = []
 
     for assumption in extraction.assumptions:
         flags.append(
-            flag(
+            state.flag(
                 AGENT,
                 FlagKind.ASSUMED_FIELD_VALUE,
                 f"'{assumption.field}' was inferred rather than read from the listing: "
@@ -467,7 +478,7 @@ def extractor_agent(state: DealState) -> dict:
         readable = field_name.replace("_", " ")
         questions.append(f"What is the {readable} for this property?")
         flags.append(
-            flag(
+            state.flag(
                 AGENT,
                 FlagKind.UNRESOLVED_FIELD,
                 f"Required field '{field_name}' could not be extracted from the "

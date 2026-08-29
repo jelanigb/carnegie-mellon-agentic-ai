@@ -677,7 +677,7 @@ def scenario_forecast_agent(state: DealState) -> dict:
 
     if not rent_bands and not price_bands:
         flags.append(
-            flag(
+            state.flag(
                 AGENT,
                 FlagKind.FORECAST_UNAVAILABLE,
                 "No forecast was produced: neither a rent-growth series nor a "
@@ -696,7 +696,7 @@ def scenario_forecast_agent(state: DealState) -> dict:
             else ("price appreciation", detail.price_growth_unavailable_reason)
         )
         flags.append(
-            flag(
+            state.flag(
                 AGENT,
                 FlagKind.FORECAST_UNAVAILABLE,
                 f"The forecast covers only one side of this deal: no {missing} "
@@ -761,7 +761,7 @@ def scenario_forecast_agent(state: DealState) -> dict:
     if not result.survivors:
         detail.search_exhausted_reason = result.exhausted_reason
         flags.append(
-            flag(
+            state.flag(
                 AGENT,
                 FlagKind.FORECAST_UNAVAILABLE,
                 f"The scenario search ended with no surviving hypothesis. "
@@ -779,7 +779,9 @@ def scenario_forecast_agent(state: DealState) -> dict:
         result.survivors, state.rent_estimate, terms.price, horizon
     )
 
-    flags.extend(_disclosure_flags(detail, result, chosen, scenarios))
+    flags.extend(
+        _disclosure_flags(detail, result, chosen, scenarios, state.planner_invocations)
+    )
 
     return {
         "scenarios": scenarios,
@@ -851,6 +853,7 @@ def _disclosure_flags(
     result: tot.SearchResult,
     chosen: dict,
     scenarios: list[Scenario],
+    planner_invocations: int,
 ) -> list:
     """Every flag that describes how the surviving forecast was reached."""
     flags: list = []
@@ -869,6 +872,7 @@ def _disclosure_flags(
                 f"ZIP-period) and no all-residential extract exists here, so there is no "
                 f"fallback below this one.",
                 Severity.INFO,
+                planner_invocations,
             )
         )
         if price.includes_anomalous_period:
@@ -885,6 +889,7 @@ def _disclosure_flags(
                         else "."
                     ),
                     Severity.INFO,
+                    planner_invocations,
                 )
             )
 
@@ -903,6 +908,7 @@ def _disclosure_flags(
                 f"screened and disclosed rather than attributed. Note these are not the "
                 f"same years as the price series' 2020-2022 window.",
                 Severity.INFO,
+                planner_invocations,
             )
         )
 
@@ -921,6 +927,7 @@ def _disclosure_flags(
                 f"resolved by the conservatism tie-break. The branch ledger lists the "
                 f"framing that lost and what it would have implied.",
                 Severity.WARN,
+                planner_invocations,
             )
         )
 
@@ -936,14 +943,15 @@ def _disclosure_flags(
                 f"Treat the ordering as one defensible reading rather than as the "
                 f"search's conclusion.",
                 Severity.WARN,
+                planner_invocations,
             )
         )
 
-    flags.extend(_distinctness_flags(scenarios))
+    flags.extend(_distinctness_flags(scenarios, planner_invocations))
     return flags
 
 
-def _distinctness_flags(scenarios: list[Scenario]) -> list:
+def _distinctness_flags(scenarios: list[Scenario], planner_invocations: int) -> list:
     """Report when the search returned fewer distinct answers than it has labels for.
 
     The reconciliation step promises three scenarios that bracket an outcome range. When
@@ -968,6 +976,7 @@ def _distinctness_flags(scenarios: list[Scenario]) -> list:
             f"usually means the underlying bands are close together rather than that the "
             f"search failed.",
             Severity.INFO,
+            planner_invocations,
         )
     ]
 

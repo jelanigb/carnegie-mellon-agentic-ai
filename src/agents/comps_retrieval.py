@@ -34,7 +34,7 @@ inspect the result of its own retrieval and adjust; this loop is why that matter
 from __future__ import annotations
 
 import config
-from state import DealState, FlagKind, Severity, count_area_positioned, flag
+from state import DealState, FlagKind, Severity, count_area_positioned
 from tools import vector_store
 
 AGENT = "comps_retrieval"
@@ -105,7 +105,7 @@ def comps_retrieval_agent(state: DealState) -> dict:
             "comps": [],
             "retrieval_iterations": 0,
             "flags": [
-                flag(
+                state.flag(
                     AGENT,
                     FlagKind.RETRIEVAL_DISABLED,
                     "Comp retrieval was disabled; no comparable listings were used. "
@@ -120,7 +120,7 @@ def comps_retrieval_agent(state: DealState) -> dict:
             "comps": [],
             "retrieval_iterations": 0,
             "flags": [
-                flag(
+                state.flag(
                     AGENT,
                     FlagKind.SPARSE_COMPS,
                     "Subject property has no coordinates; comp retrieval could not run.",
@@ -158,7 +158,7 @@ def comps_retrieval_agent(state: DealState) -> dict:
         if sqft_tolerance is not None:
             sqft_tolerance = None
             flags.append(
-                flag(
+                state.flag(
                     AGENT,
                     FlagKind.RELAXED_MATCH_CRITERIA,
                     f"Only {len(comps)} comps within {radius:.1f} mi; dropped the "
@@ -171,7 +171,7 @@ def comps_retrieval_agent(state: DealState) -> dict:
             radius = min(radius * config.RADIUS_EXPANSION_FACTOR,
                          config.MAX_SEARCH_RADIUS_MILES)
             flags.append(
-                flag(
+                state.flag(
                     AGENT,
                     FlagKind.RELAXED_SEARCH_RADIUS,
                     f"Only {len(comps)} comps within {previous:.1f} mi "
@@ -184,7 +184,7 @@ def comps_retrieval_agent(state: DealState) -> dict:
             previous_tolerance = bedroom_tolerance
             bedroom_tolerance += 1
             flags.append(
-                flag(
+                state.flag(
                     AGENT,
                     FlagKind.RELAXED_MATCH_CRITERIA,
                     f"Radius already at the {config.MAX_SEARCH_RADIUS_MILES:.0f} mi "
@@ -196,7 +196,7 @@ def comps_retrieval_agent(state: DealState) -> dict:
 
     if len(comps) < config.MIN_QUALIFYING_COMPS:
         flags.append(
-            flag(
+            state.flag(
                 AGENT,
                 FlagKind.SPARSE_COMPS,
                 f"Found {len(comps)} qualifying comps after {iterations} "
@@ -216,7 +216,7 @@ def comps_retrieval_agent(state: DealState) -> dict:
         if distinct < config.COMP_MIN_DISTINCT_LOCATIONS:
             area_positioned = count_area_positioned(comps)
             flags.append(
-                flag(
+                state.flag(
                     AGENT,
                     FlagKind.COMPS_SPATIALLY_CONCENTRATED,
                     f"{len(comps)} comps resolve to only {distinct} distinct "
@@ -245,7 +245,7 @@ def comps_retrieval_agent(state: DealState) -> dict:
                 else ""
             )
             flags.append(
-                flag(
+                state.flag(
                     AGENT,
                     FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA,
                     f"{len(drifted)} of {len(comps)} comparables fall outside the "

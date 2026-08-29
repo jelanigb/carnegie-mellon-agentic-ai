@@ -15,7 +15,8 @@ nothing else, so it needs no LLM, no network, no corpus and no trained model to 
 
 from __future__ import annotations
 
-from agents.critic import Objection, _interaction_objections
+import nodes
+from agents.critic import Objection, _interaction_objections, _kinds
 from state import DealState, FlagKind, Severity, flag
 
 
@@ -23,7 +24,7 @@ def _state(*kinds: FlagKind) -> DealState:
     """A DealState carrying exactly the named flags and nothing else."""
     return DealState(
         raw_listing_text="irrelevant to an interaction check",
-        flags=[flag("test", kind, f"synthetic {kind}", Severity.WARN) for kind in kinds],
+        flags=[flag("test", kind, f"synthetic {kind}", Severity.WARN, 1) for kind in kinds],
     )
 
 
@@ -167,6 +168,112 @@ def test_independent_reasons_accumulate_rather_than_collapsing():
 # ---------------------------------------------------------------------------
 # Reader-facing language
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Pass-scoped flags (U8.5/OQ-15)
+#
+# The eval batch contains no rework lap (OQ-16), so this is the only place the
+# guarantee `critic._kinds` exists for can be asserted right now. Each case builds
+# `state.plan`/`planner_invocations` directly rather than driving the graph, for the
+# same reason every other test in this file does: `_interaction_objections` is a pure
+# function over accumulated state, and these three cases are about how it reads a
+# multi-pass flag list, not about reproducing one.
+# ---------------------------------------------------------------------------
+
+
+def test_a_resolved_geocode_clears_the_stale_centroid_objection():
+    """The scenario `_kinds`' docstring names: a rework that succeeds must not keep
+    tripping I3 off the pass it fixed.
+
+    Pass 1 fell back to a centroid on an outage; pass 2 re-ran the Extractor and it
+    resolved cleanly, raising nothing. The Extractor ran this pass (`nodes.EXTRACTOR` is
+    in `state.plan`), so it is judged on this pass alone — its pass-1 flag is superseded,
+    not carried forward.
+    """
+    state = DealState(
+        raw_listing_text="irrelevant to an interaction check",
+        planner_invocations=2,
+        plan=[nodes.EXTRACTOR, nodes.COMPS_RETRIEVAL, nodes.VALUATION_RENT],
+        flags=[
+            flag(
+                nodes.EXTRACTOR,
+                FlagKind.GEOCODER_SERVICE_UNAVAILABLE,
+                "pass 1: outage",
+                Severity.WARN,
+                1,
+            ),
+            flag(
+                nodes.VALUATION_RENT,
+                FlagKind.RENT_DIVERGES_FROM_COMPS,
+                "pass 2: still diverges",
+                Severity.WARN,
+                2,
+            ),
+        ],
+    )
+    assert _interaction_objections(state) == []
+
+
+def test_an_agent_skipped_this_pass_is_not_read_as_cleared():
+    """The wrinkle `_kinds` exists to handle: absence because an agent did not run this
+    pass must not read the same as absence because it looked and found nothing.
+
+    The Extractor is missing from `state.plan` — it was not re-run this pass — so its
+    pass-1 centroid finding carries forward rather than being dropped.
+    """
+    state = DealState(
+        raw_listing_text="irrelevant to an interaction check",
+        planner_invocations=2,
+        plan=[nodes.COMPS_RETRIEVAL, nodes.VALUATION_RENT],
+        flags=[
+            flag(
+                nodes.EXTRACTOR,
+                FlagKind.COORDINATES_FROM_CITY_CENTROID,
+                "pass 1: centroid, unresolvable address",
+                Severity.WARN,
+                1,
+            ),
+            flag(
+                nodes.VALUATION_RENT,
+                FlagKind.RENT_DIVERGES_FROM_COMPS,
+                "pass 2: still diverges",
+                Severity.WARN,
+                2,
+            ),
+        ],
+    )
+    objections = _interaction_objections(state)
+    assert len(objections) == 1
+    assert objections[0].severity == Severity.WARN
+    assert not objections[0].retryable
+
+
+def test_an_agent_that_ran_this_pass_is_judged_on_this_pass_alone():
+    """The positive case behind the fix, without which the two above prove nothing
+    about which rule actually fired.
+
+    Same shape as the "resolved" case, but the Extractor's pass-1 flag differs from its
+    (empty) pass-2 contribution only in whether it ran — confirming supersession, not
+    just an absent kind.
+    """
+    state = DealState(
+        raw_listing_text="irrelevant to an interaction check",
+        planner_invocations=2,
+        plan=[nodes.EXTRACTOR, nodes.COMPS_RETRIEVAL, nodes.VALUATION_RENT],
+        flags=[
+            flag(
+                nodes.EXTRACTOR,
+                FlagKind.GEOCODER_SERVICE_UNAVAILABLE,
+                "pass 1: outage",
+                Severity.WARN,
+                1,
+            ),
+        ],
+    )
+    # No RENT_DIVERGES_FROM_COMPS this pass either, so the gate alone would already
+    # return [] — the assertion that matters is on `_kinds` directly.
+    assert FlagKind.GEOCODER_SERVICE_UNAVAILABLE not in _kinds(state)
 
 
 def test_objection_text_carries_no_internal_vocabulary():

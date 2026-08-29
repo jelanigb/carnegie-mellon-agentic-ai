@@ -47,7 +47,7 @@ from __future__ import annotations
 from typing import NamedTuple
 
 import config
-from state import DealState, FlagKind, Severity, flag
+from state import DealState, FlagKind, Severity
 
 AGENT = "critic"
 
@@ -234,7 +234,57 @@ class Objection(NamedTuple):
 
 
 def _kinds(state: DealState) -> frozenset[FlagKind]:
-    return frozenset(f.kind for f in state.flags)
+    """Flag kinds this pass should judge the deal on (U8.5/OQ-15, closes the TODO(U8)
+    `_interaction_objections` carried).
+
+    `DealState.flags` is append-only across rework laps so the raw run history stays
+    inspectable, and until this landed, every reader of it — this function included —
+    treated that whole history as if it described the current pass. Measured: a rework
+    that *succeeds* — the geocoder answers, coordinates resolve to a parcel, the
+    divergence clears, neither agent raises anything new — still tripped I3 from pass
+    one's flags, because nothing on a `Flag` said which pass raised it. Every `Flag` now
+    carries `planner_invocations`, and this function is the one place that reads it.
+
+    Two rules, and the second is the one the fix is actually about:
+
+    - **An agent that ran this pass is judged on this pass alone.** Its earlier flags
+      are superseded by this pass's own look, whether that look repeats them or clears
+      them.
+    - **An agent skipped this pass is judged on its last examination, never treated as
+      cleared.** `state.plan` records which agents ran; absence from it means "not
+      re-examined," not "found nothing." In this build only the Extractor is ever
+      conditionally skipped (decision #9) — every other node in `_PIPELINE` runs on
+      every pass — but the rule is written against `state.plan` membership rather than
+      naming the Extractor specifically, so it does not silently stop applying if a
+      second step becomes optional later.
+
+    `state.plan` is empty for a state built by hand rather than by the Planner — every
+    case in `test_critic_interactions.py` does this deliberately, to exercise this
+    function as a pure function over an accumulated flag set with no pass concept at
+    all. There is no pass information to filter on in that shape, so every accumulated
+    flag counts, which is this function's pre-U8.5 behaviour and is what keeps those
+    tests exercising exactly what they were written to exercise.
+    """
+    if not state.plan:
+        return frozenset(f.kind for f in state.flags)
+
+    current_pass = state.planner_invocations
+    last_examined: dict[str, int] = {}
+    for f in state.flags:
+        if f.source_agent in state.plan or f.planner_invocations >= current_pass:
+            continue
+        last_examined[f.source_agent] = max(
+            last_examined.get(f.source_agent, -1), f.planner_invocations
+        )
+
+    kinds: set[FlagKind] = set()
+    for f in state.flags:
+        if f.source_agent in state.plan:
+            if f.planner_invocations == current_pass:
+                kinds.add(f.kind)
+        elif f.planner_invocations == last_examined.get(f.source_agent):
+            kinds.add(f.kind)
+    return frozenset(kinds)
 
 
 def _interaction_objections(state: DealState) -> list[Objection]:
@@ -249,23 +299,12 @@ def _interaction_objections(state: DealState) -> list[Objection]:
     co-occur: a deal that trips two of these has two independent reasons its rent
     cross-check is not saying what it appears to say.
 
-    TODO(U8): **these read the accumulated flag list as if it described the current
-    pass, and on a rework lap it does not.** `DealState.flags` carries an `operator.add`
-    reducer so the raw run history stays inspectable, and nothing on a `Flag` says which
-    pass raised it. Measured: a rework that *succeeds* — the geocoder answers, coordinates
-    resolve to a parcel, the divergence clears, neither agent raises anything new — still
-    trips I3 from pass one's flags, sets `critic_rejected`, and tells the reader the comps
-    were drawn around a city centroid when they no longer were.
-
-    Accepted for U7 rather than fixed, deliberately: the loop is bounded by
-    `config.MAX_REWORKS`, and every path this can reach ends at human review, so the one
-    audience guaranteed to see the stale sentence also sees the flag list beside it. The
-    fix is to stamp each flag with the `planner_invocations` that produced it and evaluate
-    only the current pass — a §5 change touching every agent that raises a flag, which is
-    why it is scheduled at U8 and sits on §6's cut list at 2a rather than being taken here.
-    Note the wrinkle it has to handle: an agent skipped on a rework raises nothing, so
-    absence must not read as *cleared* when it means *not re-examined*. `state.plan`
-    records which agents ran.
+    **Reads only the current pass (U8.5/OQ-15) — see `_kinds` for the mechanism.** This
+    used to read the accumulated flag list as if it described the current pass, so a
+    rework that succeeded could still trip an objection off a flag from a lap that no
+    longer applied. `_kinds` now resolves that per source agent, judging an agent that
+    ran this pass on this pass alone and an agent skipped this pass on its last
+    examination — never as cleared.
     """
     kinds = _kinds(state)
     objections: list[Objection] = []
@@ -374,7 +413,7 @@ def critic_agent(state: DealState) -> dict:
     # cross-check is not the same weight as one that merely degrades it, and flattening
     # them to WARN would discard the distinction U7.2 exists to draw.
     flags = [
-        flag(AGENT, FlagKind.CRITIC_INCONSISTENCY, objection.message, objection.severity)
+        state.flag(AGENT, FlagKind.CRITIC_INCONSISTENCY, objection.message, objection.severity)
         for objection in objections
     ]
 
@@ -418,7 +457,7 @@ def critic_agent(state: DealState) -> dict:
                  f"critical-severity disclosure was raised"
         )
         flags.append(
-            flag(
+            state.flag(
                 AGENT,
                 FlagKind.LOW_CONFIDENCE_ESTIMATE,
                 f"{reason}; routing to human review rather than reporting as a "
@@ -439,7 +478,7 @@ def critic_agent(state: DealState) -> dict:
     budget_exhausted = rejected and state.rework_count >= config.MAX_REWORKS
     if budget_exhausted:
         flags.append(
-            flag(
+            state.flag(
                 AGENT,
                 FlagKind.REWORK_LIMIT_REACHED,
                 f"Objections remain after {state.rework_count} rework pass(es), the "

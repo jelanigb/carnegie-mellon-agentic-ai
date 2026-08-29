@@ -186,7 +186,9 @@ def _attach_model_provenance(detail: ValuationDetail, bundle: dict) -> None:
     detail.model_trained_at = bundle.get("trained_at")
 
 
-def _attach_metro_error(detail: ValuationDetail, terms: DealTerms, bundle: dict) -> list:
+def _attach_metro_error(
+    detail: ValuationDetail, terms: DealTerms, bundle: dict, planner_invocations: int
+) -> list:
     """Resolve the subject to one of the four markets `mae_dollars_by_metro` covers, and
     flag when that market's historical error runs materially worse than the model's
     headline figure (U8.4, OQ-3).
@@ -241,6 +243,7 @@ def _attach_metro_error(detail: ValuationDetail, terms: DealTerms, bundle: dict)
             f"harder to price accurately than most. Treat this estimate as less reliable "
             f"than the headline error band on its own would suggest.",
             Severity.WARN,
+            planner_invocations,
         )
     ]
 
@@ -303,7 +306,7 @@ def _cross_check(
 
     direction = "above" if detail.divergence_pct > 0 else "below"
     return [
-        flag(
+        state.flag(
             AGENT,
             FlagKind.RENT_DIVERGES_FROM_COMPS,
             f"The modelled rent of ${estimate:,.0f}/mo sits "
@@ -341,7 +344,7 @@ def valuation_rent_agent(state: DealState) -> dict:
     bundle = rent_model.load()
     if bundle is None:
         flags.append(
-            flag(
+            state.flag(
                 AGENT,
                 FlagKind.RENT_ESTIMATE_UNAVAILABLE,
                 "No trained rent model is present on this machine "
@@ -358,7 +361,7 @@ def valuation_rent_agent(state: DealState) -> dict:
     # report, not a resolved county or a successful estimate. See `_attach_benchmark`
     # for why that independence matters — a subject that fails later still gets this
     # disclosure.
-    flags.extend(_attach_metro_error(detail, terms, bundle))
+    flags.extend(_attach_metro_error(detail, terms, bundle, state.planner_invocations))
 
     # The model takes exactly these three, and a missing one cannot be defaulted: a zero
     # or a corpus mean silently substituted here would produce a rent figure describing
@@ -376,7 +379,7 @@ def valuation_rent_agent(state: DealState) -> dict:
     ]
     if missing:
         flags.append(
-            flag(
+            state.flag(
                 AGENT,
                 FlagKind.RENT_ESTIMATE_UNAVAILABLE,
                 f"The rent model requires {', '.join(config.RENT_MODEL_FEATURES)}, and "
@@ -397,7 +400,7 @@ def valuation_rent_agent(state: DealState) -> dict:
     # confidence scoring as much as to a reader.
     if terms.county_fips is None:
         flags.append(
-            flag(
+            state.flag(
                 AGENT,
                 FlagKind.FMR_UNAVAILABLE_FOR_COUNTY,
                 "The subject property resolved to no county, so there is no HUD Fair "
@@ -440,7 +443,7 @@ def valuation_rent_agent(state: DealState) -> dict:
         )
     except (hud_fmr.HudFmrApiError, KeyError, StopIteration, RuntimeError) as exc:
         flags.append(
-            flag(
+            state.flag(
                 AGENT,
                 FlagKind.FMR_UNAVAILABLE_FOR_COUNTY,
                 f"County {terms.county_fips} resolved, but its HUD Fair Market Rent "
@@ -501,7 +504,7 @@ def valuation_rent_agent(state: DealState) -> dict:
                  "combined with it without mixing two different baselines"
         )
         flags.append(
-            flag(
+            state.flag(
                 AGENT,
                 FlagKind.FMR_ANCHOR_COUNTY_LEVEL,
                 f"This estimate is anchored to the county-wide Fair Market Rent for "
@@ -515,7 +518,7 @@ def valuation_rent_agent(state: DealState) -> dict:
 
     if anchor["bedroom_cap_exceeded"]:
         flags.append(
-            flag(
+            state.flag(
                 AGENT,
                 FlagKind.FMR_BEDROOM_CAP_EXCEEDED,
                 f"The subject has {terms.bedrooms} bedrooms; HUD publishes no Fair "
@@ -537,7 +540,7 @@ def valuation_rent_agent(state: DealState) -> dict:
     # the features fell outside anything the model saw. Refusing beats reporting it.
     if not config.RENT_MODEL_MIN_RATIO <= ratio <= config.RENT_MODEL_MAX_RATIO:
         flags.append(
-            flag(
+            state.flag(
                 AGENT,
                 FlagKind.RENT_ESTIMATE_UNAVAILABLE,
                 f"The model predicted a rent-to-FMR ratio of {ratio:.2f}, outside the "
@@ -561,7 +564,7 @@ def valuation_rent_agent(state: DealState) -> dict:
     # reader can mistake a modelled ratio times a government reference figure for an
     # observed market rent.
     flags.append(
-        flag(
+        state.flag(
             AGENT,
             FlagKind.RENT_ANCHORED_TO_FMR,
             f"Estimated rent of ${estimate:,.0f}/mo is a modelled rent-to-FMR ratio of "

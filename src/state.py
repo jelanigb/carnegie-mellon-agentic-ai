@@ -241,6 +241,15 @@ class Flag(BaseModel):
     kind: FlagKind
     detail: str
     severity: Severity
+    # Which pass raised this (`DealState.planner_invocations` at the moment it was
+    # constructed) — U8.5/OQ-15. `DealState.flags` is append-only across rework laps so
+    # the raw run history stays inspectable, which means nothing else on a Flag says
+    # whether it still describes the deal or only described it on an earlier lap. The
+    # default of 0 is a sentinel for flags built outside the pass mechanism (a
+    # hand-constructed test fixture) rather than a real pass number: `planner_agent`
+    # advances `planner_invocations` to 1 before any other node can raise anything, so a
+    # real flag is never stamped 0.
+    planner_invocations: int = 0
 
 
 class DealTerms(BaseModel):
@@ -807,20 +816,45 @@ class DealState(BaseModel):
         """
         return {f.kind for f in self.flags}
 
+    def flag(self, source_agent: str, kind: FlagKind, detail: str, severity: Severity = Severity.INFO) -> Flag:
+        """Bound convenience constructor for the common case: a node raising a flag
+        against its own already-in-scope `state` (U8.5/OQ-15).
+
+        Every node function, and most of the helpers they call, already hold `state` —
+        this stamps `planner_invocations` from it automatically rather than making
+        every one of the ~37 call sites pass it explicitly. The free `flag()` function
+        below still exists for the handful of helpers that build a `Flag` without a
+        `DealState` in scope; they take the pass number as an explicit argument instead.
+        """
+        return flag(source_agent, kind, detail, severity, self.planner_invocations)
+
 
 def flag(
     source_agent: str,
     kind: FlagKind,
     detail: str,
-    severity: Severity = Severity.INFO,
+    severity: Severity,
+    planner_invocations: int,
 ) -> Flag:
-    """Convenience constructor, so raising a flag inside a node stays a one-liner.
+    """Convenience constructor for a helper that has no `DealState` to call
+    `state.flag()` on.
+
+    `planner_invocations` has no default here, deliberately (U8.5/OQ-15): a helper that
+    forgets to thread it through fails loudly at the call site instead of silently
+    stamping every flag it raises with the sentinel 0, which would make the Critic treat
+    a live pass's finding as if it belonged to no pass at all.
 
     Nodes return flags as a list in their partial update — e.g.
-    `return {"flags": [flag(AGENT, FlagKind.SPARSE_COMPS, "...", Severity.WARN)]}`
+    `return {"flags": [state.flag(AGENT, FlagKind.SPARSE_COMPS, "...", Severity.WARN)]}`
     — and the reducer on DealState.flags accumulates them.
     """
-    return Flag(source_agent=source_agent, kind=kind, detail=detail, severity=severity)
+    return Flag(
+        source_agent=source_agent,
+        kind=kind,
+        detail=detail,
+        severity=severity,
+        planner_invocations=planner_invocations,
+    )
 
 
 def count_area_positioned(comps: list[Comp]) -> int:
