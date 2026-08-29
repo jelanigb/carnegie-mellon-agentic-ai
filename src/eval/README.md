@@ -9,8 +9,9 @@ the cases to be written.
 
 ```bash
 .venv/bin/python -m eval.runner                 # every case
-.venv/bin/python -m eval.runner --tier golden   # no model calls
+.venv/bin/python -m eval.runner --tier golden   # replays recordings; no live calls
 .venv/bin/python -m eval.runner --case chicago
+.venv/bin/python -m eval.runner --tier golden --record   # re-record, deliberately
 ```
 
 **A case declares what the system should do with it, before the run.** That is what makes
@@ -28,7 +29,7 @@ gets cut.
 | --- | --- | --- |
 | `cases.py` | **The case set** and the `EvalCase` type. | Yes |
 | `runner.py` | **The batch runner**, results table and flag-coverage census. | Yes |
-| `data/` | **Inputs.** Golden `DealTerms` fixtures and the synthetic listings they came from. | Yes |
+| `data/golden_fixtures.py` | **Inputs.** The golden `DealTerms` fixtures, each stating what was engineered and what is real. | Yes |
 | `data/llm_recordings/` | **Inputs.** Recorded model responses, replayed by `tools/llm_cache.py` in `replay` mode. | Yes |
 | `results/` | **Outputs.** Result tables produced by a harness run. | Yes |
 
@@ -54,11 +55,45 @@ them slower, non-reproducible, and no more truthful.
    that genuinely originate in the Extractor need it to actually run, so those cases
    replay recorded responses via `LLM_CACHE_MODE=replay`.
 
-A run of tier 1 or 2 makes **no model calls at all**, which is why the harness is
+A run of tier 1 or 2 makes **no live model calls**, which is why the harness is
 quota-independent and fast. That is also a limitation, and per §8 the results table must
 say so rather than implying every row exercised the full system end to end — at least
 one live end-to-end run belongs alongside it, so "works against a real model" is
 demonstrated rather than assumed.
+
+**That sentence was wrong from U8.1 until U8.2, and the correction is worth keeping rather
+than quietly editing.** It read "no model calls at all", which was true of the *Extractor*
+and false of the run. `agents/scenario_forecast` builds an `LlmClient` and calls it twice
+per Tree-of-Thought level on every invocation, whatever tier the case is — a golden fixture
+skips the parse, not the pipeline. So until U8.2 every golden row was a live call: ~4 per
+case, ~30 seconds, quota-dependent, and not reproducible from a fresh clone.
+`config.EVAL_RECORDINGS_DIR` had been defined since U3 and **nothing in the repository
+read it**.
+
+What makes the claim true now is `runner._case_environment`, which points
+`config.LLM_CACHE_DIR` at the committed store and sets `replay` for both offline tiers, the
+same module-level override the runner already used for the retrieval ablation. A missing
+recording is then a `CacheMiss` rather than a live call. The correction is recorded here
+because the failure mode is instructive: the property was asserted in prose, nothing
+enforced it, and it stayed asserted through a unit that depended on it.
+
+## Declared faults
+
+Some degradation paths cannot be reached by any listing or any recording. The system's
+bounded-retry cycle is the clearest case: it spends a pass only on an objection marked
+retryable, and the only retryable objection is gated on the address lookup having been
+*unreachable* — a live network failure that a fixture (which carries its own coordinates
+and never calls the geocoder) cannot produce and a recording (which replays model calls,
+not HTTP requests generally) cannot replay.
+
+So a case may declare a fault for the harness to simulate, via `EvalCase.injects`. Two
+properties make that honest rather than a fixture quietly patching a module:
+
+1. **The declaration is data on the case**, so it appears in the results table's tier
+   column and in the report. A reader can tell a simulated outage from a real one.
+2. **The injection enters at the same seam the real failure does** — the geocoder request
+   raises, and the pipeline's own branch decides that this is a service outage rather than
+   an unresolvable address. Nothing forces a flag, so the branch under test still runs.
 
 ## Recording and replaying
 
