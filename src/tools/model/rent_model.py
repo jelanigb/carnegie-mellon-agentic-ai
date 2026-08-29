@@ -87,6 +87,12 @@ class TrainingReport:
     baseline_mae_dollars: float = 0.0
     r2: float = 0.0
     coefficients: dict = field(default_factory=dict)
+    # Per-metro breakdown of the same holdout residuals above, keyed by the labels in
+    # `config.INDEXED_MARKETS` (already documented there as "the inference trio plus New
+    # York"). {"New York": {"mae_dollars": 1065.xx, "n": 41}, ...}. A groupby over
+    # residuals already computed, not a second fit — see `_mae_dollars_by_metro` (U8.4,
+    # OQ-3). A metro absent here had zero holdout rows.
+    mae_dollars_by_metro: dict = field(default_factory=dict)
 
     def summary(self) -> str:
         lines = [
@@ -110,6 +116,13 @@ class TrainingReport:
             f"  MAE (ratio)            {self.baseline_mae_ratio:>7.4f}",
             f"  MAE (dollars)          {self.baseline_mae_dollars:>7.2f}",
         ]
+        if self.mae_dollars_by_metro:
+            lines.append("")
+            lines.append("MAE (dollars) by metro:")
+            for metro, stats in self.mae_dollars_by_metro.items():
+                lines.append(
+                    f"  {metro:<14} {stats['mae_dollars']:>7.2f}   (n={stats['n']:,})"
+                )
         return "\n".join(lines)
 
 
@@ -377,6 +390,48 @@ def build_training_frame(
     return df.reset_index(drop=True), report
 
 
+def _mae_dollars_by_metro(
+    df: pd.DataFrame,
+    holdout_index: np.ndarray,
+    predicted: np.ndarray,
+    y_test: np.ndarray,
+    fmr_test: np.ndarray,
+) -> dict:
+    """Break the holdout residuals already computed down by metro (U8.4, OQ-3).
+
+    A groupby over an existing result, not a second fit: `predicted`, `y_test` and
+    `fmr_test` are the same arrays `train()` already scored, in the same order as
+    `holdout_index` because all four came out of the same `train_test_split` call.
+
+    Grouped by `config.INDEXED_MARKETS`, whose own docstring already names it "the
+    inference trio plus New York" — exactly the comparison OQ-3 needs: the model's error
+    where it is actually used, against the market it is weakest in. Matched the way
+    `scripts/metro_shortlist_ablation.py` established as correct — a boolean mask against
+    `df`'s own index — rather than round-tripped through `kaggle_data.filter_markets`,
+    whose `ignore_index=True` re-indexing silently breaks that join (see that script's
+    module docstring for the bug this repeats the fix for, not the mistake).
+
+    `n` travels with each figure: a holdout slice can be thin, and a MAE over forty rows
+    should not be presented like one over five thousand.
+    """
+    residual_dollars = np.abs((predicted - y_test) * fmr_test)
+    holdout = df.loc[holdout_index]
+    by_metro: dict[str, dict] = {}
+    for state, patterns in config.INDEXED_MARKETS.items():
+        label = patterns[0]
+        mask = (holdout["state"] == state) & holdout["cityname"].apply(
+            lambda c, p=patterns: kaggle_data.city_matches(c, p)
+        )
+        n = int(mask.sum())
+        if n == 0:
+            continue
+        by_metro[label] = {
+            "mae_dollars": float(residual_dollars[mask.to_numpy()].mean()),
+            "n": n,
+        }
+    return by_metro
+
+
 def train(
     client: Optional[hud_fmr.HudFmrClient] = None,
 ) -> tuple[object, TrainingReport]:
@@ -405,8 +460,12 @@ def train(
     y = df["rent_to_fmr"].to_numpy(dtype=float)
     fmr = df["fmr"].to_numpy(dtype=float)
 
-    X_train, X_test, y_train, y_test, _, fmr_test = train_test_split(
-        X, y, fmr,
+    # `df.index` rides along in the same split so the holdout rows can be traced back to
+    # `state`/`cityname` afterward — needed for `_mae_dollars_by_metro` and nothing else,
+    # since `X_test`/`y_test`/`fmr_test` stay the plain arrays the fit and scoring below
+    # already used.
+    X_train, X_test, y_train, y_test, _, fmr_test, _, idx_test = train_test_split(
+        X, y, fmr, df.index.to_numpy(),
         test_size=config.RENT_MODEL_HOLDOUT_FRACTION,
         random_state=config.RENT_MODEL_RANDOM_SEED,
     )
@@ -422,6 +481,9 @@ def train(
     # is what a reader of the report actually experiences.
     report.mae_dollars_at_holdout_fmr = float(
         np.mean(np.abs((predicted - y_test) * fmr_test))
+    )
+    report.mae_dollars_by_metro = _mae_dollars_by_metro(
+        df, idx_test, predicted, y_test, fmr_test
     )
 
     baseline = np.full_like(y_test, float(np.mean(y_train)))
