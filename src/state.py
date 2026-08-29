@@ -153,6 +153,17 @@ class FlagKind(StrEnum):
     # agent observing that the evidence it was handed does not support the number it
     # just produced, which is the Observe step of its own loop.
     RENT_DIVERGES_FROM_COMPS = "rent_diverges_from_comps"
+    # The rent model's own historical error is measurably worse in the subject's market
+    # than the batch it is normally scored against (U8.4, OQ-3). Distinct from every
+    # other rent flag: RENT_ANCHORED_TO_FMR discloses the mechanism on every estimate,
+    # RENT_DIVERGES_FROM_COMPS is two of this run's own inputs disagreeing, and
+    # FMR_ANCHOR_COUNTY_LEVEL is about spatial resolution. This one says the estimate is
+    # the system's ordinary output, produced the ordinary way, and this particular
+    # market's holdout residual has historically run well above the figure quoted
+    # elsewhere in the report as "the" error band. New York is the standing case: it is
+    # in the training set (so this is not a transfer question — see OQ-12), just
+    # measurably harder to price.
+    RENT_ESTIMATE_MARKET_ERROR_ELEVATED = "rent_estimate_market_error_elevated"
 
     # Forecast
     APPRECIATION_SOURCE = "appreciation_source"
@@ -443,6 +454,16 @@ class ValuationDetail(BaseModel):
     model_holdout_mae_ratio: Optional[float] = None
     model_trained_at: Optional[datetime] = None
     model_training_rows: Optional[int] = None
+
+    # Per-metro holdout error for the subject's own market (U8.4, OQ-3), from
+    # `TrainingReport.mae_dollars_by_metro`. Separate from `model_holdout_mae_dollars`
+    # above rather than replacing it: the report states both, always — "±$518 overall,
+    # ±$1,065 in New York" — so a reader in a good market can see what good looks like.
+    # `subject_metro` is `None` when the subject's market is not one of the four this
+    # breakdown covers, which is a fact about coverage, not a degradation to disclose.
+    subject_metro: Optional[str] = None
+    subject_metro_mae_dollars: Optional[float] = None
+    subject_metro_mae_n: Optional[int] = None
 
     # Which HUD fiscal-year schedule anchored the estimate. The whole point of §2's
     # design is that the number is dated; the date has to survive into the report or

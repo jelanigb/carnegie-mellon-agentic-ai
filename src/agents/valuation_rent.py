@@ -186,6 +186,65 @@ def _attach_model_provenance(detail: ValuationDetail, bundle: dict) -> None:
     detail.model_trained_at = bundle.get("trained_at")
 
 
+def _attach_metro_error(detail: ValuationDetail, terms: DealTerms, bundle: dict) -> list:
+    """Resolve the subject to one of the four markets `mae_dollars_by_metro` covers, and
+    flag when that market's historical error runs materially worse than the model's
+    headline figure (U8.4, OQ-3).
+
+    Matched the same way `_attach_benchmark` resolves a Redfin metro — `city_matches`
+    against `config.INDEXED_MARKETS`, the same grouping
+    `tools.model.rent_model._mae_dollars_by_metro` used to produce these figures, so the
+    two cannot drift apart.
+
+    Sets `detail.subject_metro*` whenever the market resolves, independent of whether the
+    ratio crosses the flag's threshold: per Q2(a), the report prints this market's error
+    on every run, not only a flagged one, so a reader in a good market can see what good
+    looks like. A subject outside these four markets gets `None` — a fact about this
+    breakdown's coverage, not a degradation to disclose.
+    """
+    by_metro = (bundle.get("report") or {}).get("mae_dollars_by_metro") or {}
+    if not terms.city or not terms.state:
+        return []
+
+    label = next(
+        (
+            patterns[0]
+            for state, patterns in config.INDEXED_MARKETS.items()
+            if terms.state == state and kaggle_data.city_matches(terms.city, patterns)
+        ),
+        None,
+    )
+    if label is None or label not in by_metro:
+        return []
+
+    stats = by_metro[label]
+    detail.subject_metro = label
+    detail.subject_metro_mae_dollars = stats["mae_dollars"]
+    detail.subject_metro_mae_n = stats["n"]
+
+    overall = detail.model_holdout_mae_dollars
+    threshold = config.RENT_MODEL_METRO_ERROR_RATIO_THRESHOLD
+    if not overall or stats["mae_dollars"] <= threshold * overall:
+        return []
+
+    ratio = stats["mae_dollars"] / overall
+    return [
+        flag(
+            AGENT,
+            FlagKind.RENT_ESTIMATE_MARKET_ERROR_ELEVATED,
+            f"The rent model's historical error in {label} is ${stats['mae_dollars']:,.0f}, "
+            f"{ratio:.1f}x the ${overall:,.0f} error quoted elsewhere in this report as "
+            f"the model's typical accuracy, measured on {stats['n']} held-out {label} "
+            f"listings. This is a known weakness of the model in this particular market, "
+            f"not a property of this deal or a sign the model has never seen a market like "
+            f"it — {label} listings are part of what the model trained on; they are just "
+            f"harder to price accurately than most. Treat this estimate as less reliable "
+            f"than the headline error band on its own would suggest.",
+            Severity.WARN,
+        )
+    ]
+
+
 def _cross_check(
     detail: ValuationDetail, state: DealState, estimate: float, subject_fmr: float
 ) -> list:
@@ -295,6 +354,11 @@ def valuation_rent_agent(state: DealState) -> dict:
         return {"valuation_detail": detail, "flags": flags}
 
     _attach_model_provenance(detail, bundle)
+    # Independent of everything below: it only needs city/state and the persisted
+    # report, not a resolved county or a successful estimate. See `_attach_benchmark`
+    # for why that independence matters — a subject that fails later still gets this
+    # disclosure.
+    flags.extend(_attach_metro_error(detail, terms, bundle))
 
     # The model takes exactly these three, and a missing one cannot be defaulted: a zero
     # or a corpus mean silently substituted here would produce a rent figure describing

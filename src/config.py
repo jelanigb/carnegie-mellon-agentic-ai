@@ -346,6 +346,21 @@ RENT_MODEL_FMR_FISCAL_YEAR_START_MONTH = 10
 # trying to capture, so it imports more noise than structure.
 RENT_MODEL_BACKCAST_ZIP_FMR = False
 
+# How much worse a market's own per-metro holdout MAE must be than the model's overall
+# holdout MAE before `FlagKind.RENT_ESTIMATE_MARKET_ERROR_ELEVATED` fires (U8.4, OQ-3).
+# A ratio to the overall figure rather than a fixed dollar amount, so the line does not
+# need re-tuning every time a retrain moves the headline MAE.
+#
+# Measured Aug 29, 2026, on `TrainingReport.mae_dollars_by_metro`: overall $524.03;
+# Chicago $492.14, Los Angeles $530.46, Cleveland $452.49 — all within 1.1x of the
+# overall figure — against New York's $1,048.38, at 2.00x. 1.5x sits with wide margin on
+# both sides of that gap and is set here on that one measurement rather than a search
+# over candidates.
+#
+# PROVISIONAL — retune in U8.6 against the eval batch, same as
+# RENT_COMP_DIVERGENCE_THRESHOLD_PCT and COMP_MAX_OUTSIDE_MATCH_SHARE.
+RENT_MODEL_METRO_ERROR_RATIO_THRESHOLD = 1.5
+
 
 # --------------------------------------------------------------------------
 # Valuation agent (U5 — agents/valuation_rent.py)
