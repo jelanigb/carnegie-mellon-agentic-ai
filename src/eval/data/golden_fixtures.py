@@ -55,6 +55,16 @@ coincidence: Cook County publishes Small Area (ZIP-level) FMRs and Los Angeles a
 do not, so a Chicago fixture carries one fewer warn-severity flag than an otherwise
 identical Los Angeles one, before anything about the deal is considered. Two fixtures below
 sit either side of that line.
+
+A fourth metro, added for a different reason (U8.4)
+-----------------------------------------------------
+The New York fixture below is not part of the three-metro skew check above — it exists to
+test `FlagKind.RENT_ESTIMATE_MARKET_ERROR_ELEVATED` (OQ-3) on a listing with a real,
+non-empty comp set. The `staten-island` demo deal already trips that flag, but it does so
+by accident: that deal escalates on zero comps, so the market-error disclosure is invisible
+against a report that was already going to a human reviewer for an unrelated reason. This
+fixture sits in a part of New York the corpus covers densely, so the flag fires on a report
+that is not already determined by something else.
 """
 
 from __future__ import annotations
@@ -245,4 +255,41 @@ CLE_ORDINARY = _add(GoldenFixture(
     ),
     terms=_terms(**_CLE, price=225_000, unit_count=3, bedrooms=2, bathrooms=1.0,
                  square_footage=900.0, unit_rents=[1_050.0, 1_075.0, 1_100.0]),
+))
+
+
+# --------------------------------------------------------------------------
+# New York (Brooklyn) — Kings County, 36047. Added U8.4, for a different reason than the
+# three above: see "A fourth metro, added for a different reason" in the module docstring.
+# Census geocode Aug 29, 2026: 40.672786, -73.950302. Sited in Bedford-Stuyvesant, one of
+# the corpus's densest New York clusters (`scripts/retrieval_evidence.py`'s module
+# docstring measured 38 comps within 3 miles here), specifically so this fixture returns a
+# real comp set rather than reproducing the `staten-island` demo's zero-comp accident.
+# --------------------------------------------------------------------------
+
+_NY_BEDSTUY = dict(
+    full_address="756 Nostrand Ave, Brooklyn, NY 11216",
+    street_address="756 Nostrand Ave",
+    city="Brooklyn",
+    state="NY",
+    zip_code="11216",
+    latitude=40.672786,
+    longitude=-73.950302,
+)
+
+NY_BEDSTUY_ORDINARY = _add(GoldenFixture(
+    key="ny-bedstuy-triplex",
+    address=_NY_BEDSTUY["full_address"],
+    engineered=(
+        "Nothing about the property — an ordinary three-unit building at the market's "
+        "own bedroom count and size. The engineering is the *market*, the same way it is "
+        "for the Cleveland fixture above: New York's own holdout residual runs roughly "
+        "double the model's overall figure, a known weakness this fixture surfaces "
+        "outside the zero-comp accident the real `staten-island` deal shows it through. "
+        "Retrieval here also settles onto a handful of coordinates rather than one, the "
+        "same concentration Cleveland shows — denser, at 8 comps rather than a point "
+        "sample, but not evenly spread."
+    ),
+    terms=_terms(**_NY_BEDSTUY, price=1_050_000, unit_count=3, bedrooms=2, bathrooms=1.0,
+                 square_footage=900.0, unit_rents=[2_500.0, 2_600.0, 2_650.0]),
 ))

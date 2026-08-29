@@ -459,6 +459,24 @@ ENGINEERED_CASES: list[EvalCase] = [
         ),
         terms=golden_fixtures.CLE_ORDINARY.terms,
     ),
+    EvalCase(
+        key="ny-bedstuy-triplex",
+        tier=Tier.GOLDEN,
+        verdict=Verdict.REPORTS,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.RENT_ESTIMATE_MARKET_ERROR_ELEVATED,
+                 FlagKind.COMPS_SPATIALLY_CONCENTRATED),
+        note=(
+            "The market-error disclosure (OQ-3), tripped by a listing with a real comp "
+            "set rather than by the `staten-island` demo's zero-comp accident, where the "
+            "flag is invisible against a report already escalating for an unrelated "
+            "reason. Both targets are warn-severity, so the mechanical rule declares "
+            "`reports`; New York's other standing warn (county-level FMR anchoring) "
+            "stacks with them, which is itself the sort of thing U8.6's tuning run "
+            "should see rather than a case defect to fix."
+        ),
+        terms=golden_fixtures.NY_BEDSTUY_ORDINARY.terms,
+    ),
 
     # --- The rework cycle, under a declared outage -------------------------
     #
