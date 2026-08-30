@@ -206,15 +206,39 @@ def _extract_terms(listing_text: str) -> tuple[ListingExtraction, int]:
 # --------------------------------------------------------------------------
 
 
-def _supplied_coordinates(terms: DealTerms) -> Optional[tuple[float, float]]:
-    """Coordinates the caller put in state before this node ran, if any.
+def _supplied_coordinates(state: DealState) -> Optional[tuple[float, float]]:
+    """Coordinates an external caller put in state before the pipeline ever ran, if any.
 
     The U2 stub merged *every* pre-existing field over its own parse, as an affordance
     for callers supplying coordinates the pipeline had no way to derive. That merge is
     gone — a real extractor's output should not depend on what happened to be in state
     beforehand — but coordinates remain readable here for one narrow purpose: checking
     them against the address, not deferring to them.
+
+    **Meaningful only on the deal's first pass (U8.5/OQ-16).** Found while building a
+    fault-injection case to close `FlagKind.REWORK_LIMIT_REACHED`: on a rework,
+    `state.deal_terms.latitude/longitude` already holds whatever the *previous* pass
+    resolved to, and this function cannot tell that apart from a caller's own input — a
+    prior pass's centroid fallback was being read back as if a caller had chosen it,
+    disclosed as "used as given" with no way to verify it, rather than as the system's
+    own fallback. That silently swapped `GEOCODER_SERVICE_UNAVAILABLE` for
+    `GEOCODING_UNAVAILABLE` on the second pass, which both stopped
+    `_geocode_is_worth_retrying` from planning a third attempt and added a new unique
+    flag to the confidence tally — short-circuiting a retry a persistent outage should
+    still have been worth spending.
+
+    Safe to restrict this way **given the system's one retry path today**: a rework only
+    ever happens because of I3's `GEOCODER_SERVICE_UNAVAILABLE` objection, the only
+    retryable one that exists, and that flag is only ever raised when no caller supplied
+    coordinates in the first place — the caller-supplied branch in `_resolve_geography`
+    takes priority and raises a different, non-retryable flag instead. So a deal can only
+    ever reach a second pass when pass one's coordinates were pipeline-derived, never
+    caller-supplied. Re-check this reasoning if a second retryable objection is ever
+    added — it would no longer hold by construction.
     """
+    if state.planner_invocations != 1:
+        return None
+    terms = state.deal_terms
     if terms.latitude is None or terms.longitude is None:
         return None
     return terms.latitude, terms.longitude
@@ -457,7 +481,7 @@ def extractor_agent(state: DealState) -> dict:
     )
 
     flags = _resolve_geography(
-        terms, _supplied_coordinates(state.deal_terms), state.planner_invocations
+        terms, _supplied_coordinates(state), state.planner_invocations
     )
     questions: list[str] = []
 
