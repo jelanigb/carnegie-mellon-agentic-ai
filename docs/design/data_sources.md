@@ -1,5 +1,5 @@
 **Reference map for the plan of record, §2 — [`implementation_plan.md`](../implementation_plan.md).**
-Section numbers (§1–§9) and decision numbers (#1–#17) anywhere in this repository refer
+Section numbers (§1–§9) and decision numbers (#1–#19) anywhere in this repository refer
 to that file: §-numbers to its sections, #-numbers to the **decisions register in §7**,
 which names every decision and links to its full reasoning in
 [`decision_log.md`](../history/decision_log.md). A
@@ -94,7 +94,7 @@ the Cleveland set.
 | Counties · fiscal years | 15 · FY2019–FY2020 |
 | Columns consumed | `bedrooms`, `bathrooms`, `square_feet`, `price`, `latitude`, `longitude`, `time` |
 
-The target is `price ÷ FMR-for-that-row's-county-and-fiscal-year`, **not** `price`.
+The target is `price ÷ anchor-for-that-row's-ZIP-and-month`, **not** `price` — where the anchor is ZORI at that ZIP and month times the HUD bedroom step for its county (U11.3; it was county-and-fiscal-year FMR outright until Aug 30, 2026).
 Reproduce with `.venv/bin/python scripts/train_rent_model.py --dry-run`.
 
 ### Used for — 2. Comp index

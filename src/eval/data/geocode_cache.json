@@ -1,0 +1,27 @@
+{
+  "5100 N Kenmore Ave, Chicago, IL, 60640": {
+    "latitude": 41.975319532756,
+    "longitude": -87.656463485919,
+    "matched_address": "5100 N KENMORE AVE, CHICAGO, IL, 60640",
+    "source": "census_geocoder"
+  },
+  "99999 Nonexistent Fantasy Ln, Chicago, IL": "no_match",
+  "3400 S Vermont Ave, Los Angeles, CA, 90089": {
+    "latitude": 34.025436853962,
+    "longitude": -118.291468175118,
+    "matched_address": "3400 S VERMONT AVE, LOS ANGELES, CA, 90089",
+    "source": "census_geocoder"
+  },
+  "1425 W Adams Blvd, Los Angeles, CA, 90007": {
+    "latitude": 34.032818800203,
+    "longitude": -118.292236562377,
+    "matched_address": "1425 W ADAMS BLVD, LOS ANGELES, CA, 90007",
+    "source": "census_geocoder"
+  },
+  "1425 W Sunset Blvd, Los Angeles, CA, 90026": {
+    "latitude": 34.074839154216,
+    "longitude": -118.252766301429,
+    "matched_address": "1425 W SUNSET BLVD, LOS ANGELES, CA, 90026",
+    "source": "census_geocoder"
+  }
+}

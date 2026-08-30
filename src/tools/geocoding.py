@@ -51,13 +51,32 @@ The two centroid flags are split because only one of them is worth retrying: a s
 outage may resolve on a later run, an address with no street number will not. The Critic's
 rework cycle branches on that.
 
-Kept out of scope deliberately
--------------------------------
-No disk cache, unlike `tools/hud_fmr.py`. That client caches because a training pull
-hits the same (county, year) key repeatedly across thousands of rows against a 60/minute
-throttle. Geocoding is called at most once per subject property per pipeline run — there
-is no hot loop here to protect, and adding one would be exactly the premature machinery
-§8 warns against.
+Caching, and why the original argument against it was right and still wrong
+----------------------------------------------------------------------------
+This module carried "no disk cache, unlike `tools/hud_fmr.py`" as a deliberate omission,
+reasoned entirely about **cost**: that client caches because a training pull hits the same
+(county, year) key thousands of times against a 60/minute throttle, while geocoding runs
+at most once per subject per pipeline run. There is no hot loop here, and on cost grounds
+a cache would have been the premature machinery §8 warns against.
+
+**A second reason arrived at U8 and the omission did not survive it: reproducibility.**
+The eval harness's replay tier records model responses so a case produces the same result
+every time. But `LLM_CACHE_MODE=replay` covers *model* calls, and this is an ordinary HTTP
+request — so when the Census times out, `geocode()` correctly falls through to the centroid
+and raises `GEOCODER_SERVICE_UNAVAILABLE`, that flag joins the set the forecast's evaluator
+prompt embeds, the prompt changes, and the recorded response for it no longer exists. The
+case fails with a `CacheMiss` that reads like a prompt drifted on purpose.
+
+Measured Aug 30, 2026: roughly one case per full batch run, and **a different case each
+time**, which is what sent the first investigation looking for state leakage between cases
+rather than for a network flake. The eval harness's central claim is that a replayed case
+is reproducible; a live dependency upstream of the recorded call quietly made that false.
+
+So the cache exists for determinism, not for throughput, and it is scoped to that: an
+address that resolved once resolves the same way forever. **A timeout is never cached** —
+only outcomes the Census actually returned, match or no-match — because caching a failure
+would freeze a transient outage into a permanent one and hide exactly the condition the
+retryable/non-retryable flag split exists to distinguish.
 """
 
 from __future__ import annotations
@@ -69,6 +88,7 @@ from typing import Optional
 
 import requests
 
+import config
 from tools import diagnostics
 from tools.county_crosswalk import normalize_city, normalize_state
 
@@ -96,6 +116,26 @@ class GeocodeSource(StrEnum):
 # not the concern here).
 _CENSUS_BENCHMARK = "Public_AR_Current"
 _TIMEOUT_SECONDS = 10
+
+# Sentinel for "the Census ran and found nothing." Stored rather than left absent so a
+# repeat lookup of an unmatchable address costs no call and, more importantly, produces
+# the identical flag set on every run — which is the whole point of this cache.
+_NO_MATCH = "no_match"
+
+
+@functools.lru_cache(maxsize=1)
+def _address_cache():
+    """The on-disk address→coordinate store, built once per process.
+
+    Reuses `hud_fmr._DiskCache` rather than growing a second implementation: it is a
+    whole-file JSON store with atomic writes and its documented concurrency limitation —
+    two processes interleaving writes lose one another's entries — costs a cache miss
+    here exactly as it does there. Imported lazily to keep this module's import graph
+    free of the FMR client, which it otherwise has no relationship with.
+    """
+    from tools.hud_fmr import _DiskCache
+
+    return _DiskCache(config.GEOCODE_CACHE_PATH)
 
 
 class GeocodingError(Exception):
@@ -154,6 +194,15 @@ def geocode_census(
     if not oneline:
         return None
 
+    # Served from disk when this exact address has resolved before — see the module
+    # docstring on why this cache is about determinism rather than throughput. A cached
+    # `None` is a recorded *no-match*, which is a real answer and worth keeping; a
+    # timeout never reaches this store at all.
+    cache = _address_cache()
+    hit = cache.get(oneline)
+    if hit is not None:
+        return None if hit == _NO_MATCH else GeocodeResult(**hit)
+
     try:
         response = requests.get(
             CENSUS_GEOCODER_URL,
@@ -164,19 +213,29 @@ def geocode_census(
         payload = response.json()
         matches = payload["result"]["addressMatches"]
     except (requests.RequestException, KeyError, ValueError) as exc:
+        # Deliberately not cached. Freezing a transient outage into a permanent one would
+        # erase the very distinction `GEOCODER_SERVICE_UNAVAILABLE` exists to carry.
         raise GeocodingError(f"Census Geocoder request failed for {oneline!r}: {exc}") from exc
 
     if not matches:
+        cache.set(oneline, _NO_MATCH)
         return None
 
     best = matches[0]
     coords = best["coordinates"]
-    return GeocodeResult(
+    result = GeocodeResult(
         latitude=float(coords["y"]),
         longitude=float(coords["x"]),
         matched_address=best.get("matchedAddress", oneline),
         source=GeocodeSource.CENSUS_GEOCODER,
     )
+    cache.set(oneline, {
+        "latitude": result.latitude,
+        "longitude": result.longitude,
+        "matched_address": result.matched_address,
+        "source": result.source,
+    })
+    return result
 
 
 @functools.lru_cache(maxsize=1)

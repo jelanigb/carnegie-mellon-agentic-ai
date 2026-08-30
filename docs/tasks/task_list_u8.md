@@ -1,7 +1,7 @@
 # U8 — Evaluation harness — task list
 
 > **Conventions for this file are in [`README.md`](README.md).** Section numbers (§1–§9)
-> and decision numbers (#1–#17) refer to
+> and decision numbers (#1–#19) refer to
 > [`../implementation_plan.md`](../implementation_plan.md).
 
 **Feeds Checkpoint 6.1, the final report, and the video.** §6 sizes this unit as *8–10
@@ -1113,6 +1113,57 @@ advance, so the prediction stays honest while ceasing to be naive about siting. 
 whose only "failure" was inheriting their market's floor stop reading as tuning signals
 and start reading as what they are: correct escalations of a genuinely shakier estimate.
 
+---
+
+**Closed Aug 30, 2026, against the post-U11.3 batch. The finding is that the batch
+produces no evidence the threshold is wrong — which is a real result and a limited one.**
+
+**Every mismatch triaged, and none of them is threshold evidence.** Three of 20 predicted
+cases disagree with their declared verdict. The triage rule fixed in advance says a
+mismatch is a tuning signal when the target fired and the case is wrong when it did not;
+applied honestly, all three turn out to be a *third* thing the rule did not anticipate —
+**a gap in the prediction, not in the parameter.**
+
+| Case | Declared | Observed | What it actually is |
+| --- | --- | --- | --- |
+| `chicago-five-bedroom` | reports | escalates, 0.25 | The prediction reasoned from the target's info severity. A five-bedroom subject in Logan Square returns **1 comp**, so retrieval alone raises six warns. Escalating an estimate resting on one comparable is correct |
+| `cleveland-divergence-over` | reports | escalates †, 0.70 | Predicted from `straddle_probe`, which runs comps and Valuation only. The Critic then raised a critical objection those two agents cannot see. Escalating is correct |
+| `la-three-bedroom-comp-drift` | escalates | reports, 0.85 | Left mismatching deliberately — see U8.6e. The divergence gate closed in front of I1, and whether it should sit there is the architect's call |
+
+**So the derivation needs a third input, and this is the same lesson a second time.** The
+scope revision above added the market's standing warns after the architect showed that
+siting was being ignored. Both of the first two rows are the identical error one level
+down: the prediction reasons from what a *flag* implies and ignores what the *deal* makes
+inevitable. A five-bedroom subject's comp starvation and a Cleveland subject's Critic
+objection are both knowable before the run — from the corpus and from
+`_interaction_objections` respectively — so adding them keeps the prediction honest rather
+than fitting it. **Not taken here**, because changing the derivation *and* closing against
+it in one pass is how a prediction quietly becomes a transcription; it is recorded for
+U8.10 to decide on.
+
+**What that leaves for decision #6.** Zero of 20 predicted cases give evidence that 0.60
+is the wrong threshold or that 0.15 is the wrong warn weight. Combined with the sweep's
+measured plateau (`eval/results/sensitivity.md`), the honest close is:
+
+> **Held, with the stable region measured and published.** Not "optimal" — the batch
+> cannot distinguish the shipped values from a wide neighborhood of alternatives, and a
+> batch that cannot distinguish two settings is saying it has no evidence either way,
+> not that they are equally good.
+
+**Two rules that were open are now confirmed rather than argued.** The results table
+carries four rows marked † (escalated on a critical while the score alone would have
+reported) and one marked ‡ (escalated on the rework budget while the score alone would
+have reported). Both independent escalation grounds demonstrably do work the threshold
+does not — which is what `critic.py` left open for U8 to confirm, and what the sweep's
+critical-weight column confirms from the other direction.
+
+**One thing this close cannot claim, and says so instead.** The seven demo rows are live
+and not reproducible. Across three runs of the same batch this session, `coord-conflict`
+escalated on a critical in two and reported without one in the third, and
+`staten-island` returned 0 comps twice and 1 comp once. The regression figure against
+U7.8's table is therefore noisy at ±1 row, and any future reading of it should be taken as
+such rather than as a behavior change. See U8.6e.
+
 ### U8.6d — Confidence decomposition: what the score was made of
 
 **Taken Aug 29–30, 2026 by the architect, and it is a disclosure change rather than a
@@ -1280,6 +1331,23 @@ now shift. The objection says the narrower true thing instead.
    deals, which is why it is not being taken quietly. **`la-three-bedroom-comp-drift`'s
    declared verdict is left at `escalates` and left mismatching** — re-declaring it after
    seeing the run is what `VerdictSource` exists to prevent.
+**A third thing was found and fixed rather than surfaced, because it was a defect rather
+than a decision: the *replay* tier was not reproducible either.** One case per batch run
+failed with a `CacheMiss`, and **a different case each run**, which is what sent the first
+investigation looking for state leakage between cases. Bisecting found a predecessor that
+"poisoned" a later case — and then the same pair passed twice out of three, which is what
+a flaky test looks like and what a leak does not.
+
+The actual cause: `LLM_CACHE_MODE=replay` covers *model* calls, and the Census Geocoder is
+an ordinary HTTP request. When it times out, `geocode()` correctly falls through to the
+centroid and raises `GEOCODER_SERVICE_UNAVAILABLE` — which joins the flag set the
+forecast's evaluator prompt embeds, changing the prompt, so the recording for it does not
+exist. **A live dependency upstream of the recorded call had quietly falsified the
+harness's central claim.** `tools/geocoding.py` now caches addresses to disk, committed
+beside the recordings for the same reason those are committed; a timeout is never cached,
+so a transient outage cannot be frozen into a permanent one. Verified over five
+consecutive full replay runs, clean once the cache warms.
+
 2. **The live tier is not reproducible, and it moved a verdict this time.** `coord-conflict`
    reported at 0.70 with no critical in the batch run, and escalated at 0.60 on a critical
    `supplied_coordinates_conflict` when re-run minutes later — the Extractor's own call

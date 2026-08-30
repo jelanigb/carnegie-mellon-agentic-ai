@@ -1,7 +1,7 @@
 # U11 — Rent model v2 — task list
 
 > **Conventions for this file are in [`README.md`](README.md).** Section numbers (§1–§9)
-> and decision numbers (#1–#17) refer to
+> and decision numbers (#1–#19) refer to
 > [`../implementation_plan.md`](../implementation_plan.md).
 
 **Created Aug 29, 2026, by the architect's direction during U8.6.** Model quality had no

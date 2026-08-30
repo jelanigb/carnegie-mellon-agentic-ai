@@ -832,6 +832,16 @@ EVAL_DATA_DIR = SRC_DIR / "eval" / "data"
 EVAL_RESULTS_DIR = SRC_DIR / "eval" / "results"
 EVAL_RECORDINGS_DIR = EVAL_DATA_DIR / "llm_recordings"
 
+# Census Geocoder address→coordinate store (U8.6e, Aug 30, 2026).
+#
+# **Committed, unlike the LLM development cache above, and for the same reason
+# `EVAL_RECORDINGS_DIR` is committed.** A replayed eval case's forecast prompt embeds the
+# flag set, and the flag set depends on whether the Census answered — so a live geocode
+# upstream of a recorded model call makes the recording unreproducible on a fresh clone or
+# a flaky network. `tools/geocoding.py`'s docstring carries the measurement. Only outcomes
+# the Census actually returned are stored; a timeout never is.
+GEOCODE_CACHE_PATH = EVAL_DATA_DIR / "geocode_cache.json"
+
 
 # --------------------------------------------------------------------------
 # Retrieval / embeddings

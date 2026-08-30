@@ -1,7 +1,7 @@
 # Maintenance tasks — not tied to a unit
 
 > **Conventions for this file are in [`README.md`](README.md).** Section numbers (§1–§9)
-> and decision numbers (#1–#17) refer to
+> and decision numbers (#1–#19) refer to
 > [`../implementation_plan.md`](../implementation_plan.md).
 
 ### M1 — Name the decision at every citation site

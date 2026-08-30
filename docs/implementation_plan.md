@@ -53,11 +53,11 @@ the system currently *is*, `history/` is *how it got that way*.
 | `design/data_sources.md` | Which dataset feeds which process, at which geographic level | **Before touching anything data-related** |
 | `design/engineering_standards.md` | §8 — the bar every change set is held to in review | **Before writing code** |
 | `design/hud_fmr_client.md` | §9 — `tools/hud_fmr.py` behaviour, caching, rate limits | Touching FMR |
-| `history/decision_log.md` | All 17 numbered decisions with their full reasoning, grouped by system area | Revisiting a decision, or checking a premise before relying on it again |
+| `history/decision_log.md` | All 19 numbered decisions with their full reasoning, grouped by system area | Revisiting a decision, or checking a premise before relying on it again |
 | `history/changelog.md` | Chronological code changes, by date and unit | Closing a unit; tracing when something landed |
 | `diagrams/` | Graph topology generated from the compiled graph (`.mmd`, `.png`) | Reviewing or describing the topology |
 
-**Section numbers (§1–§9) and decision numbers (#1–#17) always refer to this file** —
+**Section numbers (§1–§9) and decision numbers (#1–#19) always refer to this file** —
 §-numbers to its sections, #-numbers to the decisions register in §7. Code comments and
 the other documents cite them bare, so this is the resolution rule for all of them.
 
@@ -406,6 +406,8 @@ Each decision has a stable number. Code comments and the other documents cite th
 | 15 | Property-level value estimate | Rent & valuation | U6 | ✅ Not produced. `value_estimate` stays `None`; metro median carried as a labelled benchmark |
 | 16 | Rent-growth source | Forecasting | U6 | ✅ Rent from HUD FMR history, price from Redfin — forecast separately (pooled r = −0.309). **Its ZORI half built Aug 28, 2026 (U8.0) and found the anchor drifting**: FMR +51.9% against market rent +33.5% since the corpus vintage, so the model over-predicts. Corrected per-ZCTA at U8.4b; re-anchoring is cut-list item 6 |
 | 17 | ToT structure at build time | Forecasting | U6 | ✅ Enumerate the space, do not sample it; pipeline stays deterministic |
+| 18 | Rent-model form | Rent & valuation | **U11** | ✅ **Gradient boosting**, adopted Aug 30, 2026 on `scripts/model_form_probe.py`'s numbers. CV MAE $513.67 → $450.71 (−12.2%) at a train/holdout gap of $18.34, against random forest's $140.41 — the better-scoring form was not the one taken. k-fold cross-validation replaces the single 20% split, and the artifact is refit on all 5,686 rows. The refusal band moved from the model's output to its **input**, since a tree cannot extrapolate an implausible ratio and the old guard would have retired silently |
+| 19 | Rent anchor | Rent & valuation | **U11** | ✅ **Hybrid: Zillow ZORI for the rent level at the subject's own ZIP, HUD FMR for the bedroom step.** Adopted Aug 30, 2026 over four alternatives scored in dollars under one CV (`scripts/anchor_probe.py`). Per metro: New York $981 → $855, Chicago $454 → $343, Los Angeles $450 → $509, overall flat — the headline hides the result, which is why per-metro reporting is now standard. Retires #16's per-ZCTA drift correction structurally: both ends read the index at the same month, so the schedule-vs-market gap divides out where it arises. Spends §6 cut-list item 6, whose stated cost was wrong in two ways (0.3% of rows lost, not 27%; FMR retained, not abandoned) |
 
 
 ---

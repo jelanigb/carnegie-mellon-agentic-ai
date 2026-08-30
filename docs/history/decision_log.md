@@ -7,7 +7,7 @@ plan of record and states the *current* design; this file holds the reasoning th
 produced it, the premises that were measured and disproved, and the corrections made
 along the way.
 
-**Section numbers (§1–§9) and decision numbers (#1–#17) throughout this repository refer
+**Section numbers (§1–§9) and decision numbers (#1–#19) throughout this repository refer
 to [`implementation_plan.md`](../implementation_plan.md)** — §-numbers to its sections,
 #-numbers to the decisions register in its §7. That register is the index to this file.
 
