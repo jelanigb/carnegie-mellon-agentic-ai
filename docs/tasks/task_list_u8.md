@@ -1118,7 +1118,14 @@ and start reading as what they are: correct escalations of a genuinely shakier e
 **Closed Aug 30, 2026, against the post-U11.3 batch. The finding is that the batch
 produces no evidence the threshold is wrong — which is a real result and a limited one.**
 
-**Every mismatch triaged, and none of them is threshold evidence.** Three of 20 predicted
+**The batch it closes against.** 28 cases, no errors, **18/21 verdict agreement** on the
+predicted set, **7/7** against U7.8's published baselines, and — after U8.6e's two
+repairs — **30 of 30 flag kinds raised, none uncovered and none unreachable**. Five rows
+carry † (escalated on a critical while the score alone would have reported) and one carries
+‡ (escalated on the rework budget), so both independent escalation grounds are demonstrated
+by rows rather than asserted.
+
+**Every mismatch triaged, and none of them is threshold evidence.** Three of 21 predicted
 cases disagree with their declared verdict. The triage rule fixed in advance says a
 mismatch is a tuning signal when the target fired and the case is wrong when it did not;
 applied honestly, all three turn out to be a *third* thing the rule did not anticipate —
@@ -1141,21 +1148,37 @@ than fitting it. **Not taken here**, because changing the derivation *and* closi
 it in one pass is how a prediction quietly becomes a transcription; it is recorded for
 U8.10 to decide on.
 
-**What that leaves for decision #6.** Zero of 20 predicted cases give evidence that 0.60
-is the wrong threshold or that 0.15 is the wrong warn weight. Combined with the sweep's
-measured plateau (`eval/results/sensitivity.md`), the honest close is:
+**What that leaves for decision #6.** Zero of 21 predicted cases give evidence that 0.60
+is the wrong threshold or that 0.15 is the wrong warn weight. The sweep
+(`eval/results/sensitivity.md`) measures how much room that leaves: **41 of 80 grid points
+decide the batch identically to the shipped configuration**, and through the shipped point
+specifically, the threshold moves from **0.30 to 0.70** and the warn weight from **0.100 to
+0.200** without changing a single verdict. The dead zone on the threshold is wider than the
+first pass estimated — that pass said (0.40, 0.70] on 14 cases — and the warn-weight run is
+about the same. Those are contiguous runs through the shipped point, not the table's
+extremes; the corners do not hold together, and the script reports it that way because the
+union reads as a rectangle and is not one.
+
+**The critical weight is inert across its entire range, including zero.** Charging a
+critical disclosure *nothing* changes no verdict on any of the 21 cases, because every deal
+carrying one escalates on the independent rule regardless. That is the confirmation
+`critic.py`'s escalation rule was explicitly left open for, and it arrives from the
+opposite direction to the † rows: those show the rule firing where the score would not,
+this shows the score cannot substitute for it even in principle.
+
+**OQ-1's surviving scoring question answered itself.** The causal pair —
+`rent_anchor_county_level` as a cause of `rent_estimate_market_error_elevated` — was
+supposed to be measured for double-charging. **It co-occurs on 0 of 21 cases.** The hybrid
+anchor resolves at ZIP tier in every indexed market, so the county-tier flag has become
+rare and the pair has stopped arising. Closed by the anchor change rather than by a
+re-pricing; re-open it if county-tier anchoring becomes common again.
+
+Combined, the honest close is:
 
 > **Held, with the stable region measured and published.** Not "optimal" — the batch
 > cannot distinguish the shipped values from a wide neighborhood of alternatives, and a
 > batch that cannot distinguish two settings is saying it has no evidence either way,
 > not that they are equally good.
-
-**Two rules that were open are now confirmed rather than argued.** The results table
-carries four rows marked † (escalated on a critical while the score alone would have
-reported) and one marked ‡ (escalated on the rework budget while the score alone would
-have reported). Both independent escalation grounds demonstrably do work the threshold
-does not — which is what `critic.py` left open for U8 to confirm, and what the sweep's
-critical-weight column confirms from the other direction.
 
 **One thing this close cannot claim, and says so instead.** The seven demo rows are live
 and not reproducible. Across three runs of the same batch this session, `coord-conflict`

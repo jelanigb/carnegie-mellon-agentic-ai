@@ -23,5 +23,11 @@
     "longitude": -118.252766301429,
     "matched_address": "1425 W SUNSET BLVD, LOS ANGELES, CA, 90026",
     "source": "census_geocoder"
+  },
+  "2500 N Kedzie Blvd, Chicago, IL, 60647": {
+    "latitude": 41.926422170944,
+    "longitude": -87.707345398786,
+    "matched_address": "2500 N KEDZIE BLVD, CHICAGO, IL, 60647",
+    "source": "census_geocoder"
   }
 }

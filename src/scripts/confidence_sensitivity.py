@@ -149,14 +149,32 @@ def _sweep_grid(results, baseline: dict[str, Verdict]) -> list[str]:
         lines.append(f"| **{warn:.3f}** | " + " | ".join(cells) + " |")
 
     if plateau:
-        warns = sorted({w for w, _ in plateau})
-        thresholds = sorted({t for _, t in plateau})
+        # **The contiguous run through the shipped point, not the union of both axes.**
+        # Reporting "warn weights 0.05-0.30 and thresholds 0.30-0.85 appear somewhere in
+        # the region" is true and misleading: those extremes do not hold *together*, and a
+        # reader would take it as a rectangle. What a person actually wants to know is how
+        # far each dial can be turned from where it sits with the other left alone.
+        flat = set(plateau)
+        row = [t for t in THRESHOLDS
+               if (shipped_warn, t) in flat
+               and all((shipped_warn, u) in flat for u in THRESHOLDS
+                       if min(t, config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD)
+                       <= u <= max(t, config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD))]
+        column = [w for w in WARN_WEIGHTS
+                  if (w, config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD) in flat
+                  and all((v, config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD) in flat
+                          for v in WARN_WEIGHTS
+                          if min(w, shipped_warn) <= v <= max(w, shipped_warn))]
         lines += [
             "",
             f"**{len(plateau)} of {len(WARN_WEIGHTS) * len(THRESHOLDS)} grid points "
-            f"decide this batch identically to the shipped configuration.** Warn weights "
-            f"{warns[0]:.3f}–{warns[-1]:.3f} and thresholds {thresholds[0]:.2f}–"
-            f"{thresholds[-1]:.2f} appear somewhere in that region.",
+            f"decide this batch identically to the shipped configuration.** Through the "
+            f"shipped point specifically: holding the warn weight at "
+            f"{shipped_warn:.3f}, **every threshold from {row[0]:.2f} to {row[-1]:.2f}** "
+            f"decides all {len(results)} cases the same way; holding the threshold at "
+            f"{config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD:.2f}, **every warn weight from "
+            f"{column[0]:.3f} to {column[-1]:.3f}** does. Those are contiguous runs, not "
+            f"the union of the table's extremes — the corners do not hold together.",
             "",
             "**Read this as a limit on the instrument, not as a licence.** A batch that "
             "cannot distinguish two settings is not saying they are equally good; it is "

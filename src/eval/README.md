@@ -31,6 +31,7 @@ gets cut.
 | `runner.py` | **The batch runner**, results table and flag-coverage census. | Yes |
 | `data/golden_fixtures.py` | **Inputs.** The golden `DealTerms` fixtures, each stating what was engineered and what is real. | Yes |
 | `data/llm_recordings/` | **Inputs.** Recorded model responses, replayed by `tools/llm_cache.py` in `replay` mode. | Yes |
+| `data/geocode_cache.json` | **Inputs.** Census Geocoder results for every address the batch touches, so the *other* live call a replay case makes is reproducible too (U8.6e). | Yes |
 | `results/` | **Outputs.** Result tables produced by a harness run. | Yes |
 
 All three are committed, and the reason is the same for each: the final report quotes
@@ -65,14 +66,31 @@ demonstrated rather than assumed.
 worth stating because tier 2 does not otherwise look offline.** Any replay case whose
 listing carries a real address reaches `agents.extractor._resolve_geography`, which calls
 the live Census geocoder: only `LLM_CACHE_MODE` is overridden for these tiers, and
-geocoding was never behind that cache (`tools/geocoding.py` deliberately has none — see
-its module docstring). Most of the time this is a fast, reliable call whose outcome does
-not matter to the case, but `coordinates_from_city_centroid` (U8.3) is the first case
-whose *target* depends on it: it needs Census to run and cleanly find no match, verified
-live before the case was written rather than assumed stable. `Fault.GEOCODER_OUTAGE`
-exists for the different, non-reproducible-on-demand case — a request that fails
-outright — and does not apply here, because a clean no-match is a naturally-reachable
-path in the first place.
+geocoding was never behind that cache. Most of the time this is a fast, reliable call whose
+outcome does not matter to the case, but `coordinates_from_city_centroid` (U8.3) is the
+first case whose *target* depends on it: it needs Census to run and cleanly find no match,
+verified live before the case was written rather than assumed stable.
+`Fault.GEOCODER_OUTAGE` exists for the different, non-reproducible-on-demand case — a
+request that fails outright — and does not apply here, because a clean no-match is a
+naturally-reachable path in the first place.
+
+**"Whose outcome does not matter to the case" was the assumption, and it was wrong
+(Aug 30, 2026).** When the Census times out, the run raises
+`GEOCODER_SERVICE_UNAVAILABLE` — correctly — and that flag joins the set
+`scenario_forecast._context_block` embeds in the evaluator prompt. A changed prompt has no
+recording, so the case dies with a `CacheMiss` that reads exactly like a prompt someone
+edited on purpose. It happened to about one case per full batch run, **a different one each
+time**, which is a very good disguise: it sent the first investigation looking for state
+leakage between cases rather than for a flaky network call. So a live dependency *upstream*
+of the recorded call had quietly falsified this tier's whole claim.
+
+`tools/geocoding.py` now keeps a disk cache, committed to `data/geocode_cache.json` beside
+the recordings and for the same reason they are committed: an evaluation a fresh clone
+cannot reproduce is not evidence. Only outcomes the Census actually returned are stored —
+a match or a clean no-match — never a timeout, since caching a failure would freeze a
+transient outage into a permanent one and erase the retryable/non-retryable distinction the
+two centroid flags exist to carry. Verified over five consecutive full replay runs, clean
+once the cache is warm.
 
 **That sentence was wrong from U8.1 until U8.2, and the correction is worth keeping rather
 than quietly editing.** It read "no model calls at all", which was true of the *Extractor*
