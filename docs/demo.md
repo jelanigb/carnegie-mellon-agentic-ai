@@ -111,8 +111,8 @@ other way around — exactly the failure mode threshold-tuning exists to avoid.
 
 ### Staten Island / New York — the real-data degradation case
 
-`main.py --deal staten-island` · confidence **0.00** · 8 disclosures (2 info, 4 warn,
-2 critical) · **escalates to human review**
+`main.py --deal staten-island` · confidence **0.00** · 9 disclosures (2 info, 6 warn,
+1 critical) · **escalates to human review**
 
 This is the one deal grounded in a real, *measured* market gap rather than a
 constructed one, and it's worth walking through why New York needed a case like this at
@@ -148,14 +148,28 @@ rent-error disclosure never gets a moment to matter on its own. To show it firin
 independently, a second fixture (`ny-bedstuy-triplex`, an eval-only case, not a
 `--deal` key) was added in `eval/cases.py` at a real, Census-geocoded Bed-Stuy address
 that *does* return 8 comps — specifically so the elevated-market-error flag can be
-observed on a deal that isn't already escalating for an unrelated reason.
+observed on a deal that isn't already escalating for an unrelated reason. (That fixture
+still escalates — the floor arithmetic below explains why, as built, no New York deal
+can report — but the flag is visible as its own line rather than lost under a zero-comp
+collapse.)
 
-**One more real gap, visible only in this deal:** Redfin's sale-price extract doesn't
-cover the New York metro at all, so unlike every other deal here, Staten Island's asking
-price has no market anchor — the listing text says so, and the report discloses it. No
-comps, no appreciation series, and no price benchmark: this deal is the one place the
-demo shows what happens when reality supplies nothing to anchor to, rather than one gap
-at a time.
+**One more gap — and its cause was misdiagnosed until Aug 29, 2026:** unlike every
+other deal here, Staten Island's asking price has no market anchor and its forecast
+covers only the rent side. This document (and the report's own disclosure text) used to
+attribute that to Redfin — "Redfin's sale-price extract doesn't cover the New York
+metro" — and a direct check of the data found that to be false: the raw extract carries
+a "New York, NY metro area" series with 102 fully-populated months at 700–950
+multi-family sales per month. What actually excludes New York is the build's own load
+filter (`tools/redfin_data.py`'s `TARGET_METROS`), written when the plan scoped the
+price series to the three inference metros — before New York entered the demo as the
+sparse-comps case, and never revisited after. Whether to widen that scope is an open
+decision; until it is taken, "no price series for New York" is a fact about this build's
+scoping, not about Redfin's coverage. That distinction matters for the same reason it
+did when U8.2b fixed the FMR anchor label: "the source publishes nothing" and "this
+system doesn't look" read identically in a report and are different facts. No comps, no
+appreciation series, and no price benchmark: this deal remains the one place the demo
+shows what happens when nothing is available to anchor to — with the middle gap now
+correctly attributed to the build rather than to the source.
 
 **Why this matters for the demo as a whole:** every other case here (and every
 engineered case in the U8 eval harness) proves the degradation mechanism fires when a
@@ -163,6 +177,46 @@ listing is built to trip it. This is the one that proves it fires when a *real* 
 genuinely under-covered by the data — reality, not the author, supplies the gap. See
 `history/decision_log.md` ("why the eval harness is protected from the cut list") for
 why this distinction is treated as important enough that U8 is never cut from schedule.
+
+#### Why *every* New York deal escalates — not just this one
+
+Measured during U8.6 (Aug 29, 2026): three warn-severity disclosures fire for **any**
+New York deal, before a single comp is retrieved, because each is a property of the
+market rather than of the listing:
+
+1. **The rent model's error is elevated market-wide.** About $1,048 mean absolute error
+   in New York against ~$524 overall — 2.0x, past the 1.5x disclosure threshold. The
+   rent-to-FMR structure the model learned from the national corpus generalizes worst
+   here.
+2. **The rent anchor is county-wide in all five boroughs.** HUD publishes no ZIP-level
+   Fair Market Rent schedule for any New York county (U8.2b), and a county-wide figure
+   is at its coarsest exactly here — Kings County prices Williamsburg and
+   Brownsville/East New York with a single number.
+3. **No price side.** As built, the system has no sale-price appreciation series or
+   benchmark for New York (see the scoping finding above), so every New York forecast
+   covers only the rent half of the deal.
+
+Three warns cost 0.45 of confidence (0.15 each), landing every New York deal at 0.55 —
+below the 0.60 threshold — **before its comps enter the picture.** Comp quality then
+decides only how far below that floor a deal lands, and it varies enormously
+sub-metro, which is a genuine property of the corpus rather than an engineered one:
+Brooklyn's 89 corpus listings collapse onto essentially one coordinate (87 of 89 share
+a single placeholder point), while Manhattan's 161 spread across 60 distinct
+coordinates, and Staten Island holds 6 listings at 1 coordinate. Staten Island's
+zero-comp escalation is the extreme end of that spread, not the cause of the pattern.
+
+**Held as policy rather than tuned away (architect's decision, Aug 29, 2026).** The
+floor could be removed by lowering the per-warn penalty or the threshold — both sit
+inside ranges the eval batch measurably cannot distinguish from the shipped values —
+but each of the three disclosures is a serious, independent limitation, and it is their
+*combination* that makes a human look warranted. This is the same principle as
+Chicago's 0.55 above: production parameters are not adjusted to make a demo read
+better. Most people would expect a rent-forecasting system to handle New York easily;
+that it escalates every New York deal, and can say precisely why in three sentences, is
+the demo's clearest showcase of Transparent Degradation doing its job. (If the
+price-series scoping decision above is later taken, the third warn stops firing and a
+well-sited New York deal could clear the bar honestly — by closing a real gap rather
+than lowering the bar.)
 
 ### No Geography — nowhere to anchor to
 
