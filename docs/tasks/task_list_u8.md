@@ -815,6 +815,125 @@ clear* from *not re-examined*. Clears the `TODO(U8)` at `critic.py:252` and
 
 Review attention belongs on the skipped-agent case, not on the stamping.
 
+---
+
+**Stamping and the Critic filter built Aug 29, 2026, as the two commits OQ-15 itself
+estimated.** OQ-16 is answered and now built too — see below, after the two commits.
+
+**Commit 1 — the stamp.** `Flag.planner_invocations`, default 0 as a sentinel no real
+pass ever produces (`planner_agent` advances `planner_invocations` to 1 before any other
+node can raise anything). `DealState.flag()` bound method stamps `self.planner_invocations`
+automatically for the ~40 call sites that already hold `state`; the free `flag()` function
+now *requires* `planner_invocations` rather than defaulting it, so a helper that forgets to
+thread it fails loudly at the call site instead of silently stamping the sentinel forever.
+
+**Measured against Q4's estimate, and it was off by one function in a way worth
+recording.** Of the six helpers Q4 named as needing a threaded parameter, two —
+`_cross_check` and `_extraction_failed` — already receive `state` and needed no signature
+change at all; `expand` never calls `flag()` and needed nothing either. A fourth helper Q4
+could not have named, `valuation_rent._attach_metro_error`, was added by U8.4 *after* Q4 was
+written and does need the parameter. Net: three helpers threaded, not six —
+`extractor._resolve_geography`, `scenario_forecast._disclosure_flags` (and
+`_distinctness_flags`, called from it), and `_attach_metro_error`.
+
+**Commit 2 — the Critic filter.** `agents/critic.py`'s `_kinds` now resolves, per source
+agent, the flags "as of its most recent examination": an agent present in `state.plan` this
+pass is read from this pass's flags alone — its earlier ones are superseded, whether this
+pass repeats or clears them; an agent absent from `state.plan` — skipped, not cleared —
+carries forward its flags from the last pass it *did* run. Generalized on `state.plan`
+membership rather than hardcoded to the Extractor, even though the Extractor is the only
+node `_PIPELINE` ever actually skips today, so the rule does not silently stop applying if a
+second step becomes optional later. A state built with no `state.plan` — every case in
+`test_critic_interactions.py`, by design, since that file exercises `_interaction_objections`
+as a pure function with no pass concept at all — falls back to the pre-U8.5 behavior of
+reading every accumulated flag, so those tests needed no rewrite beyond the new required
+argument. Clears the `TODO(U8)` at `critic.py:252`.
+
+`agents/planner.py`'s `_geocode_is_worth_retrying` gets the same fix at the other end: it now
+filters to `planner_invocations == state.planner_invocations`, i.e. the pass that just
+completed, rather than the accumulated history — so a retry that resolves a geocode stops
+re-triggering extraction on every later lap. Clears the `TODO(U8)` at `planner.py:90`.
+
+**New tests, since OQ-16 (below) means the eval batch still contains no rework lap to
+exercise any of this** — `tests/` is the only place it can be asserted right now, per OQ-15's
+own note. `test_critic_interactions.py` gained three: the exact scenario `_kinds`'s old
+docstring named (a rework that resolves the geocoder must not keep tripping I3 off the pass
+it fixed), the skipped-agent carry-forward, and the supersession case that isolates which
+rule is actually firing. `test_flag_propagation.py` gained one, a direct regression test for
+`_geocode_is_worth_retrying`'s staleness bug. All read as meaningful against the pre-fix
+code — each was checked to fail under the old accumulate-everything behavior before
+confirming it passes now, not merely written to pass. All 64 tests pass; the full eval batch
+was re-run and reproduces every published row exactly (7/7 baselines, 12/14 verdicts, 28/29
+coverage) — expected, since no case in the batch reworks, and the confirmation that this
+change is inert on every path the batch already exercises.
+
+---
+
+**Commit 3 — OQ-16, richer fault injection. Built Aug 29, 2026. Coverage: 28 → 29 of 29
+kinds — every `FlagKind` this system defines is now raised by some case.** The architect's
+answer to OQ-16 was the third option: leave `route_after_critic` unchanged (escalation still
+checked before rework, unconditionally) and make the fault injection richer instead of
+reordering production routing.
+
+**The mechanism.** `EvalCase.geocoder_fallback_override: Optional[tuple[float, float]]`,
+meaningful only alongside `injects=Fault.GEOCODER_OUTAGE`. `runner._case_environment` now
+also patches `tools.geocoding.city_centroid` when a case declares it, forcing the outage's
+fallback to a chosen point instead of the real corpus-wide `(city, state)` average — the
+thing U8.2's 9-markets-x-16-configurations search established never both diverges from the
+rent estimate and stays clear of a third warn or a critical, because divergence and comp
+dispersion trade off directly on how thin the matching supply is at whatever point a real
+centroid lands on.
+
+**Two real defects surfaced building it, both fixed alongside the mechanism, neither
+speculative — both found by actually driving a rework through the graph, the first time
+anything in this project had.**
+
+1. **`extractor._supplied_coordinates` read a previous pass's centroid fallback as if a
+   caller had deliberately supplied it.** On the first rework, that reclassified
+   `GEOCODER_SERVICE_UNAVAILABLE` as `GEOCODING_UNAVAILABLE` — a different kind, disclosed
+   as "used as given" when the system had derived the coordinates itself — which broke
+   `_geocode_is_worth_retrying`'s read of the just-completed pass (stopping a third attempt
+   from ever being planned) and added a fresh unique warn to the confidence tally
+   (escalating on low confidence one pass early). Fixed by restricting
+   `_supplied_coordinates` to the deal's first pass: safe **given this system's one retry
+   path today** — a rework only ever happens via I3's `GEOCODER_SERVICE_UNAVAILABLE`
+   objection, the only retryable one that exists, and that flag is only ever raised when no
+   caller supplied coordinates in the first place, so a second pass can never legitimately
+   see caller-supplied coordinates. Re-check if a second retryable objection is ever added.
+2. **The results-table footnote was wrong for this row before it existed to be wrong
+   about.** `CaseResult.escalated_above_threshold` only ever meant "escalated on the
+   critical-flag rule" until this landed — a row escalating on `budget_exhausted` alone
+   would have been marked with a footnote naming the wrong reason. `eval/runner.py` gained
+   `has_critical`/`budget_exhausted` properties and a second footnote marker (`‡`) so the
+   table states which of the (now three) independent escalation grounds actually fired,
+   rather than collapsing them under one caption.
+
+**A third finding, not a defect: the live scorer's own non-determinism.** Chosen for the
+case's reproducibility, not its substance — `scenario_forecast`'s Tree-of-Thought scorer is
+not perfectly deterministic even at `temperature=0.0`, because an earlier call in the chain
+(which evidence tools to pull) varies enough between live attempts to change the downstream
+scoring prompt's cache key. Roughly 1 in 15-20 live attempts at a given price landed a
+mirror-image pairing (rent-up/price-down vs. rent-down/price-up) close enough to tie,
+raising `FORECAST_BRANCHES_NEAR_TIED` as an unrelated third warn that front-loaded escalation
+before the rework budget was spent. The same non-determinism showed up organically in one
+re-run of the `los-angeles` demo deal during this work (a live-tier row, so never cached) —
+confirming this is a real, pervasive property of the live model rather than an artifact of
+the fault injection, and that a **live**-tier baseline mismatch is not automatically a code
+regression. `$640,000` on the `chicago-geocoder-outage` listing is the price that landed
+clean across three replay runs; it carries no significance beyond that, and once recorded,
+replay is exact regardless — the non-determinism only ever touches a fresh live call.
+
+**The case.** `chicago-geocoder-outage` (already existed, U8.2) updated in place rather than
+duplicated: `geocoder_fallback_override` set to the address's own real Census geocode
+(verified live, U8.2), so the case isolates the *outage* — only the ability to verify the
+address is removed, not the geography a working geocoder would have found anyway. Targets
+now `(GEOCODER_SERVICE_UNAVAILABLE, REWORK_LIMIT_REACHED)`, verdict `ESCALATES`. Measured: 2
+reworks, confidence 0.70 (clears the threshold — `rework_limit_reached` and
+`critic_inconsistency` are both Critic-derived and excluded from the score), escalates on
+`budget_exhausted` alone, reproduced identically across three replay runs. Full batch re-run:
+**7/7 baselines, 12/14 verdicts, 29/29 coverage — the largest single close in the project**,
+and the one U7.8/U8.10 both anticipated without being able to promise.
+
 ### U8.6 — Decision #6's numbers against the batch (OQ-1)
 
 Per Q1, in whichever form Q1 settles. Covers `HUMAN_REVIEW_CONFIDENCE_THRESHOLD`,

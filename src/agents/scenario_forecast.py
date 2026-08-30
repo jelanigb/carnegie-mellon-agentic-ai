@@ -914,6 +914,17 @@ def _disclosure_flags(
 
     # Two near-ties are possible and they mean different things, so they are reported
     # separately rather than collapsed into one score gap.
+    #
+    # TODO(reliability): a live scoring call is not perfectly deterministic even at
+    # temperature 0 (OQ-17, diagnosed with a direct experiment — see
+    # docs/design/architecture.md §3). Two confirmed causes, not one: OpenRouter routes
+    # this model across several backend deployments that are not numerically identical,
+    # and even pinned to one fixed deployment, scores still swing widely call to call —
+    # `seed` does not help, since temperature 0 has no sampling step for it to control.
+    # So the same deal can trip this flag on one run and not the next. The message below
+    # states the gap as a fact about the evidence; it does not currently say the tie
+    # could be a property of this one sample rather than a stable judgment. No unit
+    # assigned.
     framing_gap = result.score_gap_by_depth.get(1)
     if framing_gap is not None and framing_gap < config.TOT_TIE_EPSILON:
         flags.append(

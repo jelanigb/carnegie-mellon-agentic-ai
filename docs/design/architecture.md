@@ -135,6 +135,83 @@ The single validation loop-back is the Critic's, which is the whole of this syst
 two-way communication.
 
 
+### Known limitation: live model output is not perfectly reproducible, even at temperature 0
+
+Documented here Aug 29, 2026, found while building U8.5's OQ-16 case and diagnosed with a
+direct experiment rather than left as a guess — full reasoning in
+[`../open_questions.md`](../open_questions.md) (OQ-17), no unit assigned.
+
+**What was observed.** `scenario_forecast`'s Tree-of-Thought scorer (`config.MODEL_SCENARIO
+= "nvidia/nemotron-3-nano-30b-a3b"`, `config.LLM_TEMPERATURE = 0.0`) gave different
+depth-2 pairing scores across live re-runs of the same prompt — enough, on roughly 1 in
+15-20 attempts, to flip which of two candidates the search preferred and trip
+`FlagKind.FORECAST_BRANCHES_NEAR_TIED`. The same variance showed up unprompted in a
+`live`-tier eval re-run of the `los-angeles` demo deal.
+
+**What temperature does and does not control.** Temperature governs the *sampling* step —
+how a probability distribution over the next token gets turned into a choice. Setting it
+to 0 removes that step's randomness by always taking the highest-probability token
+(effectively greedy decoding). It says nothing about how the underlying probabilities
+(the logits) get *computed* in the first place, and that computation is not guaranteed to
+be bit-identical between two calls with the same input:
+
+- GPU matrix operations (attention, matmuls, softmax reductions) run in parallel across
+  many cores, and floating-point addition is not associative —
+  `(a + b) + c` and `a + (b + c)` can round differently. The order partial sums combine
+  can vary run to run under real serving conditions — continuous-batching servers process
+  many concurrent requests together, and which other requests happen to be batched
+  alongside yours can change the numerical path even though the "logical" input did not.
+- These differences are usually too small to matter, except exactly when two candidate
+  tokens are near-tied — which is precisely the failure mode `FORECAST_BRANCHES_NEAR_TIED`
+  exists to name at the *output* level. Because generation is autoregressive, one flipped
+  early token can cascade into a materially different rest of the response.
+- `nvidia/nemotron-3-nano-30b-a3b`'s `-a3b` suffix ("30B total, ~3B active per token") is
+  standard notation for a sparse Mixture-of-Experts model. MoE routing amplifies this
+  problem rather than absorbing it: which expert sub-network handles a token is a hard,
+  discrete switch decided by a gating score, not a smooth function — the same small
+  numerical noise that might nudge a dense model's output by a hair can send an MoE
+  model's token through a genuinely different expert, producing a qualitatively different
+  answer rather than a slightly different one.
+
+**Confirmed empirically, and the confirmation matters because the two candidate causes
+call for different responses.** Eight identical calls to the model at `temperature=0.0`
+were fired directly against the OpenRouter API, bypassing this project's cache entirely:
+
+1. **OpenRouter routes "the same model" across different backend deployments per
+   request.** The eight calls landed on four different providers (Novita, Crusoe, Nebius,
+   DeepInfra) running three different `vllm` server versions. Even a trivial "what is 2+2"
+   prompt came back differently formatted depending which one answered — direct evidence
+   that "the same model" served through an aggregator is not one fixed numerical artifact.
+2. **Pinning the request to one provider (OpenRouter's `provider.order` /
+   `allow_fallbacks` routing parameters) removes that layer — confirmed via the response's
+   `provider` and `system_fingerprint` fields staying constant across repeated calls — but
+   a second, larger layer of variance survives untouched.** Scores for the same candidate
+   on the same fixed deployment still swung from 0.05 to 0.95 across repeated identical
+   calls. `seed` was tested on top of the pinned provider and made no measurable
+   difference — expected, since `temperature=0` removes the sampling step a seed would
+   otherwise control, so a seed has nothing left to fix. The residual variance has to live
+   in the forward pass itself, consistent with the batching/floating-point mechanism
+   above.
+
+**Neither `seed` nor provider-pinning is worth adopting as a mitigation.** Both were
+tested rather than assumed. `seed` costs nothing (an extra request field, no added
+latency) but measurably did not help. Pinning a provider also costs nothing in latency,
+but it trades away OpenRouter's automatic failover for a benefit the experiment showed
+does not materialize — the dominant source of variance survives the pin. Given this
+project's own history of live-model reliability problems (§3 above — free-tier rate
+limits, an account-wide daily cap, a model behaving differently across variants), giving
+up automatic failover is a real cost for no measured gain, and neither change is made.
+
+**What this means for the system, not just the observation.** This is not fixable by a
+client-side parameter, and chasing exact reproducibility from a hosted, aggregated model
+is the wrong target. The right target — not yet acted on, tracked as OQ-17 — is a system
+that discloses this rather than presents one noisy sample as a stable judgment: a
+committed eval recording is unaffected (replay reads a frozen response, so `golden` and
+`replay` rows are exact regardless), but a `live` row, and any future live surface, can
+legitimately differ between runs of what looks like the identical deal. A resilient
+design should expect that and still produce a defensible result, rather than assume a
+single live call is reproducible.
+
 ---
 
 ## 4. Proposed Repository Structure

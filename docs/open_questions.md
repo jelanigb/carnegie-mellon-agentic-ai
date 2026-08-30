@@ -48,9 +48,14 @@ argument, one central `state.flag()` constructor — one mechanical commit plus 
 filter. It lands *before* U8.6, because the eval batch contains rework laps and a stale
 objection in a published results table is worse than the same sentence in one demo report.
 
-**Note for whoever builds it: the batch does not currently contain a rework lap.** See
-OQ-16 — nothing in it reworks, so the pass-scoping change has no eval row exercising it and
-`tests/` is the only place it can be asserted until OQ-16 is settled.
+**BUILT Aug 29, 2026, at U8.5's first two commits — clears both `TODO(U8)` markers.**
+`Flag.planner_invocations` and `DealState.flag()` stamp every flag with the pass that
+raised it; `critic._kinds` judges an agent that ran this pass on this pass alone, and an
+agent skipped this pass on its last examination, never as cleared; `state.plan` is the
+signal for which. New tests in `test_critic_interactions.py`/`test_flag_propagation.py`
+assert the mechanism directly, since **the batch did not contain a rework lap at the
+time this landed** — OQ-16's fault-injection extension, closed below the same day,
+supplies the first one.
 
 ### OQ-16 · U8.5 — should a critical objection preempt a retry that could clear it?
 **Raised Aug 28, 2026 by U8.2, from a measurement rather than a reading.**
@@ -75,6 +80,35 @@ clear the objection should be taken before a human is asked; or make the fault i
 richer so the path is exercised without a listing. **The first is a legitimate answer** — the
 cycle is bounded and every path ends at human review — but it should be chosen rather than
 inherited. `agents/planner.py:181`, [`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.2.
+
+**Decided Aug 29, 2026 by the architect: richer fault injection, `route_after_critic`
+unchanged.** `agents/planner.py:181` stays escalation-before-rework, unconditionally — every
+currently-retryable objection (I3, on a geocoder outage) is WARN-severity, and the criticals
+U8.2's search found co-occurring with it (I1/I2) are structural facts a rework cannot fix, so
+reordering would spend a rework pass on a lap that could not help before escalating anyway
+one lap later. Instead, `eval/`'s existing `Fault`/`EvalCase.injects` mechanism (already used
+for `GEOCODER_OUTAGE` and `LLM_UNAVAILABLE`) gets extended so a case can force exactly the
+two-warn/no-critical window without needing a real listing — closing eval coverage on
+`REWORK_LIMIT_REACHED` without touching production routing.
+
+**BUILT Aug 29, 2026. Coverage: 28 → 29 of 29 kinds — every `FlagKind` this system
+defines is now raised by some case.** `EvalCase.geocoder_fallback_override` forces the
+outage's fallback to a chosen point (the address's own real Census geocode, so only the
+outage is simulated, not a change in geography) instead of the real corpus-wide centroid
+U8.2 already showed never both diverges and stays clear of a third warn or a critical.
+`chicago-geocoder-outage` (U8.2) updated in place with it rather than duplicated; 2
+reworks, confidence 0.70, escalates on `budget_exhausted` alone, reproduces identically
+across three replay runs.
+
+**Building it surfaced a second, real defect, fixed alongside it and worth naming here
+since it is not really an eval-harness problem:** `extractor._supplied_coordinates` was
+reading a *previous pass's* centroid fallback as if a caller had deliberately supplied
+it, which silently swapped `GEOCODER_SERVICE_UNAVAILABLE` for a different, non-retryable
+kind on the second pass — stopping a third attempt from ever being planned and
+misdescribing pipeline-derived coordinates as caller-given. Fixed by restricting
+`_supplied_coordinates` to the deal's first pass, safe given this system's one retry path
+today (see that function's docstring for the full argument). Full detail:
+[`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.5.
 
 ---
 
@@ -188,6 +222,62 @@ Keys fall back to plaintext files in `ignore/` when the env var is unset. **The 
 whether to drop the fallback and require the env var.** Affects `tools/hud_fmr.py:24`,
 `tools/llm_client.py:41`, and `tools/diagnostics.py:36` (which deliberately prints the
 account identifier). Raise before any public demo.
+
+### OQ-17 · `TODO(reliability)` · no unit — live model calls are not perfectly deterministic, even at temperature 0
+Found Aug 29, 2026 while building U8.5's OQ-16 case. `scenario_forecast`'s ToT scorer gave
+different depth-2 pairing scores across live re-runs of what looked like an identical
+prompt at `temperature=0.0`. Measured empirically: roughly 1 in 15-20 live attempts at a
+fixed listing landed a mirror-image pairing (rent-up/price-down vs. rent-down/price-up)
+close enough to trip `FORECAST_BRANCHES_NEAR_TIED` as an extra warn that would not
+otherwise fire. The same thing showed up unprompted mid-session in the `los-angeles` demo
+deal — a `live`-tier eval row — which escalated on one re-run where every run before and
+since reports cleanly.
+
+**Diagnosed Aug 29, 2026 with a direct experiment (`agents/scenario_forecast.py`'s design
+doc, §3 of `architecture.md` — full detail there). Two independent, confirmed layers, not
+one:**
+
+1. **OpenRouter routes "the same model" to different backend deployments per request.**
+   8 identical calls to `nvidia/nemotron-3-nano-30b-a3b` at `temperature=0.0` landed on
+   four different providers (Novita, Crusoe, Nebius, DeepInfra) running three different
+   `vllm` builds. Even a trivial "what is 2+2" prompt came back differently formatted
+   depending which one answered.
+2. **Even pinned to one fixed deployment (confirmed via OpenRouter's `provider.order`
+   parameter — same provider, same `system_fingerprint`, every call), scores still swing
+   widely** — one candidate scored 0.05 on one call and 0.95 on the next, same prompt, same
+   deployment. `seed` does not help here, and testing confirmed it: at `temperature=0`
+   there is no sampling step for a seed to control, so the residual variance has to be
+   coming from the forward pass itself — plausibly the well-known GPU floating-point
+   reduction-order sensitivity of continuous-batched serving, likely amplified by this
+   model's Mixture-of-Experts routing (the `-a3b` in its name), where a near-tied gating
+   decision is a hard switch to a different expert rather than a small numerical nudge.
+   **This second layer dominates**, and it is not something a client-side parameter fixes.
+
+**Accepted as an inherent property of a stochastic model, not a defect** — the open
+question is what it implies about the system's own resilience, not the non-determinism
+itself:
+- **A committed recording is exact regardless.** Replay reads a frozen response, so this
+  only ever touches a fresh live call — `golden`/`replay` eval rows are unaffected; only
+  `live` rows (and any future live surface, including a Streamlit demo that calls the
+  model live) can drift run to run.
+- `FORECAST_BRANCHES_NEAR_TIED`'s disclosure text doesn't currently say the near-tie could
+  be a property of *this one sample* rather than a stable fact about the evidence — worth
+  checking against §8's Transparent Degradation principle.
+- The same variance could in principle tip `HUMAN_REVIEW_CONFIDENCE_THRESHOLD` either way
+  on a genuinely borderline live deal — a resilience question separate from, but adjacent
+  to, the threshold-tuning question itself (OQ-1/U8.6).
+- **Pinning the provider was considered and rejected as a mitigation**, since the
+  experiment showed it removes a smaller source of variance than it leaves behind, while
+  trading away OpenRouter's automatic failover — a real cost given §3's own history of
+  free-tier reliability problems. Not worth the trade for a benefit that does not
+  materialize.
+
+**Closes when** a future pass checks whether any of the above needs a system response —
+accepted as-is with one disclosure sentence, or addressed structurally (e.g. sampling the
+scorer more than once and disclosing disagreement, rather than trusting one draw) if it
+turns out to move a real decision. Noted here rather than acted on now, per the
+architect's explicit call to document and defer. `agents/scenario_forecast.py`,
+`docs/design/architecture.md` §3.
 
 ---
 
