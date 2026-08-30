@@ -510,18 +510,30 @@ def _findings_section(state: DealState) -> list[str]:
                 )
         basis = str(state.rent_estimate_source or "unspecified")
         if state.rent_estimate_ratio_to_fmr is not None and state.fmr_anchor_used is not None:
-            year = f"FY{detail.fmr_year} " if detail and detail.fmr_year else ""
-            # Name the spatial resolution, not just the figure. ZIP schedules span
-            # roughly 2x within a single county, so "FMR $2,220" means something very
-            # different depending on which of the two it is.
+            # **Names the market index, not Fair Market Rent (U11.3).** Until then the
+            # anchor was a HUD schedule and this line said so; it is now a Zillow rent
+            # index read at a month, stepped to the subject's bedroom count by the
+            # schedule's own ratio between unit sizes. The old sentence survived the
+            # anchor change for one commit and was false for that whole time, which is
+            # the defect class U8.2b and U8.4c both fixed — a disclosure describing a
+            # mechanism the system has stopped using.
+            #
+            # Name the spatial resolution, not just the figure. Rents span roughly 2x
+            # within a single county, so the same dollar amount means something very
+            # different depending on which of the two produced it.
             where = ""
             if detail and detail.fmr_resolution == "zip":
                 where = f" (ZIP {detail.fmr_zip})" if detail.fmr_zip else " (ZIP)"
             elif detail and detail.fmr_resolution == "county":
                 where = " (county-wide)"
+            asof = (
+                f" as of {detail.anchor_index_month[:7]}"
+                if detail and detail.anchor_index_month
+                else ""
+            )
             basis += (
-                f", ratio {state.rent_estimate_ratio_to_fmr:.2f} × {year}FMR "
-                f"{_money(state.fmr_anchor_used)}{where}"
+                f", ratio {state.rent_estimate_ratio_to_fmr:.2f} × market rent "
+                f"{_money(state.fmr_anchor_used)}{where}{asof}"
             )
         lines.append(f"| Estimated rent | {value} | {basis} |")
     else:
