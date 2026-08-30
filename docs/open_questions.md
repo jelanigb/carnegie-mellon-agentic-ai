@@ -41,6 +41,23 @@ would let an unreliable estimate report as confident. The market/deal split is w
 having as a **disclosure** structure instead; full reasoning and the rejected two-score
 design in [`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.6d.
 
+**CLOSED Aug 30, 2026 — held on measurement, and the sub-question dissolved.**
+`scripts/confidence_sensitivity.py` swept an 80-point grid over the 21-case batch and
+wrote `eval/results/sensitivity.md`. Threshold 0.60 and warn 0.15 are **held**, with the
+stable region published: through the shipped point, the threshold moves 0.30–0.70 and the
+warn weight 0.100–0.200 without changing a single verdict. **This is a robustness claim,
+not an optimality one** — no case in the batch gives evidence the shipped numbers are
+wrong, and a batch that cannot separate two settings is saying it has no evidence either
+way. The critical weight is **behaviorally inert across its entire range including 0.00**,
+confirming the escalation rule's independence from the other direction.
+
+The causal-pair sub-question needs no measurement: **the pair co-occurs on 0 of 21 cases.**
+The hybrid anchor resolves at ZIP tier in every indexed market, so `rent_anchor_county_level`
+became rare and stopped stacking with `rent_estimate_market_error_elevated`. Closed by the
+anchor change rather than by a re-pricing — re-open if county-tier anchoring becomes common
+again. The disclosure structure the *closed* half called for shipped as U8.6d
+(`state.FlagScope`, `ConfidenceBreakdown`, and the report's grouped disclosures).
+
 ### OQ-15 · U8, cut list 2a — pass-scoped flags
 `DealState.flags` is append-only, so nothing separates *raised this pass* from *ever
 raised*, and every Critic interaction check reads the accumulated list as current truth. A
