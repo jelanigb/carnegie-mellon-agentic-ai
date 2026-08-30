@@ -88,7 +88,7 @@ from state import (
     Severity,
     flag,
 )
-from tools import hud_fmr, zcta_crosswalk
+from tools import hud_fmr, rent_drift, zcta_crosswalk
 from tools.geocoding import GeocodeResult, GeocodeSource
 from tools.llm_client import LlmError
 from tools.llm_client import LlmClient, LlmError, SchemaValidationExhausted
@@ -328,6 +328,7 @@ def offline_valuation(
     zip_table_enabled: bool = True,
     zcta: str | None = "90026",
     zip_trained: bool = True,
+    drift_factor: float | None = 0.9,
 ):
     """Give the Valuation agent a county and an FMR schedule without leaving the process.
 
@@ -364,6 +365,32 @@ def offline_valuation(
         report["zip_anchored_counties"] = [county] if zip_trained else []
         gated["report"] = report
         monkeypatch.setattr(valuation_module.rent_model, "load", lambda: gated)
+
+    # The drift correction (U8.4b) reads the on-disk ZORI panel, which is a re-fetchable
+    # download rather than a committed file — exactly the machine-state dependency this
+    # helper stubs the ZCTA boundary file to avoid. Left unstubbed, a machine without
+    # the file would raise the unavailable WARN, change confidence, and flip outcomes in
+    # tests that never mention drift. `drift_factor=None` drives the unavailable path
+    # deliberately.
+    if drift_factor is None:
+        stub = rent_drift.DriftResult(
+            unavailable_reason="stubbed as unavailable by this test"
+        )
+    else:
+        stub = rent_drift.DriftResult(
+            factor=drift_factor,
+            zip_code=zcta or "90026",
+            zori_vintage_month_used="2019-06-30",
+            zori_latest_month="2026-06-30",
+            zori_staleness_months=2,
+            market_growth_pct=30.0,
+            schedule_growth_pct=44.4,
+            fmr_vintage_year=2019,
+            fmr_current_year=2026,
+        )
+    monkeypatch.setattr(
+        valuation_module.rent_drift, "compute_drift", lambda *a, **k: stub
+    )
     return client
 
 
@@ -1309,10 +1336,15 @@ def test_a_rent_estimate_discloses_the_anchor_it_was_built_from(monkeypatch):
     assert result.get("rent_estimate") is not None
     assert result.get("rent_estimate_source") == RentEstimateSource.REGRESSION_MODEL
     # The anchoring arithmetic itself, asserted rather than assumed: the estimate is the
-    # ratio times the FMR and nothing else has been applied to it on the way out.
+    # ratio times the FMR times the *disclosed* drift factor (U8.4b), and nothing
+    # undisclosed has been applied to it on the way out.
+    assert result["valuation_detail"].rent_drift_factor == pytest.approx(0.9)
     assert result.get("rent_estimate") == pytest.approx(
-        result.get("rent_estimate_ratio_to_fmr") * result.get("fmr_anchor_used")
+        result.get("rent_estimate_ratio_to_fmr")
+        * result.get("fmr_anchor_used")
+        * result["valuation_detail"].rent_drift_factor
     )
+    assert_reaches_report(result, FlagKind.RENT_DRIFT_CORRECTION_APPLIED)
     # The ZIP schedule, not the county one — the model is trained against ZIP resolution
     # wherever HUD publishes it, so a county-anchored subject would multiply a
     # ZIP-relative ratio by a county-level figure.
@@ -1332,6 +1364,26 @@ def test_a_rent_estimate_discloses_the_anchor_it_was_built_from(monkeypatch):
         "training metrics it would print a point estimate reading as exact."
     )
     assert f"{detail.model_holdout_mae_dollars:,.0f}" in result["report_markdown"]
+
+
+@pytest.mark.skipif(not _rent_model_available(), reason="rent model not trained")
+def test_an_unavailable_drift_correction_is_disclosed_and_leaves_the_estimate_raw(monkeypatch):
+    """When the drift correction can't be computed, the estimate ships uncorrected and
+    the report says so at WARN — a known, measured bias the system could not remove is a
+    degradation, not a mechanism (U8.4b)."""
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
+    offline_valuation(monkeypatch, drift_factor=None)
+
+    result = run_deal()
+
+    assert result.get("rent_estimate") is not None
+    assert result["valuation_detail"].rent_drift_factor is None
+    assert result.get("rent_estimate") == pytest.approx(
+        result.get("rent_estimate_ratio_to_fmr") * result.get("fmr_anchor_used")
+    )
+    raised = assert_reaches_report(result, FlagKind.RENT_DRIFT_CORRECTION_UNAVAILABLE)
+    assert raised.severity == Severity.WARN
+    assert not flags_of_kind(result, FlagKind.RENT_DRIFT_CORRECTION_APPLIED)
 
 
 @pytest.mark.skipif(not _rent_model_available(), reason="rent model not trained")

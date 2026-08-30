@@ -459,9 +459,10 @@ def _stated_rent_section(state: DealState, detail) -> list[str]:
             "affordability benchmark that sits below typical market rents by design, "
             "while the listings the model learned from rent well above that benchmark — "
             "so the estimate leans toward market-typical rent, and these figures sit "
-            "nearer the benchmark. Which of the two better describes this local market "
-            "is not something this project's data can settle; doing so would take an "
-            "independently observed market-rent series, which is named as future work.",
+            "nearer the benchmark. An independently observed market-rent series "
+            "(Zillow's rent index) now informs the estimate where its coverage allows — "
+            "see the rent disclosures above — which narrows, but does not settle, which "
+            "of the two better describes this local market.",
             "",
         ])
     else:

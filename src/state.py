@@ -164,6 +164,20 @@ class FlagKind(StrEnum):
     # in the training set (so this is not a transfer question — see OQ-12), just
     # measurably harder to price.
     RENT_ESTIMATE_MARKET_ERROR_ELEVATED = "rent_estimate_market_error_elevated"
+    # The estimate (and the comp-implied figures compared against it — both carry the
+    # same construction, so both carry the same drift) was multiplied by the subject
+    # ZIP's measured market-vs-schedule drift factor (U8.4b, from U8.0's finding that
+    # the FMR schedule outran market rent by ~18.5 points since the corpus vintage).
+    # INFO: a mechanism working as designed, disclosed so a corrected figure is more
+    # inspectable than an uncorrected one — the task list's own condition for shipping
+    # it.
+    RENT_DRIFT_CORRECTION_APPLIED = "rent_drift_correction_applied"
+    # The correction could not be computed for this subject (no ZIP, no ZORI coverage,
+    # coverage starting too late, no vintage schedule, mixed anchor grains), so the
+    # estimate carries the uncorrected drift and likely reads high. WARN rather than
+    # INFO: a known, measured bias the system could not remove is a degradation, not a
+    # mechanism.
+    RENT_DRIFT_CORRECTION_UNAVAILABLE = "rent_drift_correction_unavailable"
 
     # Forecast
     APPRECIATION_SOURCE = "appreciation_source"
@@ -473,6 +487,16 @@ class ValuationDetail(BaseModel):
     subject_metro: Optional[str] = None
     subject_metro_mae_dollars: Optional[float] = None
     subject_metro_mae_n: Optional[int] = None
+
+    # --- Drift correction provenance (U8.4b) -------------------------------------
+    # The factor the estimate and the comp-implied figures were both multiplied by, and
+    # the reads behind it, so the report can show the correction's arithmetic instead of
+    # asserting it. All None when the correction was unavailable — the flag carries why.
+    rent_drift_factor: Optional[float] = None
+    rent_drift_market_growth_pct: Optional[float] = None
+    rent_drift_schedule_growth_pct: Optional[float] = None
+    rent_drift_zori_vintage_month: Optional[str] = None
+    rent_drift_zori_latest_month: Optional[str] = None
 
     # Which HUD fiscal-year schedule anchored the estimate. The whole point of §2's
     # design is that the number is dated; the date has to survive into the report or

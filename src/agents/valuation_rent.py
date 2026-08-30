@@ -70,7 +70,7 @@ from state import (
     ValuationDetail,
     flag,
 )
-from tools import hud_fmr, kaggle_data, redfin_data, zcta_crosswalk
+from tools import hud_fmr, kaggle_data, redfin_data, rent_drift, zcta_crosswalk
 from tools.model import rent_model
 
 AGENT = "valuation_rent"
@@ -249,7 +249,11 @@ def _attach_metro_error(
 
 
 def _cross_check(
-    detail: ValuationDetail, state: DealState, estimate: float, subject_fmr: float
+    detail: ValuationDetail,
+    state: DealState,
+    estimate: float,
+    subject_fmr: float,
+    drift_factor: float = 1.0,
 ) -> list:
     """Compare the estimate against the comp set, normalized to the same dollars.
 
@@ -284,6 +288,15 @@ def _cross_check(
     the better-informed of the two inputs about location.
 
         `scripts/valuation_evidence.py --diagnose-divergence`.
+
+    **The drift correction applies to both sides, symmetrically (U8.4b).** Comp-implied
+    rents are built the same way the estimate is — a vintage ratio times the subject's
+    *today* FMR — so they carry exactly the same schedule-vs-market drift U8.0 measured.
+    `drift_factor` therefore scales the comp-implied figures here just as it scaled the
+    estimate before it arrived, which keeps every reported dollar in the same corrected
+    terms while cancelling out of `divergence_pct` entirely: the check goes on measuring
+    structure against structure. Correcting only the estimate would have injected a
+    systematic ~−12% gap and reported it as a model-vs-comps disagreement.
     """
     anchoring = rent_model.anchor_comp_rents(state.comps, subject_fmr)
     detail.comps_available = anchoring.comps_available
@@ -293,10 +306,10 @@ def _cross_check(
     if anchoring.comps_used < config.RENT_COMP_CROSSCHECK_MIN_COMPS:
         return []
 
-    median = anchoring.median
+    median = anchoring.median * drift_factor
     detail.comp_implied_rent_median = median
-    detail.comp_implied_rent_p25 = anchoring.percentile(25)
-    detail.comp_implied_rent_p75 = anchoring.percentile(75)
+    detail.comp_implied_rent_p25 = anchoring.percentile(25) * drift_factor
+    detail.comp_implied_rent_p75 = anchoring.percentile(75) * drift_factor
     # Signed, so the report can say which way the estimate leans. An absolute value
     # would tell a reader the estimate is suspect without telling them how.
     detail.divergence_pct = (estimate - median) / median
@@ -556,13 +569,87 @@ def valuation_rent_agent(state: DealState) -> dict:
 
     estimate = ratio * subject_fmr
 
-    flags.extend(_cross_check(detail, state, estimate, subject_fmr))
+    # --- Drift correction (U8.4b, from U8.0's finding) -------------------------
+    # The model learned its ratio against the vintage FMR schedule and multiplies it by
+    # today's, but the schedule outran the market by ~18.5 points over that interval, so
+    # the raw product reads high by the subject ZIP's own drift. The ZIP for the market
+    # read is resolved independently of the anchor's grain: ZORI is ZIP-level even where
+    # the FMR anchor is county-level, and the market the subject rents in is its ZIP
+    # either way.
+    zori_zip = terms.zip_code or (
+        zcta_crosswalk.lookup_zcta(terms.latitude, terms.longitude)
+        if terms.latitude is not None and terms.longitude is not None
+        else None
+    )
+    drift = rent_drift.compute_drift(
+        zori_zip, terms.county_fips, int(terms.bedrooms), subject_zip, client=client
+    )
+    if drift.applied:
+        estimate *= drift.factor
+        detail.rent_drift_factor = drift.factor
+        detail.rent_drift_market_growth_pct = drift.market_growth_pct
+        detail.rent_drift_schedule_growth_pct = drift.schedule_growth_pct
+        detail.rent_drift_zori_vintage_month = drift.zori_vintage_month_used
+        detail.rent_drift_zori_latest_month = drift.zori_latest_month
+        direction = "down" if drift.factor < 1.0 else "up"
+        stale = (
+            drift.zori_staleness_months is not None
+            and drift.zori_staleness_months > config.RENT_DRIFT_MAX_ZORI_STALENESS_MONTHS
+        )
+        flags.append(
+            state.flag(
+                AGENT,
+                FlagKind.RENT_DRIFT_CORRECTION_APPLIED,
+                f"The rent estimate was adjusted {direction} by a factor of "
+                f"{drift.factor:.2f} to correct for measured drift between market rents "
+                f"and the federal rent schedule it is anchored to. Since the training "
+                f"data's 2018-19 vintage, the schedule for this area rose "
+                f"{drift.schedule_growth_pct:+.0f}% while observed market rents in ZIP "
+                f"{drift.zip_code} (Zillow's rent index) rose "
+                f"{drift.market_growth_pct:+.0f}%; an unadjusted figure would carry that "
+                f"gap. The comparable-implied rents shown alongside are adjusted "
+                f"identically, since they are built the same way and carry the same "
+                f"drift."
+                + (
+                    f" Note the market index's last observation "
+                    f"({drift.zori_latest_month}) is {drift.zori_staleness_months} "
+                    f"months old — the correction is only as current as that series."
+                    if stale
+                    else ""
+                ),
+                Severity.INFO,
+            )
+        )
+    else:
+        flags.append(
+            state.flag(
+                AGENT,
+                FlagKind.RENT_DRIFT_CORRECTION_UNAVAILABLE,
+                f"A drift correction normally applied to every rent estimate could not "
+                f"be computed for this property, because {drift.unavailable_reason}. "
+                f"The federal rent schedule this estimate is anchored to has risen "
+                f"measurably faster than market rents since the model's 2018-19 "
+                f"training data — where the correction could be computed in this "
+                f"project's markets, it reduced estimates by between roughly 7% and "
+                f"26% — so this estimate, and the comparable-implied rents beside it, "
+                f"likely read high by that kind of margin.",
+                Severity.WARN,
+            )
+        )
+
+    flags.extend(_cross_check(detail, state, estimate, subject_fmr, drift.factor or 1.0))
 
     # Raised on every estimate that took this path, without exception. INFO rather than
     # WARN because it describes a mechanism working as designed, not a degradation —
     # the severity guidance in the report says exactly that. It is here so that no
     # reader can mistake a modelled ratio times a government reference figure for an
     # observed market rent.
+    #
+    # The closing sentence branches on the drift correction (U8.4b). Its previous fixed
+    # form claimed the stability assumption was "one nothing in this project verifies" —
+    # true when written, false since U8.0 measured the assumption and found it does not
+    # hold. A disclosure that misstates what the project has checked is the same defect
+    # class U8.2b fixed, one layer up.
     flags.append(
         state.flag(
             AGENT,
@@ -572,11 +659,23 @@ def valuation_rent_agent(state: DealState) -> dict:
             f"${subject_fmr:,.0f} for "
             + (f"ZIP {detail.fmr_zip}" if detail.fmr_resolution == "zip"
                else f"county {terms.county_fips}")
+            + (
+                f", then adjusted by a factor of {drift.factor:.2f} for measured "
+                f"market-versus-schedule drift (see the drift disclosure)"
+                if drift.applied
+                else ""
+            )
             + f". It is not an observed "
             f"market rent. The ratio comes from a regression trained on 2018-19 listings "
             f"normalized the same way, which assumes rent-to-FMR structure is stable "
-            f"over that interval — the largest single source of error in this figure, "
-            f"and one nothing in this project verifies.",
+            f"over that interval — an assumption this project has measured and found "
+            + (
+                f"to have drifted, which is what the adjustment above corrects for."
+                if drift.applied
+                else f"to have drifted; the correction for it could not be applied to "
+                     f"this property, so see the drift disclosure for the likely "
+                     f"direction and size of the error."
+            ),
             Severity.INFO,
         )
     )
