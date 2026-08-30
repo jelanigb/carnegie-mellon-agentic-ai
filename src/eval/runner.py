@@ -84,16 +84,35 @@ class CaseResult:
         return Verdict.ESCALATES if self.needs_human_review else Verdict.REPORTS
 
     @property
+    def has_critical(self) -> bool:
+        return any(f.severity == Severity.CRITICAL for f in self.flags)
+
+    @property
+    def budget_exhausted(self) -> bool:
+        """True when the row escalated because the rework budget ran out unresolved,
+        rather than as a consequence of the accumulated score.
+
+        `agents/critic.critic_agent` raises `FlagKind.REWORK_LIMIT_REACHED` on exactly
+        that ground, so the flag is the marker rather than re-deriving the condition
+        from `rework_count` here — `state.plan`/`config.MAX_REWORKS` are the Critic's
+        business, not the table's.
+        """
+        return any(f.kind == FlagKind.REWORK_LIMIT_REACHED for f in self.flags)
+
+    @property
     def escalated_above_threshold(self) -> bool:
         """Escalated while the confidence score alone would have let it report.
 
         The one row shape worth calling out by name. `agents/critic.critic_agent`
-        escalates on two independent grounds — an accumulated score below
-        `config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD`, or a single critical-severity
-        disclosure — and on almost every deal the two agree, which makes the second
-        indistinguishable from the first in a results table. A row where they *disagree*
-        is the only direct evidence that the critical rule does anything, and U8.6 has to
-        be able to see it before deciding whether the two conditions could be collapsed.
+        escalates on **three** independent grounds (U8.5/OQ-16 added the third) — an
+        accumulated score below `config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD`, a single
+        critical-severity disclosure, or a retryable objection that survives
+        `config.MAX_REWORKS` reworks unresolved — and on almost every deal all of them
+        agree, which makes the other two indistinguishable from the first in a results
+        table. A row where they *disagree* is the only direct evidence that a given rule
+        does anything on its own, and U8.6 has to be able to see it before deciding
+        whether any of them could be collapsed. `has_critical`/`budget_exhausted` say
+        *which* ground fired; this says only that the score alone would not have.
         """
         return (
             self.needs_human_review
@@ -320,20 +339,37 @@ def _results_table(results: list[CaseResult]) -> str:
         # PREDICTED one would invite the two to be counted together — see cases.py.
         mark = "ok" if r.verdict_agrees else "**MISMATCH**"
         suffix = "" if r.case.verdict_source is VerdictSource.PREDICTED else " (baseline)"
-        outcome = f"{r.observed}" + (" †" if r.escalated_above_threshold else "")
+        marker = ""
+        if r.escalated_above_threshold:
+            # Both grounds are independent of the score; disambiguate rather than
+            # collapsing them into one mark, since which one fired is exactly what a
+            # reader checking this row wants to know. `has_critical` first because a
+            # row could in principle carry both — a rework spent on a retryable
+            # objection can still return with an unrelated critical flag standing.
+            marker = " †" if r.has_critical else " ‡" if r.budget_exhausted else " †"
+        outcome = f"{r.observed}" + marker
         lines.append(
             f"| `{r.case.key}` | {tier} | {r.comps} | {r.rework_count} | "
             f"{r.confidence:.2f} | {disclosures} | {outcome} | {target} | "
             f"{mark}{suffix} |"
         )
 
-    if any(r.escalated_above_threshold for r in results):
+    if any(r.escalated_above_threshold and r.has_critical for r in results):
         lines += [
             "",
             f"† Escalated on a critical-severity disclosure while the confidence score "
             f"alone ({config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD:.2f} threshold) would "
-            f"have let the deal report. These rows are the only direct evidence that the "
-            f"two escalation grounds are independent.",
+            f"have let the deal report. Direct evidence that the critical-flag rule "
+            f"does something the score alone would not.",
+        ]
+    if any(r.escalated_above_threshold and r.budget_exhausted for r in results):
+        lines += [
+            "",
+            f"‡ Escalated because a retryable objection survived "
+            f"{config.MAX_REWORKS} rework(s) unresolved, while the confidence score "
+            f"alone ({config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD:.2f} threshold) would "
+            f"have let the deal report. Direct evidence that the rework-budget rule "
+            f"does something the score alone would not (U8.5/OQ-16).",
         ]
     return "\n".join(lines)
 
