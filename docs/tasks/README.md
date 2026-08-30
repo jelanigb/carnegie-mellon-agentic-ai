@@ -8,7 +8,8 @@ need.
 | File | Unit | Status |
 | --- | --- | --- |
 | [`task_list_u7.md`](task_list_u7.md) | U7 — Critic / Reviewer | ✅ complete (Aug 27, 2026) |
-| [`task_list_u8.md`](task_list_u8.md) | U8 — Evaluation harness | 🚧 planned Aug 28, 2026 — awaiting approval |
+| [`task_list_u8.md`](task_list_u8.md) | U8 — Evaluation harness | 🚧 in progress — scope revised Aug 29, 2026 (see its "Scope revision" note) |
+| [`task_list_u11.md`](task_list_u11.md) | U11 — Rent model v2 | 🚧 planned Aug 29, 2026 — sequenced before U8.6 closes |
 | [`maintenance.md`](maintenance.md) | Not tied to a unit | standing |
 
 Units U1–U6 predate this workflow and have no task file; what they built is in

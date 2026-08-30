@@ -806,6 +806,137 @@ against numbers this subsection then invalidates.
 estimate now depends on a ZORI-derived table. It is a committed lookup rather than a live
 fetch, and it needs a refresh path and a staleness disclosure of its own.
 
+---
+
+**Landed late — built Aug 29, 2026, after U8.5, and the miss is recorded rather than
+renumbered.** U8.5 landed while this subsection sat unbuilt, which inverted the sequencing
+argument above; caught during U8.6's evidence review (the model code had no correction in
+it), flagged to the architect, and built immediately on his direction. The label stays
+U8.4b so the plan's own sequencing argument remains legible against what actually happened.
+
+**One design refinement over the plan above, found by reading the cross-check before
+building (and it prevents a defect):** `rent_model.anchor_comp_rents` expresses every
+comp-implied rent the same way the estimate is expressed — a vintage ratio times the
+subject's *today* FMR — so the comp side carries **exactly the same drift** as the model
+side. Correcting only the estimate would have injected a systematic ~−12% gap into
+`RENT_DIVERGES_FROM_COMPS` that is neither the model's error nor the comps'. The factor
+therefore applies to **both sides symmetrically** (estimate and comp-implied p25 / median /
+p75); it cancels out of `divergence_pct`, so the cross-check keeps measuring structure
+against structure while every reported today-dollar figure gets the level correction.
+
+**Built Aug 29, 2026.** `tools/rent_drift.py` computes the per-subject factor —
+`(ZORI today / ZORI vintage) × (FMR vintage / FMR today)`, at the subject's own anchor
+grain and bedroom count for both FMR ends, refusing on a grain mismatch between the two
+fiscal years rather than mixing baselines. Two new flag kinds:
+`RENT_DRIFT_CORRECTION_APPLIED` (INFO, the mechanism plus its arithmetic and a
+staleness note past `config.RENT_DRIFT_MAX_ZORI_STALENESS_MONTHS`) and
+`RENT_DRIFT_CORRECTION_UNAVAILABLE` (WARN — a measured bias the system could not
+remove). `RENT_ANCHORED_TO_FMR`'s closing sentence corrected in both branches: it
+claimed the stability assumption was "one nothing in this project verifies", false
+since U8.0 measured it.
+
+**Measured factors at landing, live against real HUD and the real ZORI file:**
+
+| Subject ZIP | Factor | Market vs schedule since vintage |
+| --- | --- | --- |
+| Los Angeles 90026 | **0.744** | +20.5% vs +62.1% |
+| Chicago 60647 | **0.799** | +38.5% vs +73.4% |
+| Cleveland 44113 | **0.881** | +31.6% vs +49.4% |
+| Bedford-Stuyvesant 11216 | **0.934** | +46.5% vs +56.8% |
+| Staten Island 10307 | no ZORI coverage → UNAVAILABLE warn | — |
+
+Two findings in that table. **The spread is wider than U8.0's +3.6%..−20% range** —
+U8.0 measured ZIP-anchored corpus rows only, which excluded the county-anchored metros,
+and the county schedules drifted hardest (recorded at the `RENT_DRIFT_FACTOR_MIN/MAX`
+comment). **The `staten-island` demo covers the UNAVAILABLE kind organically** — no
+engineered case needed for the census.
+
+**Live Los Angeles run end-to-end:** estimate $4,073 → **$3,031**, factor disclosed in
+both flags, confidence 0.70 and verdict unchanged — and the stated-vs-modelled gap
+collapsed **−29% → −4%**, confirming U8.7's "re-measure rather than assume" note ahead
+of schedule. The Summarizer's stated-rent caveat claimed an independent market series
+"is named as future work" — false as of this change set; minimally corrected now, fully
+re-measured at U8.7. Tests: `tests/test_rent_drift.py` (factor arithmetic, four refusal
+paths, and the symmetry property that keeps the cross-check honest);
+`test_flag_propagation.py` gains the unavailable-path WARN reaching the report, and
+`offline_valuation` stubs the drift seam so the suite stays hermetic — left unstubbed,
+a machine without the ZORI file would flip outcomes in tests that never mention drift.
+All 71 pass. **Batch re-derivation deliberately deferred to U8.4c's step 3**, so
+recordings are re-cut once for both changes.
+
+### U8.4c — The New York price-series scoping fix
+
+**Taken Aug 29, 2026 by the architect, on a measurement that overturned a standing
+assumption.** Every "Redfin doesn't cover New York" statement in this repository traced
+back to `tools/redfin_data.py`'s `TARGET_METROS` — a trio-only mapping written before New
+York entered the demo, never revisited. Checked against the raw extract: **"New York, NY
+metro area" is present, with 102 fully-populated months at 700–950 multi-family sales per
+month.** The absence was this build's filter, not Redfin's coverage — the same defect
+shape U8.2b fixed for the FMR anchor.
+
+The change set, per the architect's approval (a–d):
+
+1. **The metro mapping moves to `config.py`** (it is a tunable that predates config and
+   never moved, contra §8), keyed to the same market set as `INDEXED_MARKETS` so the
+   Redfin reach and the system's market list cannot drift apart again, **with New York
+   added**. The load asserts every configured region exists in the extract, so a silent
+   absence becomes a loud one.
+2. **Reader-facing text stops claiming Redfin coverage facts it never checked** —
+   `agents/valuation_rent.py`'s `benchmark_unavailable_reason` says "this build's price
+   series doesn't reach {city}", which is the true statement.
+3. **One `--record` pass and full batch re-derivation for U8.4b + U8.4c together** —
+   both change rent estimates or flag sets, so recordings are re-cut once, not twice.
+   `staten-island`'s baseline changes legitimately (it gains an appreciation series and a
+   price benchmark); the new baseline is measured and published, not patched.
+4. **Docs sweep** — `demo.md`'s pending-decision paragraphs resolve, `data_sources.md`,
+   open-questions entries.
+
+**Consequence for the NY floor:** `forecast_unavailable` stops firing for New York, so
+the standing-warn floor drops from three warns (0.55, always escalates) to two (0.70) —
+a well-sited New York deal can now report **without any tunable moving**, by closing a
+real gap rather than lowering the bar. The always-escalate arithmetic in `demo.md`
+updates to match.
+
+---
+
+**Built Aug 29, 2026, and it had a second half nobody had looked for.** The trio-only
+region filter was only one of the two reasons New York resolved to no benchmark.
+`_attach_benchmark` matched the subject's city against the metro **label** alone, with no
+state check — so no borough name could ever match "New York", and a Brooklyn subject read
+as outside the market even once the region was loaded. Both halves are fixed:
+`config.REDFIN_TARGET_METROS` (asserted equal to `INDEXED_MARKETS`' label set, with
+`load_redfin` raising on a region absent from the file) and `_resolve_market_label`, now
+the single resolver both the benchmark and the per-metro error figure use. **Two
+independent bugs producing one symptom is the reason the symptom survived so long** — a
+fix to either alone would have looked like it had failed.
+
+`staten-island`'s $875,000 was set without a benchmark *because of* the stale belief; it
+now measures ~11% below the metro's multi-family median (~$981K), a plausible borough
+discount, so the figure stands as committed rather than being recalibrated to fit.
+
+**Measured after the combined re-record (U8.4b + U8.4c + U8.6c): coverage 31/31 kinds,
+baselines 6/7, predicted verdicts 10/14.** The New York floor is now two warns as
+predicted — `ny-bedstuy-triplex` escalates at 0.55 on a *third*, deal-specific warn
+(Brooklyn's corpus rows sharing one coordinate), not on the market alone. The U8.6b
+Manhattan fixture is what would demonstrate a New York deal reporting.
+
+### U8.6c — Near-tie split *(landed early, with U8.4c)*
+
+Built ahead of its place in the sequence because the re-record had to happen once, and
+this change moves the same flag sets. Full design in the U8.6 scope revision above.
+**Two consequences worth reviewing, both measured rather than anticipated:**
+
+1. **The `chicago` demo re-baselined, 0.55/escalates → 0.70/reports.** Its third warn was
+   the pairing near-tie. This is a real loss the plan should not gloss: the demo set no
+   longer contains an "escalates on accumulated warnings alone, nothing broken" case, and
+   that property now lives only in the engineered fixtures.
+2. **`chicago-geocoder-outage` recovered its rework path.** The near-tie had been firing
+   as an unrelated third warn and front-loading escalation *before* the rework budget
+   could be spent — exactly the failure mode U8.2's case note predicted and picked the
+   listing price to dodge empirically. Demoting it fixed the case structurally: 2 reworks,
+   0.70, escalating on `budget_exhausted`. That the fix landed on a case built to work
+   around the symptom is the strongest evidence the demotion was right.
+
 ### U8.5 — Pass-scoped flags (OQ-15, cut-list 2a)
 
 Per Q4. Stamp each `Flag` with the `planner_invocations` that raised it; the Critic's
@@ -934,7 +1065,7 @@ reworks, confidence 0.70 (clears the threshold — `rework_limit_reached` and
 **7/7 baselines, 12/14 verdicts, 29/29 coverage — the largest single close in the project**,
 and the one U7.8/U8.10 both anticipated without being able to promise.
 
-### U8.6 — Decision #6's numbers against the batch (OQ-1)
+### U8.6 — Decision #6's numbers against the batch (OQ-1) — **scope revised Aug 29, 2026**
 
 Per Q1, in whichever form Q1 settles. Covers `HUMAN_REVIEW_CONFIDENCE_THRESHOLD`,
 `FLAG_SEVERITY_PENALTY`, `MAX_REWORKS`, and confirmation of the critical-flag rule at
@@ -945,6 +1076,166 @@ note names the same batch.
 **The demo table must be re-derived after any number moves.**
 `scripts/confidence_evidence.py` already does this in one command; a moved weight with a
 stale table would republish the exact staleness U7.8 fixed.
+
+---
+
+**Scope revision (architect-approved Aug 29, 2026), from the first tuning pass's own
+findings.** The pass ran the 14 predicted cases through a threshold/weight sensitivity
+sweep instead of scoring bare agreement — the cases were designed knowing the shipped
+values, so agreement alone would measure the fixtures. Findings that reshape the close:
+
+- **The scores are quantized to multiples of the warn weight**, so the whole
+  (threshold, warn-weight) space collapses to one question — *how many independent
+  warn-level disclosures send a deal to a human* — and the batch measurably cannot
+  distinguish any threshold in (0.40, 0.70] or warn weight in [0.125, 0.20] from the
+  shipped values. The close is therefore a robustness claim ("held, with the stable
+  region measured and published"), not an optimality claim.
+- **The critical severity weight is behaviorally inert** — any critical flag escalates
+  through the independent rule, so `FLAG_SEVERITY_PENALTY["critical"]` can never change
+  a verdict. Documented as a finding; it also *confirms* the critical-flag rule's
+  independence, which is what this subsection was asked to check.
+- **The verdict mismatches are mostly not threshold evidence, and this plan said
+  otherwise for half a day.** The first reading was "target fired, deal escalated anyway
+  → tune the threshold." The architect's challenge (below) overturned it: a case sited in
+  a given market *inherits that market's standing warns*, and the escalation those
+  produce is usually correct on the merits. What is actually wrong is the **predicted-
+  verdict derivation**, which predicts from the target flag's severity alone. Fixed here
+  rather than in the threshold — see "the derivation gains the market's standing warns"
+  below.
+- **The New York always-escalate floor** (three standing market-level warns) is held as
+  policy by the architect — and one of the three warns traced to the stale Redfin
+  assumption U8.4c now fixes, so the floor drops to two warns once U8.4c lands.
+
+**The derivation gains the market's standing warns.** A predicted verdict is still a
+claim made before the run, but it is now derived from the target flag's severity **plus
+the warns the subject's market raises for every listing in it** — both knowable in
+advance, so the prediction stays honest while ceasing to be naive about siting. Cases
+whose only "failure" was inheriting their market's floor stop reading as tuning signals
+and start reading as what they are: correct escalations of a genuinely shakier estimate.
+
+### U8.6d — Confidence decomposition: what the score was made of
+
+**Taken Aug 29–30, 2026 by the architect, and it is a disclosure change rather than a
+scoring change — that distinction was itself the decision.** Recorded with the rejected
+alternative, because the rejection is the substance.
+
+**The observation that started it.** The confidence score does not distinguish *"this
+deal has problems"* from *"our data is thin where this property is."* Four flag kinds are
+properties of a **location** and fire identically for every listing there —
+`fmr_anchor_county_level`, `rent_estimate_market_error_elevated`,
+`rent_drift_correction_unavailable`, `comps_spatially_concentrated` — while the rest are
+properties of **this listing or this run**. Measured on the batch, the split is stark:
+`ny-bedstuy-triplex` scores 0.55 with **every one** of its charged warns market-scoped
+and *no* deal-specific reservation at all, while `chicago-five-bedroom` scores 0.25 with
+almost all of its deal-scoped. Today those two are one undifferentiated number.
+
+**Proposed and rejected: two scores with independent floors** (`deal_confidence` and
+`market_coverage`, escalating on either). It was measured before it was rejected —
+`ny-bedstuy-triplex` computes deal 1.00 / market 0.55, `staten-island` deal 0.30 /
+market 0.55 — and the arithmetic was seductive: it would have reconciled three of the
+four verdict mismatches.
+
+**The architect's objection killed it, and it is the correct objection.** Market coverage
+is not a parallel kind of doubt; **it propagates into the deal's own numbers.** Each of
+the four does something to *this* estimate: elevated market error doubles its error bar
+($1,048 against $524), county-level anchoring means the anchor describes a county whose
+ZIP schedules span ~2x, an unavailable drift correction leaves a measured 7–26% upward
+bias in place, and spatial concentration weakens the independent check on it. Scoring the
+deal side alone would therefore have reported `ny-bedstuy-triplex` at **1.00 confidence
+on a rent figure twice as unreliable as the report's own headline accuracy claim** — a
+Transparent Degradation regression, and precisely the failure the split was supposed to
+prevent. The earlier analogy to the critical-flag rule was wrong: a critical flag is
+genuinely independent of the score; coverage is an *input* to it.
+
+**Taken instead: decompose and disclose, don't split and threshold.** One score, market
+flags counting exactly as they do today, and three reporting changes:
+
+1. **Show the score's arithmetic.** Not "confidence 0.55" but what the 0.45 deducted was
+   made of — e.g. *"0.45 deducted: 0.45 from data coverage in this market, 0.00 from
+   this property."* A reader can currently see the flags and the score but cannot see
+   the sum that connects them.
+2. **Name the dominant ground in the escalation sentence**, so a reviewer knows on sight
+   whether there is anything they can act on. A human asked to review "HUD publishes no
+   ZIP-level schedule for this county" cannot resolve it; one asked to review "the
+   listing never stated a price" can.
+3. **Group the report's disclosures** into *about this property* and *about our coverage
+   of this market*.
+
+This yields everything the split was for — legibility, an ordered coverage figure,
+actionable review — while changing no escalation behavior and suppressing no doubt.
+**It is also independent of U11**, since it touches no estimate and no threshold.
+
+**One narrow scoring question survives, and is measured rather than assumed (see
+OQ-1).** `fmr_anchor_county_level` is a *cause* of `rent_estimate_market_error_elevated`
+— county-level anchoring is part of why New York's holdout error is high — so charging
+0.15 for each charges cause and effect separately. The other two are independent axes
+(drift is a bias, concentration is about the check rather than the estimate). Whether
+de-duplicating that one causal pair moves any verdict is a batch measurement for U8.6,
+not a judgment to make in advance.
+
+**Revised sequence for the remainder of the unit** (each line one commit or one
+re-derivation; U8.6 does not close until all land, and its numbers are scored against
+the *final* batch):
+
+1. **U8.4b** — drift correction *(landed late, above)*
+2. **U8.4c** — NY scoping fix *(above)*
+3. Re-record + batch re-derivation + docs sweep for 1–2 together
+4. **U11 model probe** (see [`task_list_u11.md`](task_list_u11.md)) → architect's
+   adoption call on its numbers; U8.6's close waits for the model U11 settles on
+5. **U8.6c — near-tie split and evaluator-score disclosure** *(below)*
+6. Sensitivity sweep script + committed artifact, re-run against the post-change batch
+7. **U8.6b — straddle pairs** *(below)*, then close: verdicts re-scored, PROVISIONALs
+   resolved, #6 register entry, demo table re-derived
+
+### U8.6b — Straddle pairs: measuring brittleness at the per-flag thresholds
+
+**Taken Aug 29, 2026 by the architect, over a schedule-based deferral recommendation —
+recorded because the overrule is part of a pattern he has named.** The confidence
+threshold's dead zone means verdict-deciding lines live in the *per-flag* thresholds
+(they decide whether the third warn fires), so rigidity is measured there: pairs of
+near-identical fixtures either side of each line, published as a brittleness section in
+the results artifact — how much does a deal have to change to change its verdict.
+
+| Tunable | Straddle pair | Feasible? |
+| --- | --- | --- |
+| `COMP_MAX_OUTSIDE_MATCH_SHARE` (0.25) | 2-of-8 vs 3-of-8 comps outside the band | Yes — vary subject sqft |
+| `COMP_MIN_DISTINCT_LOCATIONS` (3) | NY geography is a natural control: Brooklyn (87 of 89 corpus rows on one coordinate) vs Manhattan (161 rows, 60 coordinates) | Yes — doubles as the NY-floor fixture |
+| `RENT_COMP_DIVERGENCE_THRESHOLD_PCT` | `chicago-uptown-duplex` measures 48% (far side); build the near-side sibling | Yes — vary ZIP rent level |
+| `MIN_QUALIFYING_COMPS` (8) | A siting returning exactly 7 vs 8 comps | Probably — corpus-determined |
+| `RENT_MODEL_METRO_ERROR_RATIO_THRESHOLD` (1.5) | **Not straddleable by any deal** — markets sit at ≤1.1x and 2.0x; a listing cannot move its market's ratio | Documented as such |
+| `TOT_TIE_EPSILON` (0.05) | **Not meaningfully straddleable** — the gap is noise-dominated (OQ-17); a recorded straddle measures the recording | Documented as such |
+
+### U8.6c — Near-tie split, and the evaluator's scores reach the reader
+
+**Taken Aug 29, 2026 by the architect.** `FORECAST_BRANCHES_NEAR_TIED` turned out to be
+two different disclosures sharing one kind, and the reading path shows they deserve
+different severities:
+
+- **Pairing near-tie (depth 2) → INFO.** With `TOT_BEAM_WIDTH = 3` over nine pairings,
+  both tied candidates survive into the reported scenario set, labels are assigned by
+  projected outcome (not score rank), and band provenance comes from the framing every
+  pairing shares — so the ordering the tie-break resolves never reaches anything a
+  reader sees. It is also measured with an instrument whose single-draw noise (OQ-17:
+  0.05→0.95 swings on identical calls) exceeds the 0.05 epsilon by an order of
+  magnitude. Message rewritten to stop claiming the ordering matters, and to say the
+  gap is one sample's reading.
+- **Framing near-tie (depth 1) stays WARN.** `TOT_FRAMING_BEAM_WIDTH = 1` means the
+  losing framing — a whole reading of the data — is discarded on a tie-break. The beam
+  width itself was revisited at the architect's request and held: the observed defect
+  that motivated it (a +19.03%/yr "optimistic" case from an unscreened framing printed
+  beneath a basis block claiming screening) and the one-provenance report contract both
+  stand. The upgrade is disclosure, not selection: when the tie fires, compute what the
+  losing framing's base case would have projected and render the delta — the flag text
+  already promises the ledger holds "what it would have implied", and today nothing
+  computes the implication.
+- **`Scenario.evaluator_score` is rendered.** Populated for every reported scenario
+  (`scenario_forecast.py:621`), carried through state, and never rendered — the
+  evaluator's credibility judgment across the three scenarios is known and invisible.
+  Rendered per scenario with the OQ-17 caveat (a score is one sample of a noisy judge).
+  Labels stay outcome-based; reordering by score would break the bracket semantics.
+- **The tie measurement gains the depth-2 cut boundary (#3 vs #4)** — the one rank line
+  where ordering *is* load-bearing (which pairing makes the scenario set at all), and
+  today unmeasured.
 
 ### U8.7 — Checks A and B, and `config.py:413` — **the veto branch fired**
 
