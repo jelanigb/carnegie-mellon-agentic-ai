@@ -71,13 +71,22 @@ score, starting at 1.0 and subtracting a penalty per flag by severity
 | `critical` | 0.40 |
 
 If the score falls below `config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD` (**0.60**,
-provisional), the deal escalates. **But a single critical flag escalates on its own,
-independent of the score** — a deal can clear the 0.60 bar and still be sent to a human
-if even one disclosure is severe enough. `chicago --no-retrieval` below is the case that
-isolates this rule from the score-based one. Mechanism in `agents/critic.py`; both
-constants are marked provisional in `config.py` because U8's eval batch is what tunes
-them against real evidence rather than against the six deals, which were calibrated to
-run clean and can't stress-test a threshold themselves.
+provisional), the deal escalates. **But there are two further, independent grounds** —
+a single critical flag escalates on its own however high the score, and a retryable
+objection that survives the rework budget does the same. `chicago --no-retrieval` below
+is the case that isolates the critical-flag rule from the score-based one; the eval
+harness's `chicago-geocoder-outage` row isolates the rework-budget one. Mechanism in
+`agents/critic.py`; both constants are marked provisional in `config.py` because U8's
+eval batch is what tunes them against real evidence rather than against the six deals,
+which were calibrated to run clean and can't stress-test a threshold themselves.
+
+**One consequence of the arithmetic is worth seeing before reading the deals below.**
+Because info-severity disclosures cost nothing and warns cost 0.15, the score is
+effectively a count: one warn reports at 0.85, two report at 0.70, and **three warns
+escalate at 0.55**. So the practical question the threshold asks is *"have three
+independent things gone wrong?"* — and a market that supplies two warnings to every
+listing in it (see New York, below) has spent most of that budget before the property
+is examined at all.
 
 ---
 
@@ -85,33 +94,51 @@ run clean and can't stress-test a threshold themselves.
 
 ### Los Angeles — the clean baseline
 
-`main.py --deal los-angeles` · confidence **0.70** · 4 disclosures (2 info, 2 warn) ·
+`main.py --deal los-angeles` · confidence **0.85** · 7 disclosures (6 info, 1 warn) ·
 **reports normally**
 
 An Echo Park duplex, dense market, full 8-comp set. This is the "everything worked"
-case — but even here, one disclosure fires: Los Angeles County doesn't publish a
-Small Area (ZIP-level) Fair Market Rent, so the rent anchor falls back to the
-county-wide figure, and the report says so. That's deliberate evidence in itself: **the
-clean row in this demo set is "reports with no critical flag," not "raises zero
-flags."** A perfectly silent run doesn't exist in this system by design — see the
-re-measurement note in `history/decision_log.md` under "U7.8."
+case — but even here, one warn-severity disclosure fires: Los Angeles County's rent
+anchor falls back to the county-wide Fair Market Rent, and the report says so. That's
+deliberate evidence in itself: **the clean row in this demo set is "reports with no
+critical flag," not "raises zero flags."** A perfectly silent run doesn't exist in this
+system by design — see the re-measurement note in `history/decision_log.md` under
+"U7.8."
 
-### Chicago — the deliberate escalation
+The six info-severity disclosures are mechanism, not weakness, and they cost the score
+nothing: how the rent figure was anchored, that a **drift correction was applied to it**
+(U8.4b — this deal's estimate is adjusted down by a factor of 0.74, because the federal
+rent schedule for this ZIP rose 62% since the model's training vintage while observed
+market rents rose 21%), which years were screened out of the rent bands, and so on.
 
-`main.py --deal chicago` · confidence **0.55** · 9 disclosures (5 info, 4 warn) ·
-**escalates to human review**
+### Chicago — the deal that used to escalate, and why it stopped
 
-A Logan Square two-flat. Still finds a full comp set (8 comps) — this deal escalates
-purely on accumulated warn-severity flags, not because anything is broken: a widened
-comp search radius, comps that came back outside the target size band, and a
-near-tied forecast between scenarios. **This outcome was accepted on purpose rather
-than tuned away.** The threshold could be nudged to make Chicago pass, but that would
-mean adjusting a production parameter to fit a demo's expected result instead of the
-other way around — exactly the failure mode threshold-tuning exists to avoid.
+`main.py --deal chicago` · confidence **0.70** · 7 disclosures (5 info, 2 warn) ·
+**reports normally**
+
+A Logan Square two-flat with a full 8-comp set. **Through U8.5 this deal escalated at
+0.55**, and it was the demo set's one example of "escalates on accumulated warnings
+alone, with nothing actually broken" — a deliberately accepted outcome, on the principle
+that you don't move a production threshold to make a demo pass.
+
+It reports now, and the reason is a severity change made on evidence rather than a
+threshold nudge. One of its three warns was a **near-tie between forecast scenarios**.
+U8.6c found that flag was two different disclosures sharing one name: a tie between
+*framings* (which years feed every band) discards a whole reading of the data and stays
+warn-severity, but a tie between *scenario pairings* — which is what fired here —
+changes nothing a reader sees, because both tied pairings appear in the scenario table
+anyway and each scenario's label comes from its projected outcome, not its rank. It was
+also being measured by a scorer whose repeat runs vary by more than the tie threshold
+itself (see OQ-17). Charging 0.15 of confidence for it was pricing the model's own
+noise as doubt about the deal, so the pairing variant is now info-severity.
+
+**Worth stating plainly, because it is a real cost:** the demo set no longer has a
+"escalates purely on accumulated warns" case. That property is now carried by the eval
+harness's engineered fixtures instead.
 
 ### Staten Island / New York — the real-data degradation case
 
-`main.py --deal staten-island` · confidence **0.00** · 9 disclosures (2 info, 6 warn,
+`main.py --deal staten-island` · confidence **0.00** · 10 disclosures (3 info, 6 warn,
 1 critical) · **escalates to human review**
 
 This is the one deal grounded in a real, *measured* market gap rather than a
@@ -148,28 +175,28 @@ rent-error disclosure never gets a moment to matter on its own. To show it firin
 independently, a second fixture (`ny-bedstuy-triplex`, an eval-only case, not a
 `--deal` key) was added in `eval/cases.py` at a real, Census-geocoded Bed-Stuy address
 that *does* return 8 comps — specifically so the elevated-market-error flag can be
-observed on a deal that isn't already escalating for an unrelated reason. (That fixture
-still escalates — the floor arithmetic below explains why, as built, no New York deal
-can report — but the flag is visible as its own line rather than lost under a zero-comp
-collapse.)
+observed on a deal that isn't already escalating for an unrelated reason. (It escalates
+too, at 0.55, but for a visible and different reason: Brooklyn's corpus listings nearly
+all share one placeholder coordinate, so it pays a spatial-concentration warn on top of
+New York's two market-level ones. See the floor arithmetic below.)
 
-**One more gap — and its cause was misdiagnosed until Aug 29, 2026:** unlike every
-other deal here, Staten Island's asking price has no market anchor and its forecast
-covers only the rent side. This document (and the report's own disclosure text) used to
-attribute that to Redfin — "Redfin's sale-price extract doesn't cover the New York
-metro" — and a direct check of the data found that to be false: the raw extract carries
-a "New York, NY metro area" series with 102 fully-populated months at 700–950
-multi-family sales per month. What actually excludes New York is the build's own load
-filter (`tools/redfin_data.py`'s `TARGET_METROS`), written when the plan scoped the
-price series to the three inference metros — before New York entered the demo as the
-sparse-comps case, and never revisited after. Whether to widen that scope is an open
-decision; until it is taken, "no price series for New York" is a fact about this build's
-scoping, not about Redfin's coverage. That distinction matters for the same reason it
-did when U8.2b fixed the FMR anchor label: "the source publishes nothing" and "this
-system doesn't look" read identically in a report and are different facts. No comps, no
-appreciation series, and no price benchmark: this deal remains the one place the demo
-shows what happens when nothing is available to anchor to — with the middle gap now
-correctly attributed to the build rather than to the source.
+**A third gap used to be listed here and turned out not to exist — the correction is
+kept rather than quietly deleted, because believing it shaped this deal's design.**
+Staten Island was described as having no price anchor at all, on the stated grounds that
+"Redfin's sale-price extract doesn't cover the New York metro." Checked directly against
+the file on Aug 29, 2026, that is false: the extract carries a New York series with 102
+fully-populated months at 700–950 multi-family sales each. What excluded it was a filter
+in this build's own loader, scoped to three metros before New York was ever a demo case
+and never revisited (fixed in U8.4c). The listing's committed $875,000 asking price was
+set without a benchmark *because of* that belief; it now measures about 11% below the
+metro's multi-family median (~$981K), a plausible Staten Island discount, so the figure
+stands as committed and the report benchmarks it like any other deal.
+
+The distinction matters for the same reason it did when U8.2b fixed the FMR anchor
+label: **"the source publishes nothing" and "this system never looked" read identically
+in a report and are completely different facts.** What remains genuinely missing here is
+the comp set — zero comparables, from a real and measured thinness — which is the gap
+this deal exists to show.
 
 **Why this matters for the demo as a whole:** every other case here (and every
 engineered case in the U8 eval harness) proves the degradation mechanism fires when a
@@ -178,11 +205,16 @@ genuinely under-covered by the data — reality, not the author, supplies the ga
 `history/decision_log.md` ("why the eval harness is protected from the cut list") for
 why this distinction is treated as important enough that U8 is never cut from schedule.
 
-#### Why *every* New York deal escalates — not just this one
+#### What New York costs *every* deal, before its own comps are counted
 
-Measured during U8.6 (Aug 29, 2026): three warn-severity disclosures fire for **any**
-New York deal, before a single comp is retrieved, because each is a property of the
-market rather than of the listing:
+Measured during U8.6 (Aug 29, 2026). The investigation started from a question worth
+repeating — *why should a rent-forecasting system struggle with the largest rental
+market in the country?* — and the answer turned out to be partly real and partly this
+project's own stale assumption. Both halves are recorded, because the second one was
+believed for weeks.
+
+**Two warn-severity disclosures fire for any New York deal**, before a single comp is
+retrieved, because each is a property of the market rather than of the listing:
 
 1. **The rent model's error is elevated market-wide.** About $1,048 mean absolute error
    in New York against ~$524 overall — 2.0x, past the 1.5x disclosure threshold. The
@@ -190,33 +222,37 @@ market rather than of the listing:
    here.
 2. **The rent anchor is county-wide in all five boroughs.** HUD publishes no ZIP-level
    Fair Market Rent schedule for any New York county (U8.2b), and a county-wide figure
-   is at its coarsest exactly here — Kings County prices Williamsburg and
-   Brownsville/East New York with a single number.
-3. **No price side.** As built, the system has no sale-price appreciation series or
-   benchmark for New York (see the scoping finding above), so every New York forecast
-   covers only the rent half of the deal.
+   is at its coarsest exactly here: Kings County prices Williamsburg and
+   Brownsville/East New York with one number, and those are not one market.
 
-Three warns cost 0.45 of confidence (0.15 each), landing every New York deal at 0.55 —
-below the 0.60 threshold — **before its comps enter the picture.** Comp quality then
-decides only how far below that floor a deal lands, and it varies enormously
-sub-metro, which is a genuine property of the corpus rather than an engineered one:
-Brooklyn's 89 corpus listings collapse onto essentially one coordinate (87 of 89 share
-a single placeholder point), while Manhattan's 161 spread across 60 distinct
-coordinates, and Staten Island holds 6 listings at 1 coordinate. Staten Island's
-zero-comp escalation is the extreme end of that spread, not the cause of the pattern.
+**A third disclosure used to fire and no longer does, because it was never true.** Every
+New York report carried "no price appreciation series" — and this document, and the
+report text itself, attributed that to Redfin not covering the metro. Checked directly
+on Aug 29, 2026: the extract carries a full New York series, 102 months at 700–950
+multi-family sales each. The gap was a filter in this build's own code, scoped to three
+metros before New York was ever a demo case and never revisited (U8.4c). It is fixed,
+New York deals now get a price forecast and a sale-price benchmark like any other
+market, and the standing cost is two warns rather than three.
 
-**Held as policy rather than tuned away (architect's decision, Aug 29, 2026).** The
-floor could be removed by lowering the per-warn penalty or the threshold — both sit
-inside ranges the eval batch measurably cannot distinguish from the shipped values —
-but each of the three disclosures is a serious, independent limitation, and it is their
-*combination* that makes a human look warranted. This is the same principle as
-Chicago's 0.55 above: production parameters are not adjusted to make a demo read
-better. Most people would expect a rent-forecasting system to handle New York easily;
-that it escalates every New York deal, and can say precisely why in three sentences, is
-the demo's clearest showcase of Transparent Degradation doing its job. (If the
-price-series scoping decision above is later taken, the third warn stops firing and a
-well-sited New York deal could clear the bar honestly — by closing a real gap rather
-than lowering the bar.)
+**So the floor is 0.70, which reports.** Two market-level warns cost 0.30, leaving a New
+York deal at the reporting threshold before anything about the property is considered —
+where a third disclosure sends it to a human. Comp quality usually supplies that third,
+and it varies enormously sub-metro, which is a genuine property of the corpus rather
+than something engineered: Brooklyn's 89 corpus listings collapse onto essentially one
+coordinate (87 of 89 share a single placeholder point), Staten Island holds 6 listings
+at 1 coordinate, while Manhattan's 161 spread across 60 distinct coordinates. That is
+why the Bedford-Stuyvesant eval fixture escalates at 0.55 on a *spatial concentration*
+warn even with 8 comps, and why Staten Island escalates at 0.00 on no comps at all.
+
+**The thresholds were held rather than tuned (architect's decision, Aug 29, 2026).** The
+floor could be lifted by lowering the per-warn penalty or the threshold — both sit
+inside ranges the eval batch measurably cannot distinguish from the shipped values — but
+each of these disclosures is a serious, independent limitation, and it is their
+*combination* that makes a human's look warranted. Production parameters are not moved
+to make a demo read better. What did move was a wrong fact about the data. That is the
+distinction this whole section is here to show: **the right response to "New York looks
+bad" was to check whether the system's reasons were true, not to adjust the bar until
+the complaint went away** — and one of the three reasons turned out not to be.
 
 ### No Geography — nowhere to anchor to
 
@@ -234,7 +270,7 @@ checked against.
 
 ### Overpriced — exercising the price-benchmark disclosure
 
-`main.py --deal overpriced` · confidence **0.70** · 4 disclosures (2 info, 2 warn) ·
+`main.py --deal overpriced` · confidence **0.70** · 5 disclosures (3 info, 2 warn) ·
 **reports normally**
 
 Identical in almost every respect to the Los Angeles deal — same market, same unit mix,
@@ -248,8 +284,8 @@ fixture built to make that one disclosure show something.
 
 ### Coordinate Conflict — supplied coordinates disagree with the address
 
-`main.py --deal coord-conflict` · confidence **0.05** · 5 disclosures (1 info, 2 warn,
-2 critical) · **escalates to human review**
+`main.py --deal coord-conflict` · confidence **0.45** · 6 disclosures (3 info, 2 warn,
+1 critical) · **escalates to human review**
 
 The same Echo Park listing as the Los Angeles deal, but with coordinates supplied
 directly that actually describe a property in Santa Monica, ~14 miles away. This
@@ -260,8 +296,8 @@ its own, since each only sees one half of the conflict.
 
 ### The ablation: isolating the critical-flag escalation rule
 
-`main.py --deal chicago --no-retrieval` · confidence **0.60** (exactly) · 6 disclosures
-(4 info, 1 warn, 1 critical) · **escalates to human review**
+`main.py --deal chicago --no-retrieval` · confidence **0.60** (exactly) · 8 disclosures
+(6 info, 1 warn, 1 critical) · **escalates to human review**
 
 Not a seventh listing — the Chicago deal run with retrieval switched off, which is the
 U4 ablation demonstrating what the system does without its comps step at all. It's

@@ -38,6 +38,7 @@ one is derived from the code and is the one to trust.
 | **Kaggle rent corpus** | Dec 7 2018 – Dec 26 2019, static | Street address (**8% of rows**), else city | Latitude/longitude per row (city-area placeholder for 92%) | Rent-model training · comp index |
 | **HUD FMR API** | Live, by federal fiscal year, **FY2017–2026 history** | **ZIP** (SAFMR counties only) | **ZIP** where published, county elsewhere | Training target denominator · inference anchor · comp cross-check · demo calibration · **rent-growth series (U6)** |
 | **Redfin sale medians** | Jan 2018 – Jun 2026, monthly | Metro (this extract); ZIP extract exists unused | Metro | Market benchmark · **price** appreciation (U6) · demo calibration |
+| **Zillow ZORI** | 2015-01 – present, monthly | **ZIP** (8,543 nationally) | **ZIP** | Rent-drift correction at prediction time (U8.4b) · the independent rent check (#16, U8.0) |
 | **Census Geocoder** | Live | Parcel / street address | Parcel, with city-centroid fallback | Subject-property coordinates |
 | **Census county boundaries** | TIGER/Line 2023 | County polygon | County | Coordinate → county FIPS |
 | **Census ZCTA boundaries** | Cartographic 2020 | ZCTA polygon (~33,800) | ZCTA | Coordinate → ZIP, for ZIP-level FMR |
@@ -52,6 +53,7 @@ One gap remains open: Redfin.
 | Source | Gap | Status |
 | --- | --- | --- |
 | HUD FMR | County used where ZIP published | ✅ **Closed Aug 22, 2026** — see below |
+| Zillow ZORI | Covers 7 of 10 fixture ZIPs; misses thin or atypical ones (a campus ZIP, a far-borough ZIP), and some series begin after the corpus vintage | 🟨 **Disclosed, not closed.** Where it does not reach, the rent-drift correction cannot be computed and `rent_drift_correction_unavailable` says so at warn severity rather than shipping an uncorrected figure silently |
 | Redfin | Metro used; a ZIP extract sits unused on disk | 🟨 **Not a defect.** §2's metro choice is correct and settled for the *appreciation series* — measured, the ZIP extract has a median of **2 sales per period** nationally, and a YoY growth rate off 2 sales is noise. The only open question is the far narrower one of whether the *market benchmark* (a level, not a growth rate) could be ZIP-level where volume allows: 90026 / 60647 / 44109 carry 15 / 42 / 35 sales per period. A possible refinement to a figure already labelled "not this property's value", not a gap |
 
 ---
@@ -190,6 +192,16 @@ Zillow ZORI is the independent check (decision #16).
 > Reproduce with `scripts/fmr_history_evidence.py`. The panel is committed at
 > `src/tools/data/fmr_cohort_panel.json`; it is ten large coastal/midwest areas, not a
 > national sample, so the direction is trustworthy and the baseline level is not.
+>
+> **Attributed at U8.0 (Aug 28, 2026), by the ZORI pull this note said was what could do
+> it.** Market rent rose **+33.5%** since the corpus vintage while the FMR schedule rose
+> **+51.9%** — so the administrative series outran the market it prices by 18.5 points,
+> which is the attribution this screen deliberately declined to make from FMR alone. The
+> consequence is not confined to the screen: the rent model learns a ratio against the
+> vintage schedule and multiplies it by today's, so **every uncorrected estimate read
+> high**. U8.4b corrects it per-ZIP at prediction time (`tools/rent_drift.py`) and
+> discloses the factor; measured corrections run 0.744 (Los Angeles 90026) to 0.934
+> (Bedford-Stuyvesant 11216).
 
 ---
 
@@ -200,12 +212,22 @@ Zillow ZORI is the independent check (decision #16).
 
 | | |
 | --- | --- |
-| `REGION TYPE` | **Metro only** — 943 metros nationally, filtered to 3 |
+| `REGION TYPE` | **Metro only** — 943 metros nationally, filtered to 4 |
 | `PROPERTY TYPE` | `Multi-Family (2-4 Units)` only |
 | `FREQUENCY` | Monthly |
 | Range | Jan 2018 – Jun 2026 (102 periods) |
-| Rows after filtering | **306** (3 metros × 102 periods) |
+| Rows after filtering | **408** (4 metros × 102 periods) |
 | Columns used | `MEDIAN SALE PRICE NSA ($)`, `HOMES SOLD` |
+
+**New York was absent from this filter until Aug 29, 2026, and the absence was reported
+downstream as a fact about Redfin (U8.4c).** The mapping was written when §2 scoped the
+price series to the inference trio, before New York was indexed as the sparse-comps
+case, and it was never revisited — so `benchmark_unavailable_reason` said "Redfin's
+extract does not cover this city" about a metro the extract covers with **102
+fully-populated months at 700–950 sales each**. The membership now lives in
+`config.REDFIN_TARGET_METROS`, is asserted equal to `INDEXED_MARKETS`' own label set, and
+`load_redfin` raises if a configured region is missing from the file rather than
+returning an empty frame that reads downstream as absent coverage.
 
 **It is pre-aggregated. There are zero individual sales in it** — one median per
 metro-month, carrying no square footage, unit count, or condition. That is why decision
@@ -376,14 +398,17 @@ interchangeable, and conflating them is the most common way to misread a row cou
 
 | Scope | Count | Defined at | Question it answers |
 | --- | --- | --- | --- |
-| `INFERENCE_METROS` | 3 | `config.py` | Which markets have a Redfin appreciation series? |
+| `INFERENCE_METROS` | 3 | `config.py` | §2's original inference trio (Chicago / LA / Cleveland) |
+| `REDFIN_TARGET_METROS` | 4 | `config.py` | Which markets have a Redfin appreciation series and benchmark? |
 | `TRAINING_METROS` | 8 (6 states, 14 city patterns) | `config.py` | Which listings does the regression learn from? |
 | `INDEXED_MARKETS` | 4 | `config.py` | Which listings can be retrieved as comps? |
 
 `INDEXED_MARKETS` is the trio **plus New York**, indexed deliberately as the sparse-comps
-case rather than excluded. That is why Staten Island returns comps and a rent estimate but
-**no market benchmark** — it is in the comp index and the training set, and outside
-Redfin's coverage.
+case rather than excluded. Until Aug 29, 2026 this section said that is "why Staten Island
+returns comps and a rent estimate but **no market benchmark** — outside Redfin's
+coverage." That was wrong, and the row above records the correction: New York is inside
+Redfin's coverage and was outside *this build's filter*. Staten Island now gets a
+benchmark and a price forecast; what it still lacks is comps, which is the real gap.
 
 Training is a superset of inference by design: the model predicts a *ratio*, so it
 benefits from markets it will never price, while comp retrieval needs density in the

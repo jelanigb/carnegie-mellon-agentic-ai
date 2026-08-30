@@ -27,6 +27,20 @@ independent of the score (U2 finding 1) — that guarantee is deliberately separ
 weights *because* the weights were always going to move. What U8 should measure first is
 recorded as `TODO(U8)` at `critic.confidence_from_flags`.
 
+**One sub-question added Aug 30, 2026, and one closed by argument rather than by
+measurement.** *Added:* `fmr_anchor_county_level` is a **cause** of
+`rent_estimate_market_error_elevated` — county-level anchoring is part of why New York's
+holdout error is double — so the score charges 0.15 for the cause and 0.15 again for the
+effect. That is the double-counting `confidence_from_flags`'s own de-duplication rule
+exists to prevent, one level up. **Measure at U8.6** whether collapsing that causal pair
+moves any verdict; the other market-scoped flags are independent axes (drift is a bias;
+spatial concentration is about the comp check rather than the estimate) and are not part
+of this question. *Closed:* whether market-scoped flags should be scored separately from
+deal-scoped ones — **no.** They degrade this deal's own numbers, so scoring them apart
+would let an unreliable estimate report as confident. The market/deal split is worth
+having as a **disclosure** structure instead; full reasoning and the rejected two-score
+design in [`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.6d.
+
 ### OQ-15 · U8, cut list 2a — pass-scoped flags
 `DealState.flags` is append-only, so nothing separates *raised this pass* from *ever
 raised*, and every Critic interaction check reads the accumulated list as current truth. A
@@ -152,6 +166,16 @@ rent rose +33.5% while the FMR schedule rose +51.9%.** The denominator outran th
 18.5 points. So **the shipped rent model over-predicts**, by roughly 15–35% depending on
 subset. This also supplies the attribution `config.py`'s cohort-shift screen explicitly
 deferred as undeterminable from FMR alone.
+
+**BUILT Aug 29, 2026 (U8.4b) — the correction is now applied and disclosed.**
+`tools/rent_drift.py` computes the subject ZIP's own
+`(ZORI today / ZORI vintage) × (FMR vintage / FMR today)` and multiplies both the
+estimate *and* the comp-implied figures by it (both carry the same drift, so the factor
+cancels out of the divergence check). Measured factors 0.744 (LA 90026) to 0.934
+(Bed-Stuy 11216) — a wider spread than U8.0's ZIP-anchored-only measurement, because the
+county-anchored metros drifted hardest. Two new flag kinds disclose the correction and
+its absence; ZORI reaches 7 of 10 fixture ZIPs, and where it does not, the WARN says the
+estimate likely reads high rather than shipping the bias silently.
 
 **Closes as measured, but opens two follow-ons rather than none:** U8.4b applies a per-ZCTA
 correction at prediction time, and §6 cut-list item 6 carries re-anchoring the model on ZORI
@@ -282,6 +306,26 @@ architect's explicit call to document and defer. `agents/scenario_forecast.py`,
 ---
 
 ## Evaluation & demo
+
+### OQ-18 · U8 — a replay row missed its recordings once, and the cause is not established
+**Found Aug 29, 2026 during U8.4c's batch re-derivation.** Three replay-tier cases
+(`la-unpriced-triplex`, `la-duplex-near-usc`, `chicago-unmatched-street`) raised
+`CacheMiss` in one full-batch run, then passed in every run since — including two later
+full batches with identical ordering. **The cause was searched for and not found**, which
+is why this is recorded rather than closed: live-tier cases were ruled out by running each
+one ahead of the failing case (all passed), golden-tier cases likewise (all passed), the
+Census geocoder was ruled out by 20 rapid calls with 0 failures and by 6 repeat calls per
+address returning byte-identical coordinates and ZCTAs.
+
+**Why it matters more than a flake.** A `CacheMiss` means a *prompt* changed, and U8.4b
+made every rent estimate depend on the subject's ZIP (for the drift factor), while the
+scoring prompt embeds the rent estimate. So the replay tier's reproducibility now rides on
+ZIP resolution being stable — it was measured stable, but the coupling is new and is the
+mechanism by which a silent upstream change becomes a batch-wide replay failure. **Closes
+when** either the cause is identified, or the scoring prompt stops embedding a
+freshly-computed float (e.g. rounding the rent figure the prompt quotes, which would make
+replay robust to sub-dollar drift without changing what the evaluator is told).
+`eval/runner.py`, `agents/scenario_forecast._context_block`.
 
 ### OQ-12 · U8 — two items, and they separated at U8 planning
 `config.py:309` wants a leave-one-metro-out run as evaluation rather than the current
