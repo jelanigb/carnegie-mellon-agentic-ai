@@ -66,6 +66,83 @@ changes only the headline number — adoption is a live decision on accuracy gro
 alone. If either condition breaks, the probe has found that form changes system
 *behavior*, and the adoption decision carries that evidence.
 
+---
+
+**Built Aug 30, 2026** — `scripts/model_form_probe.py`, 5-fold CV over the 5,686-row
+frame, no model calls, nothing written to disk. **Condition A holds and condition B
+breaks, so the triage rule returns the second branch: model form changes what the system
+discloses, not only what it scores.**
+
+**1. Accuracy.** Cross-validated, so this is the like-for-like comparison; the shipped
+artifact's $524.03 came from a single 20% split and is reference, not baseline.
+
+| Candidate | CV MAE $ | fold sd | MAE ratio | R² | train MAE $ | **train/holdout gap** |
+| --- | --- | --- | --- | --- | --- | --- |
+| LinearRegression | 513.67 | 13.51 | 0.4000 | 0.263 | 513.35 | **0.32** |
+| RandomForest | **428.83** | 8.55 | 0.3160 | 0.454 | 288.42 | **140.41** |
+| GradientBoosting | 450.71 | 7.29 | 0.3472 | 0.427 | 432.37 | **18.34** |
+
+**The 17% figure survives proper validation** — RandomForest is 16.5% better than the
+shipped form under CV, against the 17% the single-split probe measured. That was the open
+question about the number and it is now closed.
+
+**The gap column is the finding the headline hides, and it is why the probe reports it.**
+`config.py`'s deferral named added capacity's overfitting risk as one of its two reasons.
+RandomForest's held-out win is real, and it is bought with a $140 train-vs-holdout gap
+against the shipped model's $0.32 — it memorizes heavily. GradientBoosting takes 12.2% of
+the error for a $18 gap. **On variance, GBM is the better-behaved candidate; on error, RF
+wins.** That trade is the architect's call and the probe does not make it.
+
+**2. Per-metro, and the New York ratio.** Pooled out-of-fold, so every row is scored once
+by a model that never saw it — which is what makes New York's n=264 slice readable at all.
+
+| Candidate | Chicago | Los Angeles | Cleveland | **New York** |
+| --- | --- | --- | --- | --- |
+| LinearRegression | 483 (0.94x) | 512 (1.00x) | 455 (0.89x) | 1,050 (**2.04x**) |
+| RandomForest | 454 (1.06x) | 480 (1.12x) | 222 (0.52x) | 986 (**2.30x**) |
+| GradientBoosting | 454 (1.01x) | 450 (1.00x) | 366 (0.81x) | 982 (**2.18x**) |
+
+**Condition A holds: New York stays above 1.5x under every candidate.** But the direction
+is worth stating because it is counter-intuitive and it reaches the reader: both trees
+improve New York *absolutely* ($1,050 → $986 / $982) and make it *relatively worse*,
+because the overall figure improves faster than New York does. `RENT_ESTIMATE_MARKET_ERROR_ELEVATED`'s
+message quotes that multiple, so adopting a tree makes every New York report say the
+estimate is 2.2–2.3x the headline error rather than 2.0x. No model form on the table
+retires this disclosure; the model is not the reason New York is hard.
+
+**3. Per-fixture behavior — condition B breaks, on two fixtures, and both are load-bearing
+cases rather than incidental ones.**
+
+- **`la-oversized-loft` stops being refused.** LinearRegression predicts a ratio outside
+  `RENT_MODEL_MIN/MAX_RATIO` and the agent refuses the estimate — which is the entire
+  point of the fixture. RandomForest predicts 3.00 and GradientBoosting 2.20, both inside
+  the band, so both **produce an estimate instead**, and the flag set swaps
+  `rent_estimate_unavailable` (critical) for `rent_anchored_to_fmr` +
+  `rent_diverges_from_comps` + `rent_drift_correction_applied`. It is the **only case that
+  targets** `RENT_ESTIMATE_UNAVAILABLE`. Whether the census still covers that kind through
+  another case's cascade (the `extraction_unavailable` row raises four criticals) is a
+  batch question this probe does not answer and **U11.4's re-derivation must check**.
+- **`chicago-uptown-duplex` stops diverging under RandomForest** — +46.6% → +26.2%,
+  inside the ±30% line, so `rent_diverges_from_comps` does not fire. This is the case
+  U8.2 built to close OQ-12's second half, on the strength that *nothing about the
+  property is engineered*. GradientBoosting keeps it at +33.2% — 3.2 points of margin,
+  which is thin. The **kind** stays covered either way (three other fixtures still
+  diverge: −36.1% LA, +75.4% Chicago oversized, −48.1% Cleveland), so this is a loss of
+  the specific case's argument rather than of coverage.
+
+**Estimates move by more than the accuracy table suggests, and not in one direction.**
+Ordinary 2bd/950sqft subjects come down under RF (−$386 LA, −$404 Chicago); the
+five-bedroom goes *up* $1,086. `chicago-uptown-oversized` moves −$1,151 under RF and
++$498 under GBM — **the two trees disagree by $1,650 on the same subject**, which is a
+sharper statement about extrapolation beyond the corpus's ordinary footprint than either
+one's MAE is.
+
+**What this hands the architect.** Adoption is not the accuracy-only decision the triage
+rule's first branch would have made it. Any adoption re-records the batch (the scoring
+prompt embeds the rent estimate), invalidates two engineered cases' arguments, and moves
+New York's disclosed multiple. Reproduce with
+`.venv/bin/python scripts/model_form_probe.py`; `--no-fixtures` runs reports 1–2 alone.
+
 ### U11.2 — Feature measurement
 
 CV-ablation pricing of corpus columns the model does not use: amenity/pet fields,

@@ -54,6 +54,12 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Aug 30, 2026 — U11.1: the model-form probe
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Aug 30, 2026 | U11 | **Model-form probe.** `scripts/model_form_probe.py` — LinearRegression vs RandomForest vs GradientBoosting on the identical feature set and FMR-ratio target under k-fold cross-validation, which is the proper-validation condition §6 cut-list 1a attached to reopening model form. Reports cross-validated MAE with fold spread and each candidate's train-vs-holdout gap, per-metro error over the same `INDEXED_MARKETS` grouping the shipped figures use, and every eval fixture run through the **real Valuation agent** with each candidate swapped in — so a flag-set change reported here is one the pipeline would produce. Writes nothing: the bundle is patched at `rent_model.load`, never onto `config.RENT_MODEL_PATH` | 6.1, 7.1 |
+
 ## Aug 29, 2026 — U8.4c / U8.6c: a stale assumption removed, and a flag split in two
 
 | Date added | Unit | Work done | Related checkpoint |
