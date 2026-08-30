@@ -98,10 +98,14 @@ def _terms(**kwargs) -> DealTerms:
 # --------------------------------------------------------------------------
 # Los Angeles — 1200 S Hoover St, 90006 (Pico-Union). Los Angeles County, 06037.
 # Census geocode Aug 28, 2026: 34.049278, -118.284093.
-# HUD publishes no Small Area FMR for LA County at the vintage this model trained on, so
-# every fixture here also carries the county-level anchoring disclosure. That is a
-# property of the county, not of the fixture, and it is why the control below scores 0.85
-# rather than 1.00.
+#
+# **This block used to say every LA fixture carries a county-level anchoring warn, and
+# that stopped being true on Aug 30, 2026 (U11.3).** HUD published no Small Area FMR for
+# LA County at the corpus's vintage, so under the old anchor every subject here was
+# county-anchored unconditionally and the control scored 0.85 rather than 1.00. The
+# anchor is now Zillow's market index at the subject's own ZIP, which covers 90006 — so
+# the warn is gone and the control scores clean. Left as a note rather than deleted,
+# because a stale *baseline* is how a batch quietly stops measuring what it claims to.
 # --------------------------------------------------------------------------
 
 _LA = dict(
@@ -161,9 +165,11 @@ LA_THREE_BEDROOM = _add(GoldenFixture(
 
 
 # --------------------------------------------------------------------------
-# Chicago — Cook County, 17031. The one demo-adjacent county with Small Area FMRs, so
-# these fixtures anchor at ZIP resolution and carry one fewer warn than their LA
-# counterparts before anything else is considered.
+# Chicago — Cook County, 17031. Was "the one demo-adjacent county with Small Area FMRs,
+# so these fixtures anchor at ZIP resolution and carry one fewer warn than their LA
+# counterparts" — true until U11.3, and no longer a distinction: the market-index anchor
+# resolves at ZIP tier in all four markets. What Chicago still gives the batch is the
+# market where the re-anchoring moved the *estimate* most (metro MAE $454 → $343).
 # --------------------------------------------------------------------------
 
 _CHI_UPTOWN = dict(
@@ -215,6 +221,31 @@ CHI_UPTOWN_OVERSIZED = _add(GoldenFixture(
                  square_footage=1_600.0, unit_rents=[2_450.0, 2_550.0]),
 ))
 
+CHI_UPTOWN_BAND_UNDER = _add(GoldenFixture(
+    key="chicago-uptown-band-under",
+    address=_CHI_UPTOWN["full_address"],
+    engineered=(
+        "Floor area, and *only* floor area, chosen so the comp set comes back with "
+        "exactly two of eight comparables outside the size band. Its sibling below is "
+        "the same building 200 sq ft larger, which makes it three of eight. Nothing "
+        "else about either property differs."
+    ),
+    terms=_terms(**_CHI_UPTOWN, price=560_000, unit_count=2, bedrooms=2, bathrooms=1.0,
+                 square_footage=1_100.0, unit_rents=[2_050.0, 2_100.0]),
+))
+
+CHI_UPTOWN_BAND_OVER = _add(GoldenFixture(
+    key="chicago-uptown-band-over",
+    address=_CHI_UPTOWN["full_address"],
+    engineered=(
+        "The straddle partner of the fixture above: 1,300 sq ft instead of 1,100, which "
+        "takes the out-of-band comp count from two to three and trips the drift "
+        "disclosure. 18% more floor area is the whole difference."
+    ),
+    terms=_terms(**_CHI_UPTOWN, price=590_000, unit_count=2, bedrooms=2, bathrooms=1.0,
+                 square_footage=1_300.0, unit_rents=[2_250.0, 2_300.0]),
+))
+
 CHI_FIVE_BEDROOM = _add(GoldenFixture(
     key="chicago-five-bedroom",
     address=_CHI_LOGAN["full_address"],
@@ -257,6 +288,31 @@ CLE_ORDINARY = _add(GoldenFixture(
                  square_footage=900.0, unit_rents=[1_050.0, 1_075.0, 1_100.0]),
 ))
 
+CLE_DIVERGENCE_OVER = _add(GoldenFixture(
+    key="cleveland-divergence-over",
+    address=_CLE["full_address"],
+    engineered=(
+        "Floor area, and *only* floor area, sited at 1,000 sq ft so the model comes in "
+        "30.8% below the comp median — eight tenths of a point past the line. Its "
+        "sibling below is the same building 50 sq ft larger and lands 28.9% below, "
+        "which clears. The pair exists to measure how hard that line is to cross."
+    ),
+    terms=_terms(**_CLE, price=235_000, unit_count=3, bedrooms=2, bathrooms=1.0,
+                 square_footage=1_000.0, unit_rents=[1_100.0, 1_125.0, 1_150.0]),
+))
+
+CLE_DIVERGENCE_UNDER = _add(GoldenFixture(
+    key="cleveland-divergence-under",
+    address=_CLE["full_address"],
+    engineered=(
+        "The straddle partner of the fixture above, 5% larger. Everything the comp "
+        "search sees is unchanged — same coordinate, same eight comps, same zero out of "
+        "band — so the divergence flag is the only thing that differs between them."
+    ),
+    terms=_terms(**_CLE, price=240_000, unit_count=3, bedrooms=2, bathrooms=1.0,
+                 square_footage=1_050.0, unit_rents=[1_150.0, 1_175.0, 1_200.0]),
+))
+
 
 # --------------------------------------------------------------------------
 # New York (Brooklyn) — Kings County, 36047. Added U8.4, for a different reason than the
@@ -292,4 +348,64 @@ NY_BEDSTUY_ORDINARY = _add(GoldenFixture(
     ),
     terms=_terms(**_NY_BEDSTUY, price=1_050_000, unit_count=3, bedrooms=2, bathrooms=1.0,
                  square_footage=900.0, unit_rents=[2_500.0, 2_600.0, 2_650.0]),
+))
+
+
+# --------------------------------------------------------------------------
+# New York, the other two sitings (U8.6b's straddle pairs). Both are the same borough
+# system and the same market-level disclosures as Bed-Stuy above; what differs is how the
+# corpus is distributed under them, which is the quantity two of U8.6b's thresholds are
+# compared against. **Geography is the engineering here, so no property attribute had to
+# be bent** — which is what makes these the cleanest straddles in the batch.
+# Census geocodes Aug 30, 2026.
+# --------------------------------------------------------------------------
+
+_NY_MANHATTAN = dict(
+    full_address="530 W 45th St, New York, NY 10036",
+    street_address="530 W 45th St",
+    city="New York",
+    state="NY",
+    zip_code="10036",
+    latitude=40.762049,
+    longitude=-73.995412,
+)
+
+_NY_WAKEFIELD = dict(
+    full_address="1500 E 233rd St, Bronx, NY 10466",
+    street_address="1500 E 233rd St",
+    city="Bronx",
+    state="NY",
+    zip_code="10466",
+    latitude=40.889188,
+    longitude=-73.832145,
+)
+
+NY_MANHATTAN_DISPERSED = _add(GoldenFixture(
+    key="ny-manhattan-dispersed",
+    address=_NY_MANHATTAN["full_address"],
+    engineered=(
+        "Nothing about the property, and nothing about the market either — the "
+        "engineering is the *siting*. Bed-Stuy above returns eight comps standing on a "
+        "single placeholder coordinate; Hell's Kitchen returns eight standing on five. "
+        "Same city, same borough system, same elevated-market-error disclosure, opposite "
+        "sides of the spatial-concentration line."
+    ),
+    terms=_terms(**_NY_MANHATTAN, price=2_400_000, unit_count=3, bedrooms=2,
+                 bathrooms=1.0, square_footage=900.0,
+                 unit_rents=[3_400.0, 3_500.0, 3_600.0]),
+))
+
+NY_WAKEFIELD_SEVEN_COMPS = _add(GoldenFixture(
+    key="ny-wakefield-seven-comps",
+    address=_NY_WAKEFIELD["full_address"],
+    engineered=(
+        "Again the siting, not the property: the northern edge of the Bronx is the one "
+        "place in four indexed markets where retrieval exhausts its radius expansions "
+        "and still returns seven comps instead of eight. **This is a straddle that does "
+        "not straddle cleanly, and it is kept for that finding** — reaching seven means "
+        "the relaxation ladder ran to the end first, so the case necessarily carries the "
+        "radius and match-criteria concessions too."
+    ),
+    terms=_terms(**_NY_WAKEFIELD, price=850_000, unit_count=3, bedrooms=2, bathrooms=1.0,
+                 square_footage=900.0, unit_rents=[2_200.0, 2_250.0, 2_300.0]),
 ))

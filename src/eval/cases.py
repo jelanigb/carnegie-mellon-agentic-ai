@@ -451,19 +451,141 @@ ENGINEERED_CASES: list[EvalCase] = [
         tier=Tier.GOLDEN,
         verdict=Verdict.REPORTS,
         verdict_source=VerdictSource.PREDICTED,
-        targets=(FlagKind.RENT_DIVERGES_FROM_COMPS,),
+        targets=(),
         note=(
-            "**Closes the open question about whether anything still trips the rent-comp "
-            "divergence check** — it moved from firing on two of five subjects to none "
-            "when ZIP-resolution anchoring landed, and a flag nothing can raise would "
-            "corrupt the coverage claim. Nothing about this property is engineered: an "
-            "ordinary two-bedroom duplex whose comps match it on bedrooms and floor area, "
-            "in a market whose ZIP-level Fair Market Rent is high. The disagreement is "
-            "between the model and the comps alone, which is the only form in which this "
-            "flag says anything. Predicted to report: one warn-severity disclosure sits "
-            "well above the threshold."
+            "**Built to close the open question about whether anything still trips the "
+            "rent-comp divergence check, and it stopped doing so on Aug 30, 2026 — kept, "
+            "retargeted, and the history recorded rather than the fixture re-engineered.** "
+            "Nothing about this property is engineered: an ordinary two-bedroom duplex "
+            "whose comps match it on bedrooms and floor area. It measured +46.6% "
+            "divergence under the FMR anchor and measures **−6.1%** under the market-index "
+            "anchor U11.3 adopted — a 53-point move on an unchanged listing, which is the "
+            "clearest single statement in this batch of what the anchor change did.\n\n"
+            "Re-engineering the property to make the flag fire again would have destroyed "
+            "the one thing the case was worth: that nothing about it is bent. So it "
+            "becomes the batch's **second control**, in a different market from "
+            "`la-ordinary-duplex`. The divergence kind stays covered — "
+            "`chicago-uptown-oversized` (+80.0%), `cleveland-triplex` (−36.4%) and the "
+            "`cleveland-divergence-over` straddle below all raise it — so the coverage "
+            "census is unaffected."
         ),
         terms=golden_fixtures.CHI_UPTOWN_ORDINARY.terms,
+    ),
+
+    # --- U8.6b's straddle pairs -------------------------------------------
+    #
+    # **What these are for, and why they are pairs.** U8.6's sensitivity sweep found the
+    # confidence threshold and the severity weights sit in a dead zone: the scores are
+    # quantized to multiples of the warn weight, so nothing in this batch distinguishes a
+    # threshold anywhere in (0.40, 0.70] from the shipped 0.60. The lines that actually
+    # decide verdicts are therefore the **per-flag** thresholds, which decide whether a
+    # third warn fires at all. A pair of near-identical fixtures either side of one of
+    # those lines measures how much a deal has to change to change what the report says —
+    # which is the rigidity question, asked where the answer lives.
+    #
+    # Sited with `scripts/straddle_probe.py`, which runs the real comp-retrieval and
+    # Valuation agents over a grid and reports each threshold's own input. Measured
+    # rather than guessed, and reproducible.
+    EvalCase(
+        key="chicago-uptown-band-under",
+        tier=Tier.GOLDEN,
+        verdict=Verdict.REPORTS,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(),
+        note=(
+            "The clearing side of the comp-drift line. 1,100 sq ft returns **two of "
+            "eight** comparables outside the size band — exactly the share the threshold "
+            "admits — so no drift disclosure is raised. Predicted to report: no "
+            "warn-severity flag at all."
+        ),
+        terms=golden_fixtures.CHI_UPTOWN_BAND_UNDER.terms,
+    ),
+    EvalCase(
+        key="chicago-uptown-band-over",
+        tier=Tier.GOLDEN,
+        verdict=Verdict.REPORTS,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA,),
+        note=(
+            "The firing side, and the whole difference is 200 sq ft. **Three of eight** "
+            "comparables outside the band instead of two, which crosses the line and "
+            "raises the drift disclosure. Predicted to report anyway: one warn does not "
+            "reach the escalation threshold, so this pair measures the *flag's* "
+            "brittleness rather than the verdict's."
+        ),
+        terms=golden_fixtures.CHI_UPTOWN_BAND_OVER.terms,
+    ),
+    EvalCase(
+        key="cleveland-divergence-over",
+        tier=Tier.GOLDEN,
+        verdict=Verdict.REPORTS,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.RENT_DIVERGES_FROM_COMPS,),
+        note=(
+            "The tightest straddle in the batch. At 1,000 sq ft the estimate lands "
+            "**30.8% below** the comparable median — eight tenths of a point past the "
+            "line — and the disagreement is disclosed. Its partner below is the same "
+            "building 5% larger and clears at 28.9%. Predicted to report: two "
+            "warn-severity disclosures, which the threshold admits."
+        ),
+        terms=golden_fixtures.CLE_DIVERGENCE_OVER.terms,
+    ),
+    EvalCase(
+        key="cleveland-divergence-under",
+        tier=Tier.GOLDEN,
+        verdict=Verdict.REPORTS,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.COMPS_SPATIALLY_CONCENTRATED,),
+        note=(
+            "The clearing partner, at 1,050 sq ft and **28.9% below**. Everything the "
+            "comp search sees is identical to its sibling — same coordinate, same eight "
+            "comps, none out of band — so the divergence disclosure is the single "
+            "difference between the two reports."
+        ),
+        terms=golden_fixtures.CLE_DIVERGENCE_UNDER.terms,
+    ),
+    EvalCase(
+        key="ny-manhattan-dispersed",
+        tier=Tier.GOLDEN,
+        verdict=Verdict.REPORTS,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.RENT_ESTIMATE_MARKET_ERROR_ELEVATED,),
+        note=(
+            "The clearing side of the spatial-concentration line, and **the pair that "
+            "needed no engineering at all** — `ny-bedstuy-triplex` returns eight comps on "
+            "one coordinate, this returns eight on five. Same city, same borough system, "
+            "same elevated-market-error disclosure; only the corpus's own distribution "
+            "differs.\n\n"
+            "It also re-measures New York's standing-warn floor, which U8.6 held as "
+            "policy at three and U8.4c reduced to two. Under the market-index anchor the "
+            "county-level anchoring warn is gone here too, so this deal carries **one**. "
+            "Predicted to report, and that prediction is the point: the floor U8.6 "
+            "reasoned about has moved twice since it was set."
+        ),
+        terms=golden_fixtures.NY_MANHATTAN_DISPERSED.terms,
+    ),
+    EvalCase(
+        key="ny-wakefield-seven-comps",
+        tier=Tier.GOLDEN,
+        verdict=Verdict.ESCALATES,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.SPARSE_COMPS,),
+        note=(
+            "**The straddle that does not straddle, kept because that is the finding.** "
+            "`MIN_QUALIFYING_COMPS` is 8, and the northern Bronx is the one siting in "
+            "four markets where retrieval exhausts its radius expansions and still "
+            "returns seven — a grid of 144 points across the four metros returned exactly "
+            "eight comps at 98 of them and seven at none, so this is a rare corner rather "
+            "than a dial.\n\n"
+            "It cannot be a clean pair with `ny-bedstuy-triplex` because reaching seven "
+            "*requires* running the relaxation ladder to its end: the case necessarily "
+            "carries the widened radius and the dropped match criteria as well. So the "
+            "threshold is not independently straddleable — it is the terminal state of a "
+            "loop whose earlier steps each raise their own disclosure. Predicted to "
+            "escalate on five accumulated warns, which is the honest reading of a deal "
+            "whose comp set had to be fought for."
+        ),
+        terms=golden_fixtures.NY_WAKEFIELD_SEVEN_COMPS.terms,
     ),
 
     # --- Critic interaction checks (U7.2's I1 and I3) ----------------------
