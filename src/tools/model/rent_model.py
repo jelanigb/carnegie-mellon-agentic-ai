@@ -296,6 +296,78 @@ def _zip_anchor_tables(
     return tables, basis
 
 
+def fmr_baseline(
+    frame, client: Optional[hud_fmr.HudFmrClient] = None
+) -> tuple["np.ndarray", "np.ndarray"]:
+    """The **old** FMR anchor, per row: `(rents, was_zip_resolution)`.
+
+    **This is the retired production path, kept deliberately and only for the evidence
+    scripts.** Until U11.3 the training target was `rent ÷ this`, and three committed
+    scripts — `anchor_probe.py`, `zori_evidence.py`, `metro_shortlist_ablation.py` — score
+    the current anchor *against* it. They used to read it off `build_training_frame`'s
+    `fmr` column, which no longer exists, so each of them broke the moment the anchor
+    moved and each would otherwise have grown its own copy of this reconstruction.
+
+    **One copy rather than three, and it lives here rather than in `scripts/` because the
+    ZIP back-cast it depends on (`_zip_anchor_tables`) is already here** and is now
+    likewise reachable only from evidence code. Keeping the retired anchor whole in one
+    place is what makes the comparison the architect decided on reproducible; splitting it
+    across three scripts would make "the FMR baseline" mean three slightly different
+    things within a unit of each other.
+
+    Nothing in the pipeline calls this. If a future reader is removing dead code, the
+    check is whether those three scripts still exist, not whether an agent imports it.
+
+    `frame` needs `county_fips`, `fiscal_year`, `bedrooms` and `zcta` — the columns
+    `build_training_frame` still produces. ZIP resolution is used where a schedule is
+    available for the row's own ZIP, exactly as the retired path did; `was_zip_resolution`
+    is what `anchor_probe`'s `fmr/z` candidate splits on.
+    """
+    import numpy as np
+
+    client = client or hud_fmr.HudFmrClient()
+    pairs = set(zip(frame["county_fips"], frame["fiscal_year"]))
+    county_table = _fmr_table(pairs, client)
+    zip_tables, _ = _zip_anchor_tables(pairs, client, county_table)
+
+    rents = np.full(len(frame), np.nan)
+    was_zip = np.zeros(len(frame), dtype=bool)
+    for position, (_, row) in enumerate(frame.iterrows()):
+        value, is_zip = fmr_rent(
+            zip_tables, county_table,
+            (row["county_fips"], row["fiscal_year"]),
+            row.get("zcta"), int(row["bedrooms"]),
+        )
+        if value is not None:
+            rents[position], was_zip[position] = value, is_zip
+    return rents, was_zip
+
+
+def fmr_rent(
+    zip_tables: dict, county_table: dict, key: tuple, zcta, bedrooms: int
+) -> tuple[Optional[float], bool]:
+    """One row's retired FMR anchor: `(rent, was_zip_resolution)`, ZIP preferred.
+
+    Split out of `fmr_baseline` above so `scripts/zori_evidence.py` can reprice a ZCTA at
+    the *current* fiscal year through the identical lookup. Two copies of "ZIP schedule if
+    there is one, else the county's" is how the two ends of that script's own gap
+    measurement would come to be computed differently — which is the error the script
+    exists to detect elsewhere.
+    """
+    field_name, _ = hud_fmr.bedroom_field(int(bedrooms))
+    zip_schedule = (zip_tables.get(key) or {}).get(zcta) if zcta else None
+    for source, is_zip in ((zip_schedule, True), (county_table.get(key), False)):
+        if not source:
+            continue
+        try:
+            value = float(source[field_name])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if value > 0:
+            return value, is_zip
+    return None, False
+
+
 @dataclass
 class AnchorTables:
     """Everything `anchor_for_row` reads, assembled once rather than per row.

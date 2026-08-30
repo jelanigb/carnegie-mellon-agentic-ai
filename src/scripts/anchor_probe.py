@@ -206,10 +206,16 @@ def main() -> None:
     print(f"Estimator {config.RENT_MODEL_ESTIMATOR}, {args.folds}-fold CV, "
           f"features {list(config.RENT_MODEL_FEATURES)}\n")
 
-    fmr = frame["fmr"].to_numpy(dtype=float)
+    # **Reconstructed rather than read off the frame, since Aug 30, 2026.** The training
+    # frame's `anchor` column *was* the FMR figure when this probe was written; it is now
+    # the hybrid this probe recommended, so reading it back would have the status-quo
+    # candidate silently become a copy of the winner and report a dead heat.
+    # `rent_model.fmr_baseline` is the retired anchor, kept whole in one place for exactly
+    # this comparison — see its docstring.
+    client = hud_fmr.HudFmrClient()
+    fmr, is_zip_fmr = rent_model.fmr_baseline(frame, client)
     zori_values = _zori_anchor(frame, zori.load())
-    shape = _bedroom_shape(frame, hud_fmr.HudFmrClient())
-    is_zip_fmr = frame["anchor_tier"].isin(["zip", "zip_backcast"]).to_numpy()
+    shape = _bedroom_shape(frame, client)
 
     # `fmr+` differs from `fmr` only on rows FMR cannot price — and `build_training_frame`
     # has already dropped those, so on this frame the two are the same array by

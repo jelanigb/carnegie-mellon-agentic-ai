@@ -1231,6 +1231,65 @@ and asked for fewer, larger review surfaces rather than the normal cadence. Reco
 because §8's small-commit discipline is a standing rule and this is a deliberate,
 time-boxed exception to it, not a drift.
 
+### U8.6e — What the re-record found: every objection sits behind one flag
+
+**Not planned. Found Aug 30, 2026 by re-deriving the batch after U11.3, which is what the
+re-derivation is for.** Three cases changed behavior at once and the cause is common to
+all of them.
+
+**`critic._interaction_objections` returns early unless `RENT_DIVERGES_FROM_COMPS` is in
+the current pass's flag set.** That is deliberate and the reasoning is sound as written —
+every interaction check is about *when the comp cross-check's verdict stops being
+readable*, and there is no verdict to read when the model and the comps agree. The gate
+was invisible while divergence was common. The hybrid anchor made it uncommon, and three
+things fell out of the batch together:
+
+| Case | Before | After | Why |
+| --- | --- | --- | --- |
+| `la-three-bedroom-comp-drift` | 0.55, escalates, critical objection | 0.85, **reports** | 6 of 8 comps still outside the band; divergence gone, so I1 never runs |
+| `chicago-geocoder-outage` | 2 reworks, escalates ‡ | 0 reworks, **reports** | I3 is the *only* retryable objection, and it is behind the same gate |
+| coverage census | 31 of 31 kinds raised | 28 of 30 | `rework_limit_reached` lost with the rework |
+
+**The second row is the serious one.** §3 requires every cycle to be bounded by an
+explicit counter, and `chicago-geocoder-outage` is the only case that exercises that
+bound. It did not fail loudly — it returned a clean report and a passing row, and the loss
+showed up as one line in the coverage census. **A case can stop testing what it was built
+to test while still passing**, which is the argument for the census being a published
+artifact rather than an assertion.
+
+**Fixed by re-siting, not by weakening the check.** The case's `geocoder_fallback_override`
+was built for exactly this and had drifted to the address's own geocode; it now sits at
+41.900000, -87.740000, found by sweeping a 49-point Chicago grid for a fallback that
+diverges **and raises nothing else** — 8 comps, 3 locations, ZIP tier, +56.1%, flag set of
+exactly one info and one warn. Re-recorded: 2 reworks, escalates ‡, target fires.
+
+**One correctness fix landed with it.** I3's premise had inverted. It argued that a
+centroid fallback moves the comp set while leaving the estimate untouched, *because* the
+model is location-blind below the county — and told the reader the system "produced the
+same estimate it would have for any address in this county." Under the hybrid anchor the
+fallback moves the ZIP, hence the anchor, hence the estimate. Both sides of the comparison
+now shift. The objection says the narrower true thing instead.
+
+**Two things are surfaced rather than decided, because both are the architect's.**
+
+1. **Should the divergence gate stay in front of I1?** A comp set 6 of 8 outside the band,
+   priced by a model that cannot see the difference, is arguably worth a human whether or
+   not the two happen to agree — agreement between a mis-specified estimate and a
+   mis-specified median is not reassurance. Ungating I1 would restore
+   `la-three-bedroom-comp-drift`'s escalation and change escalation behavior on real
+   deals, which is why it is not being taken quietly. **`la-three-bedroom-comp-drift`'s
+   declared verdict is left at `escalates` and left mismatching** — re-declaring it after
+   seeing the run is what `VerdictSource` exists to prevent.
+2. **The live tier is not reproducible, and it moved a verdict this time.** `coord-conflict`
+   reported at 0.70 with no critical in the batch run, and escalated at 0.60 on a critical
+   `supplied_coordinates_conflict` when re-run minutes later — the Extractor's own call
+   varies. OQ-17 recorded this as score noise; this is the first time it has been seen
+   changing an *outcome*. It also means the census's "`supplied_coordinates_conflict`
+   uncovered" line was an artifact of one draw. Whether the demo deals should be recorded
+   like the other tiers is a decision with a real cost on the other side: they are the
+   live end-to-end evidence, and recording them removes exactly the property that makes
+   them that.
+
 ### U8.6b — Straddle pairs: measuring brittleness at the per-flag thresholds
 
 **Taken Aug 29, 2026 by the architect, over a schedule-based deferral recommendation —

@@ -295,11 +295,16 @@ assert set(REDFIN_TARGET_METROS) == {
 # --------------------------------------------------------------------------
 # Rent regression (U5 — tools/model/rent_model.py)
 # --------------------------------------------------------------------------
-# The target is rent / FMR-for-that-row's-county-and-year, not rent. §2's rent-anchoring
+# The target is rent / anchor-for-that-row's-ZIP-and-month, not rent. §2's rent-anchoring
 # design in one line: a 2018-19 corpus cannot supply a 2026 dollar figure, but the
-# *ratio* of a unit's rent to its local FMR is a structural property that ages far more
-# slowly than the dollar level does. Training learns the ratio; prediction multiplies it
-# by today's FMR for the subject's own county.
+# *ratio* of a unit's rent to its local market rent is a structural property that ages far
+# more slowly than the dollar level does. Training learns the ratio; prediction multiplies
+# it by today's market rent for the subject's own ZIP.
+#
+# **The anchor was county-and-fiscal-year FMR until Aug 30, 2026 (U11.3).** It is now
+# Zillow's ZORI at the row's own ZIP and own listing month, times the HUD schedule's ratio
+# between unit sizes — market level, administrative shape. The design above is unchanged;
+# only which reference it multiplies by moved. See `RENT_ANCHOR_*` below.
 
 RENT_MODEL_PATH = DATA_DIR / "processed" / "rent_model.joblib"
 
@@ -366,8 +371,17 @@ RENT_MODEL_CV_FOLDS = 5
 # worth asking but is not the claim this build makes; §2 scopes the model to the three
 # inference metros, all of which are in the training set. Recorded because the weaker
 # split is a real limitation of the reported MAE and should be disclosed, not because it
-# is wrong for the purpose. TODO(U8): add a leave-one-metro-out run as evaluation
-# evidence if the buffer week allows; it needs no new data, only a second fit.
+# is wrong for the purpose.
+#
+# **Superseded twice, and both halves are now settled.** U11.4 replaced the single split
+# with `RENT_MODEL_CV_FOLDS`-fold cross-validation plus a full-data refit, so this
+# fraction no longer governs the shipped artifact — it survives only as the
+# `train_test_split` some evidence scripts still use. And the leave-one-metro-out run this
+# TODO asked for was **cut to §6 cut-list 1a on Aug 30, 2026** by the architect, with the
+# transfer question left open and disclosed rather than answered (OQ-12). A k-fold holdout
+# structurally cannot answer it — every fold still contains all four markets — so the
+# report should say the question is open rather than let a cross-validated MAE imply it
+# was settled.
 RENT_MODEL_HOLDOUT_FRACTION = 0.20
 RENT_MODEL_RANDOM_SEED = 42
 
@@ -527,9 +541,21 @@ RENT_COMP_CROSSCHECK_MIN_COMPS = 3
 #
 # So the flag is now silent on all three inference markets by design, and that is the
 # correct state: it is available to detect a genuine anomaly instead of reporting a
-# mechanism. TODO(U8): confirm against the eval batch that something still trips it —
-# a flag nothing can raise would corrupt the coverage assertion, and this one moved from
-# firing on 2 of 5 subjects to 0 of 5 in a single change.
+# mechanism.
+#
+# **Confirmed against the eval batch, twice, and the second time is the more interesting
+# one.** U8.2 built `chicago-uptown-duplex` to answer this and it fired at +46.6%. After
+# U11.3's anchor change that same unmodified listing measures **−6.1%**, so the case
+# stopped tripping the flag and was retargeted as a control. The kind is still covered —
+# `chicago-uptown-oversized` (+80.0%), `cleveland-triplex` (−36.4%) and
+# `cleveland-divergence-over` (−30.8%) all raise it, and the last of those is a straddle
+# fixture sited a fraction of a point past this line on purpose (U8.6b).
+#
+# **What that change also did, found only by re-deriving the batch:** every objection in
+# `critic._interaction_objections` is gated behind this flag, so making it rarer made the
+# Critic quieter — including on the one retryable objection that drives the rework cycle.
+# See `tasks/task_list_u8.md` U8.6e. Whether that gate is correctly placed is an open
+# design question, not a defect in this threshold.
 #
 # **What the flag is actually detecting, corrected Aug 22, 2026.** An earlier reading of
 # this held that the markets it fires on are the ones whose comp sets are unrepresentative.

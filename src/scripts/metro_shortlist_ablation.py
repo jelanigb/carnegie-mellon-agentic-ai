@@ -80,8 +80,11 @@ def main() -> None:
     def mae(model, idx) -> float:
         X = df.loc[idx, features].to_numpy(dtype=float)
         y = df.loc[idx, "rent_to_anchor"].to_numpy(dtype=float)
-        fmr = df.loc[idx, "fmr"].to_numpy(dtype=float)
-        return float(np.mean(np.abs((model.predict(X) - y) * fmr)))
+        # The frame's own denominator, whatever it currently is — `rent_to_anchor` and
+        # `anchor` have to be the same quantity's two halves or the dollars are wrong.
+        # Named `fmr` until Aug 30, 2026, when the anchor stopped being one.
+        anchor = df.loc[idx, "anchor"].to_numpy(dtype=float)
+        return float(np.mean(np.abs((model.predict(X) - y) * anchor)))
 
     trio = _market_index(df, TRIO)
     five = _market_index(df, FIVE)

@@ -409,16 +409,23 @@ def _interaction_objections(state: DealState) -> list[Objection]:
             )
         )
 
-    # I3 — the comps moved and the model did not.
+    # I3 — the comps moved, and since U11.3 the estimate moves with them.
     #
-    # Weaker than the two above, and the reason is worth stating rather than leaving to
-    # be rediscovered: the rent model is **location-blind below the county** (§2). Its
-    # features carry no market identifier and its anchor is county-level FMR, so the
-    # subject's coordinates do not affect the estimate at all — only which comps are
-    # retrieved. A centroid fallback therefore moves the comp set to the city's centre of
-    # listing density while leaving the estimate untouched. That degrades the comparison
-    # and tells you which branch of the divergence flag's own either/or is the likely one;
-    # it does not void it. WARN rather than CRITICAL for exactly that reason.
+    # **This check's premise inverted on Aug 30, 2026 and the correction changes what it
+    # is allowed to claim.** It used to reason: the rent model is location-blind below the
+    # county (§2), its features carry no market identifier and its anchor is county-level
+    # FMR, so the subject's coordinates do not affect the estimate at all — only which
+    # comps are retrieved. A centroid fallback therefore moved the comp set while leaving
+    # the estimate untouched, which made the divergence *more* readable as a fact about
+    # the comps than about the estimate.
+    #
+    # The hybrid anchor reads the market index at the subject's own ZIP, so a centroid
+    # fallback now moves the anchor too — to a different ZIP's rent level, hence to a
+    # different estimate. Both sides of the comparison shift, and neither can be held
+    # fixed as the reference. So the objection can no longer say the estimate is
+    # unaffected; what it can still say is that neither side describes the address on the
+    # listing. That is a weaker claim and a more honest one, and it stays WARN rather than
+    # CRITICAL for the same reason it always did — the comparison is degraded, not void.
     geocode_fallbacks = {
         FlagKind.COORDINATES_FROM_CITY_CENTROID,
         FlagKind.GEOCODER_SERVICE_UNAVAILABLE,
@@ -433,11 +440,11 @@ def _interaction_objections(state: DealState) -> list[Objection]:
         objections.append(
             Objection(
                 "The comps were retrieved around the city's center of listing density "
-                "rather than around this property, while the rent model — which is "
-                "location-blind below the county — produced the same estimate it would "
-                "have for any address in this county. The divergence is therefore more "
-                "readable as the comps describing a different neighborhood than as the "
-                "estimate being wrong for this property."
+                "rather than around this property, and the rent estimate is anchored to "
+                "that same fallback location's rent level rather than to this address's. "
+                "Both halves of the comparison therefore describe a neighborhood the "
+                "property may not be in, so their disagreement says little about this "
+                "deal either way."
                 + (
                     " The geocoder was unreachable rather than the address being "
                     "unresolvable, so a re-run may resolve it to a parcel."

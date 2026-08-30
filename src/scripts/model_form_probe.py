@@ -2,7 +2,13 @@
 
     .venv/bin/python scripts/model_form_probe.py [--folds N] [--no-fixtures]
 
-`config.py`'s `TODO(cut-list)` records that the shipped estimator is a vanilla
+**Historical note, Aug 30, 2026: this probe's own result retired the `TODO(cut-list)` it
+was written against.** Gradient boosting was adopted and `config.RENT_MODEL_ESTIMATOR`
+replaced that TODO; the paragraph below describes the state of the model *before* this
+script ran, which is what makes the comparison below readable. The probe still runs and
+still reproduces.
+
+`config.py`'s `TODO(cut-list)` recorded that the shipped estimator was a vanilla
 `LinearRegression` on three raw columns, that it underfits rather than overfits
 (train-vs-holdout gap $0.04), and that a random forest on identical data and features
 reached $434 MAE against $524 — **about 17% of the rent error is in model form alone.**

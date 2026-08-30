@@ -94,9 +94,16 @@ def _corpus_side() -> pd.DataFrame:
     print(f"Corpus: {len(frame):,} rows anchored, {report.counties} counties, "
           f"fiscal years {report.fiscal_years}")
 
+    # **The FMR baseline is reconstructed here rather than read off the frame.** The
+    # frame's `anchor`/`anchor_tier` columns describe the *hybrid* anchor since U11.3;
+    # this script's subject is the anchor that hybrid replaced, so it rebuilds it through
+    # the one retained implementation. `fmr` and `rent_to_fmr` are re-derived for the same
+    # reason — the frame's `rent_to_anchor` is a ratio to a different denominator.
+    frame["fmr"], was_zip = rent_model.fmr_baseline(frame)
+    frame["rent_to_fmr"] = frame["price"] / frame["fmr"]
+
     zip_anchored = frame[
-        frame["anchor_tier"].isin(["zip", "zip_backcast"])
-        & frame["zcta"].notna()
+        was_zip & frame["fmr"].notna() & frame["zcta"].notna()
     ].copy()
     print(f"        {len(zip_anchored):,} of them ZIP-anchored, across "
           f"{zip_anchored['zcta'].nunique()} ZCTAs — the comparable set\n")
@@ -120,9 +127,14 @@ def _current_denominators(frame: pd.DataFrame) -> dict[str, float]:
         fips = group["county_fips"].iloc[0]
         weighted, total = 0.0, 0
         for bedrooms, count in group["bedrooms"].value_counts().items():
-            value, _ = rent_model.anchor_for_row(
-                int(bedrooms), fips, CURRENT_FISCAL_YEAR, zcta,
-                county_table, zip_tables, zip_basis,
+            # `rent_model.fmr_rent`, not `anchor_for_row`, since Aug 30, 2026: the live
+            # anchor is the hybrid now, and repricing this gap's *current* end with it
+            # would compare a market-index figure against a corpus end still divided by
+            # FMR. This script measures the FMR-versus-market gap, so both ends stay on
+            # the retired FMR path — see `rent_model.fmr_baseline`.
+            value, _ = rent_model.fmr_rent(
+                zip_tables, county_table, (fips, CURRENT_FISCAL_YEAR),
+                zcta, int(bedrooms),
             )
             if value and value > 0:
                 weighted += float(value) * int(count)
@@ -274,6 +286,12 @@ def _anchor_comparison() -> None:
         the model structurally cannot recover. §2's "location-blind below the county".
     """
     frame, _ = rent_model.build_training_frame()
+    # Same reconstruction as `_corpus_side`, and for the same reason: this comparison's
+    # whole subject is FMR against ZORI, so the FMR side has to be the retired anchor
+    # rather than the frame's current hybrid one.
+    frame["fmr"], _ = rent_model.fmr_baseline(frame)
+    frame = frame[frame["fmr"].notna()].copy()
+    frame["rent_to_fmr"] = frame["price"] / frame["fmr"]
     panel = zori.load()
     covered = set(panel["zip"])
 

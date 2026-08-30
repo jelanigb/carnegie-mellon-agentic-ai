@@ -599,13 +599,30 @@ ENGINEERED_CASES: list[EvalCase] = [
         tier=Tier.GOLDEN,
         verdict=Verdict.ESCALATES,
         verdict_source=VerdictSource.PREDICTED,
-        targets=(FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA, FlagKind.CRITIC_INCONSISTENCY),
+        targets=(FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA,),
         note=(
             "The comp set is widened to find eight three-bedroom units and comes back "
             "unlike the subject on an attribute the rent estimate prices on, so the "
             "comparable-implied median describes a different kind of unit than the one "
-            "being priced. Escalates because that objection is critical-severity: the "
-            "rent figure has no usable independent check on this deal."
+            "being priced.\n\n"
+            "**Its second target was withdrawn Aug 30, 2026, and the withdrawal is the "
+            "finding rather than a tidy-up.** This case also targeted "
+            "`critic_inconsistency` and escalated on it at critical severity. It no "
+            "longer does, and not because the drift stopped — 6 of 8 comps are still "
+            "outside the band. **Every objection in `critic._interaction_objections` is "
+            "gated behind `rent_diverges_from_comps`**, on the reasoning that the "
+            "interaction checks are all about when the comp cross-check's *verdict* "
+            "stops being readable, and there is no verdict to read when the two agree. "
+            "The hybrid anchor cut divergence sharply, so that gate now closes on deals "
+            "it used to leave open, and this is one of them.\n\n"
+            "**The declared verdict is deliberately left at `escalates` even though the "
+            "case now reports.** Correcting a prediction after seeing the run is exactly "
+            "what `VerdictSource.PREDICTED` exists to prevent, and this mismatch is real "
+            "signal: a comp set 6-of-8 outside the band, priced by a model that cannot "
+            "see the difference, arguably still warrants a human. Whether the "
+            "divergence gate should stay in front of I1 is a design question for the "
+            "architect (see `task_list_u8.md` U8.6), not something to paper over by "
+            "re-declaring the answer."
         ),
         terms=golden_fixtures.LA_THREE_BEDROOM.terms,
     ),
@@ -686,7 +703,7 @@ ENGINEERED_CASES: list[EvalCase] = [
         verdict_source=VerdictSource.PREDICTED,
         targets=(FlagKind.GEOCODER_SERVICE_UNAVAILABLE, FlagKind.REWORK_LIMIT_REACHED),
         injects=Fault.GEOCODER_OUTAGE,
-        geocoder_fallback_override=(41.975320, -87.656463),
+        geocoder_fallback_override=(41.900000, -87.740000),
         note=(
             "**A simulated address-lookup outage, declared by the case rather than "
             "waiting for a real one.** The address is never tested, so comparables are "
@@ -736,7 +753,28 @@ ENGINEERED_CASES: list[EvalCase] = [
             "front-loads escalation before the rework budget is spent. This price was "
             "found clean across three replay runs; it carries no significance beyond "
             "that. Once recorded, replay is exact — the non-determinism only affects a "
-            "fresh live call, never a committed recording."
+            "fresh live call, never a committed recording.\n\n"
+            "**Re-sited Aug 30, 2026, because U11.3 silently switched this case off.** "
+            "The override used to sit at the address's own real geocode (41.975320, "
+            "-87.656463), so the case isolated the *outage* and nothing else. That "
+            "worked only because the rent estimate diverged from the comps there: every "
+            "objection in `critic._interaction_objections` — the retryable one included "
+            "— is gated behind `rent_diverges_from_comps`. The hybrid anchor moved that "
+            "deal from diverging to −6.1%, the gate closed, no retryable objection was "
+            "raised, and this case quietly returned **0 reworks and a clean report** "
+            "while still passing every assertion except its own target. The batch lost "
+            "its only coverage of the bounded-retry path and said so in one line of the "
+            "census.\n\n"
+            "The override now sits at 41.900000, -87.740000 (Hermosa / Belmont Cragin), "
+            "found by sweeping a 49-point Chicago grid for a fallback that diverges "
+            "**and raises nothing else**: 8 comps, 3 distinct locations, ZIP-tier "
+            "anchoring, +56.1% divergence, and a flag set of exactly "
+            "`rent_anchored_to_market_index` (info) and `rent_diverges_from_comps` "
+            "(warn). That is what the note above meant by placing the fallback "
+            "'somewhere already known to diverge', re-derived against the new anchor. "
+            "The trade is stated plainly: this no longer isolates the outage from the "
+            "displacement, because the displacement is what makes the outage reach the "
+            "rework cycle at all."
         ),
         listing=(
             "For sale: 5100 N Kenmore Ave, Chicago, IL 60640. Uptown two-flat, 2 bed / "
