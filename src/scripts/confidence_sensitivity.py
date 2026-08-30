@@ -65,14 +65,49 @@ ARTIFACT = config.SRC_DIR / "eval" / "results" / "sensitivity.md"
 # The grid. Both axes are swept well past anything defensible so the plateau's *edges* are
 # visible — a sweep that only covers the region someone already believes in cannot show
 # that the region is wide.
-THRESHOLDS = [0.30, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.85]
-WARN_WEIGHTS = [0.05, 0.10, 0.125, 0.15, 0.175, 0.20, 0.25, 0.30]
+#
+# **Extended downward Aug 30, 2026, because the first version reported its own floor as a
+# finding.** The threshold axis started at 0.30, the plateau ran to the bottom of it, and
+# the artifact said "every threshold from 0.30 to 0.70" — which reads as a measured edge
+# and was actually the edge of the search. The lowest-scoring escalating cases sit at 0.25,
+# so the real boundary was below the grid the whole time. Both axes now run to values
+# nothing could defend (a 0.05 threshold escalates almost nothing; a 0.45 warn weight
+# escalates on two), which is the point: an edge is only evidence if the sweep could have
+# found it somewhere else. `_edge_note` below says so explicitly whenever a reported bound
+# still lands on the grid boundary.
+THRESHOLDS = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30, 0.40, 0.45, 0.50,
+              0.55, 0.60, 0.65, 0.70, 0.75, 0.85, 0.95]
+WARN_WEIGHTS = [0.05, 0.10, 0.125, 0.15, 0.175, 0.20, 0.25, 0.30, 0.40, 0.45]
 CRITICAL_WEIGHTS = [0.0, 0.10, 0.25, 0.40, 0.60, 1.00]
 
 # The causal pair OQ-1 asks about: the second is partly *caused* by the first, so charging
 # both charges one observation twice. Scored as an alternative, never adopted here.
 _CAUSAL_PAIR = (FlagKind.RENT_ANCHOR_COUNTY_LEVEL,
                 FlagKind.RENT_ESTIMATE_MARKET_ERROR_ELEVATED)
+
+
+def _edge_note(run: list[float], axis: list[float], name: str) -> str:
+    """Say so when a reported bound is the edge of the search rather than a real edge.
+
+    **This exists because the first version of this artifact got it wrong.** The threshold
+    grid started at 0.30, the plateau ran all the way to it, and the summary reported
+    "every threshold from 0.30 to 0.70" — which a reader takes as a measured boundary. It
+    was the bottom of the grid. A plateau that touches the edge of the search has an
+    *unknown* extent in that direction, and saying so costs one sentence.
+    """
+    if not run:
+        return ""
+    touches = []
+    if run[0] == axis[0]:
+        touches.append("below")
+    if run[-1] == axis[-1]:
+        touches.append("above")
+    if not touches:
+        return ""
+    return (
+        f" **The {name} run reaches the {' and '.join(touches)} edge of the swept grid, "
+        f"so its true extent in that direction is unmeasured rather than bounded here.**"
+    )
 
 
 @contextlib.contextmanager
@@ -168,13 +203,20 @@ def _sweep_grid(results, baseline: dict[str, Verdict]) -> list[str]:
         lines += [
             "",
             f"**{len(plateau)} of {len(WARN_WEIGHTS) * len(THRESHOLDS)} grid points "
-            f"decide this batch identically to the shipped configuration.** Through the "
-            f"shipped point specifically: holding the warn weight at "
+            f"decide this batch identically to the shipped configuration.**",
+            "",
+            "**Nothing here changes the shipped threshold — it is 0.60 and stays 0.60.** "
+            "This asks what *would* happen at other values, so the question is how much "
+            "room the shipped choice has, not what it should become.",
+            "",
+            f"Through the shipped point specifically: holding the warn weight at "
             f"{shipped_warn:.3f}, **every threshold from {row[0]:.2f} to {row[-1]:.2f}** "
             f"decides all {len(results)} cases the same way; holding the threshold at "
             f"{config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD:.2f}, **every warn weight from "
             f"{column[0]:.3f} to {column[-1]:.3f}** does. Those are contiguous runs, not "
-            f"the union of the table's extremes — the corners do not hold together.",
+            f"the union of the table's extremes — the corners do not hold together."
+            + _edge_note(row, THRESHOLDS, "threshold")
+            + _edge_note(column, WARN_WEIGHTS, "warn weight"),
             "",
             "**Read this as a limit on the instrument, not as a licence.** A batch that "
             "cannot distinguish two settings is not saying they are equally good; it is "

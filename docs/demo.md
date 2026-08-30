@@ -89,9 +89,10 @@ listing in it (see New York, below) has spent part of that budget before the pro
 examined at all.
 
 **How much room those two numbers have was measured in U8.6 and is published in
-`src/eval/results/sensitivity.md`.** Holding the warn weight at 0.15, every threshold from
-0.30 to 0.70 decides all 21 predicted eval cases identically; holding the threshold at
-0.60, every warn weight from 0.100 to 0.200 does. That is a statement about the *batch's*
+`src/eval/results/sensitivity.md`.** The shipped threshold is 0.60 and stays 0.60; the
+sweep asks what *would* happen at other values. Holding the warn weight at 0.15, **any**
+threshold from 0.30 to 0.70 decides all 21 predicted eval cases identically; holding the
+threshold at 0.60, any warn weight from 0.100 to 0.200 does. That is a statement about the *batch's*
 resolving power, not a licence — a set of cases that cannot tell two settings apart is
 saying it has no evidence either way, which is why the shipped values were held rather
 than declared optimal.

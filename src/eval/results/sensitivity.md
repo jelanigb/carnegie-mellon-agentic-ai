@@ -10,18 +10,24 @@ Shipped: threshold **0.60**, warn **0.150**, critical **0.40**.
 
 Verdicts that differ from the shipped configuration, over 21 predicted cases. `0` means this configuration decides every case exactly as the shipped one does; **`·` marks the shipped values**.
 
-| warn \ threshold | 0.30 | 0.40 | 0.45 | 0.50 | 0.55 | 0.60 | 0.65 | 0.70 | 0.75 | 0.85 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **0.050** | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 0 |
-| **0.100** | 2 | 2 | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 3 |
-| **0.125** | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 |
-| **0.150** | 0 | 0 | 0 | 0 | 0 | **0**· | 0 | 0 | 3 | 3 |
-| **0.175** | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 3 | 9 |
-| **0.200** | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 3 | 3 | 9 |
-| **0.250** | 0 | 0 | 0 | 0 | 3 | 3 | 3 | 3 | 3 | 9 |
-| **0.300** | 0 | 0 | 3 | 3 | 3 | 3 | 3 | 3 | 9 | 9 |
+| warn \ threshold | 0.05 | 0.10 | 0.15 | 0.20 | 0.25 | 0.30 | 0.40 | 0.45 | 0.50 | 0.55 | 0.60 | 0.65 | 0.70 | 0.75 | 0.85 | 0.95 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **0.050** | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 0 | 3 |
+| **0.100** | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 3 | 9 |
+| **0.125** | 2 | 2 | 2 | 2 | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 9 |
+| **0.150** | 2 | 2 | 2 | 2 | 2 | 0 | 0 | 0 | 0 | 0 | **0**· | 0 | 0 | 3 | 3 | 9 |
+| **0.175** | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 3 | 9 | 9 |
+| **0.200** | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 3 | 3 | 9 | 9 |
+| **0.250** | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 3 | 3 | 3 | 3 | 9 | 9 |
+| **0.300** | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 3 | 3 | 3 | 3 | 3 | 3 | 9 | 9 | 9 |
+| **0.400** | 0 | 0 | 0 | 3 | 3 | 3 | 3 | 3 | 3 | 3 | 3 | 9 | 9 | 9 | 9 | 9 |
+| **0.450** | 0 | 3 | 3 | 3 | 3 | 3 | 3 | 3 | 3 | 3 | 9 | 9 | 9 | 9 | 9 | 9 |
 
-**41 of 80 grid points decide this batch identically to the shipped configuration.** Through the shipped point specifically: holding the warn weight at 0.150, **every threshold from 0.30 to 0.70** decides all 21 cases the same way; holding the threshold at 0.60, **every warn weight from 0.100 to 0.200** does. Those are contiguous runs, not the union of the table's extremes — the corners do not hold together.
+**63 of 160 grid points decide this batch identically to the shipped configuration.**
+
+**Nothing here changes the shipped threshold — it is 0.60 and stays 0.60.** This asks what *would* happen at other values, so the question is how much room the shipped choice has, not what it should become.
+
+Through the shipped point specifically: holding the warn weight at 0.150, **every threshold from 0.30 to 0.70** decides all 21 cases the same way; holding the threshold at 0.60, **every warn weight from 0.100 to 0.200** does. Those are contiguous runs, not the union of the table's extremes — the corners do not hold together.
 
 **Read this as a limit on the instrument, not as a licence.** A batch that cannot distinguish two settings is not saying they are equally good; it is saying it has no evidence either way. The shipped values are held because nothing here argues against them, and that is a weaker claim than tuning would have been — which is why it is stated in these words rather than as an optimum.
 

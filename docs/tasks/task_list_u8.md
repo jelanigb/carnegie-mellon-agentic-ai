@@ -26,6 +26,43 @@ optimism — see *Sequence*.
 
 ---
 
+## Status at a glance
+
+**Audited Aug 30, 2026 against the code rather than against this file's prose**, at the
+architect's request. Each ✅ below was verified by checking the thing it claims exists —
+case counts and tiers out of `eval/cases.py`, flag members out of `state.py`, functions out
+of the agents. One subsection did not survive that check and is marked 🟨 with the specific
+bullets that never landed (U8.6c).
+
+| | Subsection | Status |
+| --- | --- | --- |
+| ✅ | **U8.0** ZORI measurement | Built; its conclusion superseded by U11.3, which acted on it |
+| ✅ | **U8.1** harness, runner, census | Built |
+| ✅ | **U8.1b** two census defects | Built |
+| ✅ | **U8.2** engineered cases | 15 golden cases + 3 declared faults |
+| ✅ | **U8.2b** New York anchor label | Built |
+| ✅ | **U8.3** recorded extractions | 6 replay-tier cases |
+| ✅ | **U8.4** New York rent error | Built |
+| ✅ | **U8.4b** rent-drift correction | Built, then **retired structurally** at U11.3 — the anchor divides the drift out where it arises |
+| ✅ | **U8.4c** New York price series | Built |
+| ✅ | **U8.5** pass-scoped flags | Built (`critic._kinds`) |
+| ✅ | **U8.6** decision #6's numbers | **Closed** — held on measurement, stable region published |
+| ✅ | **U8.6b** straddle pairs | 6 fixtures, 3 clean pairs, 1 documented negative result |
+| 🟨 | **U8.6c** near-tie split + evaluator scores | **Half built.** Severity split ✅; `evaluator_score` still unrendered ❌; depth-2 cut boundary unmeasured ❌ |
+| ✅ | **U8.6d** confidence decomposition | Built, plus the stale Critic stub-node claim it surfaced |
+| ✅ | **U8.6e** the objection gate *(unplanned)* | Repairs built; **one open decision for the architect** |
+| 🟨 | **U8.7** checks A and B | Re-measured; **the veto's premise expired, so the decision is open** |
+| 🟨 | **U8.8** sub-metro price benchmark | Spike done for 2 of 3 metros; **ingest unbuilt**; drop-dead Sept 1 |
+| ✂️ | **U8.9** live runs, traces, diagram | Dropped Aug 30, 2026 by the architect |
+| ⬜ | **U8.10** close-out | Not started |
+| 🟨 | **U8.M** maintenance | TODO inventory reconciled; remainder open |
+
+**Two decisions are waiting on the architect**, both written up in full where they arose:
+the divergence gate in front of the Critic's objections (U8.6e) and what to do with the
+stated-rent comparison now that its veto no longer holds (U8.7).
+
+---
+
 ## Sequence, and why
 
 **ZORI runs first (U8.0), not last.** It was the last subsection in this plan's first
@@ -445,7 +482,7 @@ coordinates; the production path resolves them. Different jobs.
 
 All 60 tests pass.
 
-### U8.2 — The engineered cases (golden fixtures, plus one declared fault)
+### U8.2 ✅ — The engineered cases (golden fixtures, plus one declared fault)
 
 8–10 cases, each targeting one kind the census reports uncovered, supplied as complete
 `DealTerms` so the pre-flight Planner (#9) routes past extraction — no new mechanism
@@ -583,7 +620,7 @@ flag's contribution to confidence is worth pricing separately. **The escalation 
 therefore not isolated by any case**, and U7.8's request for one is carried forward rather
 than met.
 
-### U8.2b — The FMR anchor was labelled ZIP-resolution in every New York county
+### U8.2b ✅ — The FMR anchor was labelled ZIP-resolution in every New York county
 
 **Taken Aug 28, 2026 by the architect, as its own commit.** Found by U8.2's case work, and
 a production defect rather than an eval artifact.
@@ -619,7 +656,7 @@ own rule that the reader's response decides — it is the same response either w
 sentence naming the cause now branches, because a fixed sentence was false of half the
 deals that saw it.
 
-### U8.3 — Recorded extractions (tier 2)
+### U8.3 ✅ — Recorded extractions (tier 2)
 
 The handful of kinds that genuinely originate in the Extractor need it to run. Record with
 `LLM_CACHE_MODE=read_write`, commit the recordings to `eval/data/llm_recordings/`, and run
@@ -772,7 +809,7 @@ under replay.
 remains, unchanged from U8.3); **7/7 published baselines still match**; **12/14 predicted
 verdicts agree**, the two disagreements being the tuning signals above.
 
-### U8.4b — The rent-drift correction (U8.0's consequence)
+### U8.4b ✅ — The rent-drift correction (U8.0's consequence) — **built, then superseded at U11.3**
 
 **Taken Aug 28, 2026 by the architect, on U8.0's finding.** The model learned rent ≈ 1.3–1.7×
 FMR from a 2018-19 corpus and multiplies it by today's FMR, but the FMR schedule has risen
@@ -864,7 +901,7 @@ a machine without the ZORI file would flip outcomes in tests that never mention 
 All 71 pass. **Batch re-derivation deliberately deferred to U8.4c's step 3**, so
 recordings are re-cut once for both changes.
 
-### U8.4c — The New York price-series scoping fix
+### U8.4c ✅ — The New York price-series scoping fix
 
 **Taken Aug 29, 2026 by the architect, on a measurement that overturned a standing
 assumption.** Every "Redfin doesn't cover New York" statement in this repository traced
@@ -920,7 +957,12 @@ predicted — `ny-bedstuy-triplex` escalates at 0.55 on a *third*, deal-specific
 (Brooklyn's corpus rows sharing one coordinate), not on the market alone. The U8.6b
 Manhattan fixture is what would demonstrate a New York deal reporting.
 
-### U8.6c — Near-tie split *(landed early, with U8.4c)*
+### U8.6c 🟨 — Near-tie split *(landed early, with U8.4c)*
+
+> **🟨 because the severity split landed and the other half of U8.6c did not** —
+> `Scenario.evaluator_score` is still not rendered, and the depth-2 cut boundary is still
+> unmeasured. The audit table is at the end of the full U8.6c section below. This block
+> covers only the severity split, which *is* complete.
 
 Built ahead of its place in the sequence because the re-record had to happen once, and
 this change moves the same flag sets. Full design in the U8.6 scope revision above.
@@ -937,7 +979,7 @@ this change moves the same flag sets. Full design in the U8.6 scope revision abo
    0.70, escalating on `budget_exhausted`. That the fix landed on a case built to work
    around the symptom is the strongest evidence the demotion was right.
 
-### U8.5 — Pass-scoped flags (OQ-15, cut-list 2a)
+### U8.5 ✅ — Pass-scoped flags (OQ-15, cut-list 2a)
 
 Per Q4. Stamp each `Flag` with the `planner_invocations` that raised it; the Critic's
 interaction checks read only the current pass; `state.plan` distinguishes *examined and
@@ -1065,7 +1107,7 @@ reworks, confidence 0.70 (clears the threshold — `rework_limit_reached` and
 **7/7 baselines, 12/14 verdicts, 29/29 coverage — the largest single close in the project**,
 and the one U7.8/U8.10 both anticipated without being able to promise.
 
-### U8.6 — Decision #6's numbers against the batch (OQ-1) — **scope revised Aug 29, 2026**
+### U8.6 ✅ — Decision #6's numbers against the batch (OQ-1) — **scope revised Aug 29, 2026**
 
 Per Q1, in whichever form Q1 settles. Covers `HUMAN_REVIEW_CONFIDENCE_THRESHOLD`,
 `FLAG_SEVERITY_PENALTY`, `MAX_REWORKS`, and confirmation of the critical-flag rule at
@@ -1152,12 +1194,21 @@ U8.10 to decide on.
 is the wrong threshold or that 0.15 is the wrong warn weight. The sweep
 (`eval/results/sensitivity.md`) measures how much room that leaves: **41 of 80 grid points
 decide the batch identically to the shipped configuration**, and through the shipped point
-specifically, the threshold moves from **0.30 to 0.70** and the warn weight from **0.100 to
-0.200** without changing a single verdict. The dead zone on the threshold is wider than the
-first pass estimated — that pass said (0.40, 0.70] on 14 cases — and the warn-weight run is
-about the same. Those are contiguous runs through the shipped point, not the table's
-extremes; the corners do not hold together, and the script reports it that way because the
-union reads as a rectangle and is not one.
+specifically, **any threshold from 0.30 to 0.70** and **any warn weight from 0.100 to
+0.200** decides all 21 cases identically. Nothing here changes the shipped values — the
+threshold is 0.60 and stays 0.60; the sweep asks what *would* happen elsewhere, so the
+answer is how much room the shipped choice has. The dead zone on the threshold is wider
+than the first pass estimated — that pass said (0.40, 0.70] on 14 cases.
+
+Those are contiguous runs through the shipped point, not the table's extremes; the corners
+do not hold together, and the script reports it that way because the union reads as a
+rectangle and is not one. **The grid was extended downward on Aug 30, 2026 after the first
+artifact reported its own floor as a finding** — the threshold axis started at 0.30, the
+plateau ran to the bottom of it, and "every threshold from 0.30 to 0.70" read as a measured
+edge when it was the edge of the search. Re-swept from 0.05: 0.30 *is* the real boundary
+(0.25 changes two verdicts), so the number survived, but it had been luck rather than
+measurement. `_edge_note` now says so automatically whenever a reported bound lands on the
+grid boundary.
 
 **The critical weight is inert across its entire range, including zero.** Charging a
 critical disclosure *nothing* changes no verdict on any of the 21 cases, because every deal
@@ -1187,7 +1238,7 @@ escalated on a critical in two and reported without one in the third, and
 U7.8's table is therefore noisy at ±1 row, and any future reading of it should be taken as
 such rather than as a behavior change. See U8.6e.
 
-### U8.6d — Confidence decomposition: what the score was made of
+### U8.6d ✅ — Confidence decomposition: what the score was made of
 
 **Taken Aug 29–30, 2026 by the architect, and it is a disclosure change rather than a
 scoring change — that distinction was itself the decision.** Recorded with the rejected
@@ -1305,7 +1356,7 @@ and asked for fewer, larger review surfaces rather than the normal cadence. Reco
 because §8's small-commit discipline is a standing rule and this is a deliberate,
 time-boxed exception to it, not a drift.
 
-### U8.6e — What the re-record found: every objection sits behind one flag
+### U8.6e ✅ — What the re-record found: every objection sits behind one flag *(one open decision)*
 
 **Not planned. Found Aug 30, 2026 by re-deriving the batch after U11.3, which is what the
 re-derivation is for.** Three cases changed behavior at once and the cause is common to
@@ -1344,18 +1395,141 @@ same estimate it would have for any address in this county." Under the hybrid an
 fallback moves the ZIP, hence the anchor, hence the estimate. Both sides of the comparison
 now shift. The objection says the narrower true thing instead.
 
-**Two things are surfaced rather than decided, because both are the architect's.**
+---
 
-1. **Should the divergence gate stay in front of I1?** A comp set 6 of 8 outside the band,
-   priced by a model that cannot see the difference, is arguably worth a human whether or
-   not the two happen to agree — agreement between a mis-specified estimate and a
-   mis-specified median is not reassurance. Ungating I1 would restore
-   `la-three-bedroom-comp-drift`'s escalation and change escalation behavior on real
-   deals, which is why it is not being taken quietly. **`la-three-bedroom-comp-drift`'s
-   declared verdict is left at `escalates` and left mismatching** — re-declaring it after
-   seeing the run is what `VerdictSource` exists to prevent.
-**A third thing was found and fixed rather than surfaced, because it was a defect rather
-than a decision: the *replay* tier was not reproducible either.** One case per batch run
+## The open decision: should the divergence gate stay in front of I1?
+
+**This is the architect's call and is deliberately not taken. What follows is the full
+case on both sides, so the decision can be made from this file without re-deriving it.**
+
+### What the gate is, exactly
+
+`agents/critic._interaction_objections` opens with:
+
+```python
+kinds = _kinds(state)
+objections: list[Objection] = []
+
+# The comp cross-check is the only independent check on the rent estimate in this
+# system, so every interaction below is about when its verdict stops being readable.
+if FlagKind.RENT_DIVERGES_FROM_COMPS not in kinds:
+    return objections
+```
+
+Everything downstream of that line — I1, I2, I3 — is unreachable unless the rent estimate
+and the comp median disagree by more than
+`config.RENT_COMP_DIVERGENCE_THRESHOLD_PCT` (0.30). Since `_consistency_objections`
+delegates entirely to `_interaction_objections`, **that one line gates every objection the
+Critic can raise**, which means it also gates `CRITIC_INCONSISTENCY` (the only critical the
+Critic produces) and `Objection.retryable` (the only thing that can start a rework).
+
+### The argument for keeping it — which is the argument that built it
+
+The three checks are not about the deal being bad. They are about **the comp cross-check's
+verdict being unreadable**, and each one names a specific reason to distrust it:
+
+- **I1** — the comps were widened on an attribute the model prices on, so the median
+  describes a different kind of unit.
+- **I2** — the comps stand on one coordinate, so the median is a point sample.
+- **I3** — the comps were drawn around a fallback location, so they describe somewhere
+  else.
+
+Each of those is a reason a *disagreement* should not be read as evidence about the
+estimate. If there is no disagreement, there is nothing to reinterpret, and raising a
+critical objection would be telling a reader that a check they can see succeeded actually
+failed. On that reading the gate is not a filter bolted on top — it is part of what the
+objections mean.
+
+### The argument for removing it
+
+**Agreement between two mis-specified quantities is not evidence.** Take
+`la-three-bedroom-comp-drift` as it now runs: 6 of 8 comparables fall outside the bedroom
+or size band the search started from, the rent model prices on exactly those attributes,
+and the two figures come out within 30% of each other. The gate reads that as "no problem
+to report." The alternative reading is that a median describing the wrong kind of unit
+agreed with an estimate for the right kind by coincidence, and the coincidence is not
+reassuring.
+
+I2 has the sharpest version of this. Decision #15 measured a single Chicago coordinate
+carrying 150 listings whose rents span $760–$6,995 — a median over that is nearly
+uninformative. Whether it happens to land near the model's estimate says almost nothing,
+so gating the disclosure on agreement makes the disclosure fire exactly when it is least
+needed.
+
+### What changed, and why it only became visible now
+
+Nothing about the gate changed. **The rate at which its condition holds did.** U11.3's
+anchor moved `chicago-uptown-duplex` from +46.6% divergence to −6.1% on an unmodified
+listing, and the same compression applies across the batch. The gate went from usually-open
+to usually-closed, and three things followed:
+
+| Case | Before U11.3 | After | Mechanism |
+| --- | --- | --- | --- |
+| `la-three-bedroom-comp-drift` | 0.55, escalates on a critical objection | 0.85, **reports** | 6 of 8 comps still out of band; divergence gone, so I1 never runs |
+| `chicago-geocoder-outage` | 2 reworks, escalates ‡ | 0 reworks, **reports** | I3 is the only retryable objection, and it is behind the same gate |
+| coverage census | 31 of 31 kinds raised | 28 of 30 | `rework_limit_reached` went with the rework |
+
+**The second row is the serious one.** §3 requires every cycle to be bounded by an explicit
+counter, and `chicago-geocoder-outage` is the only case in the batch that exercises that
+bound. It did not fail loudly — it returned a clean report and a *passing* row, and the
+loss surfaced as one line in the coverage census. **A case can stop testing what it was
+built to test while still passing**, which is the argument for the census being a
+published artifact rather than an assertion buried in a test.
+
+### What was fixed here, and what was deliberately not
+
+**Fixed — the case, not the check.** `geocoder_fallback_override` was built for exactly
+this purpose and had drifted to the address's own real geocode. It now sits at
+41.900000, -87.740000, found by sweeping a 49-point Chicago grid for a fallback that
+diverges **and raises nothing else**: 8 comps, 3 distinct locations, ZIP-tier anchoring,
++56.1% divergence, and a flag set of exactly `rent_anchored_to_market_index` (info) and
+`rent_diverges_from_comps` (warn). Re-recorded: 2 reworks, escalates ‡, target fires,
+`rework_limit_reached` back in the census. The cost is stated in the case's own note — it
+no longer isolates the *outage* from the *displacement*, because the displacement is what
+carries the outage into the rework cycle at all.
+
+**Fixed — a correctness defect the same investigation surfaced.** I3's stated premise had
+inverted. It argued that a centroid fallback moves the comp set while leaving the estimate
+untouched, *because* the model is location-blind below the county — and it told the reader
+so, in the objection text: *"the rent model … produced the same estimate it would have for
+any address in this county."* Under the hybrid anchor the fallback moves the ZIP, hence the
+anchor, hence the estimate. Both sides of the comparison now shift and neither can be held
+as the reference. The objection says the narrower true thing instead: both halves describe
+a neighborhood the property may not be in.
+
+**Not fixed — `la-three-bedroom-comp-drift`'s declared verdict.** It says `escalates`; it
+now reports; the row is a **MISMATCH** in the results table and stays one. Editing a
+prediction after seeing the run is precisely what `VerdictSource.PREDICTED` exists to
+prevent, and this file would rather carry an honest mismatch than a transcribed agreement.
+Its `CRITIC_INCONSISTENCY` target *was* withdrawn — that is a claim about which flags fire,
+which the run answers definitively — but the verdict is a claim about what *should* happen,
+and that is the open question above.
+
+### If the gate is removed, here is what to expect
+
+- `la-three-bedroom-comp-drift` escalates again on I1 (critical), and its mismatch clears.
+- `cleveland-triplex` and `ny-bedstuy-triplex` both carry `comps_spatially_concentrated`,
+  so **I2 would fire on them whether or not they diverge** — `ny-bedstuy-triplex` currently
+  reports at 0.70 and would begin escalating on a critical.
+- Every Cleveland deal, and every Brooklyn deal, inherits a single-coordinate comp set from
+  the corpus. Ungating I2 makes a market's data density a critical objection on every
+  listing in it, which is a large behavioral change and arguably the wrong instrument —
+  `COMPS_SPATIALLY_CONCENTRATED` already discloses it at warn severity.
+- A narrower option exists: **ungate I1 and I3, keep the gate on I2.** I1 and I3 are about
+  the comp set being *wrong for this subject* (mis-matched attributes, wrong
+  neighborhood), which is true independent of whether the numbers agree. I2 is about the
+  median being *imprecise*, which is closer to something the existing warn already says.
+  This is the option I would take, and it is a recommendation rather than a decision.
+
+**Whichever way it goes, it needs a re-record** — objection text and flag sets both reach
+the scoring prompt.
+
+---
+
+### Two reproducibility findings from the same investigation
+
+**The replay tier was not reproducible, and this one was fixed rather than surfaced,
+because it was a defect rather than a decision.** One case per batch run
 failed with a `CacheMiss`, and **a different case each run**, which is what sent the first
 investigation looking for state leakage between cases. Bisecting found a predecessor that
 "poisoned" a later case — and then the same pair passed twice out of three, which is what
@@ -1371,17 +1545,23 @@ beside the recordings for the same reason those are committed; a timeout is neve
 so a transient outage cannot be frozen into a permanent one. Verified over five
 consecutive full replay runs, clean once the cache warms.
 
-2. **The live tier is not reproducible, and it moved a verdict this time.** `coord-conflict`
-   reported at 0.70 with no critical in the batch run, and escalated at 0.60 on a critical
-   `supplied_coordinates_conflict` when re-run minutes later — the Extractor's own call
-   varies. OQ-17 recorded this as score noise; this is the first time it has been seen
-   changing an *outcome*. It also means the census's "`supplied_coordinates_conflict`
-   uncovered" line was an artifact of one draw. Whether the demo deals should be recorded
-   like the other tiers is a decision with a real cost on the other side: they are the
-   live end-to-end evidence, and recording them removes exactly the property that makes
-   them that.
+**The *live* tier is not reproducible either, and that one is surfaced rather than fixed —
+it moved a verdict.** `coord-conflict` reported at 0.70 with no critical in one batch run
+and escalated at 0.60 on a critical `supplied_coordinates_conflict` when re-run minutes
+later — the Extractor's own model call varies. OQ-17 recorded this as *score* noise; this
+is the first time it has been observed changing an **outcome**. It also means the census's
+"`supplied_coordinates_conflict` uncovered" line, which appeared in one intermediate run,
+was an artifact of a single draw rather than a coverage gap.
 
-### U8.6b — Straddle pairs: measuring brittleness at the per-flag thresholds
+Whether the demo deals should be recorded like the other tiers is **the architect's
+decision, and it has a real cost on both sides**: they are the live end-to-end evidence,
+and recording them removes exactly the property that makes them that. The narrower option
+is to keep them live and state the noise band beside the regression figure — across three
+full batch runs this session, `coord-conflict` varied by one critical and `staten-island`
+returned 0 comps twice and 1 comp once, so "7/7 against U7.8's table" should be read as
+±1 row rather than as an exact match.
+
+### U8.6b ✅ — Straddle pairs: measuring brittleness at the per-flag thresholds
 
 **Taken Aug 29, 2026 by the architect, over a schedule-based deferral recommendation —
 recorded because the overrule is part of a pattern he has named.** The confidence
@@ -1436,7 +1616,7 @@ wrong rather than infeasible.**
    their own flag — it cannot be varied alone. Kept as a case, published as a negative
    result.
 
-### U8.6c — Near-tie split, and the evaluator's scores reach the reader
+### U8.6c 🟨 — Near-tie split, and the evaluator's scores reach the reader — **half built**
 
 **Taken Aug 29, 2026 by the architect.** `FORECAST_BRANCHES_NEAR_TIED` turned out to be
 two different disclosures sharing one kind, and the reading path shows they deserve
@@ -1468,7 +1648,33 @@ different severities:
   where ordering *is* load-bearing (which pairing makes the scenario set at all), and
   today unmeasured.
 
-### U8.7 — Checks A and B, and `config.py:413` — **the veto branch fired**
+---
+
+**Status audited Aug 30, 2026 at the architect's request, and this subsection does not
+pass. Two of four items landed; two never did.** Recorded because it was carrying an
+implicit ✅ it had not earned — the *first* bullet is the one everything downstream cites,
+so the section read as done.
+
+| Item | Status | Evidence |
+| --- | --- | --- |
+| Pairing near-tie → INFO, framing near-tie stays WARN | ✅ | `scenario_forecast.py` raises `FORECAST_BRANCHES_NEAR_TIED` at `Severity.WARN` for the framing tie and `Severity.INFO` for the two pairing ties. This is what moved the `chicago` demo deal off its 0.55 escalation |
+| Both messages rewritten to stop overclaiming | ✅ | The pairing message now says both tied candidates reach the scenario table and no reported figure depends on the ordering |
+| **`Scenario.evaluator_score` rendered** | ❌ **not built** | The field is populated (`scenario_forecast.py:621`) and carried on state (`state.py:699`), and `grep evaluator_score agents/summarizer.py` returns **nothing**. The evaluator's credibility judgment is still computed and still invisible — exactly the state this bullet was written to end |
+| **Depth-2 cut boundary (#3 vs #4) measured** | ❌ **not built** | No such measurement exists in `scenario_forecast.py` |
+
+**Neither gap is a regression — they were never built** — and neither is blocked by
+anything. Rendering the score is small: a per-scenario figure in
+`summarizer._scenarios_section` with the OQ-17 caveat beside it, labels left outcome-based.
+The cut-boundary measurement is a probe rather than a product change.
+
+**How this went unnoticed is the part worth keeping.** The severity split had visible
+downstream consequences — a demo deal's verdict changed, several documents cite it — so the
+subsection accumulated references that all pointed at its *first* bullet. Nothing pointed
+at the last two, and a section with four bullets and two citations reads as finished. The
+checkbox audit that found it was prompted by the architect asking whether U8.2 and U8.3
+were really done; those two were, and this one was not.
+
+### U8.7 🟨 — Checks A and B, and `config.py:413` — **the veto fired, then its premise expired**
 
 **Settled by U8.0's measurement: A and B are NOT promoted.** Q5 framed this as a branch and
 the branch resolved against promotion. The ~−29% stated-versus-modelled gap on the demo
@@ -1513,6 +1719,43 @@ listing for the anchor's percentile.
 anchor is a market rent index now, so the percentile mismatch that made this untunable no
 longer exists, and the reason U7.5 declined to promote the check has been removed.
 
+**The full measurement**, per fixture, so the distribution can be read rather than
+summarized. Every row is a fixture whose stated rents were set independently of the
+anchor; `gap = (mean stated rent − modelled rent) ÷ modelled rent`.
+
+| Fixture | Stated | Modelled | Gap |
+| --- | --- | --- | --- |
+| `la-three-bedroom-comp-drift` | $3,350 | $2,011 | **+66.6%** |
+| `la-ordinary-duplex` | $2,250 | $2,046 | +10.0% |
+| `cleveland-divergence-over` | $1,125 | $1,206 | −6.7% |
+| `cleveland-triplex` | $1,075 | $1,155 | −6.9% |
+| `chicago-uptown-band-over` | $2,275 | $2,486 | −8.5% |
+| `chicago-uptown-band-under` | $2,075 | $2,293 | −9.5% |
+| `cleveland-divergence-under` | $1,175 | $1,301 | −9.7% |
+| `chicago-uptown-duplex` | $1,825 | $2,154 | −15.3% |
+| `ny-manhattan-dispersed` | $3,500 | $4,828 | −27.5% |
+| `ny-bedstuy-triplex` | $2,583 | $3,708 | −30.3% |
+| `ny-wakefield-seven-comps` | $2,250 | $3,284 | −31.5% |
+| `chicago-five-bedroom` | $3,250 | $5,326 | −39.0% |
+| `chicago-uptown-oversized` | $2,500 | $4,128 | −39.4% |
+
+**n = 13 · mean −11.4% · median −9.7% · range −39.4% to +66.6%**
+
+**Read the shape, not just the summary.** Three things in it matter:
+
+- **The sign varies.** Under the old anchor every demo deal was negative and clustered
+  within 2.2 points of each other. A quantity that changes sign across fixtures is a
+  property of each deal.
+- **The tails are explainable, individually.** The +66.6% outlier is the case engineered so
+  the comp set drifts onto the wrong unit type. The −39% pair are the two oversized
+  subjects, where the model extrapolates past the corpus's ordinary footprint. The New
+  York cluster near −30% is the market whose per-metro error is 1.9x the headline. **None
+  of those is the anchor, and all of them are things a threshold might legitimately want
+  to catch.**
+- **The middle is tight.** Seven of thirteen sit between −16% and +10%. A threshold in the
+  25–35% region would fire on the tails and stay quiet on the middle, which is the shape
+  of a usable disclosure rather than a constant offset.
+
 **Three things follow, and only the first two are mine to land.**
 
 1. **The false claims are corrected wherever they were stated as fact** —
@@ -1520,20 +1763,58 @@ longer exists, and the reason U7.5 declined to promote the check has been remove
    `summarizer._stated_rents_section`'s docstring, and the direction-dependent caveat the
    report prints, which argued from the dead offset in the reader's own text. The caveat
    stays direction-dependent for a narrower and still-true reason: a sitting tenant's rent
-   lags the market, and an above-market claim has no benign default explanation.
+   lags the market wherever leases were signed earlier or renewed below it, and an
+   above-market claim has no benign default explanation.
 2. **The demo deals cannot answer this and that is a finding about them.**
    `DemoDeal.rent_basis` is `hud_fmr:2` — #11 set their stated rents *from* the old
    anchor — so their gap measures the FMR-versus-market spread by construction. **#11's
    calibration is now stale on the rent side as well as the price side**, which was not
-   previously on anyone's list.
-3. **Whether to set a threshold, delete the constant, or promote the comparison to a
-   Critic objection is the architect's decision and is deliberately not taken here.** All
-   three are now live where none were before; the constant ships at `None` unchanged in
-   the meantime, so shipped behavior is identical and only the stated reason has become
-   honest. Promoting it would add a flag kind and cost another re-record, which is the
-   other reason not to fold it into this batch.
+   previously on anyone's list. It is why the table above uses the eval fixtures instead:
+   their rents were chosen to look plausible for the unit, not derived from the anchor.
+3. **The decision is the architect's and is deliberately not taken.** Shipped behavior is
+   unchanged either way — the constant stays `None`, the comparison stays a disclosure —
+   so nothing is blocked while it waits. What changed is that the *reason* is now honest
+   rather than citing a dead offset.
 
-### U8.8 — Public-record sub-metro price benchmark (OQ-7, #11) — drop-dead Mon Sept 1
+### The open decision: what to do with the stated-rent comparison
+
+**All three options below were closed before Aug 30, 2026 and all three are open now**, so
+the choice is genuinely live rather than a formality.
+
+**Option A — set a threshold.** Emphasize the gap in the report when it exceeds some
+percentage. The measurement now supports placing one: the middle of the distribution is
+tight and the tails are individually explainable. **Cost:** it is a number chosen against
+13 fixtures, and §8's three-question check exists to catch exactly that. Mitigated by the
+fact that it gates *emphasis*, not a flag or a verdict — the comparison is rendered either
+way, so a badly-placed threshold makes a paragraph bolder, not a report wrong.
+**Cheapest, and reversible.**
+
+**Option B — delete the constant, keep the disclosure unconditional.** This was U8.7's
+original plan, taken when the gap was structural and a threshold would have been
+meaningless. **That justification is now gone**, so deleting it would be shedding an option
+the evidence just made usable. Recommend against — this is the one option the
+re-measurement argues *away* from, which is worth noting because it is what this
+subsection previously said it would do.
+
+**Option C — promote the comparison to a Critic objection.** U7.5 declined this only
+because the gap was structural, and Q5's veto branch fired on the same reasoning. Both
+premises are gone. **Cost:** a new flag kind, a re-record, and a real behavioral change —
+an objection escalates. It also needs a decision about severity, and about whether a
+*low* stated rent (the common direction, with a benign explanation) should count the same
+as a high one, which the report's own caveat says it should not.
+
+**My recommendation, for what it is worth: A, with the threshold placed above the middle
+cluster and stated as provisional against 13 fixtures.** It converts a re-measurement into
+something a reader sees, costs no re-record, and leaves C available once the demo deals are
+re-calibrated off the market index and can contribute independent rows.
+
+**What would make this decidable on better evidence:** re-calibrating `demo_deals.py`'s
+`rent_basis` from `hud_fmr:2` to the market-index anchor. That adds six independent
+observations and removes the one source in the project whose gap is circular by
+construction. It is small work and it is not scheduled anywhere — flagged here rather than
+left in conversation.
+
+### U8.8 🟨 — Public-record sub-metro price benchmark (OQ-7, #11) — **spike done, ingest unbuilt** — drop-dead Mon Sept 1
 
 Per Q3, and specified as what it can deliver rather than as what the cut list promised:
 county-assessor open data (Cook, LA County, NYC) joined to the subject's parcel, producing
@@ -1592,7 +1873,7 @@ why, which is the call U8.4c made when Staten Island's $875,000 was re-benchmark
 (checks A and B were not promoted at U8.7) and `scenario_forecast._context_block` does not
 carry it, so no prompt changes and no re-record. The ingest itself is not yet built.
 
-### U8.9 — Absorbed U10: live runs, traces, diagram, screenshots
+### U8.9 ✂️ — Absorbed U10: live runs, traces, diagram, screenshots — **dropped Aug 30, 2026**
 
 Per-metro live end-to-end runs across all three metros as `live` rows in the same table
 (Q6); LangSmith traces captured — note OQ-13's 14-day free-tier expiry, so this runs
@@ -1606,7 +1887,7 @@ added at U9 — flagged here so the dependency is not discovered at capture time
 the account identifier, and Week 7's deliverable is a terminal capture. **Redact before
 recording.**
 
-### U8.10 — Close-out
+### U8.10 ⬜ — Close-out
 
 Review the changelog rows this unit's commits already wrote; move #6 and #11 to their
 settled state in §7's register with reasoning in
@@ -1621,7 +1902,7 @@ half — confirming something still trips the rent-comp divergence flag — clos
 close in the project, which is also the reason to review each one against what actually
 shipped rather than against this plan.
 
-### U8.M — Maintenance *(separate commit, per §8)*
+### U8.M 🟨 — Maintenance *(separate commit, per §8)*
 
 Clear the `TODO(U8)` markers this unit resolves, and the ones Q5 closes by deletion rather
 than by measurement. Update the `TODO` inventory table in

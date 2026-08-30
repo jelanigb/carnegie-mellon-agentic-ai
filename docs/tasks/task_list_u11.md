@@ -45,7 +45,7 @@ gap first.
 
 ## Subsections
 
-### U11.1 — Model-form probe *(approved Aug 29, 2026; runs first)*
+### U11.1 ✅ — Model-form probe *(approved Aug 29, 2026; runs first)*
 
 `scripts/model_form_probe.py`: LinearRegression vs RandomForest vs GradientBoosting on
 the identical feature set and identical FMR-ratio target, under **k-fold cross-validation**
@@ -143,7 +143,7 @@ prompt embeds the rent estimate), invalidates two engineered cases' arguments, a
 New York's disclosed multiple. Reproduce with
 `.venv/bin/python scripts/model_form_probe.py`; `--no-fixtures` runs reports 1–2 alone.
 
-### U11.2 — Feature measurement — **CUT Aug 30, 2026 to §6 cut-list 1a**
+### U11.2 ✂️ — Feature measurement — **CUT Aug 30, 2026 to §6 cut-list 1a**
 
 **Never run.** The architect cut it, with U11.4's tuning and LOMO, once the anchor lever
 landed. Reasoning in [`../implementation_plan.md`](../implementation_plan.md) §6 item 1a;
@@ -159,7 +159,7 @@ structural; no market identifier. The FMR-ratio target exists to keep the model
 market-free (§2), and a metro dummy would reintroduce exactly the dollar-level
 memorization the ratio removes.
 
-### U11.3 — The anchor (gated on Q1, decided on U11.1–2's numbers)
+### U11.3 ✅ — The anchor (gated on Q1, decided on U11.1–2's numbers)
 
 If taken: re-anchor the target on ZORI (cut-list 6) — the largest lever and the largest
 cost. If not taken: record the decision and its evidence in the §7 register, and the
@@ -240,24 +240,37 @@ said it would: the anchor reads a market index at the same month on both ends, s
 schedule-versus-market gap U8.4b measured is divided out where it arises. The flag it
 raised is repurposed as an index-staleness disclosure.
 
-**Landed incomplete on purpose, and here is exactly what is left** (per §8, the completing
-work is named rather than implied):
+**Landed incomplete on purpose, and here is exactly what was left** (per §8, the completing
+work is named rather than implied). **All five closed Aug 30, 2026** — the names below are
+written as they stood *before* the rename, since a later sed pass over this file
+retroactively replaced them and made the list contradict itself.
 
-1. **`FlagKind` members still carry FMR names** — `RENT_ANCHORED_TO_MARKET_INDEX`,
-   `RENT_ANCHOR_COUNTY_LEVEL`, `RENT_ANCHOR_UNAVAILABLE`. Their *messages* are correct
-   and reader-facing text is honest; the enum member names and `ValuationDetail.fmr_*`
-   fields are not. A mechanical rename, and it changes `f.kind.value`, which the eval
-   results table prints and the scoring prompt embeds — so it should ride the re-record.
-2. **`agents/summarizer.py` still renders the anchor as an FMR figure.** Not yet touched.
-3. **`tools/rent_drift.py` is unused** and should be retired at U11.M, with
-   `RENT_DRIFT_CORRECTION_APPLIED` either repurposed or retired on the
-   `LLM_RENT_FALLBACK_USED` precedent — the census drops a kind either way, and that
-   should be a decision rather than a side effect.
-4. **`scripts/anchor_probe.py` and `scripts/zori_evidence.py` read the old frame shape**
-   (`fmr`, `anchor_tier`, `rent_to_fmr`) and will not run as written. Their evidence is
-   recorded above and in `config.py`; repairing them is U11.M work.
-5. **No re-record and no batch re-derivation yet**, deliberately — items 1–3 move flag
-   sets, so the recordings should be cut once after them.
+1. ✅ **`FlagKind` members still carried FMR names** — `RENT_ANCHORED_TO_FMR`,
+   `FMR_ANCHOR_COUNTY_LEVEL`, `FMR_UNAVAILABLE_FOR_COUNTY`. Their *messages* were correct
+   and reader-facing text was honest; the enum member names and `ValuationDetail.fmr_*`
+   fields were not. Renamed to `RENT_ANCHORED_TO_MARKET_INDEX`, `RENT_ANCHOR_COUNTY_LEVEL`
+   and `RENT_ANCHOR_UNAVAILABLE`, with `fmr_resolution`/`fmr_zip`/`fmr_year` →
+   `anchor_tier`/`anchor_zip`/`fmr_shape_year`. **`FMR_BEDROOM_CAP_EXCEEDED` deliberately
+   kept its name**: the four-bedroom ceiling really is a property of the federal schedule,
+   which the hybrid still reads. It changed `f.kind.value`, so it rode the re-record.
+2. ✅ **`agents/summarizer.py` rendered the anchor as an FMR figure.** The basis line said
+   `ratio 1.06 x FY2026 FMR $2,691 (ZIP 90026)`; it now says `x market rent $2,691 (ZIP
+   90026, as of 2026-07-31)`. The *other* FMR sentence in that file was left alone and is
+   still correct — the forecast's rent-growth bands do come from FMR history (#16).
+3. ✅ **`tools/rent_drift.py` was unused** and is deleted, with `tests/test_rent_drift.py`
+   and the `config.RENT_DRIFT_*` block. `RENT_DRIFT_CORRECTION_APPLIED` was **retired** on
+   the `LLM_RENT_FALLBACK_USED` precedent (a kind nothing can raise corrupts the census);
+   `RENT_DRIFT_CORRECTION_UNAVAILABLE` was **repurposed** as `RENT_ANCHOR_INDEX_STALE`.
+   Taken as a decision rather than a side effect, as this item asked.
+4. ✅ **`scripts/anchor_probe.py` and `scripts/zori_evidence.py` read the old frame shape**
+   (`fmr`, `fmr_resolution`, `rent_to_fmr`) and would not run. Both repaired, along with
+   `scripts/metro_shortlist_ablation.py` and `scripts/valuation_evidence.py` — the last of
+   which was worse than stale, since it had begun comparing the metro population on the FMR
+   anchor against comps on the hybrid one and printing the two as "normalized identically".
+   The retired FMR anchor now lives in one place, `rent_model.fmr_baseline`, rather than
+   being re-derived in three scripts.
+5. ✅ **Re-record and batch re-derivation** taken once, after items 1–3, in U8's sequence.
+   Result: 28 cases, no errors, 18/21 predicted-verdict agreement, 30 of 30 flag kinds.
 
 **What this leaves the architect.** `hyb` is the best overall, is the architect's stated
 preference, and has an architectural advantage the table does not show: **it keeps FMR in
@@ -267,7 +280,7 @@ that, `zori` is materially better in the two markets whose disclosures this unit
 improve. Neither is free: both are the U5-scale rewrite, and both largely retire U8.4b's
 drift correction, which is what cut-list item 6 says the correction stands in for.
 
-### U11.4 — Adoption, tuning, and validation artifacts
+### U11.4 ✅ — Adoption, tuning, and validation artifacts
 
 **Partially landed Aug 30, 2026, ahead of its place in the sequence** — the architect took
 gradient boosting on U11.1's numbers, and the adoption was folded in with the probe work
@@ -304,8 +317,33 @@ report should say that the transfer question is open rather than let the cross-v
 MAE imply it was settled. OQ-12 stays open in
 [`../open_questions.md`](../open_questions.md) for exactly that reason.
 
-### U11.M — Maintenance *(separate commit, per §8)*
+### U11.M ✅ — Maintenance *(separate commit, per §8)*
 
 Clear the `TODO(cut-list)` at `config.py:295` and `agents/valuation_rent.py` as
 resolved-or-superseded; update the cut-list rows for 1a and 6 in §6; update the `TODO`
 inventory in [`../design/engineering_standards.md`](../design/engineering_standards.md).
+
+---
+
+**Done Aug 30, 2026.**
+
+- **`TODO(cut-list)` is down from three sites to one.** Model form was *spent*, not
+  deferred — `config.RENT_MODEL_ESTIMATOR` replaced the note, and
+  `scripts/model_form_probe.py`'s docstring now says the paragraph it argues against
+  describes the state *before* it ran. The surviving site is the descoped LLM rent fallback
+  (§6 item 3), which is genuinely still deferred.
+- **`TODO(U8)` is down from nine sites to six.** Closed: leave-one-metro-out (cut to §6 1a,
+  transfer question disclosed via OQ-12), the rent-comp divergence confirmation, and the
+  stated-rent threshold's blocking measurement. Still open: #6's numbers (now closed as a
+  decision but the constants stay marked provisional), pass-scoped flags, and checks A/B —
+  whose *veto* was overturned by re-measurement, so it is a live decision rather than a
+  settled one.
+- **§6 cut-list rows 1a and 6 rewritten.** Item 6 leaves the list by being **spent**, like
+  item 3, and two of its stated costs were wrong in the direction that made it look
+  expensive: it drops 0.3% of training rows rather than 27%, and it keeps FMR rather than
+  abandoning it. Item 1a was **split** — model form spent, feature engineering plus tuning
+  plus LOMO cut.
+- **The `TODO` inventory in `engineering_standards.md` reconciled** against
+  `grep -rn "TODO(" src/`, which is the check that table exists to pass.
+- **Four evidence scripts repaired**, listed under U11.3 item 4 above. One of them was
+  actively wrong rather than merely broken.
