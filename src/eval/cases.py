@@ -254,9 +254,21 @@ class EvalCase:
 # evidence that a confidence threshold is well placed.
 
 _DEMO_BASELINES: dict[str, tuple[Verdict, str]] = {
-    "los-angeles": (Verdict.REPORTS, "Dense market, full comp set. U7.8: 0.70, reports."),
-    "chicago": (Verdict.ESCALATES, "U7.8: 0.55 on three deal-specific warns — escalates "
-                                   "on the score alone, accepted rather than tuned away."),
+    "los-angeles": (Verdict.REPORTS, "Dense market, full comp set. U7.8: 0.70, reports. "
+                                     "0.85 since U8.6c demoted the pairing near-tie to "
+                                     "info; verdict unchanged."),
+    # **Re-baselined Aug 29, 2026 (U8.6c), and the reason is a deliberate severity change
+    # rather than drift.** U7.8 measured 0.55 / escalates on three deal-specific warns,
+    # one of which was `forecast_branches_near_tied` at the *pairing* level. U8.6c demoted
+    # that variant to INFO on the finding that both tied pairings appear in the reported
+    # scenario set regardless, so nothing a reader sees turned on it. Chicago now carries
+    # two warns and reports at 0.70. Recorded here rather than left as a standing
+    # mismatch, because the old row is no longer the behaviour this build has — but note
+    # what it cost: this was the demo set's one "escalates on accumulated warns alone,
+    # nothing broken" case, and the set no longer has one.
+    "chicago": (Verdict.REPORTS, "U7.8: 0.55, escalated on three warns. Re-baselined at "
+                                 "U8.6c: 0.70, reports — the third warn was the pairing "
+                                 "near-tie, now info-severity."),
     "staten-island": (Verdict.ESCALATES, "§2's real-thinness case: zero comps. U7.8: 0.00."),
     "no-geography": (Verdict.ESCALATES, "Address neither geocoder nor centroid can place. "
                                         "U7.8: 0.00."),
@@ -446,17 +458,22 @@ ENGINEERED_CASES: list[EvalCase] = [
         verdict_source=VerdictSource.PREDICTED,
         targets=(FlagKind.CRITIC_INCONSISTENCY,),
         note=(
-            "**The case that isolates the critical-disclosure rule from the confidence "
-            "score.** A critical disclosure sends a deal to a human on its own ground, "
-            "not only by dragging the score down, and until now nothing demonstrated the "
-            "difference: every demo deal carrying a critical disclosure already sat below "
-            "the threshold anyway, and the one run that separated them was reached by "
-            "switching retrieval off rather than by any property of a listing. This "
-            "listing reaches it — a large but ordinary two-bedroom unit in a market where "
-            "the comp set can be filled without widening the search area, so the deal "
-            "carries few enough disclosures to clear the threshold comfortably and is "
-            "escalated anyway. If the two grounds were ever collapsed into one, this is "
-            "the row that would change."
+            "**Built to isolate the critical-disclosure rule from the confidence score, "
+            "and it no longer does — recorded rather than quietly re-purposed.** A "
+            "critical disclosure sends a deal to a human on its own ground, not only by "
+            "dragging the score down. This listing was engineered so the deal cleared "
+            "the threshold comfortably (measured 0.70 at design, 0.55 once recorded) and "
+            "escalated on the critical alone.\n\n"
+            "Since U8.4b/U8.4c it measures **0.30**: the drift-corrected rent changed the "
+            "scoring prompt and the Tree-of-Thought search now empties its beam at depth "
+            "2, adding a second, *critical* `forecast_unavailable` — so the score is far "
+            "below threshold and the two escalation grounds agree again. The case still "
+            "passes (its target fires, verdict `escalates`), but it is no longer evidence "
+            "for the rule's independence. **`chicago--no-retrieval` still carries that "
+            "evidence** — it is the row the results table marks with †, landing at exactly "
+            "0.60 with one critical — so the batch has not lost the property, only this "
+            "listing-reachable demonstration of it. U7.8's request for a *deal* that "
+            "isolates the rule is therefore open again, and is U8.6's to re-site."
         ),
         terms=golden_fixtures.CHI_UPTOWN_OVERSIZED.terms,
     ),
@@ -587,10 +604,18 @@ ENGINEERED_CASES: list[EvalCase] = [
             "but never states a price — 'contact listing agent' is the only thing said "
             "about it. Predicted to report: `unit_count` is given as '3-unit', which "
             "the extraction system prompt's rule 3a treats as stated rather than "
-            "inferred, so this case does not also trip `assumed_field_value` — the two "
-            "warns measured (`unresolved_field` plus `fmr_anchor_county_level`, this "
-            "ZIP's Small Area schedule not matching and falling through to the county "
-            "figure) sit well under threshold either way. **Sited in Los Angeles rather "
+            "inferred, so this case does not also trip `assumed_field_value`.\n\n"
+            "**Measured `escalates` since U8.4b, and kept as a declared mismatch rather "
+            "than re-sited.** The prediction stands on the mechanical rule — a lone WARN "
+            "target reports — but ZIP 90089 is a USC campus ZIP that Zillow's rent index "
+            "does not cover, so the deal also pays `rent_drift_correction_unavailable`, "
+            "which with `fmr_anchor_county_level` makes three warns and 0.55. The target "
+            "fired, so the triage rule fixed in advance classes this a **tuning signal**. "
+            "Re-siting to a covered ZIP was considered and rejected: it would make the "
+            "batch systematically avoid the ZIPs where the system degrades, which is the "
+            "same 'calibrated to run clean' failure the demo deals are criticized for. "
+            "See U8.6's finding on market-structural warns stacking on deal-specific "
+            "targets. **Sited in Los Angeles rather "
             "than Cleveland deliberately** — a first attempt at Cleveland reproduced "
             "(across three re-runs, so structural rather than a network flake) the same "
             "comp-concentration critical objection `cleveland-triplex` already "
@@ -613,10 +638,14 @@ ENGINEERED_CASES: list[EvalCase] = [
         note=(
             "'Duplex' names a building type but no number, so the extraction system "
             "prompt's rule 3 requires the model to infer unit_count=2 and record the "
-            "basis rather than read it. Predicted to report: two warns measured "
-            "(`assumed_field_value` plus `fmr_anchor_county_level` — this ZIP's Small "
-            "Area schedule did not match, the same fall-through `la-unpriced-triplex` "
-            "hits a few blocks over), both well under threshold."
+            "basis rather than read it. Predicted to report on the mechanical rule: a "
+            "lone WARN target costs 0.15.\n\n"
+            "**Measured `escalates` since U8.4b, and kept as a declared mismatch** for "
+            "the same reason as `la-unpriced-triplex` a few blocks over: ZIP 90007's "
+            "rent-index coverage begins 31 months after the training vintage — too late "
+            "to anchor a before/after comparison — so `rent_drift_correction_unavailable` "
+            "joins `fmr_anchor_county_level` and the target for three warns at 0.55. "
+            "Target fired, so this is a tuning signal, not a broken case."
         ),
         listing=(
             "For sale: 1425 W Adams Blvd, Los Angeles, CA 90007. Charming duplex near "
