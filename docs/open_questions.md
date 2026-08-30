@@ -138,6 +138,30 @@ none, so carrying U7 in the label overstated what was scheduled. The `staten-isl
 deal reaches human review today for a different reason — zero comps — which means the
 error is disclosed on that one deal by accident rather than by a check.
 
+### OQ-19 · U11.3 — is the rent-to-market-index ratio stable over seven years?
+**Raised Aug 30, 2026, when the anchor moved.** The model learns how a unit's rent
+compares to its ZIP's typical rent from 2018-19 listings, then applies that ratio to
+today's index. U8.0 measured the *old* anchor's assumption and found it false (FMR drifted
+18 points from the market); the new one has a much stronger prior — numerator and
+denominator are both market rents for the same ZIP — but **it has not been measured over
+the interval that matters, and cannot be**: that needs current-vintage rents for
+individual units, which this project does not have.
+
+**Bounded rather than open.** `scripts/anchor_stability.py` falsifies it cheaply over the
+corpus's own 13-month window and it survives: **+3.6%** cost to extrapolating in time
+(within-metro, so geography is held constant), and a **6.3%** peak-to-trough spread in the
+monthly ratio across the four months carrying 97% of the rows. Cleveland is the weakest at
++15.9% and also the thinnest in month coverage. **That is a floor the assumption clears,
+not a demonstration that it holds for seven years**, and the report should say so in those
+terms. **Closes when** a current-vintage rent sample exists to test it directly — no such
+source is in scope before the freeze.
+
+**One property of the training data surfaced by this and worth carrying:** the corpus is
+not a uniform time series. 3,825 of 5,701 rows share a single listing month, and the metro
+mix shifts 51 percentage points between the window's halves — so any future temporal
+analysis of it must hold geography constant or it will measure the scrape's schedule
+instead. `config.py`, `tools/model/rent_model.py`.
+
 ### OQ-4 · cut list 1a — rent-model feature engineering and model form
 Measured: ~17% of rent error is available to model form alone, no new data. Deferred
 deliberately. **Closes only if** schedule allows and proper validation replaces the single
