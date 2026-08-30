@@ -134,7 +134,7 @@ class DealState(BaseModel):
     # valuation
     rent_estimate: Optional[float] = None
     rent_estimate_ratio_to_anchor: Optional[float] = None  # model's raw structural output
-    rent_anchor_used: Optional[float] = None              # today's FMR figure applied
+    rent_anchor_used: Optional[float] = None              # today's local market rent
     value_estimate: Optional[float] = None               # never populated — see U5 below
     rent_estimate_source: Optional[RentEstimateSource] = None
     valuation_detail: Optional[ValuationDetail] = None   # provenance for the report
@@ -292,6 +292,40 @@ single county — and because a reader cannot tell a ZIP-anchored figure from a
 county-anchored one by looking at it. `RENT_ANCHOR_COUNTY_LEVEL` is deliberately distinct
 from `RENT_ANCHOR_UNAVAILABLE`: that one means no estimate at all, this one means the
 estimate exists but cannot see below the county line.
+
+**Renamed Aug 30, 2026 (U11.3), because the anchor stopped being a Fair Market Rent.**
+These fields and flags were named `fmr_*` when HUD's schedule supplied the rent *level*.
+It now supplies only the bedroom *step*; the level comes from Zillow's market rent index
+at the subject's own ZIP. Three flag kinds moved — `RENT_ANCHORED_TO_FMR` →
+`RENT_ANCHORED_TO_MARKET_INDEX`, `FMR_UNAVAILABLE_FOR_COUNTY` → `RENT_ANCHOR_UNAVAILABLE`,
+`FMR_ANCHOR_COUNTY_LEVEL` → `RENT_ANCHOR_COUNTY_LEVEL` — along with
+`ValuationDetail.fmr_resolution`/`fmr_zip`/`fmr_year` → `anchor_tier`/`anchor_zip`/
+`fmr_shape_year` and `DealState.rent_estimate_ratio_to_fmr`/`fmr_anchor_used` →
+`rent_estimate_ratio_to_anchor`/`rent_anchor_used`.
+
+**`FMR_BEDROOM_CAP_EXCEEDED` deliberately keeps its name.** The four-bedroom ceiling
+really is a property of the federal schedule, which the hybrid anchor still reads. A
+mechanical rename that swept it up would have made the vocabulary *less* accurate, which
+is the point of doing this by hand rather than by pattern.
+
+The meaning of `RENT_ANCHOR_COUNTY_LEVEL` shifted with the rename and the flag's own text
+says so: it used to mean *HUD publishes no ZIP-level schedule here*, and now means *the
+market index does not cover this ZIP for the month read, so the county's median across
+its covered ZIPs stood in*. Same consequence for a reader, different cause — U8.2b's rule.
+
+**Added Aug 30, 2026 (U8.6d): `FlagScope`, `scope_of()`, and `ConfidenceBreakdown`.**
+Every flag kind is classified as describing this **deal** or this **market**; four kinds
+are market-scoped (`RENT_ANCHOR_COUNTY_LEVEL`, `RENT_ESTIMATE_MARKET_ERROR_ELEVATED`,
+`RENT_ANCHOR_INDEX_STALE`, `COMPS_SPATIALLY_CONCENTRATED`) and everything else defaults to
+deal. `DealState.confidence_detail` carries the score's arithmetic split the same way, so
+the report can state what the deduction was made of rather than only what it totalled.
+
+**This is a reporting classification and must not become a scoring one.** Two scores with
+independent floors were proposed, measured, and rejected — market coverage propagates into
+the deal's own numbers, so scoring the deal side alone would have published high
+confidence on a rent figure the report elsewhere calls unreliable. The full reasoning is
+in `tasks/task_list_u8.md` U8.6d and is repeated in the `FlagScope` docstring, deliberately,
+because the constraint has to be visible where the enum is read.
 
 **One severity changed.** `RENT_ANCHOR_UNAVAILABLE` moved from `warn` to `critical`.
 §2 specified `warn` when the design still had a coarser state/national fallback behind

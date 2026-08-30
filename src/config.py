@@ -554,18 +554,33 @@ RENT_COMP_DIVERGENCE_THRESHOLD_PCT = 0.30
 # calls the gap out rather than only reporting it. `None` means the comparison is always
 # rendered and never editorialized, which is the shipped state.
 #
-# TODO(U8): set a number, or delete this and the emphasis it gates. It is None rather than
-# tuned because the gap measured on the demo listings is ~-29% on all three (Aug 24, 2026:
-# Los Angeles -28.8%, Chicago -29.0%, Staten Island -26.8%), and that offset is structural
+# TODO(U8): set a number, or delete this and the emphasis it gates. It was None rather than
+# tuned because the gap measured on the demo listings was ~-29% on all three (Aug 24, 2026:
+# Los Angeles -28.8%, Chicago -29.0%, Staten Island -26.8%), and that offset was structural
 # rather than a property of any listing. FMR is a 40th-percentile rent; the corpus the rent
-# model learned from rents at ~1.40x FMR; #11 calibrated these listings to FMR itself. A
-# threshold placed against those three numbers would be measuring this repository's own
-# fixtures, which is the error the three-question check in §8 exists to catch.
+# model learned from rented at ~1.40x FMR; #11 calibrated these listings to FMR itself. A
+# threshold placed against those three numbers would have been measuring this repository's
+# own fixtures, which is the error the three-question check in §8 exists to catch.
 #
-# Settling it needs an independently observed market-rent series — Zillow ZORI, adopted in
-# #16 and still unbuilt (OQ-6). If ZORI says the market rents near 1.40x FMR, the model is
-# right and these listings are genuinely below market; if it says otherwise, the model
-# over-predicts and the threshold belongs on the model rather than on the listing.
+# **Re-measured Aug 30, 2026, because U11.3 removed the premise.** The estimate is no
+# longer anchored to a 40th-percentile administrative figure — the anchor is Zillow's
+# market rent index — so the structural offset that made this untunable is gone. Across
+# the 13 eval fixtures carrying independently-set rents: **mean -11.4%, median -9.7%,
+# range -39.4% to +66.6%.** Dispersed and sign-varying, which is what a property of the
+# deal looks like rather than a property of the anchor.
+#
+# **So this is now tunable and was not before, and that is a decision for the architect
+# rather than a value to pick here.** Three live options: set a threshold against the
+# measured spread; delete the constant and keep the disclosure unconditional (U8.7's
+# original veto branch, whose justifying measurement has itself changed); or promote the
+# comparison to a Critic objection, which U7.5 declined only because the gap was
+# structural. Held at None pending that call — the shipped behavior is unchanged either
+# way, and the reason for it is now stated honestly instead of citing a dead offset.
+#
+# The demo deals cannot settle it: `demo_deals.DemoDeal.rent_basis` is `hud_fmr:2`, so #11
+# set their stated rents from the old anchor. Their gap measures the FMR-versus-market
+# spread. That is a finding about the demo set (#11 needs re-calibrating to the market
+# index), not evidence about this threshold.
 RENT_CLAIM_DIVERGENCE_DISCLOSURE_THRESHOLD = None
 
 # --- ZORI comparison (U8.0, OQ-6) -----------------------------------------

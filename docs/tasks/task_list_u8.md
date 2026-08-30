@@ -1165,6 +1165,42 @@ This yields everything the split was for — legibility, an ordered coverage fig
 actionable review — while changing no escalation behavior and suppressing no doubt.
 **It is also independent of U11**, since it touches no estimate and no threshold.
 
+---
+
+**Built Aug 30, 2026.** All three changes landed, plus a fourth the work surfaced.
+
+- **`state.FlagScope` / `scope_of()`** carries the classification. Enumerated, not
+  derived — nothing about a `FlagKind` predicts this, it is a judgment about each
+  disclosure's subject — and **DEAL is the default**, so a kind added later and left
+  unclassified reads as something a reviewer might fix rather than something they cannot.
+  That is the failure direction that wastes attention instead of hiding a limitation.
+- **`ConfidenceBreakdown` and the arithmetic line.** `confidence_from_flags` keeps its
+  signature and delegates to `confidence_breakdown`, so routing reads the identical number
+  it always did. Measured on the fixture this decision was written about,
+  `ny-bedstuy-triplex` now renders *"0.30 deducted from a starting 1.00: 0.00 from this
+  property, 0.30 from how much is known about this market."*
+- **The escalation sentence names its ground** (`critic._review_guidance`), quoting the
+  dominant disclosure's own text — already written for this reader — rather than a flag
+  name. No internal vocabulary reaches it (§8).
+- **The report's disclosure list is grouped by subject**, property-scoped first, severity
+  still ordering within each group and every flag still rendered in full.
+
+**A fourth thing, found by reading a rendered report rather than the code.** The Critic
+had returned `stub_nodes: [AGENT]` since U2, when half of it genuinely was a stub. U7
+completed it — this module's first line has said "complete as of U7" ever since — and
+nobody removed the declaration, so **every report published since U7 opened with a banner
+telling its reader the analysis was provisional.** `test_report_discloses_stubbed_agents`
+was asserting the defect, and its companion assertion was passing on a string that appears
+elsewhere in the report for an unrelated reason. Both rewritten, and a new test checks the
+whole `stub_nodes` set rather than one agent by name — which is precisely why the stale
+claim survived four units.
+
+**The one surviving scoring question is deferred to the sweep, not answered here.**
+Whether de-duplicating the causal pair (`rent_anchor_county_level` is part of *why*
+`rent_estimate_market_error_elevated` fires) moves any verdict is a measurement on the
+final batch, and it belongs with the sensitivity sweep rather than in a disclosure commit.
+OQ-1.
+
 **One narrow scoring question survives, and is measured rather than assumed (see
 OQ-1).** `rent_anchor_county_level` is a *cause* of `rent_estimate_market_error_elevated`
 — county-level anchoring is part of why New York's holdout error is high — so charging
@@ -1177,15 +1213,23 @@ not a judgment to make in advance.
 re-derivation; U8.6 does not close until all land, and its numbers are scored against
 the *final* batch):
 
-1. **U8.4b** — drift correction *(landed late, above)*
-2. **U8.4c** — NY scoping fix *(above)*
-3. Re-record + batch re-derivation + docs sweep for 1–2 together
-4. **U11 model probe** (see [`task_list_u11.md`](task_list_u11.md)) → architect's
-   adoption call on its numbers; U8.6's close waits for the model U11 settles on
-5. **U8.6c — near-tie split and evaluator-score disclosure** *(below)*
-6. Sensitivity sweep script + committed artifact, re-run against the post-change batch
-7. **U8.6b — straddle pairs** *(below)*, then close: verdicts re-scored, PROVISIONALs
-   resolved, #6 register entry, demo table re-derived
+1. ✅ **U8.4b** — drift correction *(landed late, above; retired structurally at U11.3)*
+2. ✅ **U8.4c** — NY scoping fix *(above)*
+3. ✅ Re-record + batch re-derivation + docs sweep for 1–2 together
+4. ✅ **U11 model probe** (see [`task_list_u11.md`](task_list_u11.md)) → architect adopted
+   gradient boosting and the hybrid anchor; U11.2 and U11.4's remainder cut to §6
+5. ✅ **U8.6c — near-tie split and evaluator-score disclosure** *(below)*
+6. ✅ **U8.6d — confidence decomposition** *(below)*; ✅ **U8.6b — straddle pairs**
+   *(below)*; ✅ flag renames off FMR (U11.3's leftover, gated the re-record)
+7. Re-record + batch re-derivation for 4–6 together, then close: sensitivity sweep
+   re-run against the post-change batch, verdicts re-scored, PROVISIONALs resolved,
+   #6 register entry, demo table re-derived
+
+**Steps 6 and 7 were batched into one review at the architect's direction (Aug 30, 2026),
+against this file's usual one-commit-per-subsection rule.** He was away from the keyboard
+and asked for fewer, larger review surfaces rather than the normal cadence. Recorded
+because §8's small-commit discipline is a standing rule and this is a deliberate,
+time-boxed exception to it, not a drift.
 
 ### U8.6b — Straddle pairs: measuring brittleness at the per-flag thresholds
 
@@ -1204,6 +1248,43 @@ the results artifact — how much does a deal have to change to change its verdi
 | `MIN_QUALIFYING_COMPS` (8) | A siting returning exactly 7 vs 8 comps | Probably — corpus-determined |
 | `RENT_MODEL_METRO_ERROR_RATIO_THRESHOLD` (1.5) | **Not straddleable by any deal** — markets sit at ≤1.1x and 2.0x; a listing cannot move its market's ratio | Documented as such |
 | `TOT_TIE_EPSILON` (0.05) | **Not meaningfully straddleable** — the gap is noise-dominated (OQ-17); a recorded straddle measures the recording | Documented as such |
+
+---
+
+**Built Aug 30, 2026.** `scripts/straddle_probe.py` sites the pairs by running the real
+comp-retrieval and Valuation agents over a grid — the two agents that produce every
+quantity a per-flag threshold is compared against, and the two that make no model call, so
+a full sweep is free. Six fixtures added; the table above scored four rows and got three
+clean pairs and one instructive failure.
+
+| Tunable | Pair, as built | Measured |
+| --- | --- | --- |
+| `COMP_MAX_OUTSIDE_MATCH_SHARE` (0.25) | Chicago Uptown, 1,100 vs 1,300 sq ft | 2-of-8 (0.25, clears) vs 3-of-8 (0.38, fires). Exactly one flag differs |
+| `RENT_COMP_DIVERGENCE_THRESHOLD_PCT` (0.30) | Cleveland, 1,000 vs 1,050 sq ft | **−30.8% vs −28.9%**. Same coordinate, same eight comps, none out of band — a **5% floor-area change flips the flag**. The tightest pair in the batch |
+| `COMP_MIN_DISTINCT_LOCATIONS` (3) | Bed-Stuy vs Hell's Kitchen | 8 comps on **1** coordinate vs 8 on **5**. Needed no engineering at all — the corpus's own distribution supplies both sides |
+| `MIN_QUALIFYING_COMPS` (8) | Bed-Stuy vs northern Bronx | 8 vs **7** — and **not a clean pair**, see below |
+
+**Three corrections to the table above, all in the direction of the planned pair being
+wrong rather than infeasible.**
+
+1. **`RENT_COMP_DIVERGENCE_THRESHOLD_PCT`'s far side moved out from under it.**
+   `chicago-uptown-duplex` measured 48% when this was written and measures **−6.1%** now:
+   the hybrid anchor moved it 53 points. The pair was rebuilt in Cleveland, and the
+   Chicago case was retargeted as a second control rather than re-engineered — see
+   `eval/cases.py` for why re-sizing it would have destroyed the only thing it was worth.
+2. **`COMP_MIN_DISTINCT_LOCATIONS` no longer "doubles as the NY-floor fixture."** The
+   New York floor was three standing market warns, then two after U8.4c, and is **one**
+   now that the county-anchoring warn is gone. The pair still works; the second job it
+   was given no longer exists.
+3. **`MIN_QUALIFYING_COMPS` is not independently straddleable, and this is a measurement
+   rather than a shrug.** A 144-point grid across the four indexed markets returned
+   exactly 8 comps at **98** points, 0 at 30, and 7 at **none**; a finer 324-point scan
+   found real 7-comp sitings, one of which (1500 E 233rd St, Bronx) is now a fixture. But
+   reaching 7 *requires* the retrieval loop to exhaust its radius expansions and its match
+   relaxations first, so the case necessarily carries four extra disclosures its partner
+   does not. The threshold is the terminal state of a loop whose earlier steps each raise
+   their own flag — it cannot be varied alone. Kept as a case, published as a negative
+   result.
 
 ### U8.6c — Near-tie split, and the evaluator's scores reach the reader
 
@@ -1255,6 +1336,52 @@ changed — which is a reason to re-run the comparison here, not a reason to ski
 Kept separate from U8.0 deliberately: measuring and acting on a measurement are different
 change sets, and folding them would make it impossible to review the number independently
 of the conclusion drawn from it. Safe after U8.6, because nothing here moves confidence.
+
+---
+
+**Re-measured Aug 30, 2026 — and the veto's own premise is gone, so the branch is open
+again rather than closed.** This subsection was right to insist on re-measuring rather
+than assuming, and the instruction paid off in the opposite direction to the one it
+expected.
+
+**What the veto rested on.** The gap was **~−29% on all three demo listings** — Los
+Angeles −28.8%, Chicago −29.0%, Staten Island −26.8% — a near-constant. A constant is what
+a *structural* offset looks like, and the structure was identifiable: the estimate was
+`ratio × FMR`, FMR is a 40th-percentile administrative rent, and the corpus the model
+learned from rented at ~1.40x it. An objection raised from that would have blamed the
+listing for the anchor's percentile.
+
+**What it measures now**, across the 13 eval fixtures carrying independently-set rents:
+
+| | |
+| --- | --- |
+| mean | **−11.4%** |
+| median | **−9.7%** |
+| range | **−39.4% to +66.6%** |
+
+**Dispersed, and sign-varying.** That is what a property of the *deal* looks like. The
+anchor is a market rent index now, so the percentile mismatch that made this untunable no
+longer exists, and the reason U7.5 declined to promote the check has been removed.
+
+**Three things follow, and only the first two are mine to land.**
+
+1. **The false claims are corrected wherever they were stated as fact** —
+   `config.RENT_CLAIM_DIVERGENCE_DISCLOSURE_THRESHOLD`'s comment,
+   `summarizer._stated_rents_section`'s docstring, and the direction-dependent caveat the
+   report prints, which argued from the dead offset in the reader's own text. The caveat
+   stays direction-dependent for a narrower and still-true reason: a sitting tenant's rent
+   lags the market, and an above-market claim has no benign default explanation.
+2. **The demo deals cannot answer this and that is a finding about them.**
+   `DemoDeal.rent_basis` is `hud_fmr:2` — #11 set their stated rents *from* the old
+   anchor — so their gap measures the FMR-versus-market spread by construction. **#11's
+   calibration is now stale on the rent side as well as the price side**, which was not
+   previously on anyone's list.
+3. **Whether to set a threshold, delete the constant, or promote the comparison to a
+   Critic objection is the architect's decision and is deliberately not taken here.** All
+   three are now live where none were before; the constant ships at `None` unchanged in
+   the meantime, so shipped behavior is identical and only the stated reason has become
+   honest. Promoting it would add a flag kind and cost another re-record, which is the
+   other reason not to fold it into this batch.
 
 ### U8.8 — Public-record sub-metro price benchmark (OQ-7, #11) — drop-dead Mon Sept 1
 

@@ -36,9 +36,9 @@ one is derived from the code and is the one to trust.
 | Source | Vintage | Finest geography it carries | Geography this system actually uses | What it feeds |
 | --- | --- | --- | --- | --- |
 | **Kaggle rent corpus** | Dec 7 2018 – Dec 26 2019, static | Street address (**8% of rows**), else city | Latitude/longitude per row (city-area placeholder for 92%) | Rent-model training · comp index |
-| **HUD FMR API** | Live, by federal fiscal year, **FY2017–2026 history** | **ZIP** (SAFMR counties only) | **ZIP** where published, county elsewhere | Training target denominator · inference anchor · comp cross-check · demo calibration · **rent-growth series (U6)** |
+| **HUD FMR API** | Live, by federal fiscal year, **FY2017–2026 history** | **ZIP** (SAFMR counties only) | **County** | Anchor's **bedroom step** only (U11.3) · demo calibration · **rent-growth series (U6)** |
 | **Redfin sale medians** | Jan 2018 – Jun 2026, monthly | Metro (this extract); ZIP extract exists unused | Metro | Market benchmark · **price** appreciation (U6) · demo calibration |
-| **Zillow ZORI** | 2015-01 – present, monthly | **ZIP** (8,543 nationally) | **ZIP** | Rent-drift correction at prediction time (U8.4b) · the independent rent check (#16, U8.0) |
+| **Zillow ZORI** | 2015-01 – present, monthly | **ZIP** (8,543 nationally) | **ZIP**, county median where a ZIP's series does not reach | Anchor's **rent level** — training denominator, inference anchor, comp cross-check (U11.3) · the independent rent check (#16, U8.0) |
 | **Census Geocoder** | Live | Parcel / street address | Parcel, with city-centroid fallback | Subject-property coordinates |
 | **Census county boundaries** | TIGER/Line 2023 | County polygon | County | Coordinate → county FIPS |
 | **Census ZCTA boundaries** | Cartographic 2020 | ZCTA polygon (~33,800) | ZCTA | Coordinate → ZIP, for ZIP-level FMR |
@@ -52,8 +52,8 @@ One gap remains open: Redfin.
 
 | Source | Gap | Status |
 | --- | --- | --- |
-| HUD FMR | County used where ZIP published | ✅ **Closed Aug 22, 2026** — see below |
-| Zillow ZORI | Covers 7 of 10 fixture ZIPs; misses thin or atypical ones (a campus ZIP, a far-borough ZIP), and some series begin after the corpus vintage | 🟨 **Disclosed, not closed.** Where it does not reach, the rent-drift correction cannot be computed and `rent_drift_correction_unavailable` says so at warn severity rather than shipping an uncorrected figure silently |
+| HUD FMR | County used where ZIP published | ✅ **Closed Aug 22, 2026**, then **superseded Aug 30, 2026** — HUD no longer supplies the rent level at all, so its ZIP/county gap stopped mattering. See "The anchor moved" below |
+| Zillow ZORI | Some ZIP series begin after the corpus's 2018-19 vintage, so a row's own listing month may have no observation at its own ZIP | 🟨 **Disclosed, not closed** — and much smaller than it looked. Measured Aug 30, 2026: the gap is 27% of training rows at ZIP grain, and a county-median fallback recovers 99.0% of it, leaving **0.3%** with no anchor. Where the fallback fires, `rent_anchor_county_level` says so at warn severity |
 | Redfin | Metro used; a ZIP extract sits unused on disk | 🟨 **Not a defect.** §2's metro choice is correct and settled for the *appreciation series* — measured, the ZIP extract has a median of **2 sales per period** nationally, and a YoY growth rate off 2 sales is noise. The only open question is the far narrower one of whether the *market benchmark* (a level, not a growth rate) could be ZIP-level where volume allows: 90026 / 60647 / 44109 carry 15 / 42 / 35 sales per period. A possible refinement to a figure already labelled "not this property's value", not a gap |
 
 ---
@@ -146,18 +146,43 @@ is priced against the four-bedroom figure and `FlagKind.FMR_BEDROOM_CAP_EXCEEDED
 > within-county shape is imported. Tested where both years exist — r = 0.873 (Cook),
 > 0.771 (Philadelphia), median back-cast error 4.5% / 5.1%.
 
-### Used for — four distinct roles in one run
+### The anchor moved on Aug 30, 2026 (U11.3), and this section is the before-and-after
 
-| # | Role | Where | Which FMR |
+**HUD FMR used to be the rent anchor outright.** Every rent figure was `ratio × FMR`, the
+ratio learned against each training row's own county-and-fiscal-year schedule and
+multiplied back by the subject's current one. U8.0 then measured the schedule rising
+**+51.9%** against market rent's **+33.5%** since the corpus vintage — so the reference
+the model learned against had drifted ~18 points away from the market it was pricing, and
+that drift landed in every estimate.
+
+**It is now `ratio × (market rent level × bedroom step)`**, where the level is Zillow's
+ZORI at the subject's own ZIP and only the *step* — how a three-bedroom prices against a
+two-bedroom in this county — comes from HUD. The schedule's own level cancels out of the
+step, so its drift can no longer reach a rent figure. Both ends read the market index at
+the same kind of month, so the vintage divides out where it arises rather than being
+corrected afterwards; U8.4b's drift correction retired with the change.
+
+| # | Role | Where | Which source, now |
 | --- | --- | --- | --- |
-| 1 | **Training denominator** — makes the target a ratio | `rent_model.build_training_frame` | Each row's own county, own fiscal year (FY2019/2020) |
-| 2 | **Inference anchor** — converts the ratio back to dollars | `agents/valuation_rent.py` | Subject's county, **current** fiscal year (FY2026) |
-| 3 | **Comp cross-check denominator** | `rent_model.anchor_comp_rents` | Each comp's own county, own fiscal year |
+| 1 | **Training denominator** — makes the target a ratio | `rent_model.build_training_frame` | ZORI at each row's own ZIP and own **listing month**, × HUD bedroom step for its county/fiscal year |
+| 2 | **Inference anchor** — converts the ratio back to dollars | `agents/valuation_rent.py` | ZORI at the subject's ZIP, **newest observed month**, × HUD bedroom step (FY2026) |
+| 3 | **Comp cross-check denominator** | `rent_model.anchor_comp_rents` | Same function as role 1, per comp, at each comp's own month |
 | 4 | **Demo calibration** | `scripts/verify_demo_calibration.py` | Geocoded county, FY2026 |
+| 5 | **Rent-growth series (U6)** | `tools/fmr_history.py` | HUD FY2017–2026 history — **still genuinely FMR**, see below |
 
-Roles 1 and 2 are the whole rent-anchoring design: train on a ratio that ages slowly,
-multiply by a current dated reference. Role 3 is what makes the cross-check a fair
-comparison rather than a 2019-vs-2026 vintage error.
+Roles 1 and 2 are the whole rent-anchoring design and the change did not alter its shape:
+train on a ratio that ages slowly, multiply by a current dated reference. What changed is
+which reference, and role 3 is what keeps the cross-check a fair comparison rather than a
+2019-vs-2026 vintage error.
+
+**Role 5 is the one that did not move, and confusing it with role 2 is the easy mistake.**
+The forecast's rent-growth bands still come from HUD FMR history (#16) — that is a series
+of the same administrative figure over ten years, which is a legitimate rent-growth
+signal, and it is a different question from what today's rent *level* is. The report says
+"market rent" for the anchor and "Fair Market Rent history" for the bands, deliberately.
+
+What follows below is the FMR-anchored design as it stood, kept because the measurements
+in it are the evidence the change was made on.
 
 **A fifth role lands at U6: the rent-growth series.** The API serves ten fiscal years
 (FY2017–2026, verified for all three inference counties), which is a rent-native growth

@@ -428,15 +428,27 @@ def _stated_rent_section(state: DealState, detail) -> list[str]:
     shows its working only on the runs where the working looked good.
 
     **No flag, no objection, no effect on confidence or routing** — this is a disclosure,
-    not a check (Q4). The reason is measured rather than cautious: the gap is ~-29% on all
-    three demo listings, and it is structural. `rent_estimate` is anchored to FMR, a
-    40th-percentile administrative rent, while the corpus the model learned from rents at
-    roughly 1.40x that anchor — so the model predicts market-typical rent, and #11
+    not a check (Q4). The reason was measured rather than cautious: the gap was ~-29% on
+    all three demo listings and it was *structural*. `rent_estimate` was anchored to FMR,
+    a 40th-percentile administrative rent, while the corpus the model learned from rented
+    at roughly 1.40x that anchor — so the model predicted market-typical rent while #11
     calibrated these listings to the anchor itself. Raising an objection from that would
-    charge the deal for a property of the fixtures. Whether the offset belongs to the
-    market or to the corpus is genuinely unsettled and needs an independently observed
-    market-rent series to answer (OQ-6, #16), which is why
-    `config.RENT_CLAIM_DIVERGENCE_DISCLOSURE_THRESHOLD` ships as `None`.
+    have charged the deal for a property of the fixtures.
+
+    **That premise expired at U11.3 and the measurement was re-run rather than assumed.**
+    The anchor is a market rent index now, not a 40th-percentile benchmark, so the
+    structural offset is gone. Across the 13 fixtures carrying independently-set rents:
+    **mean -11.4%, median -9.7%, range -39.4% to +66.6%** — dispersed and sign-varying,
+    which is a property of each deal rather than of the anchor. The reason this stayed a
+    disclosure has therefore been removed, and **whether to promote it to a Critic
+    objection is an open decision rather than a settled one** (U8.7, OQ-1). It ships as a
+    disclosure until that is taken, which is the same behavior for a different and now
+    honestly-stated reason.
+
+    The demo deals cannot be used to answer it: their `rent_basis` is `hud_fmr:2`, so #11
+    set their stated rents *from* the old anchor. Any gap they show measures the
+    FMR-versus-market spread, not the deal — which is a live finding about the demo set,
+    not about this check.
 
     Reason/Act/Observe/Decide is the Summarizer's, not this helper's: it renders, and
     decides only how much to say.
@@ -513,36 +525,43 @@ def _stated_rent_section(state: DealState, detail) -> list[str]:
             f"as one figure with a margin around it."
         )
 
-    # The caveat is direction-dependent, and getting that wrong would be worse than
-    # omitting it. The estimate is anchored to a benchmark that sits below typical market
-    # rents while the corpus behind the model sits above it, so the estimate leans high:
-    # stated rents *below* it are the expected shape and say little, and stated rents
-    # *above* it run against that lean and say more.
+    # **This caveat was direction-dependent for a reason that stopped being true on
+    # Aug 30, 2026 (U11.3), and the correction is a narrowing rather than a rewrite.**
+    #
+    # It used to say a negative gap was *expected*: the estimate was anchored to a
+    # 40th-percentile federal affordability benchmark while the corpus behind the model
+    # rented well above it, so every estimate leaned high by a structural offset and
+    # stated rents below it said nothing. Measured then, the gap was ~-29% on all three
+    # demo listings — a constant, which is what a structural offset looks like.
+    #
+    # The anchor is a market rent index now, so that offset is gone. Re-measured across
+    # the 13 fixtures that carry independently-set rents: **mean -11.4%, median -9.7%,
+    # range -39.4% to +66.6%.** Dispersed and sign-varying, which is what a property of
+    # the *deal* looks like. So a negative gap is no longer "expected" in the sense of
+    # being predicted by the anchor — but it is still the common direction, and the two
+    # remaining reasons for it are real and worth stating. The text below says the
+    # narrower, true thing.
     if gap < 0:
         lines.extend([
             "",
-            "> **A gap in this direction is expected and is not on its own evidence "
-            "that the property is under-rented.** The estimate is anchored to a federal "
-            "affordability benchmark that sits below typical market rents by design, "
-            "while the listings the model learned from rent well above that benchmark — "
-            "so the estimate leans toward market-typical rent, and these figures sit "
-            "nearer the benchmark. An independently observed market-rent series "
-            "(Zillow's rent index) now informs the estimate where its coverage allows — "
-            "see the rent disclosures above — which narrows, but does not settle, which "
-            "of the two better describes this local market.",
+            "> **A gap in this direction is common and is not on its own evidence that "
+            "the property is under-rented.** The estimate describes what a unit of this "
+            "size and configuration rents for in this ZIP code today; a stated rent is "
+            "what sitting tenants are actually paying, which lags the market wherever "
+            "leases were signed earlier or renewed below market. It is also an estimate "
+            "with a stated error band — see the rent disclosures above — and a gap "
+            "inside that band is not a disagreement.",
             "",
         ])
     else:
         lines.extend([
             "",
-            "> **Stated rents above the estimate run against the direction this system "
-            "tends to err.** The estimate is anchored to a federal affordability "
-            "benchmark that sits below typical market rents, while the listings the "
-            "model learned from rent well above it, so the estimate already leans "
-            "toward the higher of the two. Rents stated above it are therefore worth "
-            "verifying against leases rather than taken from the listing — the usual "
-            "explanations are short-term or furnished tenancies, rents including "
-            "utilities or parking, or figures that are asking rather than collected.",
+            "> **Stated rents above the estimate are worth verifying against leases "
+            "rather than taken from the listing.** The estimate describes a unit of this "
+            "size and configuration in this ZIP code; rents materially above it usually "
+            "have an explanation the listing has not given — short-term or furnished "
+            "tenancies, rents including utilities or parking, or figures that are asking "
+            "rather than collected.",
             "",
         ])
     return lines

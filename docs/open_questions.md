@@ -208,6 +208,20 @@ geography better, per-city mean spread 0.172 against FMR's 0.257) but costing a 
 and 27% of training rows. Q5's veto branch fired: checks A and B are **not** promoted.
 Reproduce both with `scripts/zori_evidence.py` and `--anchor-comparison`.
 
+**CLOSED Aug 30, 2026 (U11.3), and both follow-ons resolved in the same change.** Cut-list
+item 6 was taken as a **hybrid** — ZORI for the rent level at the subject's own ZIP, HUD
+only for the bedroom step — so the drift U8.4b corrected for is now divided out where it
+arises and `tools/rent_drift.py` was retired. Two numbers above were wrong and are
+corrected here rather than left standing: the anchor swap costs **0.3%** of training rows,
+not 27% (the county-median fallback recovers 99.0% of the ZIP-level gap), and it does not
+require abandoning FMR, which is why `FMR_BEDROOM_CAP_EXCEEDED` survives.
+
+**Q5's veto branch has since had its own premise removed** — see U8.7 in
+[`tasks/task_list_u8.md`](tasks/task_list_u8.md). The ~−29% structural gap that justified
+*not* promoting checks A and B was a property of the FMR anchor; re-measured on the new
+one it is mean −11.4%, median −9.7%, ranging −39.4% to +66.6%. Promotion is a live
+decision again, and is the architect's.
+
 **Why it ran first, recorded because the reasoning generalizes.** It had no unit for two units. It moves
 to the *front* on dependency rather than on enthusiasm: three deferred items are gated on
 this one number (promoting Critic checks A and B at `agents/critic.py:187`, the stated-rent

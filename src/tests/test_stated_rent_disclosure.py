@@ -40,17 +40,25 @@ def test_the_stated_rents_and_the_estimate_both_reach_the_reader():
 
 
 def test_the_caveat_follows_the_direction_of_the_gap():
-    """The structural offset only explains stated rents that fall *below* the estimate.
-    Printing that explanation over a listing whose rents sit above it would excuse the
-    one case worth questioning."""
+    """The explanation for a low stated rent must not be printed over a high one.
+
+    **The reason the caveat is direction-dependent changed at U11.3; that it must be
+    did not.** It used to be a structural offset — the estimate was anchored to a
+    40th-percentile benchmark, so it leaned high by construction and stated rents below
+    it said nothing. The anchor is a market index now and that offset is gone; what
+    remains is that a sitting tenant's rent lags the market while an above-market claim
+    does not have a benign default explanation. Either way, printing the low-side
+    reassurance over a high-side gap would excuse the one case worth questioning, which
+    is what this asserts.
+    """
     below = _render(estimate=4_075.0, rents=[2_850.0], unit_count=1, bedrooms=2)
     above = _render(estimate=1_700.0, rents=[2_400.0], unit_count=1, bedrooms=1)
 
-    assert "is expected" in below
+    assert "is common and is not on its own evidence" in below
     assert "worth verifying against leases" not in below
 
     assert "worth verifying against leases" in above
-    assert "is expected" not in above
+    assert "is common and is not on its own evidence" not in above
 
 
 def test_a_listing_that_states_no_rents_says_so():

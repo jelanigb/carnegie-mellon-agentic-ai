@@ -516,6 +516,56 @@ published ZIP schedules in the corpus's own FY2019 vintage, and only Chicago imp
 anchored at county resolution on both sides and now say so via
 `FlagKind.RENT_ANCHOR_COUNTY_LEVEL`.
 
+### Reopened and re-closed Aug 30, 2026 (U11.3) — the anchor is a market index now
+
+**Everything above is the FMR-anchored design, and it was superseded rather than
+refined.** The section above closes with a partial result — Chicago improved, Los Angeles
+and Cleveland did not, because HUD had published no ZIP schedules in those counties at the
+corpus's vintage. That partial-ness was the whole reason to look again.
+
+**What replaced it.** The anchor is now `ZORI at the row's own ZIP and own month × the
+HUD schedule's ratio between unit sizes`. Zillow publishes a monthly ZIP-level rent index
+covering 5,662 of the corpus's 5,686 ZIPs — so ZIP grain exists in *every* market at the
+corpus's own vintage, which is exactly what the SAFMR route could not supply. HUD is kept
+only for the bedroom step, whose own level cancels, so the schedule's drift against the
+market can no longer reach a rent figure.
+
+**Measured, per metro** (`scripts/anchor_probe.py`, five candidates under one
+cross-validation):
+
+| Metro | FMR anchor | Hybrid anchor | |
+| --- | --- | --- | --- |
+| New York | $981 | **$855** | −13% |
+| Chicago | $454 | **$343** | −24% |
+| Cleveland | $366 | **$357** | −2% |
+| Los Angeles | $450 | $509 | **+13% worse** |
+| Overall | $451 | $452 | flat |
+
+**The overall figure is flat and that is not the result.** Los Angeles is 41% of the
+training frame, so it drags a headline that hides a 13–24% improvement in the two markets
+whose disclosures this work exists to fix. **Chicago is the finding that changes the
+reasoning**: it was already 100% ZIP-anchored under FMR, so resolution cannot explain a
+24% improvement there. ZORI is simply a better reference series than the administrative
+schedule, independent of grain — a broader claim than "close the sub-county gap," and a
+stronger argument than the one this section was originally making.
+
+**One hypothesis tested and not supported**, recorded so it is not re-run: Los Angeles is
+both the market ZORI makes worse and the one where the county fallback carries the most
+weight, so the fallback looked like the culprit. Split by tier, it is not — within Los
+Angeles the county tier scores 468 against the ZIP tier's 487. Los Angeles genuinely
+prices better against FMR.
+
+**And the blind spot above narrowed without closing.** "The FMR anchor is the only channel
+through which location enters, and that anchor is county-level" was literally true in Los
+Angeles and New York; it is not any more. What remains is that `RENT_MODEL_FEATURES` still
+carries no market identifier, so whatever the anchor fails to absorb is still error the
+model structurally cannot recover — now below the *ZIP* rather than below the county.
+`rent_diverges_from_comps` should fire less often and mean something narrower when it
+does, and the batch confirms it: `chicago-uptown-duplex` measured +46.6% divergence under
+FMR and −6.1% under the hybrid, on a listing nothing was bent in.
+
+---
+
 **The back-cast was tried, looked better, and was rejected on measurement.**
 Reconstructing ZIP schedules for every county produced convergence across all three
 markets (−10.7% / −14.3% / −13.9%), which was briefly taken as success. It was an
