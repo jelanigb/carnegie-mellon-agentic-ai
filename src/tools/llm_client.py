@@ -273,10 +273,29 @@ class LlmClient:
             raise LlmError(_transport_failure(resolved_model, exc)) from exc
 
         content = resp.choices[0].message.content or ""
+
+        # OpenRouter's own account of which backend answered — not part of the OpenAI
+        # response schema `resp` is typed against, so `.model_dump()` is what surfaces it
+        # rather than an attribute access. Previously read nowhere and discarded the
+        # instant this function returned (OQ-17): the same model id is served from
+        # several, not-numerically-identical deployments, and this is the only place
+        # that fact is ever visible. Logged for every live call — not on a cache hit,
+        # since a hit answers from a frozen recording and reporting "today's" provider
+        # for it would be attributing someone else's call to this one.
+        response_meta = resp.model_dump()
+        provider = response_meta.get("provider")
+        system_fingerprint = response_meta.get("system_fingerprint")
+        diagnostics.log_note(
+            f"llm_client.complete: {resolved_model} answered by {provider or 'unknown'}",
+            f"system_fingerprint={system_fingerprint or 'none'}",
+        )
+
         # Recorded after a successful call only. A failed call has nothing worth
         # replaying, and recording one would make a transient outage permanent for
         # every future run keyed on the same prompt.
-        self._cache.put(key, content)
+        self._cache.put(
+            key, content, provider=provider, system_fingerprint=system_fingerprint
+        )
         return content
 
     def call_with_schema(

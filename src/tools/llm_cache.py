@@ -172,8 +172,23 @@ class ResponseCache:
             raise CacheMiss(digest, key.model, self._dir)
         return None
 
-    def put(self, key: CacheKey, response: str) -> None:
-        """Record a response. No-op in `off`; in `replay` nothing new is ever recorded."""
+    def put(
+        self,
+        key: CacheKey,
+        response: str,
+        *,
+        provider: Optional[str] = None,
+        system_fingerprint: Optional[str] = None,
+    ) -> None:
+        """Record a response. No-op in `off`; in `replay` nothing new is ever recorded.
+
+        `provider`/`system_fingerprint` are OpenRouter's own account of which backend
+        actually answered — previously read off the live response and immediately
+        discarded (OQ-17: the same model ID is served from multiple, not-numerically-
+        identical deployments, and this is the only place that fact is ever visible).
+        Recorded for auditability, same reasoning as `prompt`/`system` below; nothing in
+        this module reads them back for lookup or replay behavior.
+        """
         if self._mode != CacheMode.READ_WRITE:
             return
 
@@ -186,6 +201,8 @@ class ResponseCache:
             "system": key.system,
             "prompt": key.prompt,
             "response": response,
+            "provider": provider,
+            "system_fingerprint": system_fingerprint,
         }
 
         # Same atomicity discipline as tools/hud_fmr.py's cache: write to a temporary
