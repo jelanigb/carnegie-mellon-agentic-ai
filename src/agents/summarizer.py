@@ -42,12 +42,15 @@ from typing import Optional
 import config
 from state import (
     Comp,
+    ConfidenceBreakdown,
     DealState,
     DealStatus,
     Flag,
+    FlagScope,
     ForecastDetail,
     Severity,
     count_area_positioned,
+    scope_of,
 )
 
 AGENT = "summarizer"
@@ -80,8 +83,63 @@ def _join(items: list[str]) -> str:
     return f"{', '.join(items[:-1])} and {items[-1]}"
 
 
+# The two halves of the disclosure list, and what each one asks of a reader (U8.6d). The
+# split is by *subject*, not by severity — severity still orders within each half — because
+# "the listing never stated a price" and "no rent index covers this county" call for
+# different responses even at identical weight. One is a gap someone can close; the other
+# is a standing property of the data, the same for every listing in that market.
+_SCOPE_HEADING = {
+    FlagScope.DEAL: "About this property",
+    FlagScope.MARKET: "About our coverage of this market",
+}
+
+_SCOPE_GUIDANCE = {
+    FlagScope.DEAL: (
+        "specific to this listing or this run — some of these may be resolvable"
+    ),
+    FlagScope.MARKET: (
+        "true of every listing in this market, not of this property in particular; "
+        "they still widen the uncertainty on the numbers below"
+    ),
+}
+
+
+def _confidence_arithmetic(breakdown: Optional[ConfidenceBreakdown]) -> list[str]:
+    """Show what the deduction was made of, not just what it totalled (U8.6d).
+
+    A reader could always see the flags and the score; what was missing was the sum
+    connecting them, so "confidence 0.55" arrived as a verdict rather than as a result.
+    One line, immediately under the score, splitting the deduction the same way the
+    disclosure list below is split — so the two halves of the report agree about what this
+    deal's doubt is made of.
+
+    Silent when nothing was deducted: "0.00 deducted, 0.00 from each of two things" is
+    noise on a clean run, and the score of 1.00 already says it.
+    """
+    if breakdown is None or breakdown.total_deducted <= 0:
+        return []
+    return [
+        f"*{breakdown.total_deducted:.2f} deducted from a starting 1.00: "
+        f"{breakdown.deducted_deal:.2f} from this property, "
+        f"{breakdown.deducted_market:.2f} from how much is known about this market. "
+        f"Both halves are itemized under Disclosures below.*",
+        "",
+    ]
+
+
 def _flag_section(flags: list[Flag]) -> list[str]:
-    """Every flag, grouped by severity, most severe first."""
+    """Every flag, grouped by what it is *about*, then by severity within that.
+
+    **Grouped by subject rather than only by severity as of U8.6d.** The previous ordering
+    was severity alone, which put a warning about the county's rent index next to a warning
+    about this building's comp set and left a reader to work out that only one of them
+    describes the deal in front of them. It never dropped anything — rule 2 of the module
+    docstring stands, every flag is rendered in full — but it made the list harder to act
+    on the longer it got.
+
+    Property-scoped disclosures print first, deliberately: they are the ones a reader might
+    do something about, and the report's job is to put what matters where it is read.
+    """
     if not flags:
         return [
             "## Disclosures",
@@ -94,23 +152,32 @@ def _flag_section(flags: list[Flag]) -> list[str]:
     lines = ["## Disclosures", ""]
     lines.append(
         f"{len(flags)} disclosure(s) were raised during this evaluation. Each is "
-        "listed in full below, most severe first."
+        "listed in full below, grouped by whether it describes this property or the "
+        "data available for its market, and ordered most severe first within each."
     )
     lines.append("")
 
-    for severity in _SEVERITY_ORDER:
-        matching = [f for f in flags if f.severity == severity]
-        if not matching:
+    for scope in (FlagScope.DEAL, FlagScope.MARKET):
+        in_scope = [f for f in flags if scope_of(f.kind) is scope]
+        if not in_scope:
             continue
-        lines.append(
-            f"### {_SEVERITY_LABEL[severity]} ({len(matching)}) — "
-            f"{_SEVERITY_GUIDANCE[severity]}"
-        )
+        lines.append(f"### {_SCOPE_HEADING[scope]} ({len(in_scope)})")
         lines.append("")
-        for f in matching:
-            lines.append(f"- **`{f.kind}`** — {f.detail}  ")
-            lines.append(f"  *raised by:* `{f.source_agent}`")
+        lines.append(f"*{_SCOPE_GUIDANCE[scope].capitalize()}.*")
         lines.append("")
+        for severity in _SEVERITY_ORDER:
+            matching = [f for f in in_scope if f.severity == severity]
+            if not matching:
+                continue
+            lines.append(
+                f"**{_SEVERITY_LABEL[severity]} ({len(matching)})** — "
+                f"{_SEVERITY_GUIDANCE[severity]}"
+            )
+            lines.append("")
+            for f in matching:
+                lines.append(f"- **`{f.kind}`** — {f.detail}  ")
+                lines.append(f"  *raised by:* `{f.source_agent}`")
+            lines.append("")
 
     return lines
 
@@ -788,6 +855,7 @@ def summarizer_agent(state: DealState) -> dict:
         f"**Comparables:** {len(state.comps)}"
     )
     lines.append("")
+    lines.extend(_confidence_arithmetic(state.confidence_detail))
 
     # Disclosures precede findings deliberately — see the module docstring.
     lines.extend(_flag_section(state.flags))

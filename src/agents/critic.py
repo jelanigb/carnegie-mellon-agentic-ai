@@ -47,7 +47,19 @@ from __future__ import annotations
 from typing import NamedTuple
 
 import config
-from state import DealState, FlagKind, Severity
+from state import (
+    ConfidenceBreakdown,
+    DealState,
+    Flag,
+    FlagKind,
+    FlagScope,
+    Severity,
+    scope_of,
+)
+
+# Only used to break ties when two disclosures cost the same — a critical and a warn can
+# never tie on cost today, but the ordering should not depend on that staying true.
+_SEVERITY_RANK = {Severity.INFO: 0, Severity.WARN: 1, Severity.CRITICAL: 2}
 
 AGENT = "critic"
 
@@ -129,8 +141,29 @@ def confidence_from_flags(state: DealState) -> float:
     # does. That is the boundary the U2 defect sat on. It is a live case for the rule but
     # not a *deal* — only the ablation flag raises that kind — so U8 still owes an eval
     # case that reaches the boundary through a property of the listing itself.
+    return confidence_breakdown(state).score
+
+
+def confidence_breakdown(state: DealState) -> ConfidenceBreakdown:
+    """The same sum, itemized (U8.6d).
+
+    `confidence_from_flags` above is the contract every caller had before this existed and
+    still the one the routing decision uses; this returns the *same arithmetic* with its
+    parts kept, so the report can show a reader where the deduction came from instead of
+    only what it totalled.
+
+    **The split is reporting, not scoring.** Market-scoped flags are charged at exactly the
+    same weight as deal-scoped ones — see `state.FlagScope` for why the two-score
+    alternative was measured and rejected. If this function ever starts charging them
+    differently, that decision has been reversed by accident.
+
+    The dominant disclosure is the largest single deduction, ties broken by severity and
+    then by order raised. It is what the escalation sentence names, so a reviewer can tell
+    on sight whether they have been handed something they can act on.
+    """
     seen: set[tuple[str, FlagKind, str]] = set()
-    penalty = 0.0
+    market = deal = 0.0
+    dominant: tuple[float, int, Flag] | None = None
     for f in state.flags:
         if f.kind in _DERIVED_KINDS:
             continue
@@ -138,8 +171,23 @@ def confidence_from_flags(state: DealState) -> float:
         if signature in seen:
             continue
         seen.add(signature)
-        penalty += config.FLAG_SEVERITY_PENALTY.get(f.severity, 0.0)
-    return max(0.0, min(1.0, 1.0 - penalty))
+        cost = config.FLAG_SEVERITY_PENALTY.get(f.severity, 0.0)
+        if scope_of(f.kind) is FlagScope.MARKET:
+            market += cost
+        else:
+            deal += cost
+        rank = _SEVERITY_RANK.get(f.severity, 0)
+        if cost > 0 and (dominant is None or (cost, rank) > (dominant[0], dominant[1])):
+            dominant = (cost, rank, f)
+
+    return ConfidenceBreakdown(
+        score=max(0.0, min(1.0, 1.0 - (market + deal))),
+        deducted_market=market,
+        deducted_deal=deal,
+        dominant_kind=dominant[2].kind if dominant else None,
+        dominant_scope=scope_of(dominant[2].kind) if dominant else None,
+        dominant_detail=dominant[2].detail if dominant else None,
+    )
 
 
 def _consistency_objections(state: DealState) -> list[Objection]:
@@ -404,10 +452,47 @@ def _interaction_objections(state: DealState) -> list[Objection]:
     return objections
 
 
+def _review_guidance(breakdown: ConfidenceBreakdown) -> str:
+    """Tell the reviewer, in the escalation sentence itself, what kind of thing this is.
+
+    **The question this answers is whether there is anything they can act on**, and it is
+    the difference between being asked to review *"the listing never stated a price"* and
+    *"no ZIP-level rent index covers this county"*. The first is a gap someone can go and
+    close; the second is a standing limitation of the data, identical for every listing in
+    that market, and a reviewer who reads it expecting a task has had their attention
+    spent for nothing.
+
+    Written as plain prose with no flag names or thresholds in it (§8): the audience is an
+    investor or a demo viewer, and `rent_anchor_county_level` means nothing to them. The
+    dominant disclosure's own text is quoted instead, because it was already written for
+    this reader.
+    """
+    if breakdown.dominant_detail is None:
+        return ""
+    lead = breakdown.dominant_detail.split(". ")[0].rstrip(".")
+    if breakdown.dominant_scope is FlagScope.MARKET:
+        weight = (
+            "Most of what was deducted concerns how much this system knows about this "
+            "market, not this property"
+            if breakdown.deducted_market >= breakdown.deducted_deal
+            else "The single largest deduction concerns this market rather than this "
+                 "property"
+        )
+        return (
+            f" {weight} — a reviewer can weigh it but cannot resolve it. The leading "
+            f"one: {lead}."
+        )
+    return (
+        f" The largest single deduction is about this specific listing, so there may be "
+        f"something a reviewer can act on: {lead}."
+    )
+
+
 def critic_agent(state: DealState) -> dict:
     """Node function: returns a partial state update, never the whole state."""
     objections = _consistency_objections(state)
-    confidence = confidence_from_flags(state)
+    breakdown = confidence_breakdown(state)
+    confidence = breakdown.score
 
     # Each objection carries its own severity — an interaction that voids the rent
     # cross-check is not the same weight as one that merely degrades it, and flattening
@@ -461,7 +546,7 @@ def critic_agent(state: DealState) -> dict:
                 AGENT,
                 FlagKind.LOW_CONFIDENCE_ESTIMATE,
                 f"{reason}; routing to human review rather than reporting as a "
-                f"normal result.",
+                f"normal result.{_review_guidance(breakdown)}",
                 Severity.WARN,
             )
         )
@@ -489,8 +574,18 @@ def critic_agent(state: DealState) -> dict:
 
     return {
         "confidence_score": confidence,
+        "confidence_detail": breakdown,
         "critic_rejected": rejected,
         "needs_human_review": low_confidence or has_critical or budget_exhausted,
         "flags": flags,
-        "stub_nodes": [AGENT],
     }
+    # **`stub_nodes` no longer carries this agent, and it should have stopped at U7.**
+    # U2 built half of this file and declared the half it had not built, which was the
+    # honest thing to do at the time. U7 built the other half — this module's own first
+    # line has said "complete as of U7" since then — but the declaration was never
+    # removed, so every report published since has opened with a banner telling its
+    # reader that the Critic "ran as a stub or partial implementation and did not produce
+    # its full output". That is exactly the shape of claim §1 built `stub_nodes` to
+    # prevent, pointed the wrong way: a true statement about the build that outlived the
+    # build. Found at U8.6d while reading a rendered report rather than the code, which is
+    # the only place this defect was visible.

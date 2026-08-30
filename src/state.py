@@ -248,6 +248,91 @@ class RentEstimateSource(StrEnum):
     LLM_FALLBACK = "llm_fallback"
 
 
+class FlagScope(StrEnum):
+    """Whether a disclosure is about *this deal* or about *our data in its market* (U8.6d).
+
+    **This exists because the confidence score could not distinguish "this deal has
+    problems" from "our data is thin where this property is," and a reader needs both.**
+    Measured on the eval batch, the difference is stark: one New York fixture scored 0.55
+    with every charged warn describing its market and none describing the listing, while a
+    Chicago fixture scored 0.25 with almost all of them describing the listing. Those two
+    reports asked for very different things from a reviewer and said the same thing.
+
+    **What this is not: a second score.** Splitting confidence into `deal_confidence` and
+    `market_coverage` with independent floors was proposed, measured, and rejected by the
+    architect — the reasoning is in `tasks/task_list_u8.md` U8.6d and is worth restating
+    because it constrains what this enum may be used for. Market coverage is not a parallel
+    kind of doubt that can be set aside; **it propagates into the deal's own numbers.**
+    Elevated market error doubles this estimate's error bar. A county-tier anchor means the
+    figure describes a county whose rents span roughly 2x. A stale index means the market
+    read behind the number is old. Spatial concentration weakens the one independent check
+    on it. Scoring the deal side alone would have reported that New York fixture at 1.00
+    confidence on a rent figure twice as unreliable as the report's own headline accuracy
+    claim — a Transparent Degradation regression, and precisely the failure the split was
+    meant to prevent.
+
+    So this classification changes **what the report says**, never what it decides. Market
+    flags are charged exactly as they were. Anything that reads this to alter routing or
+    scoring is reintroducing the rejected design.
+    """
+
+    # A property of this listing or this run: the address didn't resolve, the comp set had
+    # to be relaxed, the model and the comps disagree. A reviewer may be able to act on it.
+    DEAL = "deal"
+    # A property of the market the subject sits in, identical for every listing there. A
+    # reviewer can weigh it but cannot resolve it.
+    MARKET = "market"
+
+
+# The market-scoped kinds, enumerated rather than derived, because there is no property of
+# a `FlagKind` that predicts this — it is a judgment about each disclosure's subject and it
+# belongs where the vocabulary is defined. Everything absent is DEAL-scoped: the default is
+# the actionable one, so a kind added later and not classified reads as something a
+# reviewer might fix rather than something they cannot, which is the failure direction that
+# wastes a reviewer's attention instead of hiding a limitation from them.
+_MARKET_SCOPED_KINDS: frozenset[FlagKind] = frozenset({
+    # The anchor describes the county rather than the subject's ZIP.
+    FlagKind.RENT_ANCHOR_COUNTY_LEVEL,
+    # The model's own historical error is worse in this market than overall.
+    FlagKind.RENT_ESTIMATE_MARKET_ERROR_ELEVATED,
+    # The market index behind the anchor has not been observed recently.
+    FlagKind.RENT_ANCHOR_INDEX_STALE,
+    # The comp set stands on too few distinct places to check the estimate independently.
+    FlagKind.COMPS_SPATIALLY_CONCENTRATED,
+})
+
+
+def scope_of(kind: FlagKind) -> FlagScope:
+    """Which side of the property/market split a disclosure falls on."""
+    return FlagScope.MARKET if kind in _MARKET_SCOPED_KINDS else FlagScope.DEAL
+
+
+class ConfidenceBreakdown(BaseModel):
+    """What the confidence score was made of (U8.6d).
+
+    The score has always been a sum, and a reader could always see both the flags and the
+    result — but never the arithmetic connecting them. This carries it, so a report can say
+    *"0.45 deducted: 0.45 from data coverage in this market, 0.00 from this property"*
+    rather than only *"confidence 0.55"*.
+
+    `deducted_market + deducted_deal == 1.0 - score` except where the score floors at 0.0,
+    which is why the deductions are carried rather than recomputed from the score.
+    """
+
+    score: float
+    deducted_market: float = 0.0
+    deducted_deal: float = 0.0
+    # The single disclosure that cost the most, with ties broken by severity and then by
+    # order raised. `None` when nothing was charged.
+    dominant_kind: Optional[FlagKind] = None
+    dominant_scope: Optional[FlagScope] = None
+    dominant_detail: Optional[str] = None
+
+    @property
+    def total_deducted(self) -> float:
+        return self.deducted_market + self.deducted_deal
+
+
 class DealStatus(StrEnum):
     """Where a deal's run stands. Terminal values are `COMPLETE` and `FAILED`;
     `NEEDS_REVIEW` is a durable state a deal can still be resumed from (see
@@ -804,6 +889,11 @@ class DealState(BaseModel):
 
     # review
     confidence_score: Optional[float] = None
+    # The same number, itemized (U8.6d). Carried beside the score rather than replacing it
+    # because `confidence_score` is what routing reads and what every prior artifact
+    # recorded; this is what the *report* reads, so a reader can see the arithmetic that
+    # connects the flags above it to the number.
+    confidence_detail: Optional[ConfidenceBreakdown] = None
     needs_human_review: bool = False
     critic_rejected: bool = False
     rework_count: int = 0

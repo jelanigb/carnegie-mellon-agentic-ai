@@ -77,6 +77,7 @@ from agents import valuation_rent as valuation_module
 from agents.critic import Objection, critic_agent
 from agents.extractor import FieldAssumption, ListingExtraction
 from agents.planner import planner_agent, route_after_critic
+from agents.summarizer import summarizer_agent
 from graph import build_graph
 from state import (
     DealState,
@@ -524,14 +525,40 @@ def test_every_flag_is_rendered_in_full_not_counted():
         assert str(f.kind) in report, f"Flag kind {f.kind} is missing from the report."
 
 
-def test_report_discloses_stubbed_agents():
-    """A reader must be able to tell 'unbuilt' from 'nothing to report'."""
-    result = run_deal()
-    report = result["report_markdown"]
+def test_the_build_status_banner_still_renders_when_a_node_is_stubbed():
+    """A reader must be able to tell 'unbuilt' from 'nothing to report'.
+
+    **Rewritten Aug 30, 2026 (U8.6d), and the rewrite is the interesting part.** This
+    asserted `"Provisional build" in report` on an ordinary run, which passed for four
+    units because `agents/critic.py` had never stopped declaring itself a stub — so the
+    test was asserting a defect. Its companion assertion, `nodes.VALUATION_RENT in
+    report`, was satisfied by the string appearing in a flag's `raised by:` line rather
+    than in the banner at all.
+
+    Every agent is built now, so the mechanism has nothing to report on an ordinary run.
+    It is still load-bearing for anything stubbed later, so it is exercised directly
+    against a state that declares one, rather than being deleted along with the defect
+    that was keeping it green.
+    """
+    state = DealState(raw_listing_text="[stub banner]", stub_nodes=["some_future_agent"])
+    report = summarizer_agent(state)["report_markdown"]
 
     assert "Provisional build" in report
-    assert nodes.VALUATION_RENT in report
-    assert result["stub_nodes"], "Stubbed nodes should record themselves in state."
+    assert "some_future_agent" in report
+
+
+def test_no_agent_still_reports_itself_as_a_stub():
+    """The other half, and the reason the test above could sit wrong for four units.
+
+    `test_the_extractor_no_longer_reports_itself_as_a_stub` below checks one agent by
+    name, which is why the Critic's stale declaration survived U7's completion of it.
+    This checks the set, so the next agent to finish cannot leave the claim behind.
+    """
+    result = run_deal()
+    assert result["stub_nodes"] == [], (
+        f"{result['stub_nodes']} still declare themselves unbuilt. Every agent is "
+        f"built; a stale declaration tells every reader the report is provisional."
+    )
 
 
 def test_the_extractor_no_longer_reports_itself_as_a_stub():
