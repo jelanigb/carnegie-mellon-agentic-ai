@@ -913,18 +913,30 @@ def _disclosure_flags(
         )
 
     # Two near-ties are possible and they mean different things, so they are reported
-    # separately rather than collapsed into one score gap.
+    # separately rather than collapsed into one score gap — and since U8.6c they carry
+    # different severities, because the two ties have different stakes:
     #
-    # TODO(reliability): a live scoring call is not perfectly deterministic even at
-    # temperature 0 (OQ-17, diagnosed with a direct experiment — see
-    # docs/design/architecture.md §3). Two confirmed causes, not one: OpenRouter routes
-    # this model across several backend deployments that are not numerically identical,
-    # and even pinned to one fixed deployment, scores still swing widely call to call —
-    # `seed` does not help, since temperature 0 has no sampling step for it to control.
-    # So the same deal can trip this flag on one run and not the next. The message below
-    # states the gap as a fact about the evidence; it does not currently say the tie
-    # could be a property of this one sample rather than a stable judgment. No unit
-    # assigned.
+    # - A *framing* tie (depth 1) is WARN. `TOT_FRAMING_BEAM_WIDTH` is 1, so the losing
+    #   framing — a whole reading of the data — is discarded on the conservatism
+    #   tie-break, and the basis of every number in the forecast was chosen by policy
+    #   rather than by evidence. That is real doubt about the forecast.
+    # - A *pairing* tie (depth 2) is INFO. `TOT_BEAM_WIDTH` is 3, so both tied pairings
+    #   survive into the reported scenario set; labels are assigned by projected outcome
+    #   (never by score rank) and band provenance comes from the framing every pairing
+    #   shares — so nothing a reader sees hinges on which pairing nominally led. Charging
+    #   0.15 of confidence for a distinction that does not survive to the report was
+    #   pricing the hypothesis space's symmetry as deal doubt: mirror pairings
+    #   (rent-up/price-down against rent-down/price-up) are genuinely equally defensible
+    #   under this project's measured negative correlation, and the evaluator scoring
+    #   them identically is the scoring working, not a degradation.
+    #
+    # Both messages state the one-sample caveat OQ-17 measured: a live scoring call is
+    # not perfectly deterministic even at temperature 0 (OpenRouter routes across
+    # non-identical backend deployments, and even one pinned deployment's scores swing
+    # call to call — see docs/design/architecture.md §3), so a near-tie can be a property
+    # of this one draw rather than a stable judgment. The structural response — scoring
+    # k times and disclosing disagreement — remains OQ-17's open question, not this
+    # flag's job.
     framing_gap = result.score_gap_by_depth.get(1)
     if framing_gap is not None and framing_gap < config.TOT_TIE_EPSILON:
         flags.append(
@@ -935,8 +947,12 @@ def _disclosure_flags(
                 f"inside the {config.TOT_TIE_EPSILON} tie threshold. A framing decides "
                 f"which years feed every band, so this means the whole forecast rests on "
                 f"a reading the evaluator could not separate from its alternative, "
-                f"resolved by the conservatism tie-break. The branch ledger lists the "
-                f"framing that lost and what it would have implied.",
+                f"resolved by a fixed preference for the more conservative one. The "
+                f"branch ledger lists the framing that lost and what it would have "
+                f"implied. One caution in reading this: the scores come from a single "
+                f"model call whose repeat runs measurably vary, so a gap this small can "
+                f"also be a property of this one sample rather than a stable judgment "
+                f"about the evidence.",
                 Severity.WARN,
                 planner_invocations,
             )
@@ -948,12 +964,18 @@ def _disclosure_flags(
             flag(
                 AGENT,
                 FlagKind.FORECAST_BRANCHES_NEAR_TIED,
-                f"The two best-scoring scenarios were separated by {pairing_gap:.3f}, "
-                f"inside the {config.TOT_TIE_EPSILON} tie threshold, so which one leads "
-                f"was settled by the conservatism tie-break rather than on evidence. "
-                f"Treat the ordering as one defensible reading rather than as the "
-                f"search's conclusion.",
-                Severity.WARN,
+                f"The two best-scoring scenario pairings were separated by "
+                f"{pairing_gap:.3f}, inside the {config.TOT_TIE_EPSILON} tie threshold — "
+                f"the evaluator found both equally defensible. Both appear in the "
+                f"scenario table below, and each scenario's label comes from its "
+                f"projected outcome, so no reported figure depends on which of the two "
+                f"nominally ranked first. A tie here is common and often correct: two "
+                f"pairings that mirror each other are equally consistent with the "
+                f"opposite-direction relationship between rent and price growth this "
+                f"project measured. The scores also come from a single model call whose "
+                f"repeat runs measurably vary, so a gap this small can be a property of "
+                f"this one sample.",
+                Severity.INFO,
                 planner_invocations,
             )
         )
