@@ -581,11 +581,13 @@ def valuation_rent_agent(state: DealState) -> dict:
     # on a lag. Disclosed rather than corrected: there is nothing to correct *to*, and a
     # reader weighing a rent figure should know how old the market read behind it is.
     staleness = _index_staleness_months(month)
+    detail.anchor_index_month = month
+    detail.anchor_index_staleness_months = staleness
     if staleness is not None and staleness > config.RENT_ANCHOR_MAX_STALENESS_MONTHS:
         flags.append(
             state.flag(
                 AGENT,
-                FlagKind.RENT_DRIFT_CORRECTION_UNAVAILABLE,
+                FlagKind.RENT_ANCHOR_INDEX_STALE,
                 f"The market rent index this estimate is anchored to was last observed "
                 f"{staleness} months ago ({month}). The estimate is only as current as "
                 f"that reading, and rents may have moved since.",

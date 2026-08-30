@@ -43,7 +43,12 @@ import config
 from eval.cases import EvalCase, Fault, Tier, Verdict, VerdictSource, all_cases
 from graph import build_graph
 from state import DealState, DealTerms, FlagKind, Severity
-from tools import geocoding
+from tools import geocoding, zori
+
+# The month `Fault.STALE_RENT_INDEX` pins the market index to. Chosen to sit well past
+# `config.RENT_ANCHOR_MAX_STALENESS_MONTHS` so refreshing the committed panel cannot
+# quietly stop the case from firing.
+_STALE_INDEX_MONTH = "2023-01-31"
 from tools.llm_cache import CacheMode
 from tools.llm_client import LlmClient, LlmError
 
@@ -238,6 +243,12 @@ def _case_environment(case: EvalCase, record: bool) -> Iterator[None]:
             # whether it is worth retrying is untouched.
             geocoding.city_centroid = _forced_centroid
 
+    if case.injects is Fault.STALE_RENT_INDEX:
+        # Far enough back that the staleness threshold is crossed by a wide margin, so
+        # the case does not silently stop firing when the committed panel is refreshed.
+        previous_latest_month = zori.latest_month
+        zori.latest_month = lambda panel: _STALE_INDEX_MONTH
+
     if case.injects is Fault.LLM_UNAVAILABLE:
         def _unreachable_complete(*args, **kwargs):
             raise LlmError(
@@ -260,6 +271,8 @@ def _case_environment(case: EvalCase, record: bool) -> Iterator[None]:
         config.LLM_CACHE_DIR = previous_cache_dir
         config.LLM_CACHE_MODE = previous_cache_mode
         geocoding.geocode_census = previous_geocode_census
+        if case.injects is Fault.STALE_RENT_INDEX:
+            zori.latest_month = previous_latest_month
         geocoding.city_centroid = previous_city_centroid
         LlmClient.complete = previous_llm_complete
 

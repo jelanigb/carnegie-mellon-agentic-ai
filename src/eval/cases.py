@@ -140,6 +140,25 @@ class Fault(StrEnum):
 
     GEOCODER_OUTAGE = "geocoder_outage"
     LLM_UNAVAILABLE = "llm_unavailable"
+    # **`STALE_RENT_INDEX`, added U11.3, for the same reason as the two above: no listing
+    # can reach this path.** `RENT_ANCHOR_INDEX_STALE` fires when the market-rent index
+    # the estimate is anchored to has not been observed for
+    # `config.RENT_ANCHOR_MAX_STALENESS_MONTHS`, which is a property of the *data file* on
+    # the machine, not of any property. Today's panel is one month old, so no fixture and
+    # no recording can raise it — and a kind nothing can raise corrupts the coverage
+    # census, which is the rule `state.FlagKind` already set when it retired
+    # `LLM_RENT_FALLBACK_USED`. Patched at `zori.latest_month`, one layer above the file,
+    # so the pipeline's own staleness arithmetic does the deciding rather than a directly
+    # forced flag.
+    STALE_RENT_INDEX = "stale_rent_index"
+
+
+# Faults whose seam lives inside the Extractor, and which a golden fixture therefore
+# skips. Scoped to these two rather than applied to every fault (U11.3): the check was
+# written when both faults were extraction-path ones, and `STALE_RENT_INDEX` patches the
+# market index the *Valuation* agent reads, which every case reaches whatever its tier.
+# Left unscoped, the guard would reject the only kind of case that can cover it.
+_EXTRACTION_PATH_FAULTS = frozenset({Fault.GEOCODER_OUTAGE, Fault.LLM_UNAVAILABLE})
 
 
 @dataclass(frozen=True)
@@ -187,7 +206,7 @@ class EvalCase:
             )
         if self.terms is not None:
             self._check_golden_fixture()
-        if self.injects is not None and self.terms is not None:
+        if self.injects in _EXTRACTION_PATH_FAULTS and self.terms is not None:
             # A fixture supplies its terms directly, so U8.1b's geography path takes the
             # county-only branch and the Extractor never calls the model or the geocoder
             # at all — either injection would be a silent no-op and the case would report
@@ -195,9 +214,9 @@ class EvalCase:
             # same reason `_check_golden_fixture` is: the run would still produce a
             # plausible row.
             raise ValueError(
-                f"Case {self.key!r}: a declared fault needs the seam it patches to "
-                f"actually be reached, so this case must supply `listing` rather than "
-                f"`terms`. A fixture skips the Extractor entirely."
+                f"Case {self.key!r}: {self.injects} patches a seam inside the Extractor, "
+                f"which a fixture skips entirely, so this case must supply `listing` "
+                f"rather than `terms` for the fault to be reached at all."
             )
         if self.geocoder_fallback_override is not None and self.injects is not Fault.GEOCODER_OUTAGE:
             raise ValueError(
@@ -372,6 +391,25 @@ ENGINEERED_CASES: list[EvalCase] = [
             "targeting nothing. Without at least one case that should not escalate, a "
             "threshold of 1.0 would score perfectly and the agreement figure would be "
             "measuring only how many cases were built to fail."
+        ),
+        terms=golden_fixtures.LA_ORDINARY.terms,
+    ),
+
+    EvalCase(
+        key="la-stale-rent-index",
+        tier=Tier.GOLDEN,
+        verdict=Verdict.REPORTS,
+        verdict_source=VerdictSource.PREDICTED,
+        targets=(FlagKind.RENT_ANCHOR_INDEX_STALE,),
+        injects=Fault.STALE_RENT_INDEX,
+        note=(
+            "The same control property as above, run against a market-rent index pinned "
+            "to an old observation. **Nothing about the listing is engineered** — the "
+            "condition being disclosed is a property of the data file on the machine, "
+            "not of any deal, which is exactly why it needs an injected fault rather "
+            "than a fixture: today's committed index is a month old, so no listing can "
+            "reach this path. Predicted to report: one warn-severity disclosure on an "
+            "otherwise ordinary deal does not cross the escalation line."
         ),
         terms=golden_fixtures.LA_ORDINARY.terms,
     ),
@@ -608,7 +646,7 @@ ENGINEERED_CASES: list[EvalCase] = [
             "**Measured `escalates` since U8.4b, and kept as a declared mismatch rather "
             "than re-sited.** The prediction stands on the mechanical rule — a lone WARN "
             "target reports — but ZIP 90089 is a USC campus ZIP that Zillow's rent index "
-            "does not cover, so the deal also pays `rent_drift_correction_unavailable`, "
+            "does not cover, so the deal also pays `rent_anchor_index_stale`, "
             "which with `fmr_anchor_county_level` makes three warns and 0.55. The target "
             "fired, so the triage rule fixed in advance classes this a **tuning signal**. "
             "Re-siting to a covered ZIP was considered and rejected: it would make the "
@@ -643,7 +681,7 @@ ENGINEERED_CASES: list[EvalCase] = [
             "**Measured `escalates` since U8.4b, and kept as a declared mismatch** for "
             "the same reason as `la-unpriced-triplex` a few blocks over: ZIP 90007's "
             "rent-index coverage begins 31 months after the training vintage — too late "
-            "to anchor a before/after comparison — so `rent_drift_correction_unavailable` "
+            "to anchor a before/after comparison — so `rent_anchor_index_stale` "
             "joins `fmr_anchor_county_level` and the target for three warns at 0.55. "
             "Target fired, so this is a tuning signal, not a broken case."
         ),

@@ -594,29 +594,13 @@ ZORI_MIN_CORPUS_ROWS_PER_ZCTA = 30
 # surge into the "before" figure and understate the drift being measured.
 ZORI_MAX_VINTAGE_SUBSTITUTION_MONTHS = 12
 
-# --- Rent drift correction (U8.4b, tools/rent_drift.py) -------------------
-# U8.0 measured the FMR schedule rising +51.9% against market rent's +33.5% since the
-# corpus vintage, so every uncorrected estimate reads high by the subject ZIP's own
-# drift. The correction multiplies the predicted ratio by
-# (ZORI/FMR today) / (ZORI/FMR at vintage), per ZIP.
-
-# Plausibility band for the computed factor, same philosophy as RENT_MODEL_MIN/MAX_RATIO:
-# a factor outside [0.5, 1.5] is a join or data defect — a wrong-ZIP ZORI read, a
-# wrong-year FMR — not real drift, and the correction refuses rather than applies it.
-# Measured range at U8.4b's landing: 0.744 (Los Angeles 90026, county schedule +62.1%
-# against market +20.5%) to 0.934 (Bedford-Stuyvesant 11216). Wider than U8.0's
-# +3.6%..−20% per-ZCTA range, and the difference is instructive: U8.0 measured
-# ZIP-anchored corpus rows only, which excludes the county-anchored metros — and the
-# county schedules turn out to have drifted hardest.
-RENT_DRIFT_FACTOR_MIN = 0.5
-RENT_DRIFT_FACTOR_MAX = 1.5
-
-# Months behind today the ZORI series' last observed month may run before the
-# correction's disclosure says so out loud. Zillow publishes monthly with ~1-2 months of
-# lag, so 6 separates ordinary publication lag from a file nobody has refreshed since a
-# prior semester — the failure mode the on-disk-lookup design makes possible. Refresh
-# path: tools/zori.download(force=True).
-RENT_DRIFT_MAX_ZORI_STALENESS_MONTHS = 6
+# **The rent-drift correction was removed at U11.3.** U8.4b multiplied every estimate by
+# (ZORI/FMR today) / (ZORI/FMR at vintage) to remove a measured FMR-versus-market bias.
+# The anchor is now that market index itself, read at each row's own listing month, so
+# the bias is divided out where it arises rather than corrected afterwards.
+# RENT_DRIFT_FACTOR_MIN/MAX and RENT_DRIFT_MAX_ZORI_STALENESS_MONTHS went with it; the
+# staleness question survives as RENT_ANCHOR_MAX_STALENESS_MONTHS, asked of the anchor
+# rather than of the correction.
 
 
 # --------------------------------------------------------------------------

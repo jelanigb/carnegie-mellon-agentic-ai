@@ -167,17 +167,18 @@ class FlagKind(StrEnum):
     # The estimate (and the comp-implied figures compared against it — both carry the
     # same construction, so both carry the same drift) was multiplied by the subject
     # ZIP's measured market-vs-schedule drift factor (U8.4b, from U8.0's finding that
-    # the FMR schedule outran market rent by ~18.5 points since the corpus vintage).
-    # INFO: a mechanism working as designed, disclosed so a corrected figure is more
-    # inspectable than an uncorrected one — the task list's own condition for shipping
-    # it.
-    RENT_DRIFT_CORRECTION_APPLIED = "rent_drift_correction_applied"
-    # The correction could not be computed for this subject (no ZIP, no ZORI coverage,
-    # coverage starting too late, no vintage schedule, mixed anchor grains), so the
-    # estimate carries the uncorrected drift and likely reads high. WARN rather than
-    # INFO: a known, measured bias the system could not remove is a degradation, not a
-    # mechanism.
-    RENT_DRIFT_CORRECTION_UNAVAILABLE = "rent_drift_correction_unavailable"
+    # The market-rent index this estimate is anchored to has not been observed recently
+    # enough for the figure to be called current. Zillow publishes ZORI on a lag and a
+    # thin ZIP's series can end earlier still, so this is measured per subject against
+    # `config.RENT_ANCHOR_MAX_STALENESS_MONTHS` rather than per file.
+    #
+    # **Replaces `RENT_DRIFT_CORRECTION_UNAVAILABLE`, and the kind it replaced is gone
+    # (U11.3).** That flag disclosed that a measured FMR-versus-market bias could not be
+    # removed from this estimate. The anchor is now a market index read at the same month
+    # on both ends, so the bias is divided out where it arises and there is nothing left
+    # for a correction to fail at. What survives is the narrower and still-true statement:
+    # an estimate is only as current as the market read behind it.
+    RENT_ANCHOR_INDEX_STALE = "rent_anchor_index_stale"
 
     # Forecast
     APPRECIATION_SOURCE = "appreciation_source"
@@ -489,14 +490,11 @@ class ValuationDetail(BaseModel):
     subject_metro_mae_n: Optional[int] = None
 
     # --- Drift correction provenance (U8.4b) -------------------------------------
-    # The factor the estimate and the comp-implied figures were both multiplied by, and
-    # the reads behind it, so the report can show the correction's arithmetic instead of
-    # asserting it. All None when the correction was unavailable — the flag carries why.
-    rent_drift_factor: Optional[float] = None
-    rent_drift_market_growth_pct: Optional[float] = None
-    rent_drift_schedule_growth_pct: Optional[float] = None
-    rent_drift_zori_vintage_month: Optional[str] = None
-    rent_drift_zori_latest_month: Optional[str] = None
+    # How old the market index's newest observation was when this estimate was built,
+    # and which month it came from. Carried whether or not the staleness flag fired, so
+    # the report can state the anchor's vintage rather than only complain about it.
+    anchor_index_month: Optional[str] = None
+    anchor_index_staleness_months: Optional[int] = None
 
     # Which HUD fiscal-year schedule anchored the estimate. The whole point of §2's
     # design is that the number is dated; the date has to survive into the report or

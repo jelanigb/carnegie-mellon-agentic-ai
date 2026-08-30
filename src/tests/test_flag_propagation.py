@@ -1358,9 +1358,8 @@ def test_a_rent_estimate_discloses_the_anchor_it_was_built_from(monkeypatch):
     # The anchoring arithmetic itself, asserted rather than assumed: since U11.3 the
     # estimate is the ratio times the composed anchor and nothing else, so a correction
     # applied on the way out without being disclosed would show up here.
-    assert result["valuation_detail"].rent_drift_factor is None, (
-        "U11.3 retired the drift correction: the anchor is now a market series read at "
-        "the same month on both ends, so there is no schedule-versus-market gap left."
+    assert result["valuation_detail"].anchor_index_month is not None, (
+        "The anchor's own vintage is carried whether or not it is stale enough to flag."
     )
     assert result.get("rent_estimate") == pytest.approx(
         result.get("rent_estimate_ratio_to_fmr") * result.get("fmr_anchor_used")
