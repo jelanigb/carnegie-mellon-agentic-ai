@@ -106,7 +106,7 @@ def confidence_from_flags(state: DealState) -> float:
     # TODO(U8): superseded, Aug 27, 2026 — this previously claimed a "two-warn floor"
     # from a three-deal sample. `scripts/confidence_evidence.py` (U7.6) measured all six
     # demo deals and it does not generalize: **no warn-severity flag is common to every
-    # deal.** `fmr_anchor_county_level` fires on `los-angeles`, `overpriced` and
+    # deal.** `rent_anchor_county_level` fires on `los-angeles`, `overpriced` and
     # `coord-conflict` — not because every deal pays it, but because those three are the
     # deals sited in the one demo county with no HUD Small Area FMR. `chicago`'s county
     # has one, so it never raises that flag at all; the earlier note claiming it did was

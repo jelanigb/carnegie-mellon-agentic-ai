@@ -132,7 +132,7 @@ is priced against the four-bedroom figure and `FlagKind.FMR_BEDROOM_CAP_EXCEEDED
 > Cuyahoga (Cleveland) are **Small Area FMR** counties — HUD publishes a separate
 > schedule per ZIP, and within a single county those span roughly 2x. The pipeline
 > anchors on them as of Aug 22, 2026. Richmond County (Staten Island) is not SAFMR and
-> is county-only, which raises `FlagKind.FMR_ANCHOR_COUNTY_LEVEL`.
+> is county-only, which raises `FlagKind.RENT_ANCHOR_COUNTY_LEVEL`.
 >
 > **SAFMR coverage is younger than the rent corpus, and that nearly broke the change.**
 > Los Angeles publishes 474 ZIP schedules for FY2026 and **zero** for FY2019; Cuyahoga
@@ -318,7 +318,7 @@ the county the point actually falls in rather than a "principal" county.
 
 **Returns `None` throughout New England** (`TODO(geography)`): HUD prices those six states
 by town, and a county polygon cannot produce a town-level entityid. A `None` here becomes
-`FlagKind.FMR_UNAVAILABLE_FOR_COUNTY` and **no rent estimate at all**.
+`FlagKind.RENT_ANCHOR_UNAVAILABLE` and **no rent estimate at all**.
 
 ---
 
@@ -356,7 +356,7 @@ cross-check and inference alike so the three cannot drift onto different denomin
 
 Only the county with published ZIP data in the *corpus's own vintage* improved, and it
 improved a lot. The other two are anchored at county resolution on both sides and raise
-`FlagKind.FMR_ANCHOR_COUNTY_LEVEL`.
+`FlagKind.RENT_ANCHOR_COUNTY_LEVEL`.
 
 **An intermediate version of this looked much better and was wrong**, which is worth
 recording because the mistake is the one this project keeps having to catch. Back-casting

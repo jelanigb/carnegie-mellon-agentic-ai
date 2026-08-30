@@ -647,7 +647,7 @@ ENGINEERED_CASES: list[EvalCase] = [
             "than re-sited.** The prediction stands on the mechanical rule — a lone WARN "
             "target reports — but ZIP 90089 is a USC campus ZIP that Zillow's rent index "
             "does not cover, so the deal also pays `rent_anchor_index_stale`, "
-            "which with `fmr_anchor_county_level` makes three warns and 0.55. The target "
+            "which with `rent_anchor_county_level` makes three warns and 0.55. The target "
             "fired, so the triage rule fixed in advance classes this a **tuning signal**. "
             "Re-siting to a covered ZIP was considered and rejected: it would make the "
             "batch systematically avoid the ZIPs where the system degrades, which is the "
@@ -682,7 +682,7 @@ ENGINEERED_CASES: list[EvalCase] = [
             "the same reason as `la-unpriced-triplex` a few blocks over: ZIP 90007's "
             "rent-index coverage begins 31 months after the training vintage — too late "
             "to anchor a before/after comparison — so `rent_anchor_index_stale` "
-            "joins `fmr_anchor_county_level` and the target for three warns at 0.55. "
+            "joins `rent_anchor_county_level` and the target for three warns at 0.55. "
             "Target fired, so this is a tuning signal, not a broken case."
         ),
         listing=(

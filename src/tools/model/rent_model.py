@@ -18,11 +18,11 @@ reference the report can cite.
 Three consequences worth stating, because each is a limitation rather than a feature:
 
 1. **The anchoring is disclosed, always.** Every estimate on this path raises
-   `RENT_ANCHORED_TO_FMR` (info). The number is not a market observation; it is a
+   `RENT_ANCHORED_TO_MARKET_INDEX` (info). The number is not a market observation; it is a
    modeled ratio times a government reference figure, and the report says so.
 2. **No FMR, no estimate.** A subject whose county will not resolve — New England, or no
    coordinates at all — has no anchor, so this path produces nothing and raises
-   `FMR_UNAVAILABLE_FOR_COUNTY` rather than falling back to a raw comp mean. A raw comp
+   `RENT_ANCHOR_UNAVAILABLE` rather than falling back to a raw comp mean. A raw comp
    mean is precisely the unanchored 2019 figure the design forbids.
 3. **The ratio assumption is load-bearing, and it has been measured and found false.**
    It holds that rent-to-FMR structure is stable over ~7 years. U8.0 tested that against
@@ -854,17 +854,23 @@ class CompAnchoring:
 
 def anchor_comp_rents(
     comps: list,
-    subject_fmr: float,
+    subject_anchor: float,
     client: Optional[hud_fmr.HudFmrClient] = None,
 ) -> CompAnchoring:
     """Re-express each comp's rent as "what a unit like this would rent for, here, today."
 
     This is the same normalization the training set uses, run in reverse and pointed at
-    the subject: divide the comp's rent by the FMR for *its own* county and *its own*
-    fiscal year to recover a structural ratio, then multiply by the subject's current
-    FMR. Two distortions come out in that round trip — the comp's vintage (the corpus is
-    a 2018-19 scrape) and the comp's location (a comp inside the search radius can sit
-    in a different county with a different rent schedule).
+    the subject: divide the comp's rent by the anchor for *its own* ZIP at *its own*
+    listing month to recover a structural ratio, then multiply by the subject's anchor.
+    Two distortions come out in that round trip — the comp's vintage (the corpus is a
+    2018-19 scrape) and the comp's location (a comp inside the search radius can sit in a
+    different ZIP, and a different county, with a different rent level).
+
+    **Since U11.3 the vintage comes out where it arises rather than being corrected
+    afterwards.** The anchor is a monthly market series, so a 2019 comp is divided by the
+    2019 market and the subject is multiplied by today's; the schedule-vs-market drift
+    U8.0 measured never enters, and `tools/rent_drift.py`'s symmetric correction was
+    retired with it.
 
     **Why not simply average the comps' rents.** That figure is an unanchored 2019
     dollar amount, and §8 forbids one reaching the Summarizer. Comparing a 2026 model
@@ -874,7 +880,7 @@ def anchor_comp_rents(
     and caught it only by measuring.
 
     A comp is dropped when it carries no coordinate, no listing date, an unresolvable
-    county, an absent FMR, or a ratio outside `config.RENT_MODEL_MIN/MAX_RATIO` — the
+    county, an unresolvable anchor, or a ratio outside `config.RENT_MODEL_MIN/MAX_RATIO` — the
     same bounds the training set applies, because a ratio that would have been a data
     defect in training is still one here. Dropped comps are counted, never silently
     discarded: the count is what tells the report how much the check is worth.
@@ -886,7 +892,7 @@ def anchor_comp_rents(
     """
     client = client or hud_fmr.HudFmrClient()
     result = CompAnchoring(comps_available=len(comps))
-    if not comps or not subject_fmr or subject_fmr <= 0:
+    if not comps or not subject_anchor or subject_anchor <= 0:
         return result
 
     resolved: list[tuple[object, str, int, "Optional[str]"]] = []
@@ -928,7 +934,7 @@ def anchor_comp_rents(
         ratio = comp.rent / comp_anchor
         if not (config.RENT_MODEL_MIN_RATIO <= ratio <= config.RENT_MODEL_MAX_RATIO):
             continue
-        result.implied_rents.append(ratio * subject_fmr)
+        result.implied_rents.append(ratio * subject_anchor)
         if tier == "zip":
             result.zip_anchored += 1
 

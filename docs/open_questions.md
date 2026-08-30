@@ -28,7 +28,7 @@ weights *because* the weights were always going to move. What U8 should measure 
 recorded as `TODO(U8)` at `critic.confidence_from_flags`.
 
 **One sub-question added Aug 30, 2026, and one closed by argument rather than by
-measurement.** *Added:* `fmr_anchor_county_level` is a **cause** of
+measurement.** *Added:* `rent_anchor_county_level` is a **cause** of
 `rent_estimate_market_error_elevated` — county-level anchoring is part of why New York's
 holdout error is double — so the score charges 0.15 for the cause and 0.15 again for the
 effect. That is the double-counting `confidence_from_flags`'s own de-duplication rule

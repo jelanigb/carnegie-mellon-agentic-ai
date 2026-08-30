@@ -40,7 +40,7 @@ import config
 from agents.comps_retrieval import comps_retrieval_agent
 from agents.valuation_rent import valuation_rent_agent
 from state import DealState, DealTerms
-from tools import county_crosswalk, hud_fmr, kaggle_data
+from tools import county_crosswalk, hud_fmr, kaggle_data, zcta_crosswalk, zori
 from tools.vector_store import haversine_miles
 from tools.model import rent_model
 
@@ -104,8 +104,10 @@ def run(label: str, subject: DealTerms) -> None:
     else:
         print(
             f"  rent estimate     {_money(state.rent_estimate)}/mo per unit   "
-            f"= ratio {state.rent_estimate_ratio_to_fmr:.3f} "
-            f"x FY{detail.fmr_year} FMR {_money(state.fmr_anchor_used)}"
+            f"= ratio {state.rent_estimate_ratio_to_anchor:.3f} "
+            f"x market rent {_money(state.rent_anchor_used)} "
+            f"({detail.anchor_tier} tier, {detail.anchor_index_month}, "
+            f"FY{detail.fmr_shape_year} bedroom shape)"
         )
         print(f"  holdout MAE       ± {_money(detail.model_holdout_mae_dollars)}/mo")
 
@@ -171,28 +173,54 @@ def diagnose_divergence() -> None:
     at the same radius, ranking moves the median only +2.7% / +21.6% / +4.2% against a
     neighborhood effect of +5.1% / +40.1% / +66.2%.
 
-    So the divergence belongs to the model, which is location-blind below the county by
-    design. This function prints both baselines for that reason: the metro population
-    alone is the one that misleads.
+    So the divergence belongs to the model. **The reason it does changed at U11.3 and the
+    conclusion did not**, which is worth stating because the old reason is quoted in
+    several places: the model used to be location-blind below the county, since a
+    county-grain FMR was the only channel through which location entered. It no longer is
+    — the anchor reads the market index at the subject's own ZIP wherever that ZIP is
+    covered. What remains is that `config.RENT_MODEL_FEATURES` still carries no market
+    identifier by design, so everything the *anchor* fails to absorb is still error the
+    model structurally cannot recover. The blind spot moved from the county line down to
+    whatever the ZIP-level index misses; it did not close.
 
-    Slow — it resolves a county polygon per corpus row — so it is opt-in rather than part
-    of the default run.
+    **The baselines are read from the training frame rather than re-derived here**, and
+    that is the repair the U11.3 rename forced. This function used to normalize the metro
+    population against FMR while the comps beside it were normalized against the hybrid
+    anchor — two denominators, printed as though they were one, which would have made the
+    attribution meaningless in exactly the quiet way §2 exists to prevent. Reusing
+    `build_training_frame` means the population and the comps cannot disagree about what a
+    ratio is.
+
+    Slow — the frame resolves a county polygon and a ZCTA per corpus row — so it is opt-in
+    rather than part of the default run.
     """
     client = hud_fmr.HudFmrClient()
     bundle = rent_model.load()
     if bundle is None:
         print("No trained model on disk; run scripts/train_rent_model.py first.")
         return
-    corpus = kaggle_data.load_clean()
+    frame, _ = rent_model.build_training_frame(client)
 
     print(f"\n{'=' * 74}\nDivergence attribution — is it the model or the comp set?"
           f"\n{'=' * 74}")
-    print("  All three rows are rent-to-FMR ratios, normalized identically.\n")
+    print("  All three rows are rent-to-anchor ratios, normalized identically.\n")
 
     for label, (state_code, city) in _METRO_OF.items():
         subject = SUBJECTS[label]
         fips = county_crosswalk.lookup_county_fips(subject.latitude, subject.longitude)
-        subject_fmr = float(client.get_fmr_for_bedroom(fips, int(subject.bedrooms))["rent"])
+
+        # The subject's own anchor, resolved exactly as the agent resolves it — hybrid,
+        # at the market index's newest month — so `retrieved` below is a ratio against
+        # the same denominator the training rows carry.
+        fiscal_year = rent_model.fmr_fiscal_year(pd.Timestamp.now())
+        tables = rent_model.build_anchor_tables({(fips, fiscal_year)}, client)
+        month = zori.latest_month(tables.zori_panel) if tables.available else None
+        subject_zip = subject.zip_code or zcta_crosswalk.lookup_zcta(
+            subject.latitude, subject.longitude
+        )
+        subject_anchor, _tier = rent_model.anchor_for_row(
+            int(subject.bedrooms), fips, fiscal_year, month, subject_zip, tables
+        )
 
         predicted = rent_model.predict_ratio(
             bundle, subject.bedrooms, subject.bathrooms, subject.square_footage
@@ -201,34 +229,17 @@ def diagnose_divergence() -> None:
         terms = subject.model_copy(update={"county_fips": fips})
         deal = DealState(raw_listing_text="[synthetic subject]", deal_terms=terms)
         deal = deal.model_copy(update=comps_retrieval_agent(deal))
-        anchoring = rent_model.anchor_comp_rents(deal.comps, subject_fmr, client)
-        retrieved = [r / subject_fmr for r in anchoring.implied_rents]
+        anchoring = rent_model.anchor_comp_rents(deal.comps, subject_anchor, client)
+        retrieved = [r / subject_anchor for r in anchoring.implied_rents]
 
-        # The whole metro's comparable population, normalized against each row's own
-        # county-and-fiscal-year FMR — the same operation the training set performs.
-        df = corpus.pipe(kaggle_data.filter_markets, {state_code: [city]}).copy()
-        df = df[df["bedrooms"] == int(subject.bedrooms)]
-        df["fips"] = county_crosswalk.county_fips_for_points(
-            df["latitude"].tolist(), df["longitude"].tolist()
-        )
-        df = df[df["fips"].notna()]
-        listed = pd.to_datetime(pd.to_numeric(df["time"], errors="coerce"), unit="s")
-        df["fy"] = listed.apply(rent_model.fmr_fiscal_year)
-        table = rent_model._fmr_table(set(zip(df["fips"], df["fy"])), client)
-        field_name, _ = hud_fmr.bedroom_field(int(subject.bedrooms))
-
-        def _fmr_of(row):
-            rents = table.get((row["fips"], row["fy"]))
-            try:
-                return float(rents[field_name]) if rents else np.nan
-            except (KeyError, TypeError, ValueError):
-                return np.nan
-
-        df["fmr"] = df.apply(_fmr_of, axis=1)
-        df = df[df["fmr"] > 0]
-        df["ratio"] = df["price"] / df["fmr"]
-        df = df[df["ratio"].between(config.RENT_MODEL_MIN_RATIO, config.RENT_MODEL_MAX_RATIO)]
-        population = df["ratio"]
+        # The whole metro's comparable population, straight off the training frame — the
+        # same rows, the same anchor, the same bounds the model was fitted under.
+        df = frame[
+            (frame["state"] == state_code)
+            & frame["cityname"].apply(lambda c: kaggle_data.city_matches(c, [city]))
+            & (frame["bedrooms"] == int(subject.bedrooms))
+        ].copy()
+        population = df["rent_to_anchor"]
 
         # The second baseline, and the one that makes the attribution correct: the same
         # corpus rows, restricted to the radius retrieval actually settled on. Comparing
@@ -244,7 +255,7 @@ def diagnose_divergence() -> None:
             ),
             axis=1,
         )
-        local = df[df["dist"] <= deal.search_radius_miles]["ratio"]
+        local = df[df["dist"] <= deal.search_radius_miles]["rent_to_anchor"]
 
         if not retrieved or population.empty or local.empty:
             print(f"\n  {label}: insufficient data to attribute.")
@@ -253,7 +264,7 @@ def diagnose_divergence() -> None:
         comp_median = float(np.median(retrieved))
         pop_median = float(population.median())
         local_median = float(local.median())
-        print(f"\n  {label}  (FY FMR ${subject_fmr:,.0f}, "
+        print(f"\n  {label}  (anchor ${subject_anchor:,.0f} at {month}, "
               f"radius {deal.search_radius_miles:.1f} mi)")
         print(f"    model prediction          ratio {predicted:.3f}")
         print(f"    retrieved comps    n={len(retrieved):<5} median {comp_median:.3f}")

@@ -117,7 +117,7 @@ cases rather than incidental ones.**
   `RENT_MODEL_MIN/MAX_RATIO` and the agent refuses the estimate — which is the entire
   point of the fixture. RandomForest predicts 3.00 and GradientBoosting 2.20, both inside
   the band, so both **produce an estimate instead**, and the flag set swaps
-  `rent_estimate_unavailable` (critical) for `rent_anchored_to_fmr` +
+  `rent_estimate_unavailable` (critical) for `rent_anchored_to_market_index` +
   `rent_diverges_from_comps` + `rent_drift_correction_applied`. It is the **only case that
   targets** `RENT_ESTIMATE_UNAVAILABLE`. Whether the census still covers that kind through
   another case's cascade (the `extraction_unavailable` row raises four criticals) is a
@@ -143,7 +143,14 @@ prompt embeds the rent estimate), invalidates two engineered cases' arguments, a
 New York's disclosed multiple. Reproduce with
 `.venv/bin/python scripts/model_form_probe.py`; `--no-fixtures` runs reports 1–2 alone.
 
-### U11.2 — Feature measurement
+### U11.2 — Feature measurement — **CUT Aug 30, 2026 to §6 cut-list 1a**
+
+**Never run.** The architect cut it, with U11.4's tuning and LOMO, once the anchor lever
+landed. Reasoning in [`../implementation_plan.md`](../implementation_plan.md) §6 item 1a;
+the short form is that the anchor was the lever with a measured defect behind it, and
+these are refinements to a model that is now cross-validated, per-metro reported, and
+honest in the report about its worst market. Scope kept below so the item is re-openable
+as written rather than re-derived.
 
 CV-ablation pricing of corpus columns the model does not use: amenity/pet fields,
 listing month (seasonality), sqft-per-bedroom, bath:bed ratio — each reported as
@@ -225,7 +232,7 @@ $450 → $509. New York's ratio to the headline falls from 2.18x to **1.89x**, s
 **Los Angeles gains ZIP-grain anchoring it never had.** Verified live on 90026: the anchor
 resolves at ZIP tier ($2,691), the estimate is $2,861/mo at a ratio of 1.063, and 8 of 8
 comps normalize to a median of $3,081 for a −7.1% divergence. Under FMR every Los Angeles
-subject was county-anchored and carried `FMR_ANCHOR_COUNTY_LEVEL` unconditionally; it no
+subject was county-anchored and carried `RENT_ANCHOR_COUNTY_LEVEL` unconditionally; it no
 longer does, which is a real disclosure change and will move confidence scores.
 
 **The drift correction retired structurally rather than by deletion**, as U11.3's plan
@@ -236,8 +243,8 @@ raised is repurposed as an index-staleness disclosure.
 **Landed incomplete on purpose, and here is exactly what is left** (per §8, the completing
 work is named rather than implied):
 
-1. **`FlagKind` members still carry FMR names** — `RENT_ANCHORED_TO_FMR`,
-   `FMR_ANCHOR_COUNTY_LEVEL`, `FMR_UNAVAILABLE_FOR_COUNTY`. Their *messages* are correct
+1. **`FlagKind` members still carry FMR names** — `RENT_ANCHORED_TO_MARKET_INDEX`,
+   `RENT_ANCHOR_COUNTY_LEVEL`, `RENT_ANCHOR_UNAVAILABLE`. Their *messages* are correct
    and reader-facing text is honest; the enum member names and `ValuationDetail.fmr_*`
    fields are not. A mechanical rename, and it changes `f.kind.value`, which the eval
    results table prints and the scoring prompt embeds — so it should ride the re-record.
@@ -247,14 +254,14 @@ work is named rather than implied):
    `LLM_RENT_FALLBACK_USED` precedent — the census drops a kind either way, and that
    should be a decision rather than a side effect.
 4. **`scripts/anchor_probe.py` and `scripts/zori_evidence.py` read the old frame shape**
-   (`fmr`, `fmr_resolution`, `rent_to_fmr`) and will not run as written. Their evidence is
+   (`fmr`, `anchor_tier`, `rent_to_fmr`) and will not run as written. Their evidence is
    recorded above and in `config.py`; repairing them is U11.M work.
 5. **No re-record and no batch re-derivation yet**, deliberately — items 1–3 move flag
    sets, so the recordings should be cut once after them.
 
 **What this leaves the architect.** `hyb` is the best overall, is the architect's stated
 preference, and has an architectural advantage the table does not show: **it keeps FMR in
-the system**, so `FMR_BEDROOM_CAP_EXCEEDED`, `FMR_ANCHOR_COUNTY_LEVEL` and the rest of the
+the system**, so `FMR_BEDROOM_CAP_EXCEEDED`, `RENT_ANCHOR_COUNTY_LEVEL` and the rest of the
 anchor vocabulary keep meaning what they mean, where pure `zori` would retire them. Against
 that, `zori` is materially better in the two markets whose disclosures this unit exists to
 improve. Neither is free: both are the U5-scale rewrite, and both largely retire U8.4b's
@@ -275,19 +282,27 @@ Chicago $453.67 / Los Angeles $449.75 / Cleveland $366.36 / **New York $981.51 (
 Feature importances square_feet 0.43, bedrooms 0.32, bathrooms 0.25 — the negative-bedrooms
 artifact is gone with the linear form. All 72 tests pass.
 
-**Still outstanding here:** hyperparameter tuning under the same CV (the form ships at
-library defaults, deliberately — see `config.RENT_MODEL_ESTIMATOR`), the leave-one-metro-out
-run as transfer evidence (OQ-12's first half), and the handoff to U8's sequence for
-re-record and batch re-derivation. **The re-record is deliberately not taken yet**, since the
-anchor decision above would move every rent estimate again and the recordings should be
-re-cut once for both changes — the same reasoning U8's sequence item 3 used for U8.4b+U8.4c.
+**Closed Aug 30, 2026. What was outstanding here is now either done or cut**, and the
+split is deliberate:
 
-Hyperparameter tuning for whatever form survives, under the same CV; retrain and persist
-with the per-metro breakdown (`TrainingReport.mae_dollars_by_metro` travels with the
-artifact); the leave-one-metro-out run as *transfer* evidence (OQ-12's first half, still
-open — LOMO answers what the holdout split cannot); by-metro reporting as the standard
-for every future retrain. Handoff to U8's sequence for re-record and batch
-re-derivation.
+- **Done:** the adoption itself, the retrain-and-persist with the per-metro breakdown
+  travelling on the artifact, and by-metro reporting as the standard for every future
+  retrain.
+- **Handed off, not cut:** the re-record and the batch re-derivation, which live in U8's
+  sequence and are the gate on U8.6's close. **The re-record was deliberately not taken
+  in this unit**, since the anchor decision would have moved every rent estimate again
+  and the recordings should be cut once for both changes — the same reasoning U8's
+  sequence item 3 used for U8.4b+U8.4c.
+- **CUT to §6 cut-list 1a:** hyperparameter tuning under the same CV (the form ships at
+  library defaults, deliberately — see `config.RENT_MODEL_ESTIMATOR`), and the
+  leave-one-metro-out run as transfer evidence.
+
+**LOMO is the one worth naming as a limitation rather than only as a cut.** OQ-12's first
+half asks whether the model transports to a market it never trained on, and a k-fold
+holdout structurally cannot answer it — every fold still contains all four markets. The
+report should say that the transfer question is open rather than let the cross-validated
+MAE imply it was settled. OQ-12 stays open in
+[`../open_questions.md`](../open_questions.md) for exactly that reason.
 
 ### U11.M — Maintenance *(separate commit, per §8)*
 

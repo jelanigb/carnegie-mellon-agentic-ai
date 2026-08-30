@@ -209,7 +209,7 @@ def main() -> None:
     fmr = frame["fmr"].to_numpy(dtype=float)
     zori_values = _zori_anchor(frame, zori.load())
     shape = _bedroom_shape(frame, hud_fmr.HudFmrClient())
-    is_zip_fmr = frame["fmr_resolution"].isin(["zip", "zip_backcast"]).to_numpy()
+    is_zip_fmr = frame["anchor_tier"].isin(["zip", "zip_backcast"]).to_numpy()
 
     # `fmr+` differs from `fmr` only on rows FMR cannot price — and `build_training_frame`
     # has already dropped those, so on this frame the two are the same array by

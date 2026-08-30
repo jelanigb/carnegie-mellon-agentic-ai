@@ -509,7 +509,7 @@ def _findings_section(state: DealState) -> list[str]:
                     f"{detail.subject_metro}"
                 )
         basis = str(state.rent_estimate_source or "unspecified")
-        if state.rent_estimate_ratio_to_fmr is not None and state.fmr_anchor_used is not None:
+        if state.rent_estimate_ratio_to_anchor is not None and state.rent_anchor_used is not None:
             # **Names the market index, not Fair Market Rent (U11.3).** Until then the
             # anchor was a HUD schedule and this line said so; it is now a Zillow rent
             # index read at a month, stepped to the subject's bedroom count by the
@@ -522,9 +522,9 @@ def _findings_section(state: DealState) -> list[str]:
             # within a single county, so the same dollar amount means something very
             # different depending on which of the two produced it.
             where = ""
-            if detail and detail.fmr_resolution == "zip":
-                where = f" (ZIP {detail.fmr_zip})" if detail.fmr_zip else " (ZIP)"
-            elif detail and detail.fmr_resolution == "county":
+            if detail and detail.anchor_tier == "zip":
+                where = f" (ZIP {detail.anchor_zip})" if detail.anchor_zip else " (ZIP)"
+            elif detail and detail.anchor_tier == "county":
                 where = " (county-wide)"
             asof = (
                 f" as of {detail.anchor_index_month[:7]}"
@@ -532,8 +532,8 @@ def _findings_section(state: DealState) -> list[str]:
                 else ""
             )
             basis += (
-                f", ratio {state.rent_estimate_ratio_to_fmr:.2f} × market rent "
-                f"{_money(state.fmr_anchor_used)}{where}{asof}"
+                f", ratio {state.rent_estimate_ratio_to_anchor:.2f} × market rent "
+                f"{_money(state.rent_anchor_used)}{where}{asof}"
             )
         lines.append(f"| Estimated rent | {value} | {basis} |")
     else:

@@ -179,7 +179,7 @@ building them — including the ones that changed the design — are in
 | **U4** ✅ | Comps/Retrieval: Chroma index (3,880 listings), one document per listing, hybrid metadata-filter + embedding query, top-`Y` results, adaptive relaxation loop, sparse-comps flag; **two ablations**; X/Y/Z tuned against measured density | **3.1** | [Retrieval](history/decision_log.md#retrieval) |
 | **U2** ✅ | **Walking skeleton.** 8 nodes wired in `graph.py` on the pre-flight Planner topology (#9) incl. the single Critic→Planner back edge and the `human_review` interrupt; Planner and Summarizer built for real; flag propagation proven by a 14-case suite; diagram generated from the compiled graph *and* asserting the topology | **5.1** | [Orchestration](history/decision_log.md#orchestration--control-flow) |
 | **U3** ✅ | Extractor: real LLM call, Pydantic validate→retry loop, clarifying questions, assumption flags, bounded escalation. Wires geocoding into the pipeline, adds the model liveness check, takes the flag suite to 24 cases | 2.1 evidence | [Models & infra](history/decision_log.md#models--infrastructure), [Geography](history/decision_log.md#geography--anchoring) |
-| **U5** ✅ | Rent model: FMR-normalized regression on the #4 shortlist, holdout MAE, Valuation agent, `rent_anchored_to_fmr` / `fmr_unavailable_for_county` / `fmr_bedroom_cap_exceeded` flags. **LLM fallback descoped** — cut-list item 3 taken in advance, shipping as a documented gap | — | [Rent & valuation](history/decision_log.md#rent--valuation) |
+| **U5** ✅ | Rent model: FMR-normalized regression on the #4 shortlist, holdout MAE, Valuation agent, `rent_anchored_to_market_index` / `rent_anchor_unavailable` / `fmr_bedroom_cap_exceeded` flags. **LLM fallback descoped** — cut-list item 3 taken in advance, shipping as a documented gap | — | [Rent & valuation](history/decision_log.md#rent--valuation) |
 | **U6** ✅ | Scenario/Forecast: beam search over an **enumerated** hypothesis space — 4 framings, then 9 band pairings — with an LLM evaluator pulling evidence through the MCP tool registry in-process. Rent growth and price appreciation forecast **separately** (#16), projected 5 years from the **asking price** (#15) | **4.1** | [Forecasting](history/decision_log.md#forecasting--reasoning) |
 | **U7** ✅ | Critic: three cross-agent **interaction** checks (a combination changing what a measurement means — the four checks §1 named did not survive contact with the built system), comp-attribute drift owned by Retrieval, confidence scoring evidenced on the real pipeline, a rework cycle that fires on its own and is bounded by its counter rather than by score decay, human-review escalation via `interrupt()` | **6.1** | [Orchestration](history/decision_log.md#orchestration--control-flow) |
 | **U8** ⬜ | Eval harness: 8–10 synthetic listings each engineered to trip a *specific* flag, **plus the New York sparse-comps case run against real data**; batch runner → results table. **Absorbs U10** — the demo deals run through the same batch, so the end-to-end evidence is a harness output rather than a separate pass | **6.1** + report + video | [open questions](open_questions.md#evaluation--demo) |
@@ -209,10 +209,34 @@ screenshots, and the graph diagram generated from the compiled graph.
 If the schedule slips, shed scope in this order rather than improvising:
 
 1. **ZIP-tier appreciation** (already deferred in §2 — keep it deferred).
-1a. **Rent-model feature engineering and model form** (deferred Aug 22, 2026 — keep it
-   deferred). Roughly 17% of rent error is available to model form alone, measured, with
-   no new data and no new features. Deferred anyway; the probe and the two reasons are in
+1a. **Rent-model feature engineering and model form** (deferred Aug 22, 2026). Roughly 17%
+   of rent error is available to model form alone, measured, with no new data and no new
+   features. Deferred anyway; the probe and the two reasons are in
    [`history/decision_log.md`](history/decision_log.md#rent--valuation).
+
+   **Split Aug 30, 2026 at U11, because half of it was spent and half of it was not.**
+   *Model form* left this list by being taken: U11.1 measured the three candidates under
+   k-fold cross-validation and the architect adopted gradient boosting (#18). *Feature
+   engineering* stays cut, and three further refinements join it here rather than being
+   tracked as unfinished U11 work:
+
+   - **Feature engineering** (U11.2) — interaction and derived terms above the three raw
+     features. Never measured.
+   - **Hyperparameter tuning** — the adopted form ships at library defaults, deliberately
+     and on the record at `config.RENT_MODEL_ESTIMATOR`. Tuning is the classic way to
+     spend a day buying a number that a 5-fold CV cannot distinguish from noise.
+   - **Leave-one-metro-out validation** — the transfer evidence OQ-12's first half asks
+     for. It answers a question the holdout split cannot, and it is the one of the three
+     worth regretting.
+
+   **Cut Aug 30, 2026 by the architect, and the reasoning is about what the model is
+   for.** The anchor change (item 6, below) was the lever with a *measured* defect behind
+   it and it has been spent. These three are refinements to a model that is now
+   defensible: cross-validated, per-metro reported, with its worst market disclosed to
+   the reader rather than averaged away. The remaining schedule buys more by closing U8's
+   evaluation than by taking another percent off a headline MAE — and an undisclosed
+   percent is worth less to this project than a disclosed limitation, which is what these
+   become. Recorded in [`tasks/task_list_u11.md`](tasks/task_list_u11.md) U11.2 / U11.4.
 2. **Public-record for-sale ground truth** (decision #11) — the county-assessor dataset.
    Cut before the LLM fallback because it is a new data source arriving late, attached to
    the one unit that must not slip.
@@ -288,13 +312,36 @@ If the schedule slips, shed scope in this order rather than improvising:
    recover — which is §2's "location-blind below the county" limitation, and the property
    an anchor exists to supply.
 
-   **Its cost is a U5 rewrite**: the model, the Valuation agent, `RENT_ANCHORED_TO_FMR`,
+   **Its cost is a U5 rewrite**: the model, the Valuation agent, `RENT_ANCHORED_TO_MARKET_INDEX`,
    #11's demo calibration, and the reasoning in §2 and #16 all assume the FMR anchor. It
    also drops 27% of the training rows. **Placed last deliberately, and the position means
    what the list says it means — it is shed last, not first.** That is a deliberate choice
    by the architect (Aug 28, 2026) rather than an oversight about where speculative scope
    normally belongs: this is the only item on the list that fixes a *measured* defect in a
    number the report publishes, and the rest fix gaps in scope.
+
+   **TAKEN Aug 30, 2026 at U11.3 — this item leaves the list by being spent, like item 3
+   above.** Not in the form written here. `scripts/anchor_probe.py` scored five candidates
+   and the architect adopted the **hybrid**: ZORI at the subject's own ZIP for the market
+   *level*, HUD FMR for the bedroom *shape*. Two things this row asserted turned out to be
+   wrong, and both were wrong in the direction that made the item look more expensive than
+   it was:
+
+   - **"It also drops 27% of the training rows" — no.** The 27% is rows whose ZIP carries
+     no ZORI observation at their own listing month, and those fall back to a county
+     median exactly as the FMR anchor already did. Measured: 0.3% of rows end up with no
+     anchor, not 27%.
+   - **"It assumes the FMR anchor" — half true.** The hybrid keeps FMR in the system for
+     the bedroom schedule, so `FMR_BEDROOM_CAP_EXCEEDED` and the rest of that vocabulary
+     survive with their meaning intact. Pure ZORI would have retired them; that was part
+     of why the hybrid won.
+
+   What it bought, per metro: **New York $981 → $855, Chicago $454 → $343**, Cleveland
+   $366 → $357, Los Angeles $450 → $509, overall flat. The overall figure hides the
+   result, which is the point of reporting per metro. It also retired the U8.4b drift
+   correction *structurally* — the anchor reads a market index at the same month on both
+   ends, so the schedule-versus-market gap is divided out where it arises rather than
+   corrected after the fact.
 
 **Never cut:** the flag propagation test (U2), the eval harness (U8), or the report and
 video reserve at the end.

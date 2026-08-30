@@ -629,7 +629,7 @@ def test_rework_cycle_terminates_and_discloses_that_it_did(monkeypatch):
 
     **Valuation joined that list in U5, and the reason is worth recording.** Under this
     file's autouse stubs the subject resolves to no county, so the real agent raises a
-    critical `fmr_unavailable_for_county` — which escalates immediately and leaves this
+    critical `rent_anchor_unavailable` — which escalates immediately and leaves this
     test measuring zero rework passes instead of two. That is the agent behaving
     correctly and the test asking about something else. Stubbing it out is the same move
     already made for retrieval, for the same reason, rather than a symptom worked around.
@@ -1136,7 +1136,7 @@ def test_grounded_run_reaches_the_report_with_real_comps(monkeypatch):
     assert result["comps"], "Expected comps in a market measured as dense in §2."
     assert not flags_of_kind(result, FlagKind.SPARSE_COMPS)
     assert not flags_of_kind(result, FlagKind.GEOCODING_UNAVAILABLE)
-    assert not flags_of_kind(result, FlagKind.FMR_UNAVAILABLE_FOR_COUNTY)
+    assert not flags_of_kind(result, FlagKind.RENT_ANCHOR_UNAVAILABLE)
     assert not flags_of_kind(result, FlagKind.RENT_ESTIMATE_UNAVAILABLE)
     assert "## Comparable Rentals" in result["report_markdown"]
     assert result["comps"][0].listing_id in result["report_markdown"]
@@ -1314,15 +1314,15 @@ def test_no_county_means_no_rent_figure_at_all():
     """
     result = run_deal()
 
-    raised = assert_reaches_report(result, FlagKind.FMR_UNAVAILABLE_FOR_COUNTY)
+    raised = assert_reaches_report(result, FlagKind.RENT_ANCHOR_UNAVAILABLE)
     assert raised.severity == Severity.CRITICAL, (
         "This flag means there is no rent estimate at all, not that one is imprecise. "
         "A warn here would understate a missing headline number to the Critic as much "
         "as to a reader."
     )
     assert result.get("rent_estimate") is None
-    assert result.get("rent_estimate_ratio_to_fmr") is None
-    assert result.get("fmr_anchor_used") is None
+    assert result.get("rent_estimate_ratio_to_anchor") is None
+    assert result.get("rent_anchor_used") is None
     assert "not produced" in result["report_markdown"]
 
 
@@ -1342,7 +1342,7 @@ def test_the_valuation_agent_no_longer_reports_itself_as_a_stub():
 def test_a_rent_estimate_discloses_the_anchor_it_was_built_from(monkeypatch):
     """An estimate on the model path must show its working, not just its result.
 
-    `rent_anchored_to_fmr` is `INFO` and fires on every single estimate, which usually
+    `rent_anchored_to_market_index` is `INFO` and fires on every single estimate, which usually
     makes a signal worthless — §2's own argument against always-on flags. It earns its
     place by carrying content rather than existing as a marker: the ratio, the FMR, and
     the fiscal year are all in the detail text, so a reader can multiply the two numbers
@@ -1362,18 +1362,18 @@ def test_a_rent_estimate_discloses_the_anchor_it_was_built_from(monkeypatch):
         "The anchor's own vintage is carried whether or not it is stale enough to flag."
     )
     assert result.get("rent_estimate") == pytest.approx(
-        result.get("rent_estimate_ratio_to_fmr") * result.get("fmr_anchor_used")
+        result.get("rent_estimate_ratio_to_anchor") * result.get("rent_anchor_used")
     )
     # The ZIP's own market level, not the county median — the two are different
     # denominators, and a subject whose ZIP the index covers must be anchored to it.
     # The bedroom step is 1.0 here because the subject is a two-bedroom and two bedrooms
     # is the reference the shape divides by, so the composed anchor is the level itself.
-    assert result.get("fmr_anchor_used") == pytest.approx(FAKE_ZORI_LEVEL)
-    assert result["valuation_detail"].fmr_resolution == "zip"
-    assert result["valuation_detail"].fmr_zip == "90026"
-    assert not flags_of_kind(result, FlagKind.FMR_ANCHOR_COUNTY_LEVEL)
+    assert result.get("rent_anchor_used") == pytest.approx(FAKE_ZORI_LEVEL)
+    assert result["valuation_detail"].anchor_tier == "zip"
+    assert result["valuation_detail"].anchor_zip == "90026"
+    assert not flags_of_kind(result, FlagKind.RENT_ANCHOR_COUNTY_LEVEL)
 
-    raised = assert_reaches_report(result, FlagKind.RENT_ANCHORED_TO_FMR)
+    raised = assert_reaches_report(result, FlagKind.RENT_ANCHORED_TO_MARKET_INDEX)
     assert raised.severity == Severity.INFO
     # The disclosure names the month the market index was read at, not a fiscal
     # year: since U11.3 the level comes from a monthly series, and "FY2026" would
@@ -1419,7 +1419,7 @@ def test_a_five_bedroom_subject_discloses_the_hud_bedroom_cap(monkeypatch):
 
     raised = assert_reaches_report(result, FlagKind.FMR_BEDROOM_CAP_EXCEEDED)
     assert raised.severity == Severity.INFO
-    assert result.get("fmr_anchor_used") == pytest.approx(
+    assert result.get("rent_anchor_used") == pytest.approx(
         FAKE_ZORI_LEVEL
         * FakeFmrClient.SCHEDULES[2026]["Four-Bedroom"]
         / FakeFmrClient.SCHEDULES[2026]["Two-Bedroom"]
@@ -1599,10 +1599,10 @@ def test_a_county_without_small_area_fmr_says_the_anchor_is_coarse(monkeypatch):
 
     result = run_deal()
 
-    raised = assert_reaches_report(result, FlagKind.FMR_ANCHOR_COUNTY_LEVEL)
+    raised = assert_reaches_report(result, FlagKind.RENT_ANCHOR_COUNTY_LEVEL)
     assert raised.severity == Severity.WARN
-    assert result["valuation_detail"].fmr_resolution == "county"
-    assert result.get("fmr_anchor_used") == FakeFmrClient.SCHEDULES[2026]["Two-Bedroom"]
+    assert result["valuation_detail"].anchor_tier == "county"
+    assert result.get("rent_anchor_used") == FakeFmrClient.SCHEDULES[2026]["Two-Bedroom"]
     assert result.get("rent_estimate") is not None, (
         "A coarse anchor is a disclosure, not a reason to refuse an estimate."
     )

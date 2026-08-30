@@ -305,13 +305,22 @@ def _cross_check(
     The comps are reporting genuine neighborhood premiums correctly.
 
     **The divergence is the model's, and it is structural rather than a fitting error.**
-    `config.RENT_MODEL_FEATURES` excludes any market identifier by design, so the
-    county-level FMR anchor is the only channel through which location enters an estimate
-    at all — and nothing in the pipeline can represent variation below the county. This
-    check therefore currently fires on a known blind spot rather than on an anomaly, which
-    is a limitation of the check worth stating plainly. The flag still declines to name a
-    culprit, but now for the accurate reason: the disagreement is real and the comps are
-    the better-informed of the two inputs about location.
+    `config.RENT_MODEL_FEATURES` excludes any market identifier by design, so the anchor
+    is the only channel through which location enters an estimate at all, and whatever the
+    anchor fails to absorb is error the model structurally cannot recover. This check
+    therefore fires on a known blind spot rather than on an anomaly, which is a limitation
+    of the check worth stating plainly. The flag still declines to name a culprit, but now
+    for the accurate reason: the disagreement is real and the comps are the better-informed
+    of the two inputs about location.
+
+    **U11.3 narrowed that blind spot without closing it, and the distinction matters to
+    how this paragraph should be read.** Until then the anchor was county-grain wherever
+    HUD published no Small Area schedule — all of Los Angeles, all of New York — so
+    "nothing in the pipeline can represent variation below the county" was literally true
+    there. The hybrid anchor reads the market index at the subject's own ZIP, so sub-county
+    variation now does reach the estimate in every market the index covers. What is left is
+    variation below the ZIP, plus the county-tier rows the index does not cover. Expect this
+    check to fire less often and to mean something narrower when it does.
 
         `scripts/valuation_evidence.py --diagnose-divergence`.
 
@@ -440,13 +449,13 @@ def valuation_rent_agent(state: DealState) -> dict:
         flags.append(
             state.flag(
                 AGENT,
-                FlagKind.FMR_UNAVAILABLE_FOR_COUNTY,
-                "The subject property resolved to no county, so there is no HUD Fair "
-                "Market Rent to anchor against and no rent estimate was produced. "
-                "Every rent figure in this system is a modelled ratio times a local "
-                "FMR; without the second term there is no number to report. Causes: no "
-                "resolvable coordinates, or a New England address, which HUD prices by "
-                "town rather than by county.",
+                FlagKind.RENT_ANCHOR_UNAVAILABLE,
+                "The subject property resolved to no county, so there is no local rent "
+                "reference to anchor against and no rent estimate was produced. Every "
+                "rent figure in this system is a modelled ratio times a local market "
+                "reference; without the second term there is no number to report. "
+                "Causes: no resolvable coordinates, or a New England address, which the "
+                "federal rent schedule prices by town rather than by county.",
                 Severity.CRITICAL,
             )
         )
@@ -495,7 +504,7 @@ def valuation_rent_agent(state: DealState) -> dict:
         flags.append(
             state.flag(
                 AGENT,
-                FlagKind.FMR_UNAVAILABLE_FOR_COUNTY,
+                FlagKind.RENT_ANCHOR_UNAVAILABLE,
                 f"County {terms.county_fips} resolved, but the reference rent figures "
                 f"this estimate is built from could not be retrieved "
                 f"({type(exc).__name__}). No rent estimate was produced. This is a "
@@ -510,7 +519,7 @@ def valuation_rent_agent(state: DealState) -> dict:
         flags.append(
             state.flag(
                 AGENT,
-                FlagKind.FMR_UNAVAILABLE_FOR_COUNTY,
+                FlagKind.RENT_ANCHOR_UNAVAILABLE,
                 "No reference rent figure could be resolved for this property, so no "
                 "rent estimate was produced. Every rent figure in this system is a "
                 "modelled ratio times a local market reference; without the second term "
@@ -523,9 +532,9 @@ def valuation_rent_agent(state: DealState) -> dict:
         )
         return {"valuation_detail": detail, "flags": flags}
 
-    detail.fmr_year = fiscal_year
-    detail.fmr_resolution = anchor_tier
-    detail.fmr_zip = subject_zip if anchor_tier == "zip" else None
+    detail.fmr_shape_year = fiscal_year
+    detail.anchor_tier = anchor_tier
+    detail.anchor_zip = subject_zip if anchor_tier == "zip" else None
 
     if anchor_tier == "county":
         # **The consequence is identical; the cause is not, and the message says which
@@ -549,7 +558,7 @@ def valuation_rent_agent(state: DealState) -> dict:
         flags.append(
             state.flag(
                 AGENT,
-                FlagKind.FMR_ANCHOR_COUNTY_LEVEL,
+                FlagKind.RENT_ANCHOR_COUNTY_LEVEL,
                 f"This estimate is anchored to a county-wide market rent figure rather "
                 f"than to this ZIP code's own, because the rent index Zillow publishes "
                 f"for ZIP {subject_zip or 'this address'} does not cover the period this "
@@ -678,10 +687,10 @@ def valuation_rent_agent(state: DealState) -> dict:
     flags.append(
         state.flag(
             AGENT,
-            FlagKind.RENT_ANCHORED_TO_FMR,
+            FlagKind.RENT_ANCHORED_TO_MARKET_INDEX,
             f"Estimated rent of ${estimate:,.0f}/mo is a modelled ratio of {ratio:.2f} "
             f"applied to a reference rent of ${subject_anchor:,.0f} for "
-            + (f"ZIP {detail.fmr_zip}" if detail.fmr_resolution == "zip"
+            + (f"ZIP {detail.anchor_zip}" if detail.anchor_tier == "zip"
                else f"county {terms.county_fips}")
             + f", read from Zillow's published rent index for {month} and stepped to "
             f"{terms.bedrooms} bedrooms using the federal rent schedule's own ratio "
@@ -696,8 +705,8 @@ def valuation_rent_agent(state: DealState) -> dict:
 
     return {
         "rent_estimate": estimate,
-        "rent_estimate_ratio_to_fmr": ratio,
-        "fmr_anchor_used": subject_anchor,
+        "rent_estimate_ratio_to_anchor": ratio,
+        "rent_anchor_used": subject_anchor,
         "rent_estimate_source": RentEstimateSource.REGRESSION_MODEL,
         "valuation_detail": detail,
         "flags": flags,

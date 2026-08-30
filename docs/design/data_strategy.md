@@ -94,9 +94,9 @@ candidate that costs nothing new and stays consistent with the anchoring design.
 2. At prediction time, multiply the model's output ratio by *today's* HUD FMR for the
    subject property's county. This produces a current-dollar estimate anchored to a
    real, dated reference point instead of an implicit 2018 price level.
-3. Flag every estimate that used this anchoring path (`kind="rent_anchored_to_fmr"`,
+3. Flag every estimate that used this anchoring path (`kind="rent_anchored_to_market_index"`,
    `severity="info"`) so the report can disclose the mechanism, and flag separately
-   (`kind="fmr_unavailable_for_county"`) when the subject county will not resolve.
+   (`kind="rent_anchor_unavailable"`) when the subject county will not resolve.
 
    **Revised at implementation (U5, Aug 22, 2026): that second flag is `critical`, not
    `warn`, and there is no coarser fallback.** As written above it assumed a
@@ -514,7 +514,7 @@ than presented as published figures.
 published ZIP schedules in the corpus's own FY2019 vintage, and only Chicago improved:
 −30.4% → **−9.9%**. Los Angeles (−21.6% → −21.0%) and Cleveland (−40.0% → −39.6%) are
 anchored at county resolution on both sides and now say so via
-`FlagKind.FMR_ANCHOR_COUNTY_LEVEL`.
+`FlagKind.RENT_ANCHOR_COUNTY_LEVEL`.
 
 **The back-cast was tried, looked better, and was rejected on measurement.**
 Reconstructing ZIP schedules for every county produced convergence across all three

@@ -263,7 +263,7 @@ threshold, and this is the warning that tipped it.
 **The clean baseline is already gone, and U7 did not do it.** `decision_log.md` records Los
 Angeles at **1.00 confidence with 0 disclosures**, and §6's argument leans on it: *"a clean
 run raising no flags, escalating nothing, is what establishes that the other four rows mean
-something."* Measured today it is **0.70 with 4 disclosures** — `fmr_anchor_county_level`
+something."* Measured today it is **0.70 with 4 disclosures** — `rent_anchor_county_level`
 and `forecast_branches_near_tied` (both WARN, 0.15 each), plus two INFO. Those arrived with
 U5 and U6. The table was last measured in U3.
 
@@ -292,7 +292,7 @@ it will actually be read: `TODO(U8)` at `critic.confidence_from_flags`, the site
 numbers it would change.
 
 **The one thing U8 must measure**, stated so it does not have to be rediscovered: do
-`fmr_anchor_county_level` and `forecast_branches_near_tied` fire on *every* deal? Two data
+`rent_anchor_county_level` and `forecast_branches_near_tied` fire on *every* deal? Two data
 points is not evidence of that, only consistent with it. If they do, the tuning problem is
 not the weights — it is that two constant flags are spending 0.30 of a 0.40 budget, making
 the effective threshold 0.90 while the config says 0.60, and no third disclosure of any
@@ -603,7 +603,7 @@ that the price sits where the deal *says* it sits. Measured +54.9% against a dec
 
 **A third measurement weakens Q7's specific claim and strengthens its general one.**
 `overpriced` runs at 0.70 with four disclosures — but its two warn flags are
-`fmr_anchor_county_level` and `comps_spatially_concentrated`, and it raises no near-tie at
+`rent_anchor_county_level` and `comps_spatially_concentrated`, and it raises no near-tie at
 all. So it is *not* the same two flags on every deal. What has held across all three is the
 **count**: two warns before anything deal-specific is observed. The floor is the finding,
 not the pair. `TODO(U8)` and the `config.py` note corrected to say so.
@@ -631,7 +631,7 @@ all six demo deals and reports the flag/penalty breakdown and escalation reasoni
 deal. Two findings correct the record rather than confirm it:
 
 - **The "two-warn floor" `TODO(U8)` claim (three deals, Aug 26) does not generalize to
-  six.** No warn-severity flag is common to every deal. `fmr_anchor_county_level` fires on
+  six.** No warn-severity flag is common to every deal. `rent_anchor_county_level` fires on
   the three LA-county deals (`los-angeles`, `overpriced`, `coord-conflict`) because that
   county has no HUD Small Area FMR, and not on `chicago`, whose county has one — a
   per-county HUD-coverage fact, not something every deal pays. The Aug 26 note had also

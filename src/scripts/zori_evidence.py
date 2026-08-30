@@ -95,7 +95,7 @@ def _corpus_side() -> pd.DataFrame:
           f"fiscal years {report.fiscal_years}")
 
     zip_anchored = frame[
-        frame["fmr_resolution"].isin(["zip", "zip_backcast"])
+        frame["anchor_tier"].isin(["zip", "zip_backcast"])
         & frame["zcta"].notna()
     ].copy()
     print(f"        {len(zip_anchored):,} of them ZIP-anchored, across "

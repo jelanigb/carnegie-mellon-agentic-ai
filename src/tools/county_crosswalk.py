@@ -248,7 +248,7 @@ def lookup_county_fips(
     """Resolve a subject property's coordinates to a HUD county `entityid`, or `None`
     if unresolved — missing coordinates, a point outside every county, or a New England
     point. `agents/extractor.py` is the caller; a `None` here is what eventually raises
-    `FlagKind.FMR_UNAVAILABLE_FOR_COUNTY` downstream in the Valuation agent.
+    `FlagKind.RENT_ANCHOR_UNAVAILABLE` downstream in the Valuation agent.
     """
     if latitude is None or longitude is None:
         return None

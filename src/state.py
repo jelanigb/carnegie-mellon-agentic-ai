@@ -120,14 +120,29 @@ class FlagKind(StrEnum):
     SUPPLIED_COORDINATES_CONFLICT = "supplied_coordinates_conflict"
 
     # Valuation
-    RENT_ANCHORED_TO_FMR = "rent_anchored_to_fmr"
-    FMR_UNAVAILABLE_FOR_COUNTY = "fmr_unavailable_for_county"
+    #
+    # **These three were named for FMR until Aug 30, 2026 (U11.3), and the rename is the
+    # point rather than tidiness.** The anchor stopped being a Fair Market Rent: it is
+    # now Zillow's market rent index at the subject's own ZIP for the *level*, and the
+    # HUD schedule only for the *bedroom step*. Members called `FMR_*` would have gone on
+    # naming a source that no longer supplies the number, which is the class of quiet
+    # staleness §2 exists to prevent — and enum names are what a future reader trusts
+    # when the message and the member disagree. `FMR_BEDROOM_CAP_EXCEEDED` keeps its
+    # name deliberately: the four-bedroom ceiling really is a property of the federal
+    # schedule, which the hybrid anchor still uses.
+    #
+    # Disclosed on every estimate that is produced: the figure is a modelled ratio times
+    # a local market reference, not an observed rent for this property. INFO rather than
+    # WARN — it describes how the system works, not a degradation of this run.
+    RENT_ANCHORED_TO_MARKET_INDEX = "rent_anchored_to_market_index"
+    # No local reference figure could be resolved, so there is no estimate at all.
+    RENT_ANCHOR_UNAVAILABLE = "rent_anchor_unavailable"
     FMR_BEDROOM_CAP_EXCEEDED = "fmr_bedroom_cap_exceeded"
-    # The anchor fell back to the county-wide FMR because HUD publishes no Small Area
-    # (ZIP-level) schedule for the subject's county. Distinct from
-    # FMR_UNAVAILABLE_FOR_COUNTY, which means no anchor at all: this one means the
-    # estimate exists but cannot see below the county line.
-    FMR_ANCHOR_COUNTY_LEVEL = "fmr_anchor_county_level"
+    # The anchor fell back to the county's median across its covered ZIPs, because the
+    # market rent index does not cover the subject's own ZIP for the month the estimate
+    # reads from. Distinct from RENT_ANCHOR_UNAVAILABLE, which means no anchor at all:
+    # this one means the estimate exists but cannot see below the county line.
+    RENT_ANCHOR_COUNTY_LEVEL = "rent_anchor_county_level"
     # LLM_RENT_FALLBACK_USED lived here until Aug 28, 2026 (U8.1b). Removed on the same
     # rule that retired COUNTY_FROM_PRINCIPAL_COUNTY above, and found by the mechanism
     # that rule was written for: U8.1's coverage census reported it as the one kind no
@@ -144,7 +159,7 @@ class FlagKind(StrEnum):
     # county lookup. One kind rather than three (no trained model / features the
     # Extractor never resolved / a predicted ratio outside the plausible band) because
     # the reader's response to all three is identical — there is no rent figure and the
-    # message says why. FMR_UNAVAILABLE_FOR_COUNTY stays separate because §2 specifies
+    # message says why. RENT_ANCHOR_UNAVAILABLE stays separate because §2 specifies
     # it by name and because it points at a fixable data gap rather than at this run.
     RENT_ESTIMATE_UNAVAILABLE = "rent_estimate_unavailable"
     # The modelled rent and the comp set disagree. Raised by the Valuation agent about
@@ -155,9 +170,9 @@ class FlagKind(StrEnum):
     RENT_DIVERGES_FROM_COMPS = "rent_diverges_from_comps"
     # The rent model's own historical error is measurably worse in the subject's market
     # than the batch it is normally scored against (U8.4, OQ-3). Distinct from every
-    # other rent flag: RENT_ANCHORED_TO_FMR discloses the mechanism on every estimate,
+    # other rent flag: RENT_ANCHORED_TO_MARKET_INDEX discloses the mechanism on every estimate,
     # RENT_DIVERGES_FROM_COMPS is two of this run's own inputs disagreeing, and
-    # FMR_ANCHOR_COUNTY_LEVEL is about spatial resolution. This one says the estimate is
+    # RENT_ANCHOR_COUNTY_LEVEL is about spatial resolution. This one says the estimate is
     # the system's ordinary output, produced the ordinary way, and this particular
     # market's holdout residual has historically run well above the figure quoted
     # elsewhere in the report as "the" error band. New York is the standing case: it is
@@ -286,7 +301,7 @@ class DealTerms(BaseModel):
       a hand-maintained city-name table) is now exact rather than approximate — it no
       longer picks a "principal" county for a multi-county city, it resolves the one the
       point actually falls in — so it raises nothing on success; it only fails outright
-      (`FlagKind.FMR_UNAVAILABLE_FOR_COUNTY`) for a New England point or a subject with
+      (`FlagKind.RENT_ANCHOR_UNAVAILABLE`) for a New England point or a subject with
       no coordinates to begin with.
 
     Keeping `full_address` alongside the parsed components is deliberate redundancy, not
@@ -358,7 +373,7 @@ class DealTerms(BaseModel):
 
         Both were silent until U8.1b: `config.REQUIRED_DEAL_FIELDS` covers neither, so a
         complete-looking deal skipped extraction and reached the Valuation agent with no
-        FMR anchor — disclosing `FMR_UNAVAILABLE_FOR_COUNTY` as though HUD published no
+        FMR anchor — disclosing `RENT_ANCHOR_UNAVAILABLE` as though HUD published no
         schedule for the county, rather than as though nobody had looked one up. Those
         read the same in a report and mean entirely different things.
 
@@ -454,7 +469,7 @@ class ValuationDetail(BaseModel):
 
     Separate from the five top-level valuation fields on `DealState` rather than merged
     into them, and the split is by **consumer**, not by tidiness. `rent_estimate`,
-    `fmr_anchor_used` and their siblings are the *result*: what a downstream agent reads
+    `rent_anchor_used` and their siblings are the *result*: what a downstream agent reads
     and computes with — U6's forecast projects from `rent_estimate`. Everything here is
     *provenance*: what the report has to disclose so a reader can weigh that result, and
     nothing downstream calculates from it. Keeping the two apart means U6 depends on a
@@ -496,18 +511,23 @@ class ValuationDetail(BaseModel):
     anchor_index_month: Optional[str] = None
     anchor_index_staleness_months: Optional[int] = None
 
-    # Which HUD fiscal-year schedule anchored the estimate. The whole point of §2's
-    # design is that the number is dated; the date has to survive into the report or
-    # the anchoring is undisclosed and the reader is back where they started.
-    fmr_year: Optional[int] = None
+    # Which HUD fiscal-year schedule supplied the *bedroom step* — how much a
+    # three-bedroom is worth relative to a two-bedroom in this county. Since U11.3 the
+    # schedule no longer sets the rent level (the market index does), and its own level
+    # divides out of the shape, so this dates the shape and nothing else. Still carried:
+    # §2's whole design is that the number is dated, and a shape read from a stale
+    # schedule is a disclosure even when the level beside it is current.
+    fmr_shape_year: Optional[int] = None
 
-    # Which spatial resolution the anchor came from: "zip" where HUD publishes a Small
-    # Area FMR for the subject's ZIP, "county" otherwise. Carried because the difference
-    # is large — ZIP schedules span roughly 2x within a single county — and because the
-    # model is trained against ZIP resolution wherever it exists, so a county-anchored
-    # estimate is the degraded case rather than the normal one.
-    fmr_resolution: Optional[str] = None
-    fmr_zip: Optional[str] = None
+    # Which spatial resolution the anchor's *level* came from: "zip" where the market
+    # rent index covers the subject's own ZIP at the month read, "county" where it fell
+    # back to the county's median across covered ZIPs. Carried because the difference is
+    # large — rents span roughly 2x within a single county — and because the model is
+    # trained against ZIP resolution wherever it exists, so a county-anchored estimate is
+    # the degraded case rather than the normal one. `anchor_zip` is the ZIP the level was
+    # read at, and is None on the county tier.
+    anchor_tier: Optional[str] = None
+    anchor_zip: Optional[str] = None
 
     # --- Comp cross-check (the agent's Observe step) ----------------------------
     # Each comp's own rent, divided by the FMR for *its* county and *its* fiscal year,
@@ -739,8 +759,8 @@ class DealState(BaseModel):
 
     # valuation
     rent_estimate: Optional[float] = None
-    rent_estimate_ratio_to_fmr: Optional[float] = None
-    fmr_anchor_used: Optional[float] = None
+    rent_estimate_ratio_to_anchor: Optional[float] = None
+    rent_anchor_used: Optional[float] = None
     # Never populated by this build, and that is a design decision rather than an
     # unfinished one — see `agents/valuation_rent.py`. The only sale-price source in
     # this project is Redfin's pre-aggregated extract: one median per metro-period,

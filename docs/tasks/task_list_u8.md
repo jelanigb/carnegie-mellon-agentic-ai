@@ -409,7 +409,7 @@ address components geocodes to a parcel with **zero flags and no model call**.
 **The defect had a second half, found while starting U8.2.** `county_fips` is derived only
 inside `_resolve_geography`, so a caller supplying *coordinates* and complete terms still
 reached the Valuation agent with no FMR anchor — and the report then said
-`FMR_UNAVAILABLE_FOR_COUNTY`, which reads as *HUD publishes no schedule for this county*
+`RENT_ANCHOR_UNAVAILABLE`, which reads as *HUD publishes no schedule for this county*
 when the truth was *nobody looked one up*. Those are different facts and a reader cannot
 tell them apart.
 
@@ -596,9 +596,9 @@ single flat record, there is no fallback to record, and the field is `False`.
 resolution*.
 
 **Measured: all five New York counties** — New York, Kings, Queens, Bronx, Richmond —
-return the flat shape. Every New York subject therefore recorded `fmr_resolution = "zip"`
+return the flat shape. Every New York subject therefore recorded `anchor_tier = "zip"`
 against a county-wide figure with no ZIP to name, `agents/summarizer.py:489` printed a bare
-"(ZIP)" beside the anchor, and `FMR_ANCHOR_COUNTY_LEVEL` was **suppressed** — a
+"(ZIP)" beside the anchor, and `RENT_ANCHOR_COUNTY_LEVEL` was **suppressed** — a
 warn-severity disclosure missing from every New York report, worth 0.15 of confidence
 wherever the score is not already floored. The `staten-island` demo is not the case that
 shows it: that deal sits at 0.00 on zero comps, so it absorbs the difference and its
@@ -685,11 +685,11 @@ reproduced identically across three re-runs, so structural rather than a network
 Cleveland's comps collapsing onto one coordinate is exactly what `cleveland-triplex`
 (U8.2) already evidences; sited there, this case would have measured that confound
 instead of the flag it targets. Moved to Los Angeles, where it lands cleanly at 0.70 on
-two warns (`unresolved_field` plus `fmr_anchor_county_level`, this ZIP's Small Area
+two warns (`unresolved_field` plus `rent_anchor_county_level`, this ZIP's Small Area
 schedule not matching). Worth stating plainly: **any replay-tier case with a real, valid
 address inherits a live Census call**, and that call's outcome is part of the case's
 result whether or not geography is the target. Two case notes originally guessed Los
-Angeles County's Small Area coverage would keep `fmr_anchor_county_level` off these rows
+Angeles County's Small Area coverage would keep `rent_anchor_county_level` off these rows
 entirely; both were wrong (a ZIP-match miss reaches the same flag through the fallback
 U8.2b's fix already distinguishes) and are corrected in `eval/cases.py` to state what was
 actually measured rather than what seemed likely.
@@ -831,7 +831,7 @@ fiscal years rather than mixing baselines. Two new flag kinds:
 `RENT_DRIFT_CORRECTION_APPLIED` (INFO, the mechanism plus its arithmetic and a
 staleness note past `config.RENT_DRIFT_MAX_ZORI_STALENESS_MONTHS`) and
 `RENT_DRIFT_CORRECTION_UNAVAILABLE` (WARN — a measured bias the system could not
-remove). `RENT_ANCHORED_TO_FMR`'s closing sentence corrected in both branches: it
+remove). `RENT_ANCHORED_TO_MARKET_INDEX`'s closing sentence corrected in both branches: it
 claimed the stability assumption was "one nothing in this project verifies", false
 since U8.0 measured it.
 
@@ -1122,7 +1122,7 @@ alternative, because the rejection is the substance.
 **The observation that started it.** The confidence score does not distinguish *"this
 deal has problems"* from *"our data is thin where this property is."* Four flag kinds are
 properties of a **location** and fire identically for every listing there —
-`fmr_anchor_county_level`, `rent_estimate_market_error_elevated`,
+`rent_anchor_county_level`, `rent_estimate_market_error_elevated`,
 `rent_drift_correction_unavailable`, `comps_spatially_concentrated` — while the rest are
 properties of **this listing or this run**. Measured on the batch, the split is stark:
 `ny-bedstuy-triplex` scores 0.55 with **every one** of its charged warns market-scoped
@@ -1166,7 +1166,7 @@ actionable review — while changing no escalation behavior and suppressing no d
 **It is also independent of U11**, since it touches no estimate and no threshold.
 
 **One narrow scoring question survives, and is measured rather than assumed (see
-OQ-1).** `fmr_anchor_county_level` is a *cause* of `rent_estimate_market_error_elevated`
+OQ-1).** `rent_anchor_county_level` is a *cause* of `rent_estimate_market_error_elevated`
 — county-level anchoring is part of why New York's holdout error is high — so charging
 0.15 for each charges cause and effect separately. The other two are independent axes
 (drift is a bias, concentration is about the check rather than the estimate). Whether

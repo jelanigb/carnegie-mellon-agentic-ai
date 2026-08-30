@@ -373,7 +373,7 @@ def _resolve_geography(
 
     # Geometric county lookup, keyed on whichever coordinate survived above. `None` here
     # is not flagged at this node: the Valuation agent raises
-    # FMR_UNAVAILABLE_FOR_COUNTY where the gap actually bites, and flagging it twice
+    # RENT_ANCHOR_UNAVAILABLE where the gap actually bites, and flagging it twice
     # would double-count the same problem against the confidence score.
     terms.county_fips = county_crosswalk.lookup_county_fips(terms.latitude, terms.longitude)
     return flags
@@ -430,7 +430,7 @@ def extractor_agent(state: DealState) -> dict:
             # golden tier keep the property `eval/README.md` defines it by.
             #
             # No flag on failure, deliberately: an unresolved county surfaces as
-            # `FMR_UNAVAILABLE_FOR_COUNTY` in the Valuation agent, which is the agent that
+            # `RENT_ANCHOR_UNAVAILABLE` in the Valuation agent, which is the agent that
             # knows what the absence costs. Raising one here too would disclose the same
             # gap twice in the same report.
             terms.county_fips = county_crosswalk.lookup_county_fips(

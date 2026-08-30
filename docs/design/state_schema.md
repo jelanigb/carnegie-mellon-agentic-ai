@@ -68,8 +68,8 @@ class FlagKind(StrEnum):
     UNRESOLVED_FIELD = "unresolved_field"
     RELAXED_SEARCH_RADIUS = "relaxed_search_radius"
     SPARSE_COMPS = "sparse_comps"
-    RENT_ANCHORED_TO_FMR = "rent_anchored_to_fmr"
-    FMR_UNAVAILABLE_FOR_COUNTY = "fmr_unavailable_for_county"
+    RENT_ANCHORED_TO_MARKET_INDEX = "rent_anchored_to_market_index"
+    RENT_ANCHOR_UNAVAILABLE = "rent_anchor_unavailable"
     COORDINATES_FROM_CITY_CENTROID = "coordinates_from_city_centroid"
     SUPPLIED_COORDINATES_CONFLICT = "supplied_coordinates_conflict"
     EXTRACTION_UNAVAILABLE = "extraction_unavailable"
@@ -133,8 +133,8 @@ class DealState(BaseModel):
 
     # valuation
     rent_estimate: Optional[float] = None
-    rent_estimate_ratio_to_fmr: Optional[float] = None  # model's raw structural output
-    fmr_anchor_used: Optional[float] = None              # today's FMR figure applied
+    rent_estimate_ratio_to_anchor: Optional[float] = None  # model's raw structural output
+    rent_anchor_used: Optional[float] = None              # today's FMR figure applied
     value_estimate: Optional[float] = None               # never populated — see U5 below
     rent_estimate_source: Optional[RentEstimateSource] = None
     valuation_detail: Optional[ValuationDetail] = None   # provenance for the report
@@ -284,16 +284,16 @@ observing that its own two inputs disagree, which is what distinguishes it from
 `CRITIC_INCONSISTENCY`: that one is the Critic comparing *different agents'* conclusions
 (U7).
 
-**Added Aug 22, 2026 with ZIP-resolution anchoring.** `ValuationDetail.fmr_resolution`
-(`"zip"` / `"county"`), `fmr_zip`, and `comps_zip_anchored`, plus
-`FlagKind.FMR_ANCHOR_COUNTY_LEVEL` (warn) for a county with no Small Area FMR. The
+**Added Aug 22, 2026 with ZIP-resolution anchoring.** `ValuationDetail.anchor_tier`
+(`"zip"` / `"county"`), `anchor_zip`, and `comps_zip_anchored`, plus
+`FlagKind.RENT_ANCHOR_COUNTY_LEVEL` (warn) for a county with no Small Area FMR. The
 distinction is carried because it is large — ZIP schedules span roughly 2x within a
 single county — and because a reader cannot tell a ZIP-anchored figure from a
-county-anchored one by looking at it. `FMR_ANCHOR_COUNTY_LEVEL` is deliberately distinct
-from `FMR_UNAVAILABLE_FOR_COUNTY`: that one means no estimate at all, this one means the
+county-anchored one by looking at it. `RENT_ANCHOR_COUNTY_LEVEL` is deliberately distinct
+from `RENT_ANCHOR_UNAVAILABLE`: that one means no estimate at all, this one means the
 estimate exists but cannot see below the county line.
 
-**One severity changed.** `FMR_UNAVAILABLE_FOR_COUNTY` moved from `warn` to `critical`.
+**One severity changed.** `RENT_ANCHOR_UNAVAILABLE` moved from `warn` to `critical`.
 §2 specified `warn` when the design still had a coarser state/national fallback behind
 it, so the flag meant "this figure is less precise." The fallback was removed — a raw
 comp mean is exactly the unanchored 2019 figure the design forbids — so the flag now
@@ -330,7 +330,7 @@ obtained determines how far it can be trusted:
   covered at all (e.g. Miami). `COUNTY_FROM_PRINCIPAL_COUNTY` is removed from the enum
   rather than kept unraisable — see `state.py`. `latitude`/`longitude` remain the tier
   that can raise a flag on approximation (the city-centroid fallback); `county_fips` no
-  longer can on success, only on outright failure (`FMR_UNAVAILABLE_FOR_COUNTY` — no
+  longer can on success, only on outright failure (`RENT_ANCHOR_UNAVAILABLE` — no
   coordinates, or a New England point, flagged as future work rather than solved).
 
 Keeping `full_address` alongside the parsed components is deliberate redundancy rather

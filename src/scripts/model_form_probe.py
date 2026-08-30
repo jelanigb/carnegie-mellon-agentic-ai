@@ -322,7 +322,7 @@ def run_fixture(fixture, bundles: dict[str, dict]) -> list[FixtureRow]:
             FixtureRow(
                 candidate=name,
                 estimate=update.get("rent_estimate"),
-                ratio=update.get("rent_estimate_ratio_to_fmr"),
+                ratio=update.get("rent_estimate_ratio_to_anchor"),
                 divergence_pct=detail.divergence_pct,
                 flag_kinds=frozenset(f.kind for f in update["flags"]),
             )
