@@ -1,4 +1,12 @@
-"""The drift correction's arithmetic, its refusal paths, and its symmetry (U8.4b).
+"""**Superseded by U11.3 and kept only for the factor arithmetic.** The rent-drift
+correction is no longer applied by the pipeline: the anchor is now a market index read
+at each row's own month, so the schedule-versus-market gap this module corrected for is
+divided out where it arises rather than removed afterwards. `tools/rent_drift.py` is
+unused by `agents/valuation_rent.py` and is scheduled for retirement at U11.M; the
+symmetry case that asserted the correction cancelled out of `divergence_pct` is deleted
+here because the parameter it exercised no longer exists.
+
+The drift correction's arithmetic, its refusal paths, and its symmetry (U8.4b).
 
 Deliberately scoped, per §8's testing preference: the factor computation and the one
 property that would corrupt a published check if it broke — that the correction cancels
@@ -141,39 +149,11 @@ def test_an_implausible_factor_refuses_as_a_data_defect(monkeypatch):
     assert not result.applied
     assert "plausible band" in result.unavailable_reason
 
-
-def test_the_correction_cancels_out_of_the_divergence(monkeypatch):
-    """The one property that keeps the published cross-check honest (U8.4b).
-
-    Both the estimate and the comp-implied rents are (vintage ratio) x (today's FMR), so
-    the factor scales both sides and must cancel out of `divergence_pct` exactly. If
-    this breaks, the drift correction is being read as a model-vs-comps disagreement.
-    """
-    anchoring = CompAnchoring(
-        implied_rents=[2000.0, 2200.0, 2400.0, 2600.0, 2800.0, 3000.0, 3200.0, 3400.0],
-        comps_used=8,
-        comps_available=8,
-    )
-    monkeypatch.setattr(
-        valuation_rent.rent_model, "anchor_comp_rents", lambda comps, fmr: anchoring
-    )
-    state = DealState(
-        raw_listing_text="synthetic", deal_terms=DealTerms(), comps=[],
-        planner_invocations=1,
-    )
-    uncorrected_estimate = 3500.0
-    factor = 0.85
-
-    from state import ValuationDetail
-
-    plain = ValuationDetail()
-    valuation_rent._cross_check(plain, state, uncorrected_estimate, 2500.0, 1.0)
-    corrected = ValuationDetail()
-    valuation_rent._cross_check(
-        corrected, state, uncorrected_estimate * factor, 2500.0, factor
-    )
-
-    assert plain.divergence_pct == pytest.approx(corrected.divergence_pct)
-    assert corrected.comp_implied_rent_median == pytest.approx(
-        plain.comp_implied_rent_median * factor
-    )
+# **`test_the_correction_cancels_out_of_the_divergence` was deleted at U11.3.** It
+# asserted that the drift factor cancelled out of `divergence_pct` because it scaled the
+# estimate and the comp-implied figures symmetrically. The anchor is now a market index
+# read at each row's own listing month, so the schedule-versus-market gap is divided out
+# where it arises rather than corrected afterwards, and `_cross_check` no longer takes a
+# factor for the case to exercise. `tools/rent_drift.py` is unused by the pipeline as of
+# that change and is scheduled for retirement at U11.M; the cases above still pass and
+# still describe the module's arithmetic, so they stay until it goes.

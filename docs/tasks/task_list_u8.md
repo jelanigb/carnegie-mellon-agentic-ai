@@ -1273,6 +1273,48 @@ datasets; confirm the license on each of the three before ingesting.
 up in U8.10, and keep the metro median. Three days remain at that point, which is the
 whole reason the date is set in advance rather than judged on the day.
 
+---
+
+**Spiked Aug 30, 2026, two days ahead of the drop-dead. Feasible for two metros of three,
+and the risk this subsection was scheduled around is not the one that bit.**
+
+**Q3's unbounded cost is not on the critical path, and the reason generalizes.** Q3 priced
+this as an address-to-parcel join — "the same class of work that produced U3's geocoding
+tier fallbacks, and bounded only if the join works first try." That prices the *original*
+specification. The respecified deliverable is a sub-metro **benchmark**, which needs an
+aggregate over the subject's ZIP, not a match to the subject's parcel. No fuzzy address
+matching is required by any of the three sources. This is the third time in this unit a
+cut-list cost has been found to describe work the item no longer contains — §6's own
+lesson from item 2a, applied again.
+
+| Metro | Route | Sale price? |
+| --- | --- | --- |
+| **NYC** | `w2pb-icbu` — `zip_code`, `latitude`, `longitude`, `total_units`, `building_class_category`, `sale_price`, all in one table | ✅ |
+| **Cook** | `wvhk-k5uv` (sales) → `nj4t-kc8j` (parcels: `zip_code`, `lat`, `lon`, `class`) on an **exact `pin`** | ✅ |
+| **LA County** | Roll data has `Units`, `Bedrooms`, `SQFTmain`, `SitusZIP5`, `CENTER_LAT/LON` — but **no sale price**, only `Roll_LandValue` / `Roll_ImpValue` / `Roll_TotalValue` | ❌ |
+
+**Measured against the real fixture ZIPs:** Bed-Stuy 11216, 402 multi-family sales since
+2023, median **$1,750,000**; Tottenville 10307, 152 sales, **$1,054,490**; Logan Square
+60647, 6,248 class-211 parcels and 864 sales, **$735,000**; Uptown 60640, 189 sales,
+**$850,000**.
+
+**Los Angeles keeps the Redfin metro median, disclosed per-market.** California assessor
+rolls publish assessed value, not transaction price. A Prop 13 base-year value approximates
+a sale price *at the base year* and is systematically stale for long-held parcels — a
+different instrument, and not one to substitute silently. Partial coverage with a stated
+reason is the same pattern U8.4b's drift correction already uses.
+
+**One consequence to write up rather than fix: this will make every demo deal look like a
+bargain, and that is #11's calibration showing through.** #11 set the demo asking prices
+*from the Redfin metro median* — the benchmark being replaced. Against its own ZIP,
+`chicago` at $499,000 sits 32% below Logan Square's median and `ny-bedstuy-triplex` at
+$1,050,000 sits 40% below Bed-Stuy's. The figures stand as committed and `demo.md` says
+why, which is the call U8.4c made when Staten Island's $875,000 was re-benchmarked.
+
+**Recording-safe, verified rather than assumed:** nothing flags on the benchmark value
+(checks A and B were not promoted at U8.7) and `scenario_forecast._context_block` does not
+carry it, so no prompt changes and no re-record. The ingest itself is not yet built.
+
 ### U8.9 — Absorbed U10: live runs, traces, diagram, screenshots
 
 Per-metro live end-to-end runs across all three metros as `live` rows in the same table

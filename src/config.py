@@ -311,25 +311,55 @@ RENT_MODEL_PATH = DATA_DIR / "processed" / "rent_model.joblib"
 # columns carry.
 RENT_MODEL_FEATURES = ("bedrooms", "bathrooms", "square_feet")
 
-# One fitted coefficient is worth knowing about before reading a prediction, because
-# it looks like a defect and is not: **`bedrooms` comes out negative** (-0.33 per
-# bedroom as of the ZIP-anchored retrain, Aug 22, 2026; -0.44 before it). The target is
-# a *ratio to FMR*, not a rent, and HUD's
-# schedule climbs with bedroom count faster than real rents do — LA's FY2026 4BR FMR
-# is 1.41x its 2BR, while actual 4BR rents are not — so the ratio genuinely falls as
-# bedrooms rise. The consequence is real and bounded: a high bedroom count on a small
-# footprint drives the predicted ratio below RENT_MODEL_MIN_RATIO, and the Valuation
-# agent refuses the estimate rather than reporting it. Pinned by
+# **A note kept because it explains why the competence check moved, not because the
+# coefficient still exists.** Under the LinearRegression this model shipped with until
+# Aug 30, 2026, `bedrooms` came out *negative* (-0.33 per bedroom; -0.44 before ZIP
+# anchoring). That was never a defect: the target is a ratio to FMR, and HUD's schedule
+# climbs with bedroom count faster than real rents do — LA's FY2026 4BR FMR is 1.41x its
+# 2BR while actual 4BR rents are not — so the ratio genuinely falls as bedrooms rise.
+#
+# It mattered operationally, though, and that is the part that changed. A high bedroom
+# count on a small footprint drove the *predicted ratio* below RENT_MODEL_MIN_RATIO, and
+# the Valuation agent refused the estimate. **A tree-based model cannot do that.** Its
+# prediction is an average of training targets already bounded to the plausible band, so
+# it clamps to the nearest leaf instead of extrapolating: measured Aug 30, 2026, a
+# 2bd / 100,000 sqft subject that LinearRegression prices at a ratio of 62.21 (refused)
+# is priced by gradient boosting at 2.20, and by a random forest at 3.00 — both entirely
+# reportable numbers for a property neither model has any basis to speak to.
+#
+# So the refusal was fired by an artifact of one estimator's extrapolation rather than by
+# a deliberate check, and swapping the estimator would have retired it silently. It is now
+# an explicit **input-domain** check instead — see RENT_MODEL_DOMAIN_PERCENTILES below —
+# which asks whether the subject resembles anything in the training data at all, and is
+# the same question regardless of what form the estimator takes. Pinned by
 # tests/test_flag_propagation.py::test_an_implausible_prediction_is_refused_rather_than_reported.
 
-# TODO(cut-list): feature engineering and model form are deferred, not dismissed — §6's
-# cut list, item 1a, carries the measurement and the reasoning. In short: the estimator is
-# a vanilla LinearRegression on these three raw columns, it underfits rather than overfits
-# (train-vs-holdout gap $0.04), and a random forest on identical data and features reaches
-# $434 MAE against this model's $524 — about 17% of the error is in model form alone.
-# Deferred because this project's subject is agent architecture, and because added capacity
-# introduces a real overfitting risk this model cannot currently have (poly-3 scored
-# R² -13.3 on the same probe), so it needs proper validation rather than one split.
+# The estimator. **Gradient boosting since U11.1 (Aug 30, 2026); a vanilla
+# LinearRegression before that**, which is what §6 cut-list item 1a deferred and what
+# `scripts/model_form_probe.py` reopened once k-fold cross-validation could replace the
+# single split OQ-4 objected to. Measured on 5 folds over the 5,686-row frame:
+#
+#     LinearRegression   CV MAE $513.67   fold sd 13.51   R² 0.263   train/holdout gap   $0.32
+#     RandomForest       CV MAE $428.83   fold sd  8.55   R² 0.454   train/holdout gap $140.41
+#     GradientBoosting   CV MAE $450.71   fold sd  7.29   R² 0.427   train/holdout gap  $18.34
+#
+# **Random forest wins on error and was not taken.** Its $140 train-vs-holdout gap against
+# the shipped model's $0.32 is the overfitting risk item 1a's deferral named, spent in one
+# go; gradient boosting takes 12.2% of the error for an $18 gap and the tightest fold
+# spread of the three. That is the architect's call (Aug 30, 2026), made on the balance of
+# error against variance rather than on the headline figure alone.
+#
+# **Library defaults, deliberately.** Tuning is U11.4's, on the form this selects. Tuning
+# inside the comparison would have made it a comparison of tuning effort.
+RENT_MODEL_ESTIMATOR = "gradient_boosting"
+
+# Cross-validation replaces the single 20% split, which closes the condition OQ-4 attached
+# to reopening model form at all. Two consequences beyond the headline number, both worth
+# having on their own: every row is scored exactly once by a model that never saw it, so
+# the per-metro slices below are thick enough to read (New York is n=264 rather than a
+# fifth of that); and the persisted artifact is refit on **all** the data afterwards,
+# where the single-split version shipped a model fit on 80% and threw the rest away.
+RENT_MODEL_CV_FOLDS = 5
 
 # Holdout is random rather than by-metro. A by-metro split would answer a different and
 # more demanding question — does the model transfer to a market it never saw — which is
@@ -352,6 +382,75 @@ RENT_MODEL_MIN_TRAINING_ROWS = 1_000
 # to keep genuine high-end and subsidized units.
 RENT_MODEL_MIN_RATIO = 0.25
 RENT_MODEL_MAX_RATIO = 4.0
+
+# Input-domain check: does this subject resemble anything the model trained on? Added
+# U11.1 (Aug 30, 2026) — see the note on the retired bedrooms coefficient above for why
+# the output-side band above could no longer answer that on its own.
+#
+# **The tunable half is here; the measured half travels with the artifact**, the same
+# split U8.4 settled for the per-metro error figure. These percentiles decide where the
+# line sits; the *values* it lands on are properties of the training frame and are stored
+# on `TrainingReport` so they cannot drift from the model that was fit on it.
+#
+# **Guarded on square-feet-per-bedroom rather than on each feature alone, because a
+# per-feature range does not catch what actually goes wrong.** Measured on the frame:
+# square_feet spans 130 to 9,175, so the `la-oversized-loft` fixture's 5,000 sqft sits
+# comfortably *inside* it and a min/max guard would wave it through. What is abnormal is
+# the combination — two bedrooms across 5,000 sqft is 2,500 sqft per bedroom against a
+# corpus median of 574 and a p99.9 of 1,454. The same quantity catches the other end:
+# the 6bd / 500 sqft refusal fixture is 83 sqft per bedroom, below the p0.1 of 150.
+#
+# 0.1% at each tail rather than 1%: this refuses to produce a number at all, so it should
+# fire on properties that are genuinely unlike the training data rather than on the
+# ordinary tails of it. `chicago-uptown-oversized` at 800 sqft/bedroom sits around the
+# 84th percentile and is correctly priced rather than refused.
+RENT_MODEL_DOMAIN_PERCENTILES = (0.001, 0.999)
+
+# --------------------------------------------------------------------------
+# The anchor (U11.3 — the reference the model learns a ratio to)
+# --------------------------------------------------------------------------
+# **Zillow ZORI for the level and the location; HUD FMR for the bedroom shape.** Taken
+# Aug 30, 2026 by the architect on `scripts/anchor_probe.py`'s five-candidate comparison,
+# scored in dollars on the 5,671 rows every candidate can price:
+#
+#     fmr    (status quo)                453.10   Chi 458  LA 451  Cle 372  NY 995
+#     zori   (zip -> county)             443.78   Chi 322  LA 494  Cle 361  NY 751
+#     hyb    (this one)                  439.03   Chi 337  LA 484  Cle 356  NY 812
+#     fmr+   (FMR, ZORI where absent)    453.10   -- identical to fmr; nothing to cover
+#     fmr/z  (FMR where ZIP, ZORI else)  484.17   -- worse than doing nothing
+#
+# **Why hybrid rather than pure ZORI**, which is better in two of four markets: ZORI
+# publishes one smoothed series per ZIP across all unit types and has **no bedroom
+# dimension at all**, so a pure-ZORI anchor asks `RENT_MODEL_FEATURES`' `bedrooms` column
+# to carry a signal the anchor used to supply, and retires `FMR_BEDROOM_CAP_EXCEEDED`
+# along with it. The hybrid takes ZORI's level and location — which is where the gain is —
+# and keeps FMR only for the *shape* across bedroom counts, with its level divided out.
+# Breadth over depth, and the numbers are better than the status quo nearly everywhere.
+#
+# **The measured gain is uneven and the overall figure hides it:** New York -18%
+# (995 -> 812) and Chicago -26% (458 -> 337), against Los Angeles +7% *worse*. Los Angeles
+# is 41% of the frame and drags the headline. Chicago is the finding that carried the
+# decision — it is already 100% ZIP-anchored under FMR, so resolution cannot explain a 26%
+# improvement there, and ZORI is simply a better reference series than an administrative
+# schedule whatever the grain.
+#
+# The bedroom count whose FMR figure is the denominator of the shape. 2BR because it is
+# the corpus's modal unit, so the shape is ~1.0 for the typical row and the anchor's level
+# stays interpretable as "market rent for this ZIP".
+RENT_ANCHOR_SHAPE_REFERENCE_BEDROOMS = 2
+
+# How stale the market index's newest observation may be before the report says so.
+# Zillow publishes on a lag, and a thin ZIP's series can end earlier than the panel's
+# newest column, so this is measured per subject rather than per file. Replaces
+# RENT_DRIFT_MAX_ZORI_STALENESS_MONTHS, which asked the same question of the same series
+# for the correction that this anchor makes unnecessary.
+RENT_ANCHOR_MAX_STALENESS_MONTHS = 6
+
+# Below this many ZIPs behind a county median, the county tier is a county median in name
+# only. Measured Aug 30, 2026 (`scripts/zori_county_tier.py`): median 8 ZIPs, p10 6,
+# **min 1**. None of the counties this system infers in are near the floor, so this guards
+# a path the demo set does not exercise rather than one it does.
+RENT_ANCHOR_MIN_COUNTY_ZIPS = 3
 
 # HUD publishes FMR by federal fiscal year. The corpus spans Dec 2018 - Dec 2019, so a
 # row is normalized against the FMR year its own listing date falls in, not against a

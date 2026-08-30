@@ -42,18 +42,28 @@ def main() -> None:
 
     if args.dry_run:
         df, report = rent_model.build_training_frame()
-        print(report.summary().split("\n\nMAE")[0])
+        print(report.summary().split("\n\nscored by")[0])
         print()
-        print("rent/FMR ratio distribution:")
-        print(df["rent_to_fmr"].describe().to_string())
+        print("rent/anchor ratio distribution:")
+        print(df["rent_to_anchor"].describe().to_string())
         return
 
     model, report = rent_model.train()
     print(report.summary())
     print()
-    print("coefficients (per unit change in rent/FMR ratio):")
-    for name, value in report.coefficients.items():
-        print(f"  {name:<16} {value:>12.6f}")
+    # Whichever the fitted form exposes — a linear model has coefficients, an ensemble has
+    # importances, and the label has to say which, because "per unit change in the ratio"
+    # is a true statement about one and a false one about the other.
+    if report.coefficients:
+        print("coefficients (per unit change in rent/FMR ratio):")
+        for name, value in report.coefficients.items():
+            print(f"  {name:<16} {value:>12.6f}")
+    elif report.feature_importances:
+        print(f"feature importances ({config.RENT_MODEL_ESTIMATOR}, share of split gain):")
+        for name, value in sorted(
+            report.feature_importances.items(), key=lambda kv: -kv[1]
+        ):
+            print(f"  {name:<16} {value:>12.4f}")
 
     rent_model.save(model, report)
     print()

@@ -74,12 +74,12 @@ def main() -> None:
     def fit(idx):
         return LinearRegression().fit(
             df.loc[idx, features].to_numpy(dtype=float),
-            df.loc[idx, "rent_to_fmr"].to_numpy(dtype=float),
+            df.loc[idx, "rent_to_anchor"].to_numpy(dtype=float),
         )
 
     def mae(model, idx) -> float:
         X = df.loc[idx, features].to_numpy(dtype=float)
-        y = df.loc[idx, "rent_to_fmr"].to_numpy(dtype=float)
+        y = df.loc[idx, "rent_to_anchor"].to_numpy(dtype=float)
         fmr = df.loc[idx, "fmr"].to_numpy(dtype=float)
         return float(np.mean(np.abs((model.predict(X) - y) * fmr)))
 

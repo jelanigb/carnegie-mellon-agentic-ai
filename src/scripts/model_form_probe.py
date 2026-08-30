@@ -177,8 +177,8 @@ def cross_validate(
     """
     features = list(config.RENT_MODEL_FEATURES)
     X = df[features].to_numpy(dtype=float)
-    y = df["rent_to_fmr"].to_numpy(dtype=float)
-    fmr = df["fmr"].to_numpy(dtype=float)
+    y = df["rent_to_anchor"].to_numpy(dtype=float)
+    fmr = df["anchor"].to_numpy(dtype=float)
 
     result = CvResult(name=name)
     oof = np.full(len(df), np.nan)

@@ -62,6 +62,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import httpx
+import pandas as pd
 import pytest
 from langgraph.types import Command
 from openai import APIError
@@ -88,7 +89,7 @@ from state import (
     Severity,
     flag,
 )
-from tools import hud_fmr, rent_drift, zcta_crosswalk
+from tools import hud_fmr, zcta_crosswalk, zori
 from tools.geocoding import GeocodeResult, GeocodeSource
 from tools.llm_client import LlmError
 from tools.llm_client import LlmClient, LlmError, SchemaValidationExhausted
@@ -233,6 +234,22 @@ def priced_cleanly(monkeypatch) -> None:
 # error message names a county that actually exists.
 LOS_ANGELES_COUNTY = "0603799999"
 
+# The market-rent level the stubbed ZORI panel reports for the current month. Set equal
+# to the fake county 2BR schedule so the composed anchor — market level times the
+# schedule's bedroom step — comes out at exactly that figure for a two-bedroom subject,
+# which is what the pre-U11.3 anchor was. Cases that assert on the anchor's magnitude
+# therefore keep asserting the same number, and the ones that care about the *tier* still
+# exercise the ZIP-versus-county branch.
+FAKE_ZORI_LEVEL = 2_903.0
+
+# The same index at the corpus's 2018-19 vintage — the fake 2019 county 2BR schedule
+# times the 1.186 ZORI-to-FMR ratio U8.0 measured for that year, so the synthetic market
+# read sits above the 40th-percentile schedule the way a real one does. A comp listed
+# then normalizes against this; the subject's estimate is anchored to the current level
+# above. Today's level cancels out of `divergence_pct`, so this constant alone decides
+# how far the cross-check sees the model and the comps apart.
+FAKE_ZORI_VINTAGE = 1_791.0 * 1.186
+
 
 class FakeFmrClient:
     """A HUD client that answers from fixed schedules instead of over the network.
@@ -328,7 +345,7 @@ def offline_valuation(
     zip_table_enabled: bool = True,
     zcta: str | None = "90026",
     zip_trained: bool = True,
-    drift_factor: float | None = 0.9,
+    zori_covers_zip: bool = True,
 ):
     """Give the Valuation agent a county and an FMR schedule without leaving the process.
 
@@ -366,31 +383,34 @@ def offline_valuation(
         gated["report"] = report
         monkeypatch.setattr(valuation_module.rent_model, "load", lambda: gated)
 
-    # The drift correction (U8.4b) reads the on-disk ZORI panel, which is a re-fetchable
-    # download rather than a committed file — exactly the machine-state dependency this
-    # helper stubs the ZCTA boundary file to avoid. Left unstubbed, a machine without
-    # the file would raise the unavailable WARN, change confidence, and flip outcomes in
-    # tests that never mention drift. `drift_factor=None` drives the unavailable path
-    # deliberately.
-    if drift_factor is None:
-        stub = rent_drift.DriftResult(
-            unavailable_reason="stubbed as unavailable by this test"
-        )
-    else:
-        stub = rent_drift.DriftResult(
-            factor=drift_factor,
-            zip_code=zcta or "90026",
-            zori_vintage_month_used="2019-06-30",
-            zori_latest_month="2026-06-30",
-            zori_staleness_months=2,
-            market_growth_pct=30.0,
-            schedule_growth_pct=44.4,
-            fmr_vintage_year=2019,
-            fmr_current_year=2026,
-        )
-    monkeypatch.setattr(
-        valuation_module.rent_drift, "compute_drift", lambda *a, **k: stub
-    )
+    # **The anchor reads the ZORI panel on every estimate since U11.3**, which is a
+    # re-fetchable ~10 MB data file rather than a service. Stubbed here for the same
+    # reason the FMR client is: left live, a machine without the file would flip outcomes
+    # in tests that never mention the anchor, and `tests/` is meant to be hermetic.
+    # `scripts/anchor_probe.py` and the evidence scripts exercise the real series.
+    #
+    # `zori_covers_zip=False` drives the county-tier path, which is the fallback a ZIP
+    # whose series has not begun takes.
+    months = [
+        str(m.date()) for m in pd.date_range("2018-01-31", "2026-07-31", freq="ME")
+    ]
+    # Flat across the vintage, then a step to today's level. A flat *history* is what
+    # makes the fixture readable: every comp normalizes against the same 2018-19 figure
+    # whatever month it was listed in, so the cross-check below measures the model
+    # against the comps rather than against calendar noise the fake invented.
+    levels = {m: (FAKE_ZORI_VINTAGE if m < "2026-01-01" else FAKE_ZORI_LEVEL) * scale
+              for m in months}
+    covered_zip = (zcta or "90026") if zori_covers_zip else "99999"
+    panel = pd.DataFrame([{
+        "RegionName": covered_zip, "State": "CA",
+        "CountyName": "Los Angeles County", "zip": covered_zip,
+        **levels,
+    }])
+    medians = pd.DataFrame([levels], index=pd.Index([county[:5]], name="geoid"))
+    counts = pd.DataFrame([{m: 12 for m in months}],
+                          index=pd.Index([county[:5]], name="geoid"))
+    monkeypatch.setattr(zori, "panel", lambda: panel)
+    monkeypatch.setattr(zori, "county_median_tables", lambda: (medians, counts))
     return client
 
 
@@ -1335,27 +1355,31 @@ def test_a_rent_estimate_discloses_the_anchor_it_was_built_from(monkeypatch):
 
     assert result.get("rent_estimate") is not None
     assert result.get("rent_estimate_source") == RentEstimateSource.REGRESSION_MODEL
-    # The anchoring arithmetic itself, asserted rather than assumed: the estimate is the
-    # ratio times the FMR times the *disclosed* drift factor (U8.4b), and nothing
-    # undisclosed has been applied to it on the way out.
-    assert result["valuation_detail"].rent_drift_factor == pytest.approx(0.9)
-    assert result.get("rent_estimate") == pytest.approx(
-        result.get("rent_estimate_ratio_to_fmr")
-        * result.get("fmr_anchor_used")
-        * result["valuation_detail"].rent_drift_factor
+    # The anchoring arithmetic itself, asserted rather than assumed: since U11.3 the
+    # estimate is the ratio times the composed anchor and nothing else, so a correction
+    # applied on the way out without being disclosed would show up here.
+    assert result["valuation_detail"].rent_drift_factor is None, (
+        "U11.3 retired the drift correction: the anchor is now a market series read at "
+        "the same month on both ends, so there is no schedule-versus-market gap left."
     )
-    assert_reaches_report(result, FlagKind.RENT_DRIFT_CORRECTION_APPLIED)
-    # The ZIP schedule, not the county one — the model is trained against ZIP resolution
-    # wherever HUD publishes it, so a county-anchored subject would multiply a
-    # ZIP-relative ratio by a county-level figure.
-    assert result.get("fmr_anchor_used") == FakeFmrClient.ZIP_SCHEDULES["90026"]["Two-Bedroom"]
+    assert result.get("rent_estimate") == pytest.approx(
+        result.get("rent_estimate_ratio_to_fmr") * result.get("fmr_anchor_used")
+    )
+    # The ZIP's own market level, not the county median — the two are different
+    # denominators, and a subject whose ZIP the index covers must be anchored to it.
+    # The bedroom step is 1.0 here because the subject is a two-bedroom and two bedrooms
+    # is the reference the shape divides by, so the composed anchor is the level itself.
+    assert result.get("fmr_anchor_used") == pytest.approx(FAKE_ZORI_LEVEL)
     assert result["valuation_detail"].fmr_resolution == "zip"
     assert result["valuation_detail"].fmr_zip == "90026"
     assert not flags_of_kind(result, FlagKind.FMR_ANCHOR_COUNTY_LEVEL)
 
     raised = assert_reaches_report(result, FlagKind.RENT_ANCHORED_TO_FMR)
     assert raised.severity == Severity.INFO
-    assert "FY2026" in raised.detail
+    # The disclosure names the month the market index was read at, not a fiscal
+    # year: since U11.3 the level comes from a monthly series, and "FY2026" would
+    # describe only the bedroom step.
+    assert "2026-07-31" in raised.detail
     assert "90026" in raised.detail
 
     detail = result.get("valuation_detail")
@@ -1364,26 +1388,6 @@ def test_a_rent_estimate_discloses_the_anchor_it_was_built_from(monkeypatch):
         "training metrics it would print a point estimate reading as exact."
     )
     assert f"{detail.model_holdout_mae_dollars:,.0f}" in result["report_markdown"]
-
-
-@pytest.mark.skipif(not _rent_model_available(), reason="rent model not trained")
-def test_an_unavailable_drift_correction_is_disclosed_and_leaves_the_estimate_raw(monkeypatch):
-    """When the drift correction can't be computed, the estimate ships uncorrected and
-    the report says so at WARN — a known, measured bias the system could not remove is a
-    degradation, not a mechanism (U8.4b)."""
-    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
-    offline_valuation(monkeypatch, drift_factor=None)
-
-    result = run_deal()
-
-    assert result.get("rent_estimate") is not None
-    assert result["valuation_detail"].rent_drift_factor is None
-    assert result.get("rent_estimate") == pytest.approx(
-        result.get("rent_estimate_ratio_to_fmr") * result.get("fmr_anchor_used")
-    )
-    raised = assert_reaches_report(result, FlagKind.RENT_DRIFT_CORRECTION_UNAVAILABLE)
-    assert raised.severity == Severity.WARN
-    assert not flags_of_kind(result, FlagKind.RENT_DRIFT_CORRECTION_APPLIED)
 
 
 @pytest.mark.skipif(not _rent_model_available(), reason="rent model not trained")
@@ -1416,7 +1420,11 @@ def test_a_five_bedroom_subject_discloses_the_hud_bedroom_cap(monkeypatch):
 
     raised = assert_reaches_report(result, FlagKind.FMR_BEDROOM_CAP_EXCEEDED)
     assert raised.severity == Severity.INFO
-    assert result.get("fmr_anchor_used") == FakeFmrClient.ZIP_SCHEDULES["90026"]["Four-Bedroom"]
+    assert result.get("fmr_anchor_used") == pytest.approx(
+        FAKE_ZORI_LEVEL
+        * FakeFmrClient.SCHEDULES[2026]["Four-Bedroom"]
+        / FakeFmrClient.SCHEDULES[2026]["Two-Bedroom"]
+    )
     assert result.get("rent_estimate") is not None, (
         "The cap is an approximation to disclose, not a reason to refuse an estimate."
     )
@@ -1506,27 +1514,31 @@ def test_a_model_that_disagrees_with_its_comps_says_so(monkeypatch):
 
 @pytest.mark.skipif(not _rent_model_available(), reason="rent model not trained")
 def test_an_implausible_prediction_is_refused_rather_than_reported(monkeypatch):
-    """The model's own bounds applied to the model's own output.
+    """A subject unlike anything the model trained on is refused, not priced.
 
     **This case exists because a fixture was written by accident and turned out to be
     load-bearing.** An earlier draft of the bedroom-cap test raised a 950 sqft duplex to
     five bedrooms without resizing it, and the agent declined to produce an estimate —
-    which looked like a bug and was not. The fitted `bedrooms` coefficient is *negative*,
-    because HUD's FMR schedule climbs with bedroom count faster than real rents do, so
-    the rent-to-FMR ratio genuinely falls as bedrooms rise. Push bedrooms high enough on
-    a small footprint and the prediction goes **negative** — a negative rent — which is
-    what the bound is really guarding against.
+    which looked like a bug and was not.
 
-    The exact inputs here had to be re-chosen once, and that is worth recording. The
-    original 5bd/950sqft fixture stopped tripping the bound when the model was retrained
-    against ZIP-resolution FMR: the bedrooms coefficient shrank from -0.44 to -0.33, so
-    the same fixture now predicts a low-but-legal 0.34. A test pinned to a threshold has
-    to be re-derived when the thing it thresholds moves; keeping the old numbers would
-    have left it asserting on a path it no longer reached.
+    **What it asserts changed at U11.1, and the reason is the point.** Until then the
+    refusal came from the *output* side: the shipped LinearRegression's `bedrooms`
+    coefficient was negative (HUD's schedule climbs with bedroom count faster than real
+    rents do), so a high bedroom count on a small footprint drove the predicted ratio
+    below the plausible band and the agent refused. That made this test hostage to a
+    fitted coefficient — the inputs had to be re-chosen once already, when ZIP-resolution
+    anchoring shrank the coefficient from -0.44 to -0.33 and the original 5bd/950sqft
+    fixture started predicting a low-but-legal 0.34.
 
-    `rent_model.predict_ratio` returns the raw output specifically so this stays visible
-    instead of being clipped into looking reasonable, and this is where that decision
-    gets paid off. Refusing an absurd number beats reporting one.
+    Gradient boosting has no such coefficient and, more to the point, **cannot produce an
+    implausible ratio at all** — its prediction is an average of training targets already
+    inside the band, so it clamps rather than extrapolating. The old mechanism would have
+    gone quiet without failing, which is why the check moved to
+    `rent_model.subject_is_out_of_domain` and why this test now asserts on the *input*
+    being outside the training data rather than on the output being absurd. It is no
+    longer pinned to anything a retrain can move: 6 bedrooms across 500 sqft is 83 square
+    feet per bedroom against a measured p0.1 of 150, and that stays true whatever is
+    fitted on top of it.
     """
     extraction = EXTRACTION_MISSING_PRICE.model_copy(
         deep=True,
@@ -1540,7 +1552,36 @@ def test_an_implausible_prediction_is_refused_rather_than_reported(monkeypatch):
 
     raised = assert_reaches_report(result, FlagKind.RENT_ESTIMATE_UNAVAILABLE)
     assert raised.severity == Severity.CRITICAL
-    assert "ratio" in raised.detail
+    assert "square feet per bedroom" in raised.detail
+    assert result.get("rent_estimate") is None
+
+
+@pytest.mark.skipif(not _rent_model_available(), reason="rent model not trained")
+def test_an_oversized_footprint_is_refused_at_the_other_tail(monkeypatch):
+    """The same guard from above, at the end a per-feature range cannot reach.
+
+    Added with U11.1 because the domain check has two tails and the case above only
+    exercises one. This end is the one a naive guard misses: **5,000 sqft is comfortably
+    inside the corpus's own 130-9,175 range**, so a per-feature min/max check waves this
+    subject through. What is abnormal is the combination — two bedrooms across 5,000 sqft
+    is 2,500 square feet per bedroom against a corpus median of 574.
+
+    It is the shape of `eval/`'s `la-oversized-loft` fixture, which is the case the batch
+    uses to cover this flag kind, so a regression here would show up there as a silently
+    priced estimate rather than as a failure.
+    """
+    extraction = EXTRACTION_MISSING_PRICE.model_copy(
+        deep=True,
+        update={"price": 2_400_000.0, "bedrooms": 2, "square_footage": 5_000.0},
+    )
+    monkeypatch.setattr(extractor_module, "_extract_terms", lambda text: (extraction, 1))
+    monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
+    offline_valuation(monkeypatch)
+
+    result = run_deal()
+
+    raised = assert_reaches_report(result, FlagKind.RENT_ESTIMATE_UNAVAILABLE)
+    assert raised.severity == Severity.CRITICAL
     assert result.get("rent_estimate") is None
 
 
@@ -1555,7 +1596,7 @@ def test_a_county_without_small_area_fmr_says_the_anchor_is_coarse(monkeypatch):
     exists for.
     """
     monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
-    offline_valuation(monkeypatch, zip_table_enabled=False, zip_trained=False)
+    offline_valuation(monkeypatch, zori_covers_zip=False)
 
     result = run_deal()
 

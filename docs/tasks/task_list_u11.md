@@ -158,7 +158,129 @@ If taken: re-anchor the target on ZORI (cut-list 6) — the largest lever and th
 cost. If not taken: record the decision and its evidence in the §7 register, and the
 U8.4b drift correction remains the vintage-drift instrument.
 
+---
+
+**Measured Aug 30, 2026 — `scripts/anchor_probe.py`, five candidates, one CV, gradient
+boosting, scored in dollars on the 5,671 rows all five can price.** The decision is the
+architect's; this is the evidence for it.
+
+| Anchor | MAE $ | Chicago | Los Angeles | Cleveland | New York |
+| --- | --- | --- | --- | --- | --- |
+| `fmr` — status quo | 453.10 | 458 | **451** | 372 | 995 |
+| `zori` — zip→county | 443.78 | **322** | 494 | 361 | **751** |
+| `hyb` — ZORI × FMR bedroom shape | **439.03** | 337 | 484 | **356** | 812 |
+| `fmr+` — FMR, ZORI where absent | 453.10 | 458 | 451 | 372 | 995 |
+| `fmr/z` — FMR where ZIP, ZORI where county | 484.17 | 444 | 550 | 361 | 772 |
+
+**Three findings, and one of them kills an idea this file proposed.**
+
+**1. `fmr/z` is the worst candidate on the table — worse than doing nothing.** The
+proposal was to swap ZORI into exactly the three markets where FMR is county-grain and
+leave Chicago's ZIP-level schedule alone, which targets the defect precisely and looked
+like the cheap win. It measures **$484 against the status quo's $453**, and it is worse
+even in the markets it was supposed to help (Los Angeles 550 against `fmr`'s 451 *and*
+`zori`'s 494). The stated risk was that it puts a third denominator in one training set;
+that cost is real and it exceeds the grain it buys. **Measured and rejected**, which is
+the outcome the probe existed to make possible.
+
+**2. `fmr+` is identical to `fmr`, by construction rather than by coincidence.** No row is
+dropped for a missing FMR, so the ZORI fallback never fires — a coverage lever with
+nothing to cover on the training side. It would still let a New England subject be priced
+at inference, but that is OQ-8's problem and not the anchor's.
+
+**3. The gain is real but small overall, and large in exactly the market that needs it.**
+`hyb` takes 3.1% off the headline. Underneath that: **New York −18% (995 → 812) and
+Chicago −26% (458 → 337)**, against **Los Angeles +7% worse (451 → 484)**. Los Angeles is
+41% of the frame, so it drags an overall figure that understates what happens in the two
+markets where the current anchor is weakest. Pure `zori` is stronger still in those two
+(New York −25%, Chicago −30%) and weaker in Los Angeles.
+
+**Chicago is the result that changes the reasoning.** It is the one market already 100%
+ZIP-anchored under FMR, so grain cannot explain a 26–30% improvement there. ZORI is
+simply a better reference series than the administrative schedule, independent of
+resolution — which is a broader claim than cut-list item 6 makes and a stronger argument
+for taking it.
+
+**A hypothesis tested and not supported, recorded so it is not re-run.** Los Angeles is
+the market ZORI makes worse and also the one where the county fallback carries the most
+weight (14% of its rows, against a county spanning Malibu to Compton), so the fallback
+looked like the culprit. Split by tier, it is not: within Los Angeles the county tier
+scores **468** against the ZIP tier's **487**. The county fallback is sound and Los
+Angeles genuinely prices better against FMR. (The headline split — county $337.53 against
+ZIP $462.94 — is confounded by metro mix and should not be read as the county tier being
+better in general.)
+
+---
+
+**TAKEN Aug 30, 2026: the hybrid. Built the same day.** The architect's reasoning was
+breadth over depth — the bedroom dimension is worth keeping and the numbers beat the
+status quo nearly everywhere.
+
+**Retrained on the new target:** CV MAE $452.40 (against the FMR-anchored GBM's $450.71 —
+flat overall), train/holdout gap $21.45, and the per-metro story the overall figure hides:
+**New York $981 → $855, Chicago $454 → $343**, Cleveland $366 → $357, Los Angeles
+$450 → $509. New York's ratio to the headline falls from 2.18x to **1.89x**, so
+`RENT_ESTIMATE_MARKET_ERROR_ELEVATED` still fires and still should.
+
+**Los Angeles gains ZIP-grain anchoring it never had.** Verified live on 90026: the anchor
+resolves at ZIP tier ($2,691), the estimate is $2,861/mo at a ratio of 1.063, and 8 of 8
+comps normalize to a median of $3,081 for a −7.1% divergence. Under FMR every Los Angeles
+subject was county-anchored and carried `FMR_ANCHOR_COUNTY_LEVEL` unconditionally; it no
+longer does, which is a real disclosure change and will move confidence scores.
+
+**The drift correction retired structurally rather than by deletion**, as U11.3's plan
+said it would: the anchor reads a market index at the same month on both ends, so the
+schedule-versus-market gap U8.4b measured is divided out where it arises. The flag it
+raised is repurposed as an index-staleness disclosure.
+
+**Landed incomplete on purpose, and here is exactly what is left** (per §8, the completing
+work is named rather than implied):
+
+1. **`FlagKind` members still carry FMR names** — `RENT_ANCHORED_TO_FMR`,
+   `FMR_ANCHOR_COUNTY_LEVEL`, `FMR_UNAVAILABLE_FOR_COUNTY`. Their *messages* are correct
+   and reader-facing text is honest; the enum member names and `ValuationDetail.fmr_*`
+   fields are not. A mechanical rename, and it changes `f.kind.value`, which the eval
+   results table prints and the scoring prompt embeds — so it should ride the re-record.
+2. **`agents/summarizer.py` still renders the anchor as an FMR figure.** Not yet touched.
+3. **`tools/rent_drift.py` is unused** and should be retired at U11.M, with
+   `RENT_DRIFT_CORRECTION_APPLIED` either repurposed or retired on the
+   `LLM_RENT_FALLBACK_USED` precedent — the census drops a kind either way, and that
+   should be a decision rather than a side effect.
+4. **`scripts/anchor_probe.py` and `scripts/zori_evidence.py` read the old frame shape**
+   (`fmr`, `fmr_resolution`, `rent_to_fmr`) and will not run as written. Their evidence is
+   recorded above and in `config.py`; repairing them is U11.M work.
+5. **No re-record and no batch re-derivation yet**, deliberately — items 1–3 move flag
+   sets, so the recordings should be cut once after them.
+
+**What this leaves the architect.** `hyb` is the best overall, is the architect's stated
+preference, and has an architectural advantage the table does not show: **it keeps FMR in
+the system**, so `FMR_BEDROOM_CAP_EXCEEDED`, `FMR_ANCHOR_COUNTY_LEVEL` and the rest of the
+anchor vocabulary keep meaning what they mean, where pure `zori` would retire them. Against
+that, `zori` is materially better in the two markets whose disclosures this unit exists to
+improve. Neither is free: both are the U5-scale rewrite, and both largely retire U8.4b's
+drift correction, which is what cut-list item 6 says the correction stands in for.
+
 ### U11.4 — Adoption, tuning, and validation artifacts
+
+**Partially landed Aug 30, 2026, ahead of its place in the sequence** — the architect took
+gradient boosting on U11.1's numbers, and the adoption was folded in with the probe work
+rather than held for a separate review pass. What landed: `config.RENT_MODEL_ESTIMATOR`
+and `RENT_MODEL_CV_FOLDS`, `rent_model._estimator`, `train()` rewritten to k-fold CV plus a
+full-data refit, `TrainingReport` carrying `cv_folds` / `train_mae_dollars` /
+`feature_importances`, and the input-domain guard that replaces the refusal mechanism the
+form change would otherwise have retired silently (see U11.1 above).
+
+Retrained and persisted: **CV MAE $450.71**, R² 0.427, train/holdout gap $18.34, per-metro
+Chicago $453.67 / Los Angeles $449.75 / Cleveland $366.36 / **New York $981.51 (2.18x)**.
+Feature importances square_feet 0.43, bedrooms 0.32, bathrooms 0.25 — the negative-bedrooms
+artifact is gone with the linear form. All 72 tests pass.
+
+**Still outstanding here:** hyperparameter tuning under the same CV (the form ships at
+library defaults, deliberately — see `config.RENT_MODEL_ESTIMATOR`), the leave-one-metro-out
+run as transfer evidence (OQ-12's first half), and the handoff to U8's sequence for
+re-record and batch re-derivation. **The re-record is deliberately not taken yet**, since the
+anchor decision above would move every rent estimate again and the recordings should be
+re-cut once for both changes — the same reasoning U8's sequence item 3 used for U8.4b+U8.4c.
 
 Hyperparameter tuning for whatever form survives, under the same CV; retrain and persist
 with the per-metro breakdown (`TrainingReport.mae_dollars_by_metro` travels with the

@@ -60,6 +60,8 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Optional
 
+import pandas as pd
+
 import config
 from state import (
     DealState,
@@ -70,7 +72,7 @@ from state import (
     ValuationDetail,
     flag,
 )
-from tools import hud_fmr, kaggle_data, redfin_data, rent_drift, zcta_crosswalk
+from tools import hud_fmr, kaggle_data, redfin_data, zcta_crosswalk, zori
 from tools.model import rent_model
 
 AGENT = "valuation_rent"
@@ -124,6 +126,18 @@ def _metro_benchmark(metro: str) -> Optional[tuple[float, int, float]]:
         int(len(rows)),
         float(rows["homes_sold"].median()),
     )
+
+
+def _index_staleness_months(month: Optional[str]) -> Optional[int]:
+    """How many months old the market index's newest observation is, or `None`.
+
+    Read against today rather than against the file's own newest column, because the
+    question a reader has is how current the estimate is, not how current the file is.
+    """
+    if not month:
+        return None
+    observed, now = pd.Timestamp(month), pd.Timestamp.now()
+    return max(0, (now.year - observed.year) * 12 + (now.month - observed.month))
 
 
 def _resolve_market_label(terms: DealTerms) -> Optional[str]:
@@ -265,8 +279,7 @@ def _cross_check(
     detail: ValuationDetail,
     state: DealState,
     estimate: float,
-    subject_fmr: float,
-    drift_factor: float = 1.0,
+    subject_anchor: float,
 ) -> list:
     """Compare the estimate against the comp set, normalized to the same dollars.
 
@@ -302,16 +315,15 @@ def _cross_check(
 
         `scripts/valuation_evidence.py --diagnose-divergence`.
 
-    **The drift correction applies to both sides, symmetrically (U8.4b).** Comp-implied
-    rents are built the same way the estimate is — a vintage ratio times the subject's
-    *today* FMR — so they carry exactly the same schedule-vs-market drift U8.0 measured.
-    `drift_factor` therefore scales the comp-implied figures here just as it scaled the
-    estimate before it arrived, which keeps every reported dollar in the same corrected
-    terms while cancelling out of `divergence_pct` entirely: the check goes on measuring
-    structure against structure. Correcting only the estimate would have injected a
-    systematic ~−12% gap and reported it as a model-vs-comps disagreement.
+    **No drift correction on either side since U11.3, and that is the anchor change
+    paying off here.** Until then both the estimate and the comp-implied figures were a
+    vintage ratio times *today's* FMR, so both carried the schedule-vs-market drift U8.0
+    measured and `tools/rent_drift.py` scaled both symmetrically to cancel it out of
+    `divergence_pct`. The anchor is now a market series read at each row's own month, so
+    the vintage divides out where it arises and there is no residual level error left for
+    a correction to remove.
     """
-    anchoring = rent_model.anchor_comp_rents(state.comps, subject_fmr)
+    anchoring = rent_model.anchor_comp_rents(state.comps, subject_anchor)
     detail.comps_available = anchoring.comps_available
     detail.comps_cross_checked = anchoring.comps_used
     detail.comps_zip_anchored = anchoring.zip_anchored
@@ -319,10 +331,10 @@ def _cross_check(
     if anchoring.comps_used < config.RENT_COMP_CROSSCHECK_MIN_COMPS:
         return []
 
-    median = anchoring.median * drift_factor
+    median = anchoring.median
     detail.comp_implied_rent_median = median
-    detail.comp_implied_rent_p25 = anchoring.percentile(25) * drift_factor
-    detail.comp_implied_rent_p75 = anchoring.percentile(75) * drift_factor
+    detail.comp_implied_rent_p25 = anchoring.percentile(25)
+    detail.comp_implied_rent_p75 = anchoring.percentile(75)
     # Signed, so the report can say which way the estimate leans. An absolute value
     # would tell a reader the estimate is suspect without telling them how.
     detail.divergence_pct = (estimate - median) / median
@@ -453,107 +465,166 @@ def valuation_rent_agent(state: DealState) -> dict:
     # county-anchored. Asking for a ZIP anchor there would apply a ZIP-level figure to a
     # county-relative ratio. The persisted training report carries the counties that were
     # ZIP-anchored, and only those get ZIP resolution here.
-    trained_zip_counties = set(
-        (bundle.get("report") or {}).get("zip_anchored_counties") or []
+    subject_zip = terms.zip_code or zcta_crosswalk.lookup_zcta(
+        terms.latitude, terms.longitude
     )
-    subject_zip = None
-    if terms.county_fips in trained_zip_counties:
-        subject_zip = terms.zip_code or zcta_crosswalk.lookup_zcta(
-            terms.latitude, terms.longitude
-        )
 
+    # **The anchor is ZORI for the level and FMR only for the bedroom step (U11.3).** The
+    # subject is read at the market index's newest observation rather than at a fiscal
+    # year, because ZORI is a monthly market series and the estimate is meant to be in
+    # today's dollars; the FMR half is read at the current fiscal year and its level
+    # divides out, so the schedule's own drift against the market never reaches the
+    # figure. `rent_model.anchor_for_row` is the same function training used, which is
+    # what keeps the two from drifting apart.
     try:
         client = hud_fmr.HudFmrClient()
-        anchor = client.get_fmr_for_bedroom(
-            terms.county_fips, int(terms.bedrooms), zip_code=subject_zip
+        fiscal_year = rent_model.fmr_fiscal_year(pd.Timestamp.now())
+        tables = rent_model.build_anchor_tables(
+            {(terms.county_fips, fiscal_year)}, client
+        )
+        month = zori.latest_month(tables.zori_panel) if tables.available else None
+        subject_anchor, anchor_tier = (
+            rent_model.anchor_for_row(
+                int(terms.bedrooms), terms.county_fips, fiscal_year,
+                month, subject_zip, tables,
+            )
+            if month
+            else (float("nan"), "none")
         )
     except (hud_fmr.HudFmrApiError, KeyError, StopIteration, RuntimeError) as exc:
         flags.append(
             state.flag(
                 AGENT,
                 FlagKind.FMR_UNAVAILABLE_FOR_COUNTY,
-                f"County {terms.county_fips} resolved, but its HUD Fair Market Rent "
-                f"schedule could not be retrieved ({type(exc).__name__}). No rent "
-                f"estimate was produced. This is a lookup failure rather than a "
-                f"property that cannot be priced — a re-run may succeed.",
+                f"County {terms.county_fips} resolved, but the reference rent figures "
+                f"this estimate is built from could not be retrieved "
+                f"({type(exc).__name__}). No rent estimate was produced. This is a "
+                f"lookup failure rather than a property that cannot be priced — a re-run "
+                f"may succeed.",
                 Severity.CRITICAL,
             )
         )
         return {"valuation_detail": detail, "flags": flags}
 
-    subject_fmr = float(anchor["rent"])
-    detail.fmr_year = anchor["year"]
-    # **An anchor is ZIP-resolution only if HUD published a Small Area schedule for this
-    # county *and* a ZIP in it matched.** Both halves are needed, and reading only the
-    # second was a defect (fixed U8.2b, found by U8.2's case work).
-    #
-    # `used_msa_fallback` answers two different questions depending on what HUD returned,
-    # and `tools/hud_fmr.get_fmr` is where the two shapes are normalized. For a county
-    # *with* Small Area FMRs it means "a ZIP was asked for and none matched, so the
-    # MSA-level row was used" — a genuine fallback. For a county with **no** Small Area
-    # schedule at all, HUD returns a single flat record, there is no fallback to record,
-    # and the field is `False`.
-    #
-    # Reading it alone therefore inverted the disclosure in exactly the counties that
-    # most need it. **Measured Aug 28, 2026: all five New York counties** — New York,
-    # Kings, Queens, Bronx and Richmond — return the flat shape, so every New York
-    # subject recorded `fmr_resolution = "zip"` against a county-wide figure with
-    # `fmr_zip` unset. `agents/summarizer.py` then printed a bare "(ZIP)" beside the
-    # anchor, claiming sub-county precision the estimate does not have, and the
-    # county-level disclosure below was suppressed — worth 0.15 of confidence on every
-    # New York deal, including the `staten-island` demo. §2 designates New York as the
-    # market grounded in real thinness; this made it the one market that did not say so.
-    #
-    # `is_safmr` is the half that was missing: it reports which response shape HUD sent,
-    # which is precisely "does this county have ZIP-level schedules at all".
-    zip_anchored = anchor["is_safmr"] and not anchor["used_msa_fallback"]
-    detail.fmr_resolution = "zip" if zip_anchored else "county"
-    detail.fmr_zip = subject_zip if zip_anchored else None
+    if anchor_tier == "none" or subject_anchor != subject_anchor:
+        flags.append(
+            state.flag(
+                AGENT,
+                FlagKind.FMR_UNAVAILABLE_FOR_COUNTY,
+                "No reference rent figure could be resolved for this property, so no "
+                "rent estimate was produced. Every rent figure in this system is a "
+                "modelled ratio times a local market reference; without the second term "
+                "there is no number to report. Causes: the market rent index covers "
+                "neither this ZIP nor its county, or no federal rent schedule exists for "
+                "the county — which is the case throughout New England, where the "
+                "schedule is published by town.",
+                Severity.CRITICAL,
+            )
+        )
+        return {"valuation_detail": detail, "flags": flags}
 
-    if not zip_anchored:
+    detail.fmr_year = fiscal_year
+    detail.fmr_resolution = anchor_tier
+    detail.fmr_zip = subject_zip if anchor_tier == "zip" else None
+
+    if anchor_tier == "county":
         # **The consequence is identical; the cause is not, and the message says which
-        # (U8.2b).** One flag kind rather than two, on the rule this file already applies
-        # elsewhere: a reader's response to both is the same — treat the figure as
-        # describing the county, not the address. But the sentence naming the cause has
-        # to be true of the deal in front of them, and a single fixed sentence was not.
-        # It asserted that HUD publishes no ZIP-level schedule, which is right for a New
-        # York subject and wrong for a Los Angeles one: Los Angeles County has 474 ZIP
-        # schedules for FY2026 and is county-anchored anyway, because the model's
-        # training rows there were county-anchored and mixing the two would multiply a
-        # county-relative ratio by a ZIP-level figure.
-        cause = (
-            "HUD publishes no ZIP-level rent schedule for this county, so the "
-            "county-wide figure is the only one available"
-            if not anchor["is_safmr"]
-            else "the rent model's own training data for this county was measured "
-                 "against county-wide rents, so a ZIP-level figure could not be "
-                 "combined with it without mixing two different baselines"
+        # (U8.2b's rule, applied to the new anchor).** One flag kind rather than two: a
+        # reader's response is the same either way — treat the figure as describing the
+        # county, not the address.
+        #
+        # Under the FMR anchor this meant "HUD publishes no ZIP-level schedule here".
+        # Under the market-index anchor it means the ZIP's own series has not begun, or
+        # covers this month with a gap, so the county's median across its covered ZIPs
+        # stood in. That is a different cause with the same consequence, and it is far
+        # more common at the corpus's vintage than at today's — which is why 1,528 of the
+        # model's own training rows carry it too (U11.3).
+        behind = rent_model.county_zip_count(tables, terms.county_fips, month)
+        thin = (
+            f" That median rests on only {behind} ZIP codes, so it carries little more "
+            f"local detail than a metro average would."
+            if behind and behind < config.RENT_ANCHOR_MIN_COUNTY_ZIPS
+            else ""
         )
         flags.append(
             state.flag(
                 AGENT,
                 FlagKind.FMR_ANCHOR_COUNTY_LEVEL,
-                f"This estimate is anchored to the county-wide Fair Market Rent for "
-                f"{terms.county_fips}, because {cause}. Where ZIP-level schedules are "
-                f"used, they span roughly 2x within a single county, so a county anchor "
-                f"cannot distinguish an expensive neighborhood from a cheap one — the "
-                f"estimate describes the county's rent level, not this address's.",
+                f"This estimate is anchored to a county-wide market rent figure rather "
+                f"than to this ZIP code's own, because the rent index Zillow publishes "
+                f"for ZIP {subject_zip or 'this address'} does not cover the period this "
+                f"estimate reads from. Rents span roughly 2x within a single county, so a "
+                f"county anchor cannot distinguish an expensive neighborhood from a cheap "
+                f"one — the estimate describes the county's rent level, not this "
+                f"address's.{thin}",
                 Severity.WARN,
             )
         )
 
-    if anchor["bedroom_cap_exceeded"]:
+    _, bedroom_cap_exceeded = rent_model.bedroom_shape(
+        int(terms.bedrooms), terms.county_fips, fiscal_year, tables.fmr_county
+    )
+    if bedroom_cap_exceeded:
         flags.append(
             state.flag(
                 AGENT,
                 FlagKind.FMR_BEDROOM_CAP_EXCEEDED,
-                f"The subject has {terms.bedrooms} bedrooms; HUD publishes no Fair "
-                f"Market Rent beyond four, so this estimate is anchored to the "
-                f"{anchor['bedrooms_used']}-bedroom figure. Larger units rent above "
-                f"their four-bedroom anchor, so the estimate is likely conservative.",
+                f"The subject has {terms.bedrooms} bedrooms; the federal rent schedule "
+                f"this estimate uses to step between unit sizes stops at four, so the "
+                f"four-bedroom step was applied. Larger units rent above it, so the "
+                f"estimate is likely conservative.",
                 Severity.INFO,
             )
         )
+
+    # The market index is only as current as its newest observation, and Zillow publishes
+    # on a lag. Disclosed rather than corrected: there is nothing to correct *to*, and a
+    # reader weighing a rent figure should know how old the market read behind it is.
+    staleness = _index_staleness_months(month)
+    if staleness is not None and staleness > config.RENT_ANCHOR_MAX_STALENESS_MONTHS:
+        flags.append(
+            state.flag(
+                AGENT,
+                FlagKind.RENT_DRIFT_CORRECTION_UNAVAILABLE,
+                f"The market rent index this estimate is anchored to was last observed "
+                f"{staleness} months ago ({month}). The estimate is only as current as "
+                f"that reading, and rents may have moved since.",
+                Severity.WARN,
+            )
+        )
+
+    # **Competence before prediction (U11.1).** Asked of the inputs, and asked first,
+    # because the answer must not depend on which estimator is fitted. Until U11.1 this
+    # was answered downstream by the output-side band below: the LinearRegression that
+    # shipped then extrapolated an implausible *ratio* for a subject unlike anything it
+    # trained on, and the band caught it. A tree-based estimator cannot do that — its
+    # prediction is an average of training targets already inside that band — so it
+    # returns a confident number instead, and the disclosure would have disappeared as a
+    # side effect of a model swap rather than by any decision. See
+    # `rent_model.subject_is_out_of_domain` for the measurement.
+    #
+    # Same `FlagKind` as the band below, with the cause branching, on this file's own rule
+    # (U8.2b): a reader's response is identical — there is no rent figure and none should
+    # be inferred — while the sentence explaining why has to be true of the deal in front
+    # of them.
+    out_of_domain = rent_model.subject_is_out_of_domain(
+        bundle, terms.bedrooms, terms.bathrooms, terms.square_footage
+    )
+    if out_of_domain is not None:
+        flags.append(
+            state.flag(
+                AGENT,
+                FlagKind.RENT_ESTIMATE_UNAVAILABLE,
+                f"No rent estimate was produced for this property, because "
+                f"{out_of_domain}. The model can only speak to properties resembling the "
+                f"ones it learned from, and this subject's {terms.bedrooms}bd / "
+                f"{terms.bathrooms}ba / {terms.square_footage:,.0f} sqft falls outside "
+                f"that. A figure produced here would look like every other estimate in "
+                f"this report while resting on nothing comparable, so none is given.",
+                Severity.CRITICAL,
+            )
+        )
+        return {"valuation_detail": detail, "flags": flags}
 
     ratio = rent_model.predict_ratio(
         bundle, terms.bedrooms, terms.bathrooms, terms.square_footage
@@ -562,8 +633,15 @@ def valuation_rent_agent(state: DealState) -> dict:
     # `predict_ratio` deliberately returns the raw model output so an implausible
     # prediction stays visible instead of being clipped into looking reasonable. This is
     # where that decision is paid off: the same bounds the training set applied to drop
-    # data defects are applied to the model's own output, and a ratio outside them means
-    # the features fell outside anything the model saw. Refusing beats reporting it.
+    # data defects are applied to the model's own output.
+    #
+    # **Kept as a second line of defense after U11.1 moved the competence check upstream,
+    # not made redundant by it.** The two ask different questions: the domain check above
+    # asks whether the *subject* resembles the training data, this asks whether the
+    # *model* produced something coherent. Under the current gradient-boosting form this
+    # branch is unreachable by construction — every prediction is an average of training
+    # targets already inside the band — and that is a reason to keep it rather than
+    # delete it, since it is the form, not the requirement, that made it quiet.
     if not config.RENT_MODEL_MIN_RATIO <= ratio <= config.RENT_MODEL_MAX_RATIO:
         flags.append(
             state.flag(
@@ -580,115 +658,36 @@ def valuation_rent_agent(state: DealState) -> dict:
         )
         return {"valuation_detail": detail, "flags": flags}
 
-    estimate = ratio * subject_fmr
+    estimate = ratio * subject_anchor
 
-    # --- Drift correction (U8.4b, from U8.0's finding) -------------------------
-    # The model learned its ratio against the vintage FMR schedule and multiplies it by
-    # today's, but the schedule outran the market by ~18.5 points over that interval, so
-    # the raw product reads high by the subject ZIP's own drift. The ZIP for the market
-    # read is resolved independently of the anchor's grain: ZORI is ZIP-level even where
-    # the FMR anchor is county-level, and the market the subject rents in is its ZIP
-    # either way.
-    zori_zip = terms.zip_code or (
-        zcta_crosswalk.lookup_zcta(terms.latitude, terms.longitude)
-        if terms.latitude is not None and terms.longitude is not None
-        else None
-    )
-    drift = rent_drift.compute_drift(
-        zori_zip, terms.county_fips, int(terms.bedrooms), subject_zip, client=client
-    )
-    if drift.applied:
-        estimate *= drift.factor
-        detail.rent_drift_factor = drift.factor
-        detail.rent_drift_market_growth_pct = drift.market_growth_pct
-        detail.rent_drift_schedule_growth_pct = drift.schedule_growth_pct
-        detail.rent_drift_zori_vintage_month = drift.zori_vintage_month_used
-        detail.rent_drift_zori_latest_month = drift.zori_latest_month
-        direction = "down" if drift.factor < 1.0 else "up"
-        stale = (
-            drift.zori_staleness_months is not None
-            and drift.zori_staleness_months > config.RENT_DRIFT_MAX_ZORI_STALENESS_MONTHS
-        )
-        flags.append(
-            state.flag(
-                AGENT,
-                FlagKind.RENT_DRIFT_CORRECTION_APPLIED,
-                f"The rent estimate was adjusted {direction} by a factor of "
-                f"{drift.factor:.2f} to correct for measured drift between market rents "
-                f"and the federal rent schedule it is anchored to. Since the training "
-                f"data's 2018-19 vintage, the schedule for this area rose "
-                f"{drift.schedule_growth_pct:+.0f}% while observed market rents in ZIP "
-                f"{drift.zip_code} (Zillow's rent index) rose "
-                f"{drift.market_growth_pct:+.0f}%; an unadjusted figure would carry that "
-                f"gap. The comparable-implied rents shown alongside are adjusted "
-                f"identically, since they are built the same way and carry the same "
-                f"drift."
-                + (
-                    f" Note the market index's last observation "
-                    f"({drift.zori_latest_month}) is {drift.zori_staleness_months} "
-                    f"months old — the correction is only as current as that series."
-                    if stale
-                    else ""
-                ),
-                Severity.INFO,
-            )
-        )
-    else:
-        flags.append(
-            state.flag(
-                AGENT,
-                FlagKind.RENT_DRIFT_CORRECTION_UNAVAILABLE,
-                f"A drift correction normally applied to every rent estimate could not "
-                f"be computed for this property, because {drift.unavailable_reason}. "
-                f"The federal rent schedule this estimate is anchored to has risen "
-                f"measurably faster than market rents since the model's 2018-19 "
-                f"training data — where the correction could be computed in this "
-                f"project's markets, it reduced estimates by between roughly 7% and "
-                f"26% — so this estimate, and the comparable-implied rents beside it, "
-                f"likely read high by that kind of margin.",
-                Severity.WARN,
-            )
-        )
-
-    flags.extend(_cross_check(detail, state, estimate, subject_fmr, drift.factor or 1.0))
+    flags.extend(_cross_check(detail, state, estimate, subject_anchor))
 
     # Raised on every estimate that took this path, without exception. INFO rather than
     # WARN because it describes a mechanism working as designed, not a degradation —
     # the severity guidance in the report says exactly that. It is here so that no
-    # reader can mistake a modelled ratio times a government reference figure for an
-    # observed market rent.
+    # reader can mistake a modelled ratio times a reference figure for an observed
+    # market rent.
     #
-    # The closing sentence branches on the drift correction (U8.4b). Its previous fixed
-    # form claimed the stability assumption was "one nothing in this project verifies" —
-    # true when written, false since U8.0 measured the assumption and found it does not
-    # hold. A disclosure that misstates what the project has checked is the same defect
-    # class U8.2b fixed, one layer up.
+    # **Rewritten at U11.3 with the anchor.** Its previous form named HUD Fair Market
+    # Rent as the reference and closed by saying the rent-to-FMR stability assumption had
+    # been measured and found to have drifted. Both halves stopped being true: the level
+    # now comes from a market index read at the same month on both ends, so there is no
+    # schedule-versus-market gap left to disclose.
     flags.append(
         state.flag(
             AGENT,
             FlagKind.RENT_ANCHORED_TO_FMR,
-            f"Estimated rent of ${estimate:,.0f}/mo is a modelled rent-to-FMR ratio of "
-            f"{ratio:.2f} applied to the FY{detail.fmr_year} HUD Fair Market Rent of "
-            f"${subject_fmr:,.0f} for "
+            f"Estimated rent of ${estimate:,.0f}/mo is a modelled ratio of {ratio:.2f} "
+            f"applied to a reference rent of ${subject_anchor:,.0f} for "
             + (f"ZIP {detail.fmr_zip}" if detail.fmr_resolution == "zip"
                else f"county {terms.county_fips}")
-            + (
-                f", then adjusted by a factor of {drift.factor:.2f} for measured "
-                f"market-versus-schedule drift (see the drift disclosure)"
-                if drift.applied
-                else ""
-            )
-            + f". It is not an observed "
-            f"market rent. The ratio comes from a regression trained on 2018-19 listings "
-            f"normalized the same way, which assumes rent-to-FMR structure is stable "
-            f"over that interval — an assumption this project has measured and found "
-            + (
-                f"to have drifted, which is what the adjustment above corrects for."
-                if drift.applied
-                else f"to have drifted; the correction for it could not be applied to "
-                     f"this property, so see the drift disclosure for the likely "
-                     f"direction and size of the error."
-            ),
+            + f", read from Zillow's published rent index for {month} and stepped to "
+            f"{terms.bedrooms} bedrooms using the federal rent schedule's own ratio "
+            f"between unit sizes. It is not an observed rent for this building. The "
+            f"ratio comes from a model trained on 2018-19 listings normalized against "
+            f"the same index at their own listing months, so what it carries forward is "
+            f"how this property compares to its neighbors rather than what anything "
+            f"cost in 2019.",
             Severity.INFO,
         )
     )
@@ -696,7 +695,7 @@ def valuation_rent_agent(state: DealState) -> dict:
     return {
         "rent_estimate": estimate,
         "rent_estimate_ratio_to_fmr": ratio,
-        "fmr_anchor_used": subject_fmr,
+        "fmr_anchor_used": subject_anchor,
         "rent_estimate_source": RentEstimateSource.REGRESSION_MODEL,
         "valuation_detail": detail,
         "flags": flags,

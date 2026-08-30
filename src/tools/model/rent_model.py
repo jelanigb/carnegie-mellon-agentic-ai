@@ -24,14 +24,20 @@ Three consequences worth stating, because each is a limitation rather than a fea
    coordinates at all — has no anchor, so this path produces nothing and raises
    `FMR_UNAVAILABLE_FOR_COUNTY` rather than falling back to a raw comp mean. A raw comp
    mean is precisely the unanchored 2019 figure the design forbids.
-3. **The ratio assumption is load-bearing and untested against 2026 data.** It holds
-   that rent-to-FMR structure is stable over ~7 years. Nothing in this repo verifies
-   that, because verifying it needs current-vintage rent data this project does not
-   have. It is an assumption, labelled as one, and the largest single source of error in
-   the rent estimate.
+3. **The ratio assumption is load-bearing, and it has been measured and found false.**
+   It holds that rent-to-FMR structure is stable over ~7 years. U8.0 tested that against
+   Zillow's ZORI series and found the FMR schedule rising +51.9% while market rents rose
+   +33.5% over the same interval, so the anchor drifted ~18 points away from the market
+   it prices and the raw product reads high. `tools/rent_drift.py` corrects for it per
+   ZCTA at prediction time and discloses the correction; §6's cut-list item 6 carries the
+   structural fix the correction stands in for. This paragraph previously said nothing in
+   the project verified the assumption, which was true when written and stopped being
+   true at U8.0.
 
 Feature choice is deliberately narrow and excludes any market identifier — see
-`config.RENT_MODEL_FEATURES` for why a metro dummy would defeat the ratio design.
+`config.RENT_MODEL_FEATURES` for why a metro dummy would defeat the ratio design. The
+estimator's *form* is `config.RENT_MODEL_ESTIMATOR`, gradient boosting since U11.1, and
+that constant carries the cross-validated evidence for the choice.
 """
 
 from __future__ import annotations
@@ -59,34 +65,47 @@ class TrainingReport:
 
     rows_in_shortlist: int
     rows_unresolved_county: int
-    rows_missing_fmr: int
+    rows_missing_anchor: int
     rows_outside_ratio_bounds: int
     rows_trained: int
     holdout_rows: int
     counties: int
     fiscal_years: list[int] = field(default_factory=list)
-    # Anchor resolution, split. The mixed basis is a real limitation of the target and
-    # has to be visible in the report that justifies the model, not only in the code:
-    # a row anchored at ZIP and a row anchored at county are ratios to different
-    # denominators. Kept because restricting training to SAFMR counties would drop New
-    # York entirely and train on a basis inference does not always see.
+    # Anchor tier, split. The mixed basis is a real limitation of the target and has to
+    # be visible in the report that justifies the model, not only in the code: a row
+    # anchored to its own ZIP's ZORI series and one anchored to its county's median are
+    # ratios to different denominators. Kept rather than restricting training to
+    # ZIP-covered rows, because a ZIP's series begins only when Zillow has enough
+    # listings there and excluding the rest would discard 27% of the corpus (U11.3).
     rows_anchored_at_zip: int = 0
-    rows_anchored_at_zip_backcast: int = 0
     rows_anchored_at_county: int = 0
     distinct_zctas: int = 0
-    # The counties whose training rows were anchored at ZIP resolution. Inference must
-    # consult this rather than asking HUD whether a ZIP schedule exists *today*: SAFMR
-    # coverage expanded after 2020, so Los Angeles has ZIP schedules for FY2026 and none
-    # for the corpus's FY2019. Anchoring such a subject at ZIP would multiply a
-    # county-relative ratio by a ZIP-level figure — two different denominators. The
-    # model can only be applied on the basis it was fit on.
-    zip_anchored_counties: list = field(default_factory=list)
     mae_ratio: float = 0.0
     mae_dollars_at_holdout_fmr: float = 0.0
     baseline_mae_ratio: float = 0.0
     baseline_mae_dollars: float = 0.0
     r2: float = 0.0
+    # How the scores above were obtained. 0 means the single-split protocol this model
+    # used before U11.1; anything else is the number of cross-validation folds, in which
+    # case `holdout_rows` equals `rows_trained` because every row is held out exactly once.
+    cv_folds: int = 0
+    # In-fold training error, in dollars, averaged across folds. Reported beside the
+    # held-out figure because the *gap* between them is the overfitting guard §6 cut-list
+    # item 1a's deferral was justified by, and a held-out score alone cannot show it.
+    train_mae_dollars: float = 0.0
+    # Only one of these is populated, depending on what the estimator exposes: a linear
+    # model has `coef_`, an ensemble has `feature_importances_`, and neither has both.
+    # Kept as two fields rather than one renamed "diagnostics" because they are not the
+    # same quantity and a reader should not have to guess which one they are looking at.
     coefficients: dict = field(default_factory=dict)
+    feature_importances: dict = field(default_factory=dict)
+    # The input-domain bounds this frame supports, measured here and carried on the
+    # artifact for the reason `mae_dollars_by_metro` is (U8.4 Q2(c)): it is a *measured
+    # property of the fit*, not a tunable, so putting it in `config.py` would let it drift
+    # from the model it describes. The percentiles that place it are the tunable, and they
+    # are in `config.RENT_MODEL_DOMAIN_PERCENTILES`.
+    feature_ranges: dict = field(default_factory=dict)
+    sqft_per_bedroom_bounds: tuple = ()
     # Per-metro breakdown of the same holdout residuals above, keyed by the labels in
     # `config.INDEXED_MARKETS` (already documented there as "the inference trio plus New
     # York"). {"New York": {"mae_dollars": 1065.xx, "n": 41}, ...}. A groupby over
@@ -98,24 +117,38 @@ class TrainingReport:
         lines = [
             f"shortlist rows           {self.rows_in_shortlist:>7,}",
             f"  dropped, no county     {self.rows_unresolved_county:>7,}",
-            f"  dropped, no FMR        {self.rows_missing_fmr:>7,}",
+            f"  dropped, no anchor     {self.rows_missing_anchor:>7,}",
             f"  dropped, ratio bounds  {self.rows_outside_ratio_bounds:>7,}",
             f"trained on               {self.rows_trained:>7,}"
             f"   ({self.counties} counties, FY {self.fiscal_years})",
             f"  anchored at ZIP        {self.rows_anchored_at_zip:>7,}"
-            f"   ({self.distinct_zctas} distinct ZCTAs,"
-            f" {self.rows_anchored_at_zip_backcast:,} back-cast)",
+            f"   ({self.distinct_zctas} distinct ZCTAs)",
             f"  anchored at county     {self.rows_anchored_at_county:>7,}",
             f"holdout rows             {self.holdout_rows:>7,}",
             "",
+            f"scored by                {self.cv_folds}-fold cross-validation"
+            if self.cv_folds
+            else "scored by                a single holdout split",
             f"MAE (rent/FMR ratio)     {self.mae_ratio:>7.4f}",
             f"MAE (dollars)            {self.mae_dollars_at_holdout_fmr:>7.2f}",
             f"R^2                      {self.r2:>7.4f}",
+            f"MAE in-fold (dollars)    {self.train_mae_dollars:>7.2f}",
+            f"  train/holdout gap      "
+            f"{self.mae_dollars_at_holdout_fmr - self.train_mae_dollars:>7.2f}"
+            f"   <- the overfitting guard",
             "",
             "Baseline — predict the training-set mean ratio for every row:",
             f"  MAE (ratio)            {self.baseline_mae_ratio:>7.4f}",
             f"  MAE (dollars)          {self.baseline_mae_dollars:>7.2f}",
         ]
+        if self.sqft_per_bedroom_bounds:
+            low, high = self.sqft_per_bedroom_bounds
+            lo_pct, hi_pct = config.RENT_MODEL_DOMAIN_PERCENTILES
+            lines.append("")
+            lines.append(
+                f"Input domain — sqft per bedroom, p{lo_pct:.1%} to p{hi_pct:.1%}: "
+                f"{low:,.0f} to {high:,.0f}"
+            )
         if self.mae_dollars_by_metro:
             lines.append("")
             lines.append("MAE (dollars) by metro:")
@@ -263,54 +296,157 @@ def _zip_anchor_tables(
     return tables, basis
 
 
+@dataclass
+class AnchorTables:
+    """Everything `anchor_for_row` reads, assembled once rather than per row.
+
+    Training resolves ~5,700 rows and the comp cross-check resolves at most
+    `config.MIN_QUALIFYING_COMPS`, so both want the ZORI panel and the county medians
+    loaded once; `zori` caches them per process and this holds the references plus a memo
+    for the per-ZIP series, which is a row-by-row lookup over a 9 MB frame otherwise.
+    """
+
+    fmr_county: dict
+    zori_panel: object = None
+    zori_county_median: object = None
+    zori_county_zips: object = None
+    _series: dict = field(default_factory=dict)
+
+    @property
+    def available(self) -> bool:
+        return self.zori_panel is not None
+
+    def series(self, zcta: Optional[str]):
+        """This ZIP's monthly series, memoized. `None` where ZORI does not cover it."""
+        if not zcta or self.zori_panel is None:
+            return None
+        if zcta not in self._series:
+            from tools import zori
+
+            self._series[zcta] = zori.series_for_zip(self.zori_panel, zcta)
+        return self._series[zcta]
+
+
+def build_anchor_tables(
+    pairs: set[tuple[str, int]], client: hud_fmr.HudFmrClient
+) -> AnchorTables:
+    """Assemble the anchor's inputs for a set of (county entityid, fiscal year) pairs.
+
+    The FMR half is fetched per pair because the bedroom *shape* is county-and-year
+    specific; the ZORI half is process-cached and shared.
+    """
+    from tools import zori
+
+    tables = AnchorTables(fmr_county=_fmr_table(pairs, client))
+    tables.zori_panel = zori.panel()
+    county = zori.county_median_tables()
+    if county is not None:
+        tables.zori_county_median, tables.zori_county_zips = county
+    return tables
+
+
+def bedroom_shape(
+    bedrooms: int, county_fips: str, fiscal_year: int, fmr_county: dict
+) -> tuple[float, bool]:
+    """FMR's multiplier for this bedroom count, with the schedule's level divided out.
+
+    Returns `(shape, cap_exceeded)`. The shape is this bedroom count's FMR over the
+    `config.RENT_ANCHOR_SHAPE_REFERENCE_BEDROOMS` figure for the same county and year, so
+    it is ~1.0 for a typical unit and carries only the schedule's *relative* structure
+    across unit sizes.
+
+    **This is the one thing FMR still supplies after U11.3, and the reason the anchor is a
+    hybrid rather than pure ZORI.** Zillow publishes a single smoothed series per ZIP
+    across all unit types — no bedroom dimension exists in it at all — so an anchor built
+    from ZORI alone would price a studio and a four-bedroom against the same reference and
+    leave `RENT_MODEL_FEATURES`' `bedrooms` column to absorb the difference. Dividing the
+    level out is what lets the two sources compose: ZORI decides *how expensive this
+    place is*, FMR decides only *how the schedule steps between unit sizes*, and the
+    schedule's own drift against the market (U8.0) cancels out of a within-year ratio.
+
+    `hud_fmr.bedroom_field` caps at four bedrooms and reports it, so a five-bedroom
+    subject is priced on the four-bedroom step and the caller discloses that — which is
+    why `FMR_BEDROOM_CAP_EXCEEDED` survives this change with its meaning intact.
+    """
+    rents = fmr_county.get((county_fips, fiscal_year))
+    field_name, capped = hud_fmr.bedroom_field(int(bedrooms))
+    reference_field, _ = hud_fmr.bedroom_field(
+        config.RENT_ANCHOR_SHAPE_REFERENCE_BEDROOMS
+    )
+    if not rents:
+        return float("nan"), capped
+    try:
+        own, reference = float(rents[field_name]), float(rents[reference_field])
+    except (KeyError, TypeError, ValueError):
+        return float("nan"), capped
+    if own <= 0 or reference <= 0:
+        return float("nan"), capped
+    return own / reference, capped
+
+
 def anchor_for_row(
     bedrooms: int,
     county_fips: str,
     fiscal_year: int,
+    month: str,
     zcta: Optional[str],
-    county_table: dict,
-    zip_tables: dict,
-    zip_basis: Optional[dict] = None,
+    tables: AnchorTables,
 ) -> tuple[float, str]:
-    """The FMR to normalize one row against, and the resolution it came from.
+    """The reference figure to normalize one row against, and the tier it came from.
 
-    **The single place ZIP-vs-county anchoring is decided**, shared by training and by
-    the comp cross-check so the two cannot drift. A model trained against ZIP schedules
-    and applied against county ones would be quietly wrong by up to the spread between
-    them, which HUD publishes as roughly 2x within a single county — the kind of
+    **The single place anchoring is decided**, shared by training and by the comp
+    cross-check so the two cannot drift. A model trained against one reference and applied
+    against another would be quietly wrong by the spread between them — the kind of
     mismatch that produces a plausible model no test would catch.
 
-    Returns `(fmr, resolution)` where resolution is `"zip"` (HUD published a Small Area
-    FMR for this ZIP in this fiscal year), `"zip_backcast"` (the ZIP's position within
-    its county was carried back from the current year — see `_zip_anchor_tables`), or
-    `"county"`. `(nan, "none")` means no schedule had a usable figure.
+    `anchor = ZORI(this ZIP, this month) x FMR bedroom shape`, with the ZORI term falling
+    back to the county's median across its covered ZIPs. Returns `(anchor, tier)` where
+    tier is `"zip"`, `"county"`, or `"none"` when no usable figure exists.
 
-    The three are kept distinct rather than collapsed to "zip / not zip" because they
-    carry different confidence, and the report says which one produced a given estimate.
+    **The county tier is not a nicety.** A ZIP's ZORI series begins only when Zillow has
+    enough listings there, so 1,515 of the corpus's 5,686 rows sit before their own ZIP's
+    series starts; without the fallback the anchor would discard 27% of the training data.
+    `scripts/zori_county_tier.py` measures the recovery at 99.0%. The two tiers are
+    different denominators — a county median carries far less location signal than a ZIP
+    series — which is why the tier is returned rather than absorbed, and why the report
+    discloses it.
     """
-    field_name, _ = hud_fmr.bedroom_field(int(bedrooms))
+    shape, _ = bedroom_shape(bedrooms, county_fips, fiscal_year, tables.fmr_county)
+    if shape != shape:  # NaN — no FMR schedule, so no bedroom step to apply
+        return float("nan"), "none"
 
-    if zcta:
-        rents = zip_tables.get((county_fips, fiscal_year), {}).get(zcta)
-        if rents:
-            try:
-                value = float(rents[field_name])
-                if value > 0:
-                    basis = (zip_basis or {}).get((county_fips, fiscal_year), "published")
-                    return value, "zip_backcast" if basis == "backcast" else "zip"
-            except (KeyError, TypeError, ValueError):
-                pass
+    series = tables.series(zcta)
+    if series is not None and month in series.index:
+        value = series[month]
+        if not pd.isna(value) and float(value) > 0:
+            return float(value) * shape, "zip"
 
-    rents = county_table.get((county_fips, fiscal_year))
-    if rents:
-        try:
-            value = float(rents[field_name])
-            if value > 0:
-                return value, "county"
-        except (KeyError, TypeError, ValueError):
-            pass
+    median = tables.zori_county_median
+    if median is not None:
+        geoid = str(county_fips)[:5]
+        if geoid in median.index and month in median.columns:
+            value = median.at[geoid, month]
+            if not pd.isna(value) and float(value) > 0:
+                return float(value) * shape, "county"
 
     return float("nan"), "none"
+
+
+def county_zip_count(tables: AnchorTables, county_fips: str, month: str) -> int:
+    """How many ZIPs stood behind a county-tier anchor, for the caller to disclose.
+
+    A county median over one ZIP is a county median in name only, and nothing else in the
+    returned figure distinguishes it from a median over thirty — the same reason
+    `CompAnchoring.comps_used` travels beside `comps_available`.
+    """
+    counts = tables.zori_county_zips
+    if counts is None:
+        return 0
+    geoid = str(county_fips)[:5]
+    if geoid not in counts.index or month not in counts.columns:
+        return 0
+    value = counts.at[geoid, month]
+    return 0 if pd.isna(value) else int(value)
 
 
 def build_training_frame(
@@ -328,7 +464,7 @@ def build_training_frame(
     report = TrainingReport(
         rows_in_shortlist=len(df),
         rows_unresolved_county=0,
-        rows_missing_fmr=0,
+        rows_missing_anchor=0,
         rows_outside_ratio_bounds=0,
         rows_trained=0,
         holdout_rows=0,
@@ -352,25 +488,29 @@ def build_training_frame(
         df["latitude"].tolist(), df["longitude"].tolist()
     )
 
+    # Each row is anchored at its own listing month, not at a fixed date: a 2018 listing
+    # and a 2019 one faced different markets, and pinning both to one month would import
+    # that year's trend into the ratio as noise. Keyed as ZORI's month columns are.
+    df["month"] = listed.dt.to_period("M").dt.to_timestamp("M").dt.strftime("%Y-%m-%d")
+
     pairs = set(zip(df["county_fips"], df["fiscal_year"]))
-    table = _fmr_table(pairs, client)
-    zip_tables, zip_basis = _zip_anchor_tables(pairs, client, table)
+    tables = build_anchor_tables(pairs, client)
 
     anchors = df.apply(
         lambda row: anchor_for_row(
             row["bedrooms"], row["county_fips"], row["fiscal_year"],
-            row["zcta"], table, zip_tables, zip_basis,
+            row["month"], row["zcta"], tables,
         ),
         axis=1,
     )
-    df["fmr"] = [a[0] for a in anchors]
-    df["fmr_resolution"] = [a[1] for a in anchors]
-    missing = df["fmr"].isna() | (df["fmr"] <= 0)
-    report.rows_missing_fmr = int(missing.sum())
+    df["anchor"] = [a[0] for a in anchors]
+    df["anchor_tier"] = [a[1] for a in anchors]
+    missing = df["anchor"].isna() | (df["anchor"] <= 0)
+    report.rows_missing_anchor = int(missing.sum())
     df = df[~missing]
 
-    df["rent_to_fmr"] = df["price"] / df["fmr"]
-    in_bounds = df["rent_to_fmr"].between(
+    df["rent_to_anchor"] = df["price"] / df["anchor"]
+    in_bounds = df["rent_to_anchor"].between(
         config.RENT_MODEL_MIN_RATIO, config.RENT_MODEL_MAX_RATIO
     )
     report.rows_outside_ratio_bounds = int((~in_bounds).sum())
@@ -378,16 +518,91 @@ def build_training_frame(
 
     report.counties = int(df["county_fips"].nunique())
     report.fiscal_years = sorted(int(y) for y in df["fiscal_year"].unique())
-    report.rows_anchored_at_zip = int(
-        df["fmr_resolution"].isin(["zip", "zip_backcast"]).sum()
-    )
-    report.rows_anchored_at_zip_backcast = int((df["fmr_resolution"] == "zip_backcast").sum())
-    report.rows_anchored_at_county = int((df["fmr_resolution"] == "county").sum())
-    report.zip_anchored_counties = sorted(
-        df.loc[df["fmr_resolution"].isin(["zip", "zip_backcast"]), "county_fips"].unique()
-    )
-    report.distinct_zctas = int(df.loc[df["fmr_resolution"].isin(["zip", "zip_backcast"]), "zcta"].nunique())
+    report.rows_anchored_at_zip = int((df["anchor_tier"] == "zip").sum())
+    report.rows_anchored_at_county = int((df["anchor_tier"] == "county").sum())
+    report.distinct_zctas = int(df.loc[df["anchor_tier"] == "zip", "zcta"].nunique())
+    _measure_domain(df, report)
     return df.reset_index(drop=True), report
+
+
+def _measure_domain(df: pd.DataFrame, report: TrainingReport) -> None:
+    """Record what this frame can speak to, for `subject_is_out_of_domain` to read later.
+
+    Measured on the frame that survived every filter above rather than on the raw corpus,
+    because the model is fit on the survivors and it is the survivors' range that bounds
+    what it has seen.
+
+    `bedrooms == 0` rows are excluded from the per-bedroom ratio rather than coerced: a
+    studio has a floor area but no per-bedroom figure, and dividing by zero to produce an
+    infinity would drag the upper bound to meaninglessness.
+    """
+    report.feature_ranges = {
+        name: (float(df[name].min()), float(df[name].max()))
+        for name in config.RENT_MODEL_FEATURES
+    }
+    per_bedroom = (
+        df.loc[df["bedrooms"] > 0, "square_feet"] / df.loc[df["bedrooms"] > 0, "bedrooms"]
+    ).dropna()
+    if not per_bedroom.empty:
+        low, high = config.RENT_MODEL_DOMAIN_PERCENTILES
+        report.sqft_per_bedroom_bounds = (
+            float(per_bedroom.quantile(low)),
+            float(per_bedroom.quantile(high)),
+        )
+
+
+def subject_is_out_of_domain(
+    bundle: dict, bedrooms: float, bathrooms: float, square_feet: float
+) -> Optional[str]:
+    """Why this subject is outside what the model trained on, or `None` if it is inside.
+
+    **The competence check, and it is deliberately separate from the estimator.** Until
+    U11.1 this question was answered as a side effect: the shipped LinearRegression
+    extrapolated a negative `bedrooms` coefficient into an implausible *ratio*, which the
+    Valuation agent's output-side band caught. A tree-based estimator cannot produce an
+    implausible ratio — its prediction is an average of training targets already bounded
+    to that band — so it clamps to its nearest leaf and returns a confident number for a
+    property it has no basis to price. Measured Aug 30, 2026: a 2bd / 100,000 sqft subject
+    prices at 62.21 under the old form (refused) and at 2.20 under this one (reported).
+    Swapping the form without this check would therefore have retired a disclosure
+    silently, which is the failure §8's Transparent Degradation principle exists to
+    prevent.
+
+    Asked of the *inputs* rather than the output, so the answer does not depend on which
+    estimator is fitted, and returned as a reader-facing clause rather than a boolean so
+    the caller can say which attribute is unlike the training data and by how much.
+
+    An older artifact carries no bounds — it was persisted before they were measured — and
+    returns `None` rather than refusing everything: an absent measurement is not evidence
+    that a subject is out of domain.
+    """
+    report = bundle.get("report") or {}
+    values = {"bedrooms": bedrooms, "bathrooms": bathrooms, "square_feet": square_feet}
+
+    for name, bounds in (report.get("feature_ranges") or {}).items():
+        value = values.get(name)
+        if value is None:
+            continue
+        low, high = float(bounds[0]), float(bounds[1])
+        if not low <= float(value) <= high:
+            readable = name.replace("_", " ")
+            return (
+                f"its {readable} of {float(value):,.0f} falls outside the {low:,.0f} to "
+                f"{high:,.0f} range covered by every listing the model learned from"
+            )
+
+    bounds = report.get("sqft_per_bedroom_bounds") or ()
+    if len(bounds) == 2 and bedrooms and float(bedrooms) > 0 and square_feet:
+        per_bedroom = float(square_feet) / float(bedrooms)
+        low, high = float(bounds[0]), float(bounds[1])
+        if not low <= per_bedroom <= high:
+            return (
+                f"its {per_bedroom:,.0f} square feet per bedroom is outside the "
+                f"{low:,.0f} to {high:,.0f} range the model's training listings span — "
+                f"the floor area and the bedroom count are each ordinary, but the "
+                f"combination is not one it has seen"
+            )
+    return None
 
 
 def _mae_dollars_by_metro(
@@ -432,19 +647,54 @@ def _mae_dollars_by_metro(
     return by_metro
 
 
+def _estimator():
+    """A fresh, unfitted estimator of the configured form.
+
+    A factory rather than a module-level instance because cross-validation fits one per
+    fold and a shared instance would carry the previous fold's state into the next. The
+    import is local for the reason the rest of this module's sklearn imports are: the
+    pipeline loads a persisted model and never trains, so a machine running the graph
+    should not pay sklearn's import cost to do it.
+    """
+    if config.RENT_MODEL_ESTIMATOR == "gradient_boosting":
+        from sklearn.ensemble import GradientBoostingRegressor
+
+        return GradientBoostingRegressor(random_state=config.RENT_MODEL_RANDOM_SEED)
+    if config.RENT_MODEL_ESTIMATOR == "random_forest":
+        from sklearn.ensemble import RandomForestRegressor
+
+        return RandomForestRegressor(random_state=config.RENT_MODEL_RANDOM_SEED)
+    if config.RENT_MODEL_ESTIMATOR == "linear":
+        from sklearn.linear_model import LinearRegression
+
+        return LinearRegression()
+    raise ValueError(
+        f"config.RENT_MODEL_ESTIMATOR={config.RENT_MODEL_ESTIMATOR!r} names no known "
+        f"form. Expected 'gradient_boosting', 'random_forest' or 'linear'. Refusing to "
+        f"fall back to a default, because a silently substituted estimator would ship a "
+        f"model nobody chose."
+    )
+
+
 def train(
     client: Optional[hud_fmr.HudFmrClient] = None,
 ) -> tuple[object, TrainingReport]:
-    """Fit the ratio regression and score it on a held-out slice.
+    """Fit the ratio model under k-fold cross-validation, then refit it on everything.
 
     Reports against a mean-ratio baseline as well as in absolute terms. An MAE alone
     cannot say whether the features carry signal — per §8, a check whose result was
     structurally guaranteed proves nothing, and "predict the average ratio for every
     row" is the null hypothesis this model has to beat to justify existing at all.
+
+    **Cross-validated since U11.1**, which is the condition OQ-4 attached to reopening
+    model form at all, and the reason the per-metro breakdown is worth reading: the
+    previous single 20% split scored New York on a slice thin enough to move with the
+    seed. It also reports the in-fold training error beside the held-out one, because the
+    *gap* is the overfitting guard that justified deferring model form in the first place
+    and a held-out score alone cannot show it.
     """
-    from sklearn.linear_model import LinearRegression
     from sklearn.metrics import mean_absolute_error, r2_score
-    from sklearn.model_selection import train_test_split
+    from sklearn.model_selection import KFold
 
     df, report = build_training_frame(client=client)
     if len(df) < config.RENT_MODEL_MIN_TRAINING_ROWS:
@@ -457,44 +707,67 @@ def train(
 
     features = list(config.RENT_MODEL_FEATURES)
     X = df[features].to_numpy(dtype=float)
-    y = df["rent_to_fmr"].to_numpy(dtype=float)
-    fmr = df["fmr"].to_numpy(dtype=float)
+    y = df["rent_to_anchor"].to_numpy(dtype=float)
+    fmr = df["anchor"].to_numpy(dtype=float)
 
-    # `df.index` rides along in the same split so the holdout rows can be traced back to
-    # `state`/`cityname` afterward — needed for `_mae_dollars_by_metro` and nothing else,
-    # since `X_test`/`y_test`/`fmr_test` stay the plain arrays the fit and scoring below
-    # already used.
-    X_train, X_test, y_train, y_test, _, fmr_test, _, idx_test = train_test_split(
-        X, y, fmr, df.index.to_numpy(),
-        test_size=config.RENT_MODEL_HOLDOUT_FRACTION,
+    # Out-of-fold predictions: every row scored exactly once, by a model fit without it.
+    # That is what lets the per-metro breakdown below be read at all — under the previous
+    # single 20% split New York's holdout slice was thin enough that the figure moved with
+    # the seed, which is the weakness OQ-4 named when it asked for proper validation.
+    out_of_fold = np.full(len(df), np.nan)
+    baseline_out_of_fold = np.full(len(df), np.nan)
+    in_fold_mae: list[float] = []
+
+    splitter = KFold(
+        n_splits=config.RENT_MODEL_CV_FOLDS,
+        shuffle=True,
         random_state=config.RENT_MODEL_RANDOM_SEED,
     )
+    for train_index, test_index in splitter.split(X):
+        model = _estimator().fit(X[train_index], y[train_index])
+        out_of_fold[test_index] = model.predict(X[test_index])
+        # The null hypothesis, refit per fold like the model it is compared against.
+        # Computing it once on the full frame would let it see the rows it is scored on,
+        # which would flatter the baseline and understate what the features are worth.
+        baseline_out_of_fold[test_index] = float(np.mean(y[train_index]))
+        in_fold = model.predict(X[train_index])
+        in_fold_mae.append(
+            float(np.mean(np.abs((in_fold - y[train_index]) * fmr[train_index])))
+        )
 
-    model = LinearRegression().fit(X_train, y_train)
-    predicted = model.predict(X_test)
+    # The artifact is refit on everything. The scores above already establish what it
+    # generalizes to, so holding 20% back from the model that actually ships would discard
+    # data for a second, worse estimate of a number cross-validation has already produced.
+    model = _estimator().fit(X, y)
 
-    report.rows_trained = int(len(X_train))
-    report.holdout_rows = int(len(X_test))
-    report.mae_ratio = float(mean_absolute_error(y_test, predicted))
-    report.r2 = float(r2_score(y_test, predicted))
-    # Dollar error is the ratio error re-expressed at each holdout row's own FMR, which
-    # is what a reader of the report actually experiences.
-    report.mae_dollars_at_holdout_fmr = float(
-        np.mean(np.abs((predicted - y_test) * fmr_test))
-    )
+    report.cv_folds = int(config.RENT_MODEL_CV_FOLDS)
+    report.rows_trained = int(len(df))
+    report.holdout_rows = int(len(df))
+    report.mae_ratio = float(mean_absolute_error(y, out_of_fold))
+    report.r2 = float(r2_score(y, out_of_fold))
+    # Dollar error is the ratio error re-expressed at each row's own FMR, which is what a
+    # reader of the report actually experiences.
+    report.mae_dollars_at_holdout_fmr = float(np.mean(np.abs((out_of_fold - y) * fmr)))
+    report.train_mae_dollars = float(np.mean(in_fold_mae))
     report.mae_dollars_by_metro = _mae_dollars_by_metro(
-        df, idx_test, predicted, y_test, fmr_test
+        df, df.index.to_numpy(), out_of_fold, y, fmr
     )
 
-    baseline = np.full_like(y_test, float(np.mean(y_train)))
-    report.baseline_mae_ratio = float(mean_absolute_error(y_test, baseline))
+    report.baseline_mae_ratio = float(mean_absolute_error(y, baseline_out_of_fold))
     report.baseline_mae_dollars = float(
-        np.mean(np.abs((baseline - y_test) * fmr_test))
+        np.mean(np.abs((baseline_out_of_fold - y) * fmr))
     )
-    report.coefficients = {
-        name: float(coef) for name, coef in zip(features, model.coef_)
-    }
-    report.coefficients["intercept"] = float(model.intercept_)
+    # Whichever the fitted form exposes; see `TrainingReport` on why these are two fields.
+    if hasattr(model, "coef_"):
+        report.coefficients = {
+            name: float(coef) for name, coef in zip(features, model.coef_)
+        }
+        report.coefficients["intercept"] = float(model.intercept_)
+    if hasattr(model, "feature_importances_"):
+        report.feature_importances = {
+            name: float(value)
+            for name, value in zip(features, model.feature_importances_)
+        }
 
     return model, report
 
@@ -627,29 +900,36 @@ def anchor_comp_rents(
         # config.MIN_QUALIFYING_COMPS rows, far below the crossover where sjoin's fixed
         # setup cost amortizes — the same call this module's county lookup makes here.
         zcta = zcta_crosswalk.lookup_zcta(comp.latitude, comp.longitude)
+        listed = pd.Timestamp(comp.listed_date)
         resolved.append(
-            (comp, fips, fmr_fiscal_year(pd.Timestamp(comp.listed_date)), zcta)
+            (
+                comp,
+                fips,
+                fmr_fiscal_year(listed),
+                listed.to_period("M").to_timestamp("M").strftime("%Y-%m-%d"),
+                zcta,
+            )
         )
 
-    pairs = {(fips, year) for _, fips, year, _ in resolved}
-    table = _fmr_table(pairs, client)
-    zip_tables, zip_basis = _zip_anchor_tables(pairs, client, table)
+    pairs = {(fips, year) for _, fips, year, _, _ in resolved}
+    tables = build_anchor_tables(pairs, client)
 
-    for comp, fips, year, zcta in resolved:
+    for comp, fips, year, month, zcta in resolved:
         # Same function training uses, deliberately. If a comp were anchored at county
         # resolution while the training rows behind the model were anchored at ZIP, the
         # cross-check would compare two ratios with different denominators and report the
-        # difference as a disagreement about rent.
-        comp_fmr, resolution = anchor_for_row(
-            comp.beds, fips, year, zcta, table, zip_tables, zip_basis
+        # difference as a disagreement about rent. Each comp is read at *its own* listing
+        # month, so its vintage is divided out the same way training divided out the row's.
+        comp_anchor, tier = anchor_for_row(
+            comp.beds, fips, year, month, zcta, tables
         )
-        if resolution == "none" or comp_fmr != comp_fmr:
+        if tier == "none" or comp_anchor != comp_anchor:
             continue
-        ratio = comp.rent / comp_fmr
+        ratio = comp.rent / comp_anchor
         if not (config.RENT_MODEL_MIN_RATIO <= ratio <= config.RENT_MODEL_MAX_RATIO):
             continue
         result.implied_rents.append(ratio * subject_fmr)
-        if resolution in ("zip", "zip_backcast"):
+        if tier == "zip":
             result.zip_anchored += 1
 
     result.comps_used = len(result.implied_rents)

@@ -46,6 +46,7 @@ being reproducible, which the evidence script's output satisfies on its own.
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -144,6 +145,95 @@ def series_for_zip(df: pd.DataFrame, zip_code: str) -> Optional[pd.Series]:
     row = match.iloc[0]
     months = month_columns(df)
     return pd.to_numeric(row[months], errors="coerce")
+
+
+def county_medians(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Per-county monthly median ZORI, and the ZIP count behind each median.
+
+    **Why a county tier exists at all.** ZORI covers essentially every ZIP the corpus
+    occupies, but an individual ZIP's series begins only when Zillow has enough listings
+    there, so a 2018-19 read lands before many of them start — measured at 1,515 of the
+    corpus's 5,686 rows. A county aggregate is continuous where any one of its ZIPs is
+    not, and it recovers 99.0% of that gap (`scripts/zori_county_tier.py`). This is the
+    same `zip -> county` fallback `tools.model.rent_model.anchor_for_row` already applies
+    to FMR, and it carries the same caveat: a county figure is a different denominator
+    from a ZIP one, and a caller mixing them owes its reader a disclosure.
+
+    The count travels with the median for the reason `CompAnchoring.comps_used` does — a
+    median over one ZIP is a county median in name only, and nothing else distinguishes
+    it from a median over thirty.
+
+    Returns `(medians, zip_counts)`, both indexed by 5-digit county GEOID and columned by
+    ZORI's own month strings.
+
+    **ZIPs are matched to counties by name here** (`CountyName` against the Census
+    `NAMELSAD`), which resolves ~96.6% of the file and misses independent cities and
+    similar edge cases. Adequate because the alternative — a polygon join per ZIP — needs
+    ZIP boundaries this project does not otherwise load, and every market in
+    `config.INDEXED_MARKETS` resolves. Stated because it is a real limitation of the
+    figure and not visible in the output.
+    """
+    from tools import county_crosswalk
+
+    counties = county_crosswalk._counties()
+    geoid_by_name = counties.assign(
+        key=counties["STUSPS"].str.upper() + "|" + counties["NAMELSAD"].str.lower()
+    ).set_index("key")["GEOID"].to_dict()
+
+    keyed = df.assign(
+        key=df["State"].astype(str).str.upper()
+        + "|"
+        + df["CountyName"].astype(str).str.lower()
+    )
+    keyed["geoid"] = keyed["key"].map(geoid_by_name)
+    matched = keyed[keyed["geoid"].notna()]
+    months = month_columns(df)
+    return (
+        matched.groupby("geoid")[months].median(),
+        matched.groupby("geoid")[months].count(),
+    )
+
+
+@lru_cache(maxsize=1)
+def panel() -> Optional[pd.DataFrame]:
+    """The ZORI panel, loaded once per process, or `None` if the file is absent.
+
+    ~10 MB, and since U11.3 **every rent estimate reads it** — the anchor the model
+    learns a ratio to is built from this series. `None` rather than an exception for the
+    reason `rent_model.load` returns `None` for a missing model: an absent data file is a
+    condition the Valuation agent discloses through the flag mechanism, not a crash, and
+    the pipeline must still produce a report on a machine that has not downloaded it.
+    """
+    try:
+        return load()
+    except (FileNotFoundError, OSError):
+        return None
+
+
+@lru_cache(maxsize=1)
+def county_median_tables() -> Optional[tuple[pd.DataFrame, pd.DataFrame]]:
+    """`county_medians` over the cached panel, computed once per process.
+
+    Cached because it reads the Census county boundaries and groups ~8,500 ZIPs across
+    ~140 month columns, which is far too expensive to repeat per subject — and the county
+    tier is consulted for any subject whose own ZIP series has not started.
+    """
+    frame = panel()
+    return None if frame is None else county_medians(frame)
+
+
+def latest_month(df: pd.DataFrame) -> Optional[str]:
+    """The most recent month column carrying any observation at all.
+
+    Read from the file rather than from today's date: Zillow publishes on a lag, so the
+    newest column is the newest *observation*, and an estimate anchored to it is only as
+    current as that. `config.RENT_ANCHOR_MAX_STALENESS_MONTHS` decides when that gap is
+    worth disclosing.
+    """
+    for column in reversed(month_columns(df)):
+        if df[column].notna().any():
+            return str(column)
+    return None
 
 
 def value_at(series: pd.Series, month: str) -> Optional[float]:
