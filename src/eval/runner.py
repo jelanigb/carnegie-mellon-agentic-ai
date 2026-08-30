@@ -158,17 +158,23 @@ def _case_environment(case: EvalCase, record: bool) -> Iterator[None]:
     recording raises `CacheMiss`, which is the honest failure — it means a prompt drifted
     since the batch was recorded, and re-recording is a decision rather than a fallback.
 
-    **3. Declared fault injection (U8.2, extended U8.3).** See `cases.Fault` for why this
-    exists and why it is a named, declared field rather than a fixture that quietly
-    patches something. `GEOCODER_OUTAGE` patches `geocoding.geocode_census`;
-    `LLM_UNAVAILABLE` patches `LlmClient.complete` at the class, since `_extract_terms`
-    builds a fresh instance per call and there is no instance to reach beforehand. Both
-    patches are unwound in the same `finally` as everything else here.
+    **3. Declared fault injection (U8.2, extended U8.3, extended U8.5/OQ-16).** See
+    `cases.Fault` for why this exists and why it is a named, declared field rather than a
+    fixture that quietly patches something. `GEOCODER_OUTAGE` patches
+    `geocoding.geocode_census`; `LLM_UNAVAILABLE` patches `LlmClient.complete` at the
+    class, since `_extract_terms` builds a fresh instance per call and there is no
+    instance to reach beforehand. A case declaring `geocoder_fallback_override` also
+    patches `geocoding.city_centroid`, so the outage's fallback lands at a chosen point
+    instead of the real corpus-wide city average — OQ-16's answer, since the real average
+    never both diverges from the rent estimate and stays clear of a third warn or a
+    critical (U8.2's grid search). All patches are unwound in the same `finally` as
+    everything else here.
     """
     previous_retrieval = config.RETRIEVAL_ENABLED
     previous_cache_dir = config.LLM_CACHE_DIR
     previous_cache_mode = config.LLM_CACHE_MODE
     previous_geocode_census = geocoding.geocode_census
+    previous_city_centroid = geocoding.city_centroid
     previous_llm_complete = LlmClient.complete
 
     config.RETRIEVAL_ENABLED = case.retrieval_enabled
@@ -190,6 +196,28 @@ def _case_environment(case: EvalCase, record: bool) -> Iterator[None]:
         # Patching the flag in directly would have skipped the distinction the case exists
         # to exercise.
         geocoding.geocode_census = _unreachable
+
+        if case.geocoder_fallback_override is not None:
+            lat, lon = case.geocoder_fallback_override
+
+            def _forced_centroid(city, state, primary_unavailable=False):
+                return geocoding.GeocodeResult(
+                    latitude=lat,
+                    longitude=lon,
+                    matched_address=(
+                        f"[eval fault injection, case {case.key!r}] forced centroid "
+                        f"fallback at ({lat:.5f}, {lon:.5f})"
+                    ),
+                    source=geocoding.GeocodeSource.CITY_CENTROID,
+                    primary_unavailable=primary_unavailable,
+                )
+
+            # Same shape as the real function — a `GeocodeResult` with
+            # `source=CITY_CENTROID` — so the Extractor's own branch on `.source` and
+            # `.primary_unavailable` still makes the outage-vs-unresolvable decision.
+            # Only *where* the fallback lands is forced; the mechanism that decides
+            # whether it is worth retrying is untouched.
+            geocoding.city_centroid = _forced_centroid
 
     if case.injects is Fault.LLM_UNAVAILABLE:
         def _unreachable_complete(*args, **kwargs):
@@ -213,6 +241,7 @@ def _case_environment(case: EvalCase, record: bool) -> Iterator[None]:
         config.LLM_CACHE_DIR = previous_cache_dir
         config.LLM_CACHE_MODE = previous_cache_mode
         geocoding.geocode_census = previous_geocode_census
+        geocoding.city_centroid = previous_city_centroid
         LlmClient.complete = previous_llm_complete
 
 

@@ -168,6 +168,16 @@ class EvalCase:
     retrieval_enabled: bool = True
     # An external failure the harness simulates for this case, or None. See `Fault`.
     injects: Optional[Fault] = None
+    # OQ-16, meaningful only alongside `injects=Fault.GEOCODER_OUTAGE`: where the centroid
+    # fallback lands, overriding the real corpus-wide (city, state) average `geocode()`
+    # would otherwise compute. U8.2's search over 9 markets x 16 configurations found the
+    # real city-wide centroid never both diverges from the rent estimate *and* stays clear
+    # of a critical or a third warn — divergence and comp dispersion trade off directly,
+    # since both are driven by how thin the matching supply is at whatever point the
+    # centroid lands on. This lets a case place the fallback at a specific, already-known
+    # point instead — see `runner._case_environment`, which patches
+    # `tools.geocoding.city_centroid` to return it.
+    geocoder_fallback_override: Optional[tuple[float, float]] = None
 
     def __post_init__(self) -> None:
         if (self.listing is None) == (self.terms is None):
@@ -188,6 +198,12 @@ class EvalCase:
                 f"Case {self.key!r}: a declared fault needs the seam it patches to "
                 f"actually be reached, so this case must supply `listing` rather than "
                 f"`terms`. A fixture skips the Extractor entirely."
+            )
+        if self.geocoder_fallback_override is not None and self.injects is not Fault.GEOCODER_OUTAGE:
+            raise ValueError(
+                f"Case {self.key!r}: `geocoder_fallback_override` only means something "
+                f"when the geocoder is faulted (`injects=Fault.GEOCODER_OUTAGE`) — "
+                f"otherwise the real Census geocoder runs and this is never consulted."
             )
 
     def _check_golden_fixture(self) -> None:
