@@ -241,8 +241,10 @@ TRAINING_METROS: dict[str, list[str]] = {
 # The inference trio plus New York. New York is indexed **deliberately**, as the
 # sparse-comps case: §2 measured it as genuinely thin in Staten Island while dense in
 # central Brooklyn, which makes it the one market that exercises the relaxation loop to
-# exhaustion against real data. It is why the Staten Island demo returns no comps and no
-# market benchmark while still producing a rent estimate.
+# exhaustion against real data. It is why the Staten Island demo returns no comps while
+# still producing a rent estimate. (Until U8.4c it also returned no market benchmark —
+# that turned out to be a stale filter, not a Redfin coverage fact; see
+# REDFIN_TARGET_METROS below.)
 #
 # New York rolls up its boroughs, which appear as separate `cityname` values. Matching is
 # word-boundary (tools/kaggle_data.city_matches): "Cleveland" must catch "Cleveland
@@ -261,6 +263,34 @@ INDEXED_MARKETS: dict[str, list[str]] = {
     "OH": ["Cleveland"],
     "NY": ["New York", "Brooklyn", "Queens", "Bronx", "Staten Island", "Manhattan"],
 }
+
+# Redfin `REGION NAME` per market — the sale-price series' reach (U8.4c).
+#
+# Lived in tools/redfin_data.py as a trio-only mapping from before New York entered the
+# demo, and was never revisited — so every "Redfin doesn't cover New York" statement
+# downstream was reporting this filter's output as a fact about Redfin. Checked against
+# the raw extract Aug 29, 2026: "New York, NY metro area" is present with 102
+# fully-populated months at 700-950 multi-family sales per month. Moved here (§8: config
+# is the only home for tunables; this one predates config.py and never migrated) and
+# keyed by the same market labels INDEXED_MARKETS produces, with the tie asserted below
+# so the price series' reach and the system's market list cannot drift apart again.
+# tools/redfin_data.load_redfin additionally asserts every region here exists in the
+# extract, so a silent absence becomes a loud one.
+REDFIN_TARGET_METROS: dict[str, str] = {
+    "Chicago": "Chicago, IL metro area",
+    "Los Angeles": "Los Angeles, CA metro area",
+    "Cleveland": "Cleveland, OH metro area",
+    "New York": "New York, NY metro area",
+}
+
+assert set(REDFIN_TARGET_METROS) == {
+    patterns[0] for patterns in INDEXED_MARKETS.values()
+}, (
+    "REDFIN_TARGET_METROS and INDEXED_MARKETS name different market sets. They are two "
+    "views of one scope — a market the system admits subjects from must name its Redfin "
+    "region (or be removed from both), or the price side silently regrows the stale "
+    "trio-only filter U8.4c removed."
+)
 
 # --------------------------------------------------------------------------
 # Rent regression (U5 — tools/model/rent_model.py)

@@ -164,15 +164,19 @@ DEMO_DEALS: dict[str, DemoDeal] = {
         ),
         price=875_000,
         unit_rents=(2_850, 2_900, 2_975),
-        # No Redfin coverage for the New York metro — deliberately unanchored, see the
-        # module docstring. The rents *are* anchored: Richmond County has an FMR even
-        # though the sale-price series does not reach it.
+        # Set without a market basis, and the reason recorded at the time — "Redfin's
+        # extract does not cover New York" — turned out to be false (U8.4c): the extract
+        # was fine; this build's trio-only filter was the gap. Now that the New York
+        # series is loaded, the committed $875,000 measures ~11% below the metro's
+        # multi-family median (~$981K, Jun 2026) — a plausible Staten Island discount
+        # the divergence check does not flag — so the figure stands as committed rather
+        # than being recalibrated, and the report benchmarks it like any other deal.
         price_basis=None,
         rent_basis="hud_fmr:2",
         notes=(
-            "Asking price has no market basis; Redfin's extract does not cover New "
-            "York. Retained as the case where reality supplies nothing — no comps, no "
-            "appreciation series, no price benchmark."
+            "Asking price predates the New York price benchmark (see U8.4c) and sits "
+            "~11% below the metro multi-family median. Retained as the sparse-comps "
+            "case: zero comparables is the real, measured gap this deal exists to show."
         ),
     ),
     "no-geography": DemoDeal(

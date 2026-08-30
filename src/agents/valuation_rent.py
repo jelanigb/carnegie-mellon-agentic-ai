@@ -126,19 +126,41 @@ def _metro_benchmark(metro: str) -> Optional[tuple[float, int, float]]:
     )
 
 
+def _resolve_market_label(terms: DealTerms) -> Optional[str]:
+    """The subject's market label ("Chicago", "New York", ...), or None.
+
+    One resolver for every per-market lookup in this agent — the Redfin benchmark, the
+    per-metro error figure — matched the way `config.INDEXED_MARKETS` defines a market:
+    the state key plus word-boundary city matching over the market's own city patterns
+    (`kaggle_data.city_matches`, the rule that folds "Cleveland Heights" into Cleveland
+    while keeping "Queensbury" out of Queens), with `patterns[0]` as the label.
+
+    Until U8.4c the benchmark had its own weaker matcher — the city against the metro
+    *label* alone, no state check — which no borough name ever matched, so a Brooklyn
+    subject read as outside the New York market. That was one half of the "Redfin
+    doesn't cover New York" misdiagnosis (the other was the trio-only region filter,
+    fixed in `config.REDFIN_TARGET_METROS`). Two notions of "is this city in that
+    market" is one of the ways a system quietly starts disagreeing with itself.
+    """
+    if not terms.city or not terms.state:
+        return None
+    return next(
+        (
+            patterns[0]
+            for state, patterns in config.INDEXED_MARKETS.items()
+            if terms.state == state and kaggle_data.city_matches(terms.city, patterns)
+        ),
+        None,
+    )
+
+
 def _attach_benchmark(detail: ValuationDetail, terms: DealTerms) -> None:
     """Resolve the subject to a Redfin metro and record the benchmark, or why not.
 
     Runs regardless of whether a rent estimate turns out to be possible, because the two
     fail for unrelated reasons: a subject with no county has no FMR anchor but is still
-    in a metro Redfin covers, and a reader comparing the asking price to the market
-    should not lose that because the rent path stopped earlier.
-
-    Matched with `kaggle_data.city_matches` rather than an equality test, so the metro
-    a subject belongs to is decided by the same word-boundary rule that decides corpus
-    membership — the rule that folds "Cleveland Heights" into Cleveland while keeping
-    "Queensbury" out of Queens. Two different notions of "is this city in that metro"
-    is one of the ways a system quietly starts disagreeing with itself.
+    in a metro the price series covers, and a reader comparing the asking price to the
+    market should not lose that because the rent path stopped earlier.
     """
     if not terms.city:
         detail.benchmark_unavailable_reason = (
@@ -146,14 +168,15 @@ def _attach_benchmark(detail: ValuationDetail, terms: DealTerms) -> None:
         )
         return
 
-    metro = next(
-        (m for m in redfin_data.TARGET_METROS if kaggle_data.city_matches(terms.city, [m])),
-        None,
-    )
-    if metro is None:
+    metro = _resolve_market_label(terms)
+    if metro is None or metro not in redfin_data.TARGET_METROS:
+        # "This build's series" rather than "Redfin's extract": the second claims a
+        # coverage fact about the source that this code never checks, and shipping that
+        # claim unchecked is how a stale trio-only filter got reported as a Redfin
+        # limitation for months (U8.4c).
         detail.benchmark_unavailable_reason = (
-            f"Redfin's Multi-Family (2-4 unit) extract does not cover {terms.city}. "
-            f"It reaches {', '.join(sorted(redfin_data.TARGET_METROS))} only."
+            f"This build's metro sale-price series does not reach {terms.city}. It is "
+            f"scoped to the {', '.join(sorted(redfin_data.TARGET_METROS))} markets."
         )
         return
 
@@ -193,10 +216,10 @@ def _attach_metro_error(
     flag when that market's historical error runs materially worse than the model's
     headline figure (U8.4, OQ-3).
 
-    Matched the same way `_attach_benchmark` resolves a Redfin metro — `city_matches`
-    against `config.INDEXED_MARKETS`, the same grouping
+    Matched by `_resolve_market_label` — since U8.4c literally the same function
+    `_attach_benchmark` uses, over the same `config.INDEXED_MARKETS` grouping
     `tools.model.rent_model._mae_dollars_by_metro` used to produce these figures, so the
-    two cannot drift apart.
+    three cannot drift apart.
 
     Sets `detail.subject_metro*` whenever the market resolves, independent of whether the
     ratio crosses the flag's threshold: per Q2(a), the report prints this market's error
@@ -205,17 +228,7 @@ def _attach_metro_error(
     breakdown's coverage, not a degradation to disclose.
     """
     by_metro = (bundle.get("report") or {}).get("mae_dollars_by_metro") or {}
-    if not terms.city or not terms.state:
-        return []
-
-    label = next(
-        (
-            patterns[0]
-            for state, patterns in config.INDEXED_MARKETS.items()
-            if terms.state == state and kaggle_data.city_matches(terms.city, patterns)
-        ),
-        None,
-    )
+    label = _resolve_market_label(terms)
     if label is None or label not in by_metro:
         return []
 

@@ -14,8 +14,13 @@ Three transformations happen here rather than downstream, and each exists for a 
 
 1. **Filter to the target metros at load.** The extract carries 943 metros; this
    pipeline uses Redfin only for per-deal inference lookups, never for training, so it
-   never needs more than the inference trio. Reading 38 columns for 943 metros to answer
-   a question about three is wasted memory and a wider surface for a wrong-region bug.
+   never needs more than the markets the system admits subjects from. Reading 38 columns
+   for 943 metros to answer a question about four is wasted memory and a wider surface
+   for a wrong-region bug. **The membership comes from `config.REDFIN_TARGET_METROS`
+   (U8.4c)** — it lived here as a trio-only constant from before New York entered the
+   demo, and downstream text reported that filter's output as "Redfin doesn't cover New
+   York", which a check of the raw extract found to be false. The load now *asserts*
+   every configured region exists in the extract, so the failure mode is loud.
 
 2. **Apply a minimum-price floor before any aggregation.** See `MIN_SALE_PRICE_USD`
    below for the number and the evidence behind it.
@@ -77,12 +82,11 @@ _USECOLS = [
     COL_MEDIAN_SALE_PRICE,
 ]
 
-# The §2 inference trio, mapped to the extract's own `REGION NAME` spelling.
-TARGET_METROS: dict[str, str] = {
-    "Chicago": "Chicago, IL metro area",
-    "Los Angeles": "Los Angeles, CA metro area",
-    "Cleveland": "Cleveland, OH metro area",
-}
+# The markets the system admits subjects from, mapped to the extract's own `REGION NAME`
+# spelling. Defined in config.py (U8.4c) — see the history there; the module alias stays
+# because every consumer (the valuation benchmark, the forecast's price side, the MCP
+# server's tool descriptions) reads it under this name.
+TARGET_METROS: dict[str, str] = config.REDFIN_TARGET_METROS
 
 # --- Tunables. These move to config.py in U1; this module deliberately does not import
 # --- it, because config.py does not exist yet and a half-written import is worse than a
@@ -221,6 +225,18 @@ def load_redfin(
 
     raw = pd.read_csv(path, usecols=_USECOLS)
     frame = raw[raw[COL_REGION_NAME].isin(wanted)].copy()
+
+    # Loud, not silent (U8.4c). A configured region absent from the extract used to
+    # produce an empty per-metro frame that read downstream as "Redfin doesn't cover
+    # this metro" — which is how a stale filter got reported as a coverage fact for
+    # months. A missing region is a configuration or file defect and must say so.
+    missing = wanted - set(frame[COL_REGION_NAME].unique())
+    if missing:
+        raise ValueError(
+            f"Configured Redfin regions absent from the extract at {path.name}: "
+            f"{sorted(missing)}. Either the region spelling in "
+            f"config.REDFIN_TARGET_METROS is wrong or the extract is stale."
+        )
 
     label_by_region = {region: label for label, region in metros.items()}
     frame["metro"] = frame[COL_REGION_NAME].map(label_by_region)
