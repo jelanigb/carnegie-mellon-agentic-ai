@@ -10,150 +10,20 @@ at the start of every session, so it is kept short on purpose — an entry that 
 close it and what closing it looks like. `OQ-n` numbers are stable handles for
 conversation; they are not decision numbers.
 
-Last reviewed: Aug 28, 2026 — at U8 planning ([`tasks/task_list_u8.md`](tasks/task_list_u8.md)).
+Last reviewed: Aug 30, 2026 — at U8's close-out
+([`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.10).
 
----
-
-## Orchestration & control flow
-
-### OQ-1 · decision #6 · U8 — confidence threshold and severity weights
-**The mechanism half closed in U7** (weights and threshold in `config`, critical-flag
-escalation independent of the score, no decay across rework laps, all measured on the real
-pipeline by `scripts/confidence_evidence.py`). **The numbers did not, deliberately:** the
-demo deals were calibrated to run clean, so tuning against them would fit the threshold to
-the fixtures. **Closes when** U8 tunes threshold 0.60 and the severity weights against the
-eval batch. **Do not re-derive:** a critical flag already escalates on its own ground,
-independent of the score (U2 finding 1) — that guarantee is deliberately separate from the
-weights *because* the weights were always going to move. What U8 should measure first is
-recorded as `TODO(U8)` at `critic.confidence_from_flags`.
-
-**One sub-question added Aug 30, 2026, and one closed by argument rather than by
-measurement.** *Added:* `rent_anchor_county_level` is a **cause** of
-`rent_estimate_market_error_elevated` — county-level anchoring is part of why New York's
-holdout error is double — so the score charges 0.15 for the cause and 0.15 again for the
-effect. That is the double-counting `confidence_from_flags`'s own de-duplication rule
-exists to prevent, one level up. **Measure at U8.6** whether collapsing that causal pair
-moves any verdict; the other market-scoped flags are independent axes (drift is a bias;
-spatial concentration is about the comp check rather than the estimate) and are not part
-of this question. *Closed:* whether market-scoped flags should be scored separately from
-deal-scoped ones — **no.** They degrade this deal's own numbers, so scoring them apart
-would let an unreliable estimate report as confident. The market/deal split is worth
-having as a **disclosure** structure instead; full reasoning and the rejected two-score
-design in [`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.6d.
-
-**CLOSED Aug 30, 2026 — held on measurement, and the sub-question dissolved.**
-`scripts/confidence_sensitivity.py` swept a 160-point grid over the 21-case batch and
-wrote `eval/results/sensitivity.md`. Threshold 0.60 and warn 0.15 are **held**, with the
-stable region published: through the shipped point, the threshold moves 0.30–0.70 and the
-warn weight 0.100–0.200 without changing a single verdict. **This is a robustness claim,
-not an optimality one** — no case in the batch gives evidence the shipped numbers are
-wrong, and a batch that cannot separate two settings is saying it has no evidence either
-way. The critical weight is **behaviorally inert across its entire range including 0.00**,
-confirming the escalation rule's independence from the other direction.
-
-The causal-pair sub-question needs no measurement: **the pair co-occurs on 0 of 21 cases.**
-The hybrid anchor resolves at ZIP tier in every indexed market, so `rent_anchor_county_level`
-became rare and stopped stacking with `rent_estimate_market_error_elevated`. Closed by the
-anchor change rather than by a re-pricing — re-open if county-tier anchoring becomes common
-again. The disclosure structure the *closed* half called for shipped as U8.6d
-(`state.FlagScope`, `ConfidenceBreakdown`, and the report's grouped disclosures).
-
-### OQ-15 · U8, cut list 2a — pass-scoped flags
-`DealState.flags` is append-only, so nothing separates *raised this pass* from *ever
-raised*, and every Critic interaction check reads the accumulated list as current truth. A
-rework that succeeds still re-raises the objection it was sent back to fix. **Closes when**
-each flag is stamped with the `planner_invocations` that produced it and the Critic
-evaluates only the current pass — noting that an agent skipped on a rework raises nothing,
-so absence must not be read as *cleared* when it means *not re-examined*; `state.plan`
-records which agents ran. **Accepted knowingly for U7** — bounded by `MAX_REWORKS`, and
-every affected path escalates to a human. `agents/critic.py`, `agents/planner.py`.
-
-**Related, and raised Aug 28, 2026 by U8.2 — see OQ-16 below.** The same subsection now
-also owns the question of whether escalation should preempt a retry at all.
-
-**Taken Aug 28, 2026 at U8.5, and the cut list's price on it was wrong.** §6 described it
-as "a §5 change touching every agent that raises a flag", which was estimated rather than
-measured. Measured: **37 `flag()` sites across five agents, every one inside a node
-function that already holds `state`**, six helpers that would take a pass index as an
-argument, one central `state.flag()` constructor — one mechanical commit plus the Critic
-filter. It lands *before* U8.6, because the eval batch contains rework laps and a stale
-objection in a published results table is worse than the same sentence in one demo report.
-
-**BUILT Aug 29, 2026, at U8.5's first two commits — clears both `TODO(U8)` markers.**
-`Flag.planner_invocations` and `DealState.flag()` stamp every flag with the pass that
-raised it; `critic._kinds` judges an agent that ran this pass on this pass alone, and an
-agent skipped this pass on its last examination, never as cleared; `state.plan` is the
-signal for which. New tests in `test_critic_interactions.py`/`test_flag_propagation.py`
-assert the mechanism directly, since **the batch did not contain a rework lap at the
-time this landed** — OQ-16's fault-injection extension, closed below the same day,
-supplies the first one.
-
-### OQ-16 · U8.5 — should a critical objection preempt a retry that could clear it?
-**Raised Aug 28, 2026 by U8.2, from a measurement rather than a reading.**
-`planner.route_after_critic` checks escalation before rework, unconditionally. So a retry is
-only ever spent on a deal degraded enough to draw a retryable objection and clean enough not
-to be escalated first — **exactly two warn-severity disclosures, no critical, on every lap.**
-U8.2 searched for a listing in that window across 9 indexed markets × 16 configurations and
-**found none**, so `FlagKind.REWORK_LIMIT_REACHED` is uncovered and the bounded-retry path is
-unexercised by the batch that exists to exercise every path.
-
-The window is empty for structural reasons, not for want of searching: divergence and comp
-dispersion trade off directly (both track how thin the matching supply is), so every
-configuration that diverges enough to object also concentrates enough to raise a *critical*
-objection; Los Angeles and Cleveland are excluded before any fixture is written because the
-county-anchoring warn already makes three; and the only six candidates were in New York,
-which U8.2b's fix moves into the same excluded set.
-
-**Closes when** U8.5 decides one of: leave it, and state in the report that the retry path is
-reachable in principle but not by any listing this build can be shown; or reorder so a
-*retryable* objection is spent before escalation, on the argument that a pass which could
-clear the objection should be taken before a human is asked; or make the fault injection
-richer so the path is exercised without a listing. **The first is a legitimate answer** — the
-cycle is bounded and every path ends at human review — but it should be chosen rather than
-inherited. `agents/planner.py:181`, [`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.2.
-
-**Decided Aug 29, 2026 by the architect: richer fault injection, `route_after_critic`
-unchanged.** `agents/planner.py:181` stays escalation-before-rework, unconditionally — every
-currently-retryable objection (I3, on a geocoder outage) is WARN-severity, and the criticals
-U8.2's search found co-occurring with it (I1/I2) are structural facts a rework cannot fix, so
-reordering would spend a rework pass on a lap that could not help before escalating anyway
-one lap later. Instead, `eval/`'s existing `Fault`/`EvalCase.injects` mechanism (already used
-for `GEOCODER_OUTAGE` and `LLM_UNAVAILABLE`) gets extended so a case can force exactly the
-two-warn/no-critical window without needing a real listing — closing eval coverage on
-`REWORK_LIMIT_REACHED` without touching production routing.
-
-**BUILT Aug 29, 2026. Coverage: 28 → 29 of 29 kinds — every `FlagKind` this system
-defines is now raised by some case.** `EvalCase.geocoder_fallback_override` forces the
-outage's fallback to a chosen point (the address's own real Census geocode, so only the
-outage is simulated, not a change in geography) instead of the real corpus-wide centroid
-U8.2 already showed never both diverges and stays clear of a third warn or a critical.
-`chicago-geocoder-outage` (U8.2) updated in place with it rather than duplicated; 2
-reworks, confidence 0.70, escalates on `budget_exhausted` alone, reproduces identically
-across three replay runs.
-
-**Building it surfaced a second, real defect, fixed alongside it and worth naming here
-since it is not really an eval-harness problem:** `extractor._supplied_coordinates` was
-reading a *previous pass's* centroid fallback as if a caller had deliberately supplied
-it, which silently swapped `GEOCODER_SERVICE_UNAVAILABLE` for a different, non-retryable
-kind on the second pass — stopping a third attempt from ever being planned and
-misdescribing pipeline-derived coordinates as caller-given. Fixed by restricting
-`_supplied_coordinates` to the deal's first pass, safe given this system's one retry path
-today (see that function's docstring for the full argument). Full detail:
-[`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.5.
+**Six entries closed there and two areas emptied.** *Orchestration & control flow* and
+*Data & sources* now carry nothing open: OQ-1 closed as #6, OQ-15 and OQ-16 as U8.5's build,
+OQ-7 as #11 and U8.8's benchmark, OQ-3 as U8.4's per-metro disclosure, and OQ-6 as #20 plus
+U11.3's anchor. OQ-12 was folded into OQ-4 so the transfer question has one owner. Two
+entries were **retargeted rather than closed** — OQ-5 to U9, OQ-18 to no unit — and each
+says why at the entry. Two are new, both opened by U8 and both live decisions rather than
+deferred work.
 
 ---
 
 ## Rent & valuation
-
-### OQ-3 · U8 — New York rents predict at roughly twice the trio's error
-~$1,065 MAE against ~$518, under every training set tested; no shortlist fixes it. New York
-is in `build_comps_index.INDEXED_MARKETS`, so a Staten Island subject reaches the rent model
-and gets an estimate half as reliable as a Los Angeles one. **This is a disclosure
-requirement, not a modelling problem** — it needs a flag, and U8 needs a case that trips it.
-**Retargeted from U7/U8 to U8 on Aug 27, 2026:** U7 planned no subsection for it and built
-none, so carrying U7 in the label overstated what was scheduled. The `staten-island` demo
-deal reaches human review today for a different reason — zero comps — which means the
-error is disclosed on that one deal by accident rather than by a check.
 
 ### OQ-19 · U11.3 — is the rent-to-market-index ratio stable over seven years?
 **Raised Aug 30, 2026, when the anchor moved.** The model learns how a unit's rent
@@ -179,6 +49,73 @@ mix shifts 51 percentage points between the window's halves — so any future te
 analysis of it must hold geography constant or it will measure the scrape's schedule
 instead. `config.py`, `tools/model/rent_model.py`.
 
+### OQ-20 · no unit — check B was never separately decided, and the benchmark's tier flag waits on it
+**Two questions, in order, because the first gates the second.** Raised Aug 30–31, 2026 at
+U8.8 and U8.10.
+
+**What "check B" is.** One of the six cross-agent pairs enumerated in
+[`tasks/task_list_u7.md`](tasks/task_list_u7.md) Q1: **the listing's asking price
+(`deal_terms.price`, Extractor) against the market benchmark
+(`ValuationDetail.benchmark_median_sale_price`, Valuation).** Its sibling, **check A**, is
+the listing's *stated rents* against the modelled rent. U7 Q4 shipped both as **Summarizer
+disclosures rather than Critic objections** — rendered as prose, raising no flag and moving
+no verdict — and scheduled promoting them to U8.
+
+**Check A closed on measurement as #20. Check B closed only by inheritance, and that is the
+gap.** U8.7 measured *A* (`scripts/stated_rent_gap.py`, 13 fixtures) and held it as a
+disclosure on a specific finding: every fixture a 20–35% threshold would fire on already
+carried a flag naming a more specific cause. The phrase "checks A and B" then carried B
+along with it — the code at `valuation_rent._attach_benchmark` now says "check B was not
+promoted at U8.7" — but **no measurement of B was taken and no decision about B was
+recorded.** #20's register row is about the stated-rent comparison alone.
+
+**What closing check B would take, in order:**
+
+1. **The measurement that does not exist** — the B analogue of `scripts/stated_rent_gap.py`:
+   each fixture's asking price against its own ZIP benchmark, printed beside the flags the
+   report already raises and beside the fixture's declared price basis. Every input is
+   committed (`tools/data/zip_sale_benchmarks.json`), no model calls, so it costs roughly
+   what A's script cost.
+2. **A confound worse than A's, which that measurement has to survive.** #11 set the demo
+   and eval asking prices *from the Redfin metro median*, and U8.8 replaced the comparison
+   basis with the **ZIP** median. So the measured gap is now mostly *(metro median − ZIP
+   median)* for that ZIP, plus whatever the deal itself carries — and the first term
+   dominates: ZIP 60640 runs **77% above** the Chicago metro, which is why
+   `chicago-uptown-duplex` reads 39% cheap while nothing about the property is unusual.
+   A threshold fitted to that would bury #11's calibration inside a production constant,
+   which is the class of error U7 Q4 refused for A. The one fixture carrying a
+   deal-specific signal is `overpriced`, whose `price_premium_to_basis` is a **declared**
+   +55%.
+3. **The likely outcome, stated in advance so the measurement can falsify it** rather than
+   confirm it: B closes as a disclosure like A did, but for a *different* reason — A's
+   threshold would have restated an existing flag, B's would restate #11's calibration.
+4. **What would change the answer:** asking prices set independently of the benchmark —
+   either fixtures declaring an offset from their **ZIP** figure (the `overpriced` pattern,
+   repointed), or real listings, which §8 excludes. The first is cheap and is the only route
+   inside the freeze.
+
+**The dependent half — should the benchmark's *tier* raise a flag?** The rent anchor
+discloses its own grain: `rent_anchor_county_level` fires at warn when it resolves coarser
+than ZIP. The **sale-price benchmark** — `ValuationDetail.benchmark_median_sale_price`, the
+figure U8.8 made ZIP-level for New York and Chicago and left metro-level for Los Angeles and
+Cleveland — has the same two tiers and discloses which it used **in prose, without a flag**.
+
+**Why not, as argued at `valuation_rent._attach_benchmark`:** a coarse rent anchor
+*propagates* — into the estimate, the forecast, and the comp cross-check — while **nothing
+computes from the sale-price benchmark.** It is printed beside the asking price and read by
+a human. Charging confidence for the width of a figure that enters no calculation would tell
+the reader this deal's numbers are shakier when none of them moved.
+
+**That argument expires the moment check B is promoted**, because the benchmark then becomes
+an input to a check and its grain starts deciding an outcome. And promotion would need a
+rule *first*, not after: Los Angeles and Cleveland have **no ZIP tier at all**, so B would
+compare an asking price against a metro-wide median in half the inference set. **Closes
+when** check B is decided — as a disclosure with its own measured reason, or as an objection
+with the tier rule that promotion requires. Recorded here rather than left in a docstring
+because an argument with an expiry condition is one nobody re-reads on the day it expires.
+`agents/valuation_rent._attach_benchmark`, `agents/critic._consistency_objections`,
+[`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.7–U8.8.
+
 ### OQ-4 · cut list 1a — rent-model feature engineering, tuning, and transfer
 **Retargeted Aug 30, 2026, not closed, and the original wording is kept above the change
 so the retarget is visible.** As written it read: *"Measured: ~17% of rent error is
@@ -192,7 +129,14 @@ shipped linear form). Gradient boosting was adopted rather than the lower-MAE ra
 forest, on a $18 versus $140 train/holdout gap. **Still open under this item, and narrower
 than it was:** hyperparameter tuning under the same CV (the form ships at library
 defaults, deliberately) and the **leave-one-metro-out** run — which is the only thing that
-can answer OQ-12's transfer half, since every k-fold fold still contains all four markets.
+can answer the **transfer** question, since every k-fold fold still contains all four
+markets. **That question had a second entry (OQ-12) until Aug 30, 2026; it is folded in
+here so it has one owner, and its argument comes with it:** LOMO measures transfer to a
+market the model has never seen, and every market this system indexes is *in* the training
+set — so a LOMO figure would overstate the error a Staten Island subject actually faces,
+and must not be substituted for the per-metro breakdown of holdout residuals the report
+publishes. The two answer different questions and the earlier entry existed because they
+were nearly conflated once.
 Feature engineering is the third, and the §2 caution the original deferral raised still
 applies to it: location is the dominant driver and this corpus does not carry it at useful
 granularity, which may cap the ceiling well below the probe. **Closes when** the schedule
@@ -203,95 +147,29 @@ allows all three, or when they are written up as gaps. `config.RENT_MODEL_ESTIMA
 
 ## Forecasting & reasoning
 
-### OQ-5 · U8 — the ToT constants are provisional
+### OQ-5 · U9 — the ToT constants are provisional
 `TOT_BRANCHING_FACTOR`, `TOT_MAX_DEPTH`, `TOT_BEAM_WIDTH`, `TOT_PRUNE_THRESHOLD` were set
-by reading output, not by tuning. **Closes when** U8's synthetic cases supply a
-known-correct branch to tune against. Note the framing-level values are already special
-cases found by inspection (`TOT_FRAMING_BEAM_WIDTH = 1`, `TOT_FRAMING_PRUNE_THRESHOLD = 0.0`)
-— treat those as findings, not defaults. `config.py:663`.
+by reading output, not by tuning. **Closes when** synthetic cases supply a known-correct
+branch to tune against. Note the framing-level values are already special cases found by
+inspection (`TOT_FRAMING_BEAM_WIDTH = 1`, `TOT_FRAMING_PRUNE_THRESHOLD = 0.0`) — treat
+those as findings, not defaults. `config.py:663`.
 
-### OQ-6 · **U8.0** — Zillow ZORI as the independent rent check
-#16 adopted ZORI as the validation series and it has not been built. It is the only
-available test of **the rent model's largest unverified assumption** — that rent-to-FMR
-structure is stable across the ~7 years between corpus and today. **Closes when** a ZORI
-pull lands and the ratio is measured at both ends. `config.py:430`.
+**Retargeted U8 → U9 on Aug 30, 2026, not closed.** U8 planned no subsection for these and
+built none, so carrying U8 in the label overstated what was scheduled — the same correction
+U8.4 made to OQ-3. It is retargeted to a unit rather than parked with no owner, because the
+surface U9 builds is where a reader meets these numbers and the sentence about them should
+be written by the unit that shows them.
 
-**BUILT Aug 28, 2026 (U8.0). The assumption does not hold.** ZORI/FMR fell from 1.186 at
-the corpus vintage to 1.046 today — **−11.8%** — and the decomposition says why: **market
-rent rose +33.5% while the FMR schedule rose +51.9%.** The denominator outran the market by
-18.5 points. So **the shipped rent model over-predicts**, by roughly 15–35% depending on
-subset. This also supplies the attribution `config.py`'s cohort-shift screen explicitly
-deferred as undeterminable from FMR alone.
-
-**BUILT Aug 29, 2026 (U8.4b) — the correction is now applied and disclosed.**
-`tools/rent_drift.py` computes the subject ZIP's own
-`(ZORI today / ZORI vintage) × (FMR vintage / FMR today)` and multiplies both the
-estimate *and* the comp-implied figures by it (both carry the same drift, so the factor
-cancels out of the divergence check). Measured factors 0.744 (LA 90026) to 0.934
-(Bed-Stuy 11216) — a wider spread than U8.0's ZIP-anchored-only measurement, because the
-county-anchored metros drifted hardest. Two new flag kinds disclose the correction and
-its absence; ZORI reaches 7 of 10 fixture ZIPs, and where it does not, the WARN says the
-estimate likely reads high rather than shipping the bias silently.
-
-**Closes as measured, but opens two follow-ons rather than none:** U8.4b applies a per-ZCTA
-correction at prediction time, and §6 cut-list item 6 carries re-anchoring the model on ZORI
-outright — supported by measurement (ZORI covers 5,662 of 5,686 corpus ZIPs and normalizes
-geography better, per-city mean spread 0.172 against FMR's 0.257) but costing a U5 rewrite
-and 27% of training rows. Q5's veto branch fired: checks A and B are **not** promoted.
-Reproduce both with `scripts/zori_evidence.py` and `--anchor-comparison`.
-
-**CLOSED Aug 30, 2026 (U11.3), and both follow-ons resolved in the same change.** Cut-list
-item 6 was taken as a **hybrid** — ZORI for the rent level at the subject's own ZIP, HUD
-only for the bedroom step — so the drift U8.4b corrected for is now divided out where it
-arises and `tools/rent_drift.py` was retired. Two numbers above were wrong and are
-corrected here rather than left standing: the anchor swap costs **0.3%** of training rows,
-not 27% (the county-median fallback recovers 99.0% of the ZIP-level gap), and it does not
-require abandoning FMR, which is why `FMR_BEDROOM_CAP_EXCEEDED` survives.
-
-**Q5's veto branch had its own premise removed, and a second measurement then argued
-against promoting anyway. CLOSED Aug 30, 2026 as decision #20** — reasoning in
-[`history/decision_log.md`](history/decision_log.md#rent--valuation), write-up at U8.7 in
-[`tasks/task_list_u8.md`](tasks/task_list_u8.md). The ~−29% structural gap that justified
-*not* promoting checks A and B was a property of the FMR anchor; re-measured on the new one
-it is mean −11.4%, median −9.7%, ranging −39.4% to +66.6%. But `scripts/stated_rent_gap.py`
-then found that **every fixture a 20–35% threshold would fire on already carries a flag
-naming a more specific cause** — 6 of 6 at 25% — so the check would restate an existing
-disclosure in vaguer words. The comparison stays an unconditional disclosure and
-`RENT_CLAIM_DIVERGENCE_DISCLOSURE_THRESHOLD` stays `None` without being deleted.
-
-**Why it ran first, recorded because the reasoning generalizes.** It had no unit for two units. It moves
-to the *front* on dependency rather than on enthusiasm: three deferred items are gated on
-this one number (promoting Critic checks A and B at `agents/critic.py:187`, the stated-rent
-emphasis threshold at `config.py:413`, and by extension what the eval batch scores), and a
-measurement that can change what U8.6 tunes has to land before the tuning. **Source
-verified reachable the same day** — ZIP-level, monthly from 2015-01, carrying `CountyName`,
-so the ratio can be measured at both ends of the vintage gap and joined to FMR at the
-anchor's own grain. **The measurement can veto as well as unlock:** ~1.0 means the rent
-model over-predicts and A must *not* be promoted; ~1.4 means the model is right and A gets
-a threshold above #11's known calibration offset. Both are results.
-
----
-
-## Data & sources
-
-### OQ-7 · decision #11 · **U8.8, drop-dead Mon Sept 1** — public-record sub-metro price benchmark
-County assessor open data (Cook, LA County, NYC) is chosen, admissible under §8's "public"
-definition, and unbuilt. **Closes when** U8.8 ingests it — or, if cut at the drop-dead
-date, when the gap is written up explicitly.
-
-**Respecified Aug 28, 2026, because this entry's own premise was stale.** It read "what
-would let the *value* estimate be scored" — but **#15 made `value_estimate` permanently
-`None`** in U6, so there is no value estimate to score. Nor can assessor data score the
-demo deals' asking prices: those listings are synthetic, and #11 set the asking price
-*from* the Redfin metro median, so there is no real asking price and no real sale to score
-it against. What the dataset actually delivers is a **sub-metro sale-price benchmark**
-replacing the metro median in `ValuationDetail.benchmark_median_sale_price` — the
-price-side counterpart to ZIP-resolution rent anchoring, and what makes check B local.
-
-**Taken rather than cut, with the risk carried by a date.** It is the one U8 item whose
-cost is not bounded in advance — an address-to-parcel join is the same class of work as
-U3's geocoding tiers — so it sits *behind* the harness core, and the cut, if taken, is
-taken Sept 1 with three days in hand rather than on the freeze morning.
+**Two measurements did land, and they are what is known about any of the four.**
+`TOT_TIE_EPSILON` is **not meaningfully straddleable** — the gap it compares is
+noise-dominated (OQ-17), so a recorded straddle would measure the recording (U8.6b). And
+U8.6c published the depth-2 **cut margin**, the line the beam width actually cuts on:
+across the golden batch it is often zero or negative, meaning the discarded pairing
+outscored the one reported and lost on `tot._rank`'s conservatism preference. Neither is a
+tuning signal; both say what the constants are doing today. **Tuning against the golden
+batch was considered and declined** — those fixtures were authored by the unit that would
+have tuned against them, which is the error Q1 exists to prevent, applied to a different
+tunable.
 
 ---
 
@@ -382,7 +260,7 @@ architect's explicit call to document and defer. `agents/scenario_forecast.py`,
 
 ## Evaluation & demo
 
-### OQ-18 · U8 — a replay row missed its recordings once, and the cause is not established
+### OQ-18 · no unit — a replay row missed its recordings once, and the cause is not established
 **Found Aug 29, 2026 during U8.4c's batch re-derivation.** Three replay-tier cases
 (`la-unpriced-triplex`, `la-duplex-near-usc`, `chicago-unmatched-street`) raised
 `CacheMiss` in one full-batch run, then passed in every run since — including two later
@@ -402,31 +280,55 @@ freshly-computed float (e.g. rounding the rent figure the prompt quotes, which w
 replay robust to sub-dollar drift without changing what the evaluator is told).
 `eval/runner.py`, `agents/scenario_forecast._context_block`.
 
-### OQ-12 · U8 — two items, and they separated at U8 planning
-`config.py:309` wants a leave-one-metro-out run as evaluation rather than the current
-in-sample split; `config.py:386` needs confirmation that anything still trips the flag it
-guards. Both are `TODO(U8)` at the site.
+**Retargeted U8 → no unit on Aug 30, 2026, with the mitigation declined for now.** Rounding
+the quoted figure is a small change that forces a **full re-record of the replay tier**, and
+it would land five days before the freeze against a fault that has not reproduced in three
+batches — and could not be shown to have helped, since the batch it would be verified on
+already passes. Kept open on OQ-17's precedent rather than closed, because the mechanism is
+newer than the fault: every replay prompt now rides on ZIP resolution being stable, and that
+coupling arrived with the ZIP-grain anchor. **Re-open with a unit if a second miss occurs** —
+two is a pattern and would pay for the re-record.
 
-**Split Aug 28, 2026.** The second half closes at **U8.2** — a case built to sit on the far
-side of the divergence line, which U8.1's coverage census requires anyway since a flag
-nothing can raise would corrupt it.
+### OQ-21 · U9 — a sixth demo deal, in Chicago, so the set shows a clean run twice
+**Raised Aug 30, 2026 by U8.6e; resolved in approach Aug 31 by the architect.** Ungating the
+Critic's first interaction check made `chicago` escalate — it carries
+`comps_outside_match_criteria` on an ordinary run, 3 of 8 comparables outside the size band
+— so the deal that served as the middle-of-the-road demo now routes to human review, and
+`los-angeles` became the only demo deal reaching 1.00 and reporting clean. That escalation is
+the system working and nothing about it was reverted.
 
-**Second half CLOSED Aug 28, 2026 at U8.2.** `chicago-uptown-duplex` trips it, and how it
-does so matters more than that it does: **nothing about the property is engineered.** An
-ordinary two-bedroom duplex whose comps match it on bedrooms and floor area, in a market
-whose ZIP-level rents are high, still puts the model 48% above the comp median. The flag is
-detecting a genuine disagreement between the two inputs rather than a manufactured one, so
-it is available as a signal rather than dead. `config.py:386` may keep its threshold; the
-`TODO(U8)` there is cleared at U8.M.
+**Taken: add a sixth deal, also in Chicago. `chicago` is left exactly as it is.** The two
+rejected alternatives are recorded because the reason is about what the demo has to show:
+*accepting the set as it stands* leaves one clean run against five escalations, and a range
+carried entirely by degrees of escalation understates a system whose whole argument is that
+it reports cleanly when it can; *re-siting `chicago`* would spend the escalating deal to buy
+the clean one, which is a trade, not a gain.
 
-**The first half was nearly closed by accident and should not be.** U8.4's New York
-disclosure (OQ-3) needs a per-market error figure, and folding LOMO into it looked like one
-run closing two items. It is the wrong instrument: **LOMO measures transfer to a market the
-model never saw, and New York is in the training set**, so a LOMO figure would overstate the
-error a Staten Island subject actually faces. U8.4 uses a per-metro breakdown of the
-existing holdout residuals instead. LOMO stays open as what it always was — a *transfer*
-measurement and a real limitation of the reported MAE — scheduled to U8.9's report artifacts
-if the schedule holds. [`tasks/task_list_u8.md`](tasks/task_list_u8.md) Q2(b).
+**Why re-siting is not free, in plain terms** — this replaces an earlier note that said only
+that `chicago`'s terms are "#11-calibrated". Under decision #11, no demo figure is invented:
+each one names the public source it was derived from in `demo_deals.py`, and
+`scripts/verify_demo_calibration.py` re-derives every figure from those sources on demand.
+The asking price comes from Redfin's median sale price for multi-family in that metro; the
+stated rents come from HUD's schedule for **the county the listing's own address geocodes
+to**. Move the address and both derivations move with it, the verification script's expected
+values change, and — because the address determines the ZIP — the deal stops being the one
+U8.8 uses to show a neighborhood median against a metro one.
+
+**Two things the new deal needs, both already known so U9 does not rediscover them:**
+
+- **The siting does not have to be searched for.** U8.6b already found and measured one:
+  Chicago Uptown at **1,100 sq ft** returns 8 comparables with 2 outside the size band — the
+  share the threshold admits — and raises **no warn-severity disclosure at all**. It runs at
+  confidence **1.00** as the eval fixture `chicago-uptown-band-under`. Its 1,300 sq ft
+  sibling is the straddle partner that escalates, so the pair also documents how narrow the
+  clean margin is.
+- **Its rent basis must not be copied from the existing deals.** U8.7 found `DemoDeal.
+  rent_basis` is `hud_fmr:2` across the set — #11 set those rents from the anchor #19
+  retired — so the existing basis is stale. A new deal should declare its rents against the
+  market index the system now uses, or it ships stale on day one.
+
+**Closes when** U9 adds the deal, calibrates it under #11's rules, and re-derives the demo
+table. [`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.6b, §U8.6e, §U8.7.
 
 ### OQ-13 · no unit — LangSmith account
 Wiring is done and env-driven; every run prints whether tracing is on, so a silently

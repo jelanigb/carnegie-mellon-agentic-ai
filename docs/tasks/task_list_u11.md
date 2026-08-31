@@ -317,7 +317,7 @@ report should say that the transfer question is open rather than let the cross-v
 MAE imply it was settled. OQ-12 stays open in
 [`../open_questions.md`](../open_questions.md) for exactly that reason.
 
-### U11.5 🟨 — The FMR vocabulary the rename pass did not reach *(items 1 and 6 done; 2–5 close with U8's documentation close-out)*
+### U11.5 ✅ — The FMR vocabulary the rename pass did not reach *(closed Aug 31, 2026 with U8.10)*
 
 **Opened Aug 30, 2026 by the architect**, after an audit of this unit against the code
 found that U11.3's item-1 rename covered the `FlagKind` members, the `ValuationDetail`
@@ -351,6 +351,27 @@ system rather than a naming inconsistency; the rest waits.
 correct history and rewriting them would delete the reasoning. `FMR_BEDROOM_CAP_EXCEEDED`
 and `fmr_shape_year` likewise keep their names on purpose — the bedroom step really is
 the federal schedule's.
+
+**CLOSED Aug 31, 2026 at U8.10, and this list was short by eight sites.** Items 2–5
+landed as planned. Auditing for them turned up **thirteen** live sites naming the retired
+anchor rather than five — the list above was assembled from a partial grep — and **one was
+reader-facing**: `RENT_ESTIMATE_UNAVAILABLE`'s band message told an investor the model
+"predicted a rent-to-FMR ratio of 1.87". Also fixed: the Valuation agent's Act step, the
+training report's printed MAE label, three `config.py` comments, `train_rent_model.py`,
+`model_form_probe.py`, and `la-oversized-loft`'s fixture note, which described its refusal
+as the *output* ratio band when U11.1 had moved that guard to the model's **input** domain.
+
+**Item 2 covered four identifiers, not two.** `holdout_rows` and `model_holdout_mae_ratio`
+carry the identical error in the same two structs. Final names: `TrainingReport.mae_dollars`
+/ `rows_scored`, `ValuationDetail.model_mae_dollars` / `model_mae_ratio`. The architect took
+**rename-and-retrain** over a both-keys read, since the shim would have protected an artifact
+that is not in the repository. The refit reproduces every published figure exactly and both
+offline eval tiers re-run byte-identical — verified, not assumed.
+
+**The lesson is about the audit, not the vocabulary.** A rename pass verified by reading the
+diff will find the sites the author was already thinking about. This one was verified by
+grepping for the *retired concept* across `src/` and reading every hit, which is what found
+the reader-facing one — three passes after the rename that created it.
 
 ### U11.M ✅ — Maintenance *(separate commit, per §8)*
 

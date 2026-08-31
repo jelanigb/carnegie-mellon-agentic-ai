@@ -203,6 +203,53 @@ Worth noting the rule was also relaxed from an absolute to a norm in the same pa
 is what makes a recorded exception possible at all. That is the general pattern this log
 exists for, applied to the standards document itself.
 
+---
+
+**BUILT Aug 30, 2026 at U8.8, two days inside its drop-dead date — and one sentence above
+is now wrong rather than merely superseded.** The planned work named "county assessor open
+data (Cook, LA County, NYC)" as the chosen source. **LA County's roll carries no sale
+price at all** — `Roll_LandValue`, `Roll_ImpValue`, `Roll_TotalValue` and nothing
+transactional — because California assessors publish assessed value, and a Prop 13
+base-year value approximates a sale price *at the base year*, going systematically stale
+for long-held parcels. That is a different instrument, and not one to substitute silently.
+So the entry above describes a dataset that cannot do the job it names, for one of the
+three markets it names.
+
+**What shipped, and what did not:**
+
+| Market | Route | Result |
+| --- | --- | --- |
+| New York | NYC Open Data `w2pb-icbu`, direct | 27,309 qualifying sales, **164 ZIPs** |
+| Chicago | Cook `wvhk-k5uv` → `nj4t-kc8j` on an exact `pin` | 18,251 sales, **96.8% joined**, 140 ZIPs |
+| Los Angeles | — | metro figure kept, **disclosed per deal** |
+| Cleveland | — | metro figure kept, disclosed per deal |
+
+`scripts/build_sale_benchmarks.py` writes a committed 304-ZIP table read by
+`tools/sale_benchmarks.py`; `valuation_rent._attach_benchmark` prefers the ZIP tier and
+keeps the metro figure beside it; the Summarizer renders whichever applies with its sample
+size, window, issuing office, and **the market's own definition of a multi-family sale** —
+New York publishes a unit count, Cook publishes class 211 spanning 2-6 units, and the two
+cannot be reconciled, so the definition travels with the figure instead of being averaged
+away. Partial coverage with a stated reason is the pattern this project already uses where
+a source reaches some subjects and not others.
+
+**The risk this was scheduled around was not the one that bit, and the reason generalizes.**
+It was priced as an address-to-parcel join — the same class of work as U3's geocoding tiers,
+and the sole reason it sat behind the harness core with a drop-dead date. A **benchmark**
+needs a median over the subject's ZIP and never needs to identify the subject's parcel, so
+no fuzzy address matching exists anywhere in the change set. That is the third cut-list item
+in two units whose stated price described work the item no longer contained; §6 records the
+generalization next to the list.
+
+**And this entry's own limitation became visible in the report, as predicted.** #11 set the
+demo asking prices *from the Redfin metro median* — the figure the benchmark replaces — so
+against their own ZIPs they now read cheap: `chicago-uptown-duplex` asks $530,000, 39% below
+ZIP 60640's $867,500 median, while that ZIP runs 77% above the Chicago metro's $490,903. The
+figures stand as committed and the report shows both tiers, which makes the calibration
+legible rather than mysterious. **The "no ground truth for the value estimate" limit above
+is unchanged** and is now permanent rather than pending: #15 removed the value estimate, so
+there is nothing left for a benchmark to score.
+
 
 ---
 
@@ -1033,8 +1080,70 @@ same failure waiting to happen one layer up.
 
 Decision #1 (LangGraph from day one, rather than a staged migration) is argued in
 [`../design/architecture.md`](../design/architecture.md) §3 and is not duplicated here.
-Decision #6 (the 0.60 escalation threshold and the severity weights) is **still open** —
-see [`../open_questions.md`](../open_questions.md).
+### #6 · U7 → U8 · Aug 30, 2026 — the threshold is held, and the claim is robustness rather than optimality
+
+**Decision #6 detail, taken in two halves a month apart.** U7 shipped the *mechanism*: the
+weights and the threshold in `config.py`, critical-flag escalation on an independent rule,
+no score decay across rework laps, all measured on the real pipeline by
+`scripts/confidence_evidence.py`. The *numbers* were deliberately left open, because the
+only listings that existed were the demo deals and those were calibrated to run clean —
+tuning 0.60 against them would have fitted the threshold to this repository's own fixtures.
+
+**The instrument had to be built, and the first thing that had to be settled was how not to
+fool ourselves with it.** An eval batch is calibrated to *fail* the way the demo set is
+calibrated to pass; scoring a threshold on flag counts it produces is the same circularity
+with the sign reversed, and less obvious because the batch is called an evaluation. What
+was adopted (U8 Q1, before the first run): **each case declares its intended verdict —
+`reports` or `escalates` — in its own definition, written before anything is run**, and the
+parameters are scored on agreement with those declarations. A triage rule was fixed at the
+same time and for the same reason: *the target flag fired and the verdict still disagrees →
+a tuning signal; the target flag did not fire → the case is wrong, not the threshold.* **A
+rule written after seeing a disagreement is not a rule.**
+
+**What the sweep found: a stable region, not an optimum.**
+`scripts/confidence_sensitivity.py` swept threshold × warn weight over the 21-case
+predicted batch and wrote `eval/results/sensitivity.md`. **63 of 160 grid points decide the
+batch identically to the shipped configuration.** Through the shipped point, the threshold
+moves **0.30–0.70** and the warn weight **0.100–0.200** with no verdict changing anywhere.
+Zero cases give evidence that 0.60 or 0.15 is wrong. So both are **held** — and the close
+says *robustness*, because a batch that cannot separate two settings is not saying they are
+equally good, it is saying it has no evidence either way. That is a weaker claim than
+tuning would have been, and it is the claim the evidence supports.
+
+**One methodological correction inside the sweep itself, and it is the reason the bound
+means anything.** The first grid started the threshold axis at 0.30, the plateau ran to the
+bottom of it, and the artifact reported "every threshold from 0.30 to 0.70" — which reads
+as a measured edge and was the **edge of the search**. Both axes were widened to values
+nothing could defend (a 0.05 threshold escalates almost nothing; a 0.45 warn weight
+escalates on two), the plateau then ended at a measured 0.25, and `_edge_note` now says so
+explicitly whenever a reported bound still lands on a grid boundary. **An edge is only
+evidence if the sweep could have found it somewhere else.**
+
+**The critical weight is behaviorally inert across its entire range, including 0.00.** Every
+deal carrying a critical disclosure escalates on the independent rule regardless of what the
+weight is set to. That is the confirmation U7 left open, arriving from the opposite direction
+to the one U7 expected: U7 asked whether the two conditions might coincide once the weights
+were tuned and the rule could then fold back into the score. They do not coincide, and the
+separation is what makes the guarantee independent of the weights rather than contingent on
+them.
+
+**A sub-question dissolved rather than being answered.** `rent_anchor_county_level` is a
+*cause* of `rent_estimate_market_error_elevated` — coarse anchoring is part of why New
+York's error is double — so the score appeared to charge 0.15 for the cause and 0.15 again
+for the effect, one level above the de-duplication rule that exists to prevent exactly
+that. It needed no re-pricing: **the pair co-occurs on 0 of 21 cases.** #19's hybrid anchor
+resolves at ZIP tier in every indexed market, so the county-tier flag became rare and
+stopped stacking. Closed by the anchor change rather than by a decision about weights —
+and re-opens if county-tier anchoring ever becomes common again.
+
+**The consequence that mattered more than the number.** The scores are quantized to
+multiples of the warn weight, so the threshold sits in a dead zone: nothing in this batch
+distinguishes 0.60 from anything in (0.40, 0.70]. The lines that actually decide verdicts
+are therefore the **per-flag thresholds**, which decide whether a third warn fires at all.
+That is why U8.6b measured brittleness *there* — pairs of near-identical fixtures either
+side of each per-flag line — rather than sweeping the confidence threshold harder. The
+tightest measured pair flips its flag on a **5% change in floor area**. Asking the rigidity
+question where the answer lives is the finding; the sweep is what located it.
 
 ### #9 · U2 · Aug 9, 2026 — Planner topology: pre-flight, not supervisor
 

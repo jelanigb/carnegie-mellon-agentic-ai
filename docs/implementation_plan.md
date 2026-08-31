@@ -182,7 +182,7 @@ building them — including the ones that changed the design — are in
 | **U5** ✅ | Rent model: FMR-normalized regression on the #4 shortlist, holdout MAE, Valuation agent, `rent_anchored_to_market_index` / `rent_anchor_unavailable` / `fmr_bedroom_cap_exceeded` flags. **LLM fallback descoped** — cut-list item 3 taken in advance, shipping as a documented gap | — | [Rent & valuation](history/decision_log.md#rent--valuation) |
 | **U6** ✅ | Scenario/Forecast: beam search over an **enumerated** hypothesis space — 4 framings, then 9 band pairings — with an LLM evaluator pulling evidence through the MCP tool registry in-process. Rent growth and price appreciation forecast **separately** (#16), projected 5 years from the **asking price** (#15) | **4.1** | [Forecasting](history/decision_log.md#forecasting--reasoning) |
 | **U7** ✅ | Critic: three cross-agent **interaction** checks (a combination changing what a measurement means — the four checks §1 named did not survive contact with the built system), comp-attribute drift owned by Retrieval, confidence scoring evidenced on the real pipeline, a rework cycle that fires on its own and is bounded by its counter rather than by score decay, human-review escalation via `interrupt()` | **6.1** | [Orchestration](history/decision_log.md#orchestration--control-flow) |
-| **U8** ⬜ | Eval harness: 8–10 synthetic listings each engineered to trip a *specific* flag, **plus the New York sparse-comps case run against real data**; batch runner → results table. **Absorbs U10** — the demo deals run through the same batch, so the end-to-end evidence is a harness output rather than a separate pass | **6.1** + report + video | [open questions](open_questions.md#evaluation--demo) |
+| **U8** ✅ | Eval harness, stated as what it produced rather than as what it was sized as. **28 rows across three tiers** — 21 with a verdict *declared before the first run*, 7 live demo baselines — with **30 of 30 flag kinds raised, none uncovered and none unreachable**, and verdict agreement 18/21 with every mismatch triaged. Plus: a published parameter sweep closing #6, six straddle fixtures measuring brittleness at the per-flag lines, per-metro rent-error disclosure, pass-scoped flags, and a sub-metro price benchmark that arrived from the cut list. **Absorbed U10** — the demo deals are rows in the same batch, so the end-to-end evidence is a harness output rather than a separate pass | **6.1** + report + video | [Orchestration](history/decision_log.md#orchestration--control-flow), [Eval & demo](history/decision_log.md#evaluation--demo) |
 | **U9** ⬜ | Summarizer polish + Streamlit demo app | report + video | — |
 | — | **Code frozen Sept 4, 2026.** Final report + 8–10 min video, due Sept 7 | **7.1** | — |
 
@@ -261,6 +261,28 @@ If the schedule slips, shed scope in this order rather than improvising:
    the harness core with a **drop-dead of Mon Sept 1**. If the join is not working by then
    the cut is taken with three days in hand and the gap is written up.
    [`tasks/task_list_u8.md`](tasks/task_list_u8.md) Q3.
+
+   **TAKEN Aug 30, 2026 at U8.8, two days inside the drop-dead — this item leaves the list
+   by being spent, like items 3 and 6.** ZIP-tier benchmarks ship for New York and Chicago
+   from county-assessor transaction records; Los Angeles and Cleveland keep the metro figure
+   with the reason disclosed per deal, because California assessors publish assessed value
+   rather than sale price. **The risk the date was set against never materialized, and the
+   reason is the third instance of one pattern.** It was priced as an address-to-parcel
+   join; a *benchmark* needs a median over the subject's ZIP and never identifies the
+   subject's parcel, so no fuzzy address matching exists anywhere in the change set. The
+   only join is Cook's, on the assessor's own primary key, measured at 96.8% with the misses
+   counted rather than dropped silently.
+
+   **The pattern, stated here because it has now happened three times in two units and is a
+   property of this list rather than of any item on it:** item 2a's price was "a §5 change
+   touching every agent that raises a flag" and measured as 37 call sites and one commit;
+   item 6's was "drops 27% of the training rows" and measured as 0.3%; this one's was an
+   unbounded join that the respecified deliverable does not contain. **Every one was
+   estimated when written and wrong in the direction that made the item look expensive.** A
+   cut-list price is a guess recorded under schedule pressure, and it decays as the item it
+   describes is respecified. **Re-measure a cut-list item before spending it, and again
+   before cutting it** — cutting on a stale price is the same error as spending on one, with
+   nothing to catch it afterwards.
 2a. **Pass-scoped flags** (raised Aug 25, 2026 in U7; scheduled at U8). `DealState.flags`
    is append-only by design, so nothing distinguishes *raised this pass* from *ever
    raised*. Every Critic interaction check reads the accumulated list as current truth,
@@ -399,7 +421,7 @@ Each decision has a stable number. Code comments and the other documents cite th
 | 8 | OpenRouter model per role | Models & infra | U3 → U9 | 🟨 **PART OPEN** — `nvidia/nemotron-3-nano-30b-a3b`, paid variant. Critic half closed in U7: the checks that shipped are pure functions, so the Critic makes no model call and `MODEL_CRITIC` is untested by construction. Summarizer role revisits at U9 |
 | 9 | Planner topology — pre-flight vs. supervisor | Orchestration | U2 | ✅ Pre-flight + rework re-entry; one back edge, asserted on every diagram export |
 | 10 | Geocoding source for `latitude`/`longitude` | Geography | U3 | ✅ Census Geocoder + corpus-centroid fallback; county now resolved by point-in-polygon |
-| 11 | Grounding for demo and evaluation deal terms | Data & sources | U3 → **U8** | 🟨 **PART OPEN** — demo listings calibrated against Redfin + FMR; public-record data **taken Aug 28, 2026 at U8.8**, respecified as a sub-metro price *benchmark* rather than ground truth (#15 removed the value estimate it was to score), drop-dead Sept 1 → [open](open_questions.md#data--sources) |
+| 11 | Grounding for demo and evaluation deal terms | Data & sources | U3 → **U8** | ✅ **Both halves settled Aug 30, 2026.** Demo listings calibrated against Redfin + FMR (U3); the public-record half **built at U8.8, two days inside its drop-dead**, respecified as a sub-metro sale-price *benchmark* rather than ground truth — #15 had removed the value estimate it was written to score. ZIP tier live for **New York and Chicago** from county-assessor transaction records (27,309 and 18,251 sales); **Los Angeles and Cleveland keep the metro figure with the reason disclosed per deal**, because California assessors publish assessed value and a Prop 13 base-year figure is a different instrument. The entry's original source list was wrong on LA County for exactly that reason. Q3's unbounded address-to-parcel join never appears: a benchmark needs a median over the subject's ZIP, never its parcel |
 | 12 | Tree-of-Thought scope | Forecasting | U6 → **U7** | ✅ Selective ToT — Scenario/Forecast only. Critic half retired on evidence (U7.7): the checks that shipped are pure deterministic functions, nothing to search over |
 | 13 | MCP adoption | Models & infra | U6 | ✅ Read-only reference server; adopted for portability and a second consumer, not capability. CrewAI declined |
 | 14 | ToT branch-state persistence | Forecasting | U6 | ✅ Compact ledger in state, full tree to `eval/results/` behind a flag |
