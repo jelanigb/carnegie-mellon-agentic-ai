@@ -233,11 +233,21 @@ corrected here rather than left standing: the anchor swap costs **0.3%** of trai
 not 27% (the county-median fallback recovers 99.0% of the ZIP-level gap), and it does not
 require abandoning FMR, which is why `FMR_BEDROOM_CAP_EXCEEDED` survives.
 
-**Q5's veto branch has since had its own premise removed** — see U8.7 in
+**Q5's veto branch has since had its own premise removed, and a second measurement then
+argued against promoting anyway** — see U8.7 in
 [`tasks/task_list_u8.md`](tasks/task_list_u8.md). The ~−29% structural gap that justified
 *not* promoting checks A and B was a property of the FMR anchor; re-measured on the new
-one it is mean −11.4%, median −9.7%, ranging −39.4% to +66.6%. Promotion is a live
-decision again, and is the architect's.
+one it is mean −11.4%, median −9.7%, ranging −39.4% to +66.6%. But
+`scripts/stated_rent_gap.py` (Aug 30, 2026) then found that **every fixture a 20–35%
+threshold would fire on already carries a flag naming a more specific cause** — 6 of 6 at
+25% — so the check would restate an existing disclosure in vaguer words. The
+recommendation on the table is to hold at `None` without deleting the constant.
+**Closes when** the architect takes it. **Do not re-derive:** re-calibrating
+`demo_deals.rent_basis` to the market index does *not* add independent observations — the
+gap becomes `1/ratio − 1` by construction — and the fixtures' rents are invented rather
+than observed. **What would genuinely reopen it** is stated rents observed from outside the
+anchor chain: actual asked rents for comparable units in the subject's ZIP, from a public
+listing source. That is a data acquisition and is out of scope before the freeze.
 
 **Why it ran first, recorded because the reasoning generalizes.** It had no unit for two units. It moves
 to the *front* on dependency rather than on enthusiasm: three deferred items are gated on

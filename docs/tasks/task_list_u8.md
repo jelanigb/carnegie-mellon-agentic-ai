@@ -50,16 +50,17 @@ bullets that never landed (U8.6c).
 | ✅ | **U8.6b** straddle pairs | 6 fixtures, 3 clean pairs, 1 documented negative result |
 | ✅ | **U8.6c** near-tie split + evaluator scores | **Completed Aug 30, 2026** — the two audited gaps built; the cut-boundary measurement found the tie-break deciding the reported scenario set |
 | ✅ | **U8.6d** confidence decomposition | Built, plus the stale Critic stub-node claim it surfaced |
-| ✅ | **U8.6e** the objection gate *(unplanned)* | Repairs built; **one open decision for the architect** |
-| 🟨 | **U8.7** checks A and B | Re-measured; **the veto's premise expired, so the decision is open** |
+| ✅ | **U8.6e** the objection gate *(unplanned)* | Repairs built; **decision taken Aug 30, 2026** — I1 and I3 ungated, I2 keeps the gate |
+| 🟨 | **U8.7** checks A and B | Re-measured twice; the veto's premise expired, and **the evidence the file said would settle it turns out not to exist** — still the architect's call |
 | ✅ | **U8.8** sub-metro price benchmark | **Built Aug 30, 2026, two days inside the drop-dead.** ZIP tier live for New York and Chicago; Los Angeles keeps the metro figure, disclosed. Verdict- and recording-inert, verified |
 | ✂️ | **U8.9** live runs, traces, diagram | Dropped Aug 30, 2026 by the architect |
 | ⬜ | **U8.10** close-out | Not started |
 | 🟨 | **U8.M** maintenance | TODO inventory reconciled; remainder open |
 
-**Two decisions are waiting on the architect**, both written up in full where they arose:
-the divergence gate in front of the Critic's objections (U8.6e) and what to do with the
-stated-rent comparison now that its veto no longer holds (U8.7).
+**One decision is still waiting on the architect** — what to do with the stated-rent
+comparison now that its veto no longer holds (U8.7). The other, the divergence gate in
+front of the Critic's objections (U8.6e), was taken on Aug 30, 2026 and is built; the
+write-up below is kept as the case that was put rather than rewritten as a conclusion.
 
 ---
 
@@ -1397,10 +1398,89 @@ now shift. The objection says the narrower true thing instead.
 
 ---
 
-## The open decision: should the divergence gate stay in front of I1?
+## The decision on the divergence gate — TAKEN Aug 30, 2026: ungate I1 and I3, keep the gate on I2
 
-**This is the architect's call and is deliberately not taken. What follows is the full
-case on both sides, so the decision can be made from this file without re-deriving it.**
+**Taken by the architect, and built the same day.** The case on both sides is left below
+exactly as it was put, rather than rewritten into a conclusion — the argument for the gate
+is the argument that built the checks, and a file that keeps only the winning half stops
+being usable the next time the question comes up. What landed, and what it moved, is
+recorded in the two subsections immediately below.
+
+### What was built
+
+`agents/critic._interaction_objections` no longer opens with the divergence early-return.
+In its place:
+
+- **I1 and I3 are ungated.** Both say the comp set is the wrong set for this subject —
+  matched on attributes the model prices on, or drawn around a location that is not the
+  property's — which holds however the numbers came out.
+- **I2 keeps the gate.** It says the median is *imprecise*, which degrades a disagreement
+  and on its own is what `COMPS_SPATIALLY_CONCENTRATED` already discloses at warn.
+- **A new precondition replaces the gate for I1 and I3, rather than nothing:**
+  `critic._cross_check_ran` requires the comp cross-check to have produced a median at
+  all. Below `config.RENT_COMP_CROSSCHECK_MIN_COMPS` surviving comps,
+  `valuation_rent._cross_check` returns before computing one, and an objection about a
+  median the report does not contain would be describing a comparison the reader cannot
+  see. This is the one place the Critic reads `valuation_detail` rather than flags alone;
+  the reason is at the function.
+- **Both objection texts were reworded**, because each asserted a disagreement that may
+  now not exist. I1 says the comparison is not a check on the estimate "whether the two
+  figures agree or disagree"; I3 says the comparison says little either way "including
+  where the two figures happen to agree."
+
+### What it moved, measured against the same code with only the gate reverted
+
+Golden and replay tiers are deterministic, so those rows are a clean attribution. The live
+tier was re-run on the unchanged build for the same reason, because its ±1-row noise band
+(recorded above) would otherwise be indistinguishable from the change.
+
+| Case | Before | After | Which check |
+| --- | --- | --- | --- |
+| `la-three-bedroom-comp-drift` | reports 0.85, **MISMATCH** | escalates † 0.85, **ok** | I1 — the mismatch clears, as predicted |
+| `chicago-uptown-band-over` | reports 0.85, ok | escalates † 0.85, **MISMATCH** | I1 — a new mismatch, and it is not edited away |
+| `ny-wakefield-seven-comps` | escalates 0.25, ok | escalates 0.25, ok, + 1 critical | I1 — already escalating on score |
+| `chicago-unmatched-street` | reports 0.70, ok | reports 0.70, ok, + 1 warn | I3 — a warn does not move a verdict |
+| `chicago` *(live demo)* | reports 0.70, ok | escalates † 0.70, **MISMATCH** | I1 — the flagship Chicago demo now goes to review |
+| everything else (17 rows) | — | unchanged | — |
+
+**Verdict agreement is 18/21 before and after** — one mismatch cleared, one created — and
+the regression line against U7.8's published table moves from 7/7 to 6/7 on the `chicago`
+row. Flag coverage stays 30 of 30. `eval/results/sensitivity.md` was regenerated: 11 rather
+than 9 of the 21 predicted cases now escalate under the shipped configuration, and both
+stable-region claims in its prose survive unchanged — warn 0.150 holds every threshold from
+0.30 to 0.70, threshold 0.60 holds every warn weight from 0.100 to 0.200.
+
+**No re-record was needed.** The expectation above was that one would be, on the grounds
+that "objection text and flag sets both reach the scoring prompt." Only the second half is
+true: the Critic runs *after* `scenario_forecast`, so its objections cannot reach that
+prompt on the pass that raises them, and no case gained or lost a rework lap. The batch
+replayed clean.
+
+### Three consequences worth the architect's attention
+
+1. **`chicago-uptown-band-over`'s declared verdict is now a MISMATCH and stays one.**
+   Editing a prediction after seeing the run is what `VerdictSource.PREDICTED` exists to
+   prevent, and the same rule that kept `la-three-bedroom-comp-drift` honest applies with
+   the sign reversed.
+2. **The straddle pair it belongs to has changed what it measures**, and U8.6b's note is
+   now stale where it says the pair "measures the *flag's* brittleness rather than the
+   verdict's." Under the ungate, `COMPS_OUTSIDE_MATCH_CRITERIA` is verdict-deciding, so
+   200 sq ft of floor area now flips `reports` to `escalates`. That is the honest reading
+   of the ungate rather than an argument against it — the pair is now a sharper
+   instrument, not a broken one — but the sentence describing it should be corrected at
+   U8.10.
+3. **The `chicago` demo deal escalates.** It carries `comps_outside_match_criteria` on an
+   ordinary run (3 of 8 comps outside the band), so the deal that has served as the
+   middle-of-the-road demo now routes to human review. Los Angeles remains the clean
+   baseline at 1.00. Whether the demo set should keep a second clean deal is a question
+   for U9's surface, not for this subsection.
+
+---
+
+## The case that was put, before the decision (kept)
+
+**What follows is the full case on both sides as written on Aug 30, 2026, before the call
+was made.**
 
 ### What the gate is, exactly
 
@@ -1738,7 +1818,7 @@ at the last two, and a section with four bullets and two citations reads as fini
 checkbox audit that found it was prompted by the architect asking whether U8.2 and U8.3
 were really done; those two were, and this one was not.
 
-### U8.7 🟨 — Checks A and B, and `config.py:413` — **the veto fired, then its premise expired**
+### U8.7 🟨 — Checks A and B, and `config.py:413` — **the veto fired, its premise expired, and the evidence that was supposed to settle it turned out to be circular**
 
 **Settled by U8.0's measurement: A and B are NOT promoted.** Q5 framed this as a branch and
 the branch resolved against promotion. The ~−29% stated-versus-modelled gap on the demo
@@ -1877,6 +1957,110 @@ re-calibrated off the market index and can contribute independent rows.
 observations and removes the one source in the project whose gap is circular by
 construction. It is small work and it is not scheduled anywhere — flagged here rather than
 left in conversation.
+
+---
+
+### Aug 30, 2026 — the re-calibration was computed, and it does not produce the evidence this subsection expected
+
+**Asked by the architect, and the answer is a negative result. `rent_basis` had not been
+re-calibrated** — all five demo deals with a rent basis still carry `hud_fmr:2` — so the
+paragraph above was still describing unscheduled work rather than something already done.
+It has now been computed rather than scheduled, because computing it turned out to settle
+whether it is worth doing.
+
+`scripts/stated_rent_gap.py` is the committed measurement, and it reproduces the 13-row
+table above exactly (n = 13, mean −11.4%, median −9.7%, range −39.4% to +66.6%) before
+answering the new question, so the two halves can be read against one instrument.
+
+**What re-calibrating would actually give**, per demo deal, at the market index's
+2026-07-31 observation:
+
+| Deal | ZIP | tier | FMR 2BR | market anchor | ratio | modelled | stated now | gap now | gap if re-calibrated |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `los-angeles` | 90026 | zip | $2,903 | $2,691 | 1.063 | $2,861 | $2,900 | +1.4% | **−5.9%** |
+| `chicago` | 60647 | zip | $1,781 | $2,371 | 1.063 | $2,520 | $1,775 | −29.6% | **−5.9%** |
+| `staten-island` | 10307 | county | $2,910 | $2,600 | 1.021 | $2,654 | $2,908 | +9.6% | **−2.0%** |
+| `overpriced` | 90027 | zip | $2,903 | $2,565 | 1.063 | $2,727 | $2,850 | +4.5% | **−5.9%** |
+| `coord-conflict` | 90026 | zip | $2,903 | $2,691 | 1.063 | $2,861 | $2,900 | +1.4% | **−5.9%** |
+
+**The last column is `1/ratio − 1` and nothing else.** A stated rent set equal to the
+market anchor is compared against `ratio × anchor`, so the anchor divides out and what
+remains is the model's own predicted ratio. Three of the five deals are the same unit spec
+(2bd / 1ba / 950 sqft) and return the identical figure to the decimal. **The six
+independent observations this path promised do not exist**: re-calibrating would replace a
+gap that is circular through FMR with a gap that is circular through the model, and the
+second is tighter. The premise in the paragraph above was wrong, and it was wrong in the
+direction that would have cost a change set to discover.
+
+**A smaller finding falls out of the same table, and it is about the demo set rather than
+about this threshold.** As committed, the demo gaps are *not* the constant −29% the old
+measurement found — they are +1.4%, −29.6%, +9.6%, +4.5%, +1.4%. The spread is the
+FMR-versus-market spread *by ZIP*: HUD's 40th percentile sits above Zillow's market index
+in Echo Park and 33% below it in Logan Square. So the demo deals do carry variance now,
+but it is variance in the two published series, not in the properties. **Chicago's stated
+rents sit ~25% below Logan Square's market rent** while still passing
+`verify_demo_calibration.py`, because that script checks them against FMR, which is what
+they were calibrated to. Whether that matters is a demo-realism question for #11, not
+evidence for this threshold.
+
+### The second measurement: would a threshold discriminate?
+
+`scripts/stated_rent_gap.py` prints, beside each fixture's gap, the flags the report
+already raised on that deal. **Every fixture a threshold in the 20–35% region would fire on
+already carries a flag naming a more specific cause:**
+
+| threshold | fires on | of which already explained |
+| --- | --- | --- |
+| 20% | 6 | **6 of 6** |
+| 25% | 6 | **6 of 6** |
+| 30% | 5 | **5 of 5** |
+| 35% | 3 | **3 of 3** |
+
+The causes are `comps_outside_match_criteria` (the comp set drifted onto another unit
+type), `rent_estimate_market_error_elevated` (the New York cluster, whose holdout error is
+1.9x the headline), `fmr_bedroom_cap_exceeded` and `sparse_comps` (the five-bedroom
+subject), and `rent_diverges_from_comps`. **This is the same reading the earlier analysis
+made — "the tails are explainable, individually" — with the consequence drawn out: if
+every tail is individually explained by an existing disclosure, a threshold over the tail
+is not adding information.** It restates a specific finding in vaguer words, and attributes
+to the listing's stated rent a weakness the system has already located elsewhere.
+
+The middle of the distribution behaves the other way and is worth noting for symmetry: four
+of the seven rows inside ±16% carry no rent-related flag at all, so the quiet region is
+genuinely quiet. The threshold's problem is not false positives; it is that its positives
+are redundant.
+
+### Recommendation — hold at `None`, and do not delete the constant
+
+**Not A, not B, and not C as they are written above.**
+
+- **Not A (set a threshold).** The measurement that made it look placeable is the same one
+  that shows it would not discriminate. 6 of 6 firing rows already explained is not a
+  usable disclosure; it is a second alarm on the same event.
+- **Not C (promote to an objection).** Everything against A applies with a verdict attached,
+  and it would let the fixtures' *invented* rents decide escalations. Worth being precise
+  about what the 13 rows are: their rents were chosen to look plausible for the unit, which
+  makes them independent of the anchor — the property the measurement needed — but they are
+  invented rather than observed. A distribution over them describes how the model prices
+  unit types, sampled at 13 made-up points.
+- **Not B (delete the constant).** The original reason for deleting it is dead and the new
+  reason is weaker than the old one: the check is redundant on *this* evidence, not
+  impossible in principle. Deleting the constant discards the option along with the
+  measurement.
+
+So: **leave `RENT_CLAIM_DIVERGENCE_DISCLOSURE_THRESHOLD = None`, leave the comparison
+unconditional, and replace its comment's reasoning with the two findings above.** Shipped
+behavior is unchanged, which it was under every option anyway; what changes is that the
+constant now records a measured reason for being `None` rather than an expired one. That
+correction has been made at `agents/critic.py`'s `_consistency_objections`, which was still
+carrying the dead ~−29% claim and a `TODO(U8): promote both once Zillow ZORI settles which
+baseline is right` — ZORI has settled it, and the answer is no.
+
+**What would genuinely reopen this**, stated so it is not re-derived: stated rents observed
+from a source outside the anchor chain — actual asked rents for comparable units in the
+subject's ZIP, from a public listing source. Not a re-calibration of the fixtures, and not
+more fixtures. That is a data acquisition, it is out of scope before the freeze, and it
+belongs in `open_questions.md` rather than in this unit.
 
 ### U8.8 ✅ — Public-record sub-metro price benchmark (OQ-7, #11) — **built Aug 30, 2026**
 
