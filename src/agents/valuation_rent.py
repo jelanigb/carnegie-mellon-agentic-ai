@@ -43,8 +43,9 @@ Reason/Act/Observe/Decide:
   before a rent figure is defensible — a trained model on disk, the subject's own
   bed/bath/sqft, a resolvable county, and an FMR schedule for it — and each failure is
   disclosed by name rather than collapsed into "unavailable."
-- **Act.** Predict the rent-to-FMR ratio from the subject's features, then anchor it
-  against the current FMR for `deal_terms.county_fips`.
+- **Act.** Predict the rent-to-anchor ratio from the subject's features, then anchor it
+  against the subject's own current anchor — ZORI at its ZIP times the HUD bedroom step
+  for `deal_terms.county_fips` (#19).
 - **Observe.** Re-express every retrieved comp's rent in the subject's current dollars
   and compare the estimate against their median. This is the step that makes the agent
   a loop rather than a call: the comps were retrieved by a different agent for a
@@ -218,13 +219,16 @@ def _attach_benchmark(detail: ValuationDetail, terms: DealTerms) -> None:
     compares against it, so its imprecision reaches every downstream number — which is
     precisely U8.6d's argument for keeping market-scoped doubt inside the confidence
     score. **The benchmark propagates nowhere.** Nothing computes from
-    `benchmark_median_sale_price`; check B was not promoted at U8.7, so no objection
-    reads it either. It is printed beside the asking price and read by a human. Charging
+    `benchmark_median_sale_price`, and no objection reads it either — check B
+    ships as a Summarizer disclosure (U7 Q4) and **has never been separately measured or
+    decided**. U8.7 measured and settled its sibling, check A, as #20; the phrase "checks A
+    and B" carried B along without evidence of its own, which OQ-20 now records as the open
+    question it is. It is printed beside the asking price and read by a human. Charging
     confidence for the width of a figure that enters no calculation would say this deal's
     *numbers* are shakier when none of them moved.
 
     **The condition under which that stops being true is worth naming**, because it is a
-    live decision rather than a closed one (U8.7): if check B is ever promoted to a
+    live decision rather than a closed one (OQ-20): if check B is ever promoted to a
     Critic objection, the benchmark becomes an input to a check, its grain starts
     deciding an outcome, and it earns a flag on the same reasoning the rent anchor has
     one. Sequencing the promotion after this subsection is what makes that decision
@@ -296,8 +300,8 @@ def _attach_model_provenance(detail: ValuationDetail, bundle: dict) -> None:
     a model that is no longer there.
     """
     report = bundle.get("report") or {}
-    detail.model_holdout_mae_dollars = report.get("mae_dollars_at_holdout_fmr")
-    detail.model_holdout_mae_ratio = report.get("mae_ratio")
+    detail.model_mae_dollars = report.get("mae_dollars")
+    detail.model_mae_ratio = report.get("mae_ratio")
     detail.model_training_rows = report.get("rows_trained")
     detail.model_trained_at = bundle.get("trained_at")
 
@@ -330,7 +334,7 @@ def _attach_metro_error(
     detail.subject_metro_mae_dollars = stats["mae_dollars"]
     detail.subject_metro_mae_n = stats["n"]
 
-    overall = detail.model_holdout_mae_dollars
+    overall = detail.model_mae_dollars
     threshold = config.RENT_MODEL_METRO_ERROR_RATIO_THRESHOLD
     if not overall or stats["mae_dollars"] <= threshold * overall:
         return []
@@ -735,7 +739,8 @@ def valuation_rent_agent(state: DealState) -> dict:
             state.flag(
                 AGENT,
                 FlagKind.RENT_ESTIMATE_UNAVAILABLE,
-                f"The model predicted a rent-to-FMR ratio of {ratio:.2f}, outside the "
+                f"The model predicted a rent {ratio:.2f} times the typical rent for a "
+                f"unit of this size in this area, outside the "
                 f"plausible band {config.RENT_MODEL_MIN_RATIO}-"
                 f"{config.RENT_MODEL_MAX_RATIO} that its own training set was bounded "
                 f"to. The subject's {terms.bedrooms}bd / {terms.bathrooms}ba / "

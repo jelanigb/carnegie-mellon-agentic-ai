@@ -574,13 +574,13 @@ class ValuationDetail(BaseModel):
     # estimate with no spread is the shape §1 objects to: it reads as more precise than
     # the thing that produced it. Read from the persisted model bundle rather than
     # recomputed, so the figure quoted is the one the shipped model actually scored.
-    model_holdout_mae_dollars: Optional[float] = None
-    model_holdout_mae_ratio: Optional[float] = None
+    model_mae_dollars: Optional[float] = None
+    model_mae_ratio: Optional[float] = None
     model_trained_at: Optional[datetime] = None
     model_training_rows: Optional[int] = None
 
     # Per-metro holdout error for the subject's own market (U8.4, OQ-3), from
-    # `TrainingReport.mae_dollars_by_metro`. Separate from `model_holdout_mae_dollars`
+    # `TrainingReport.mae_dollars_by_metro`. Separate from `model_mae_dollars`
     # above rather than replacing it: the report states both, always — "±$518 overall,
     # ±$1,065 in New York" — so a reader in a good market can see what good looks like.
     # `subject_metro` is `None` when the subject's market is not one of the four this

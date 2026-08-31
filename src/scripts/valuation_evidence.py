@@ -109,7 +109,7 @@ def run(label: str, subject: DealTerms) -> None:
             f"({detail.anchor_tier} tier, {detail.anchor_index_month}, "
             f"FY{detail.fmr_shape_year} bedroom shape)"
         )
-        print(f"  holdout MAE       ± {_money(detail.model_holdout_mae_dollars)}/mo")
+        print(f"  scored MAE        ± {_money(detail.model_mae_dollars)}/mo")
 
     if detail.comp_implied_rent_median is not None:
         print(

@@ -391,17 +391,19 @@ def _rent_basis_section(state: DealState, detail) -> list[str]:
     rather than a fifth of it. Both are stated in plain words rather than named, on this
     file's rule that reader-facing text carries no vocabulary the reader cannot resolve.
 
-    `ValuationDetail.model_holdout_mae_dollars` and `TrainingReport.
-    mae_dollars_at_holdout_fmr` keep their FMR-and-holdout names for now — the second is
-    serialized into the persisted bundle and read by string key, so renaming it needs a
-    retrain or a both-keys read. Tracked as U11.5 item 2.
+    **Their identifiers were renamed at U8.10 (U11.5 item 2), a pass behind this one.**
+    `ValuationDetail.model_mae_dollars` and `TrainingReport.mae_dollars` had carried
+    FMR-and-holdout names describing an anchor #19 retired and a protocol #18 replaced.
+    The second is serialized into the persisted bundle and read back by string key, so it
+    took a retrain rather than an edit; the architect took the retrain over a both-keys
+    read, since the shim would have protected an artifact that is not in the repository.
     """
     if detail is None or state.rent_estimate is None:
         return []
 
     lines = ["### How the rent figure was reached", ""]
 
-    if detail.model_holdout_mae_dollars is not None:
+    if detail.model_mae_dollars is not None:
         trained = (
             f", trained {detail.model_trained_at:%b %d, %Y}"
             if detail.model_trained_at else ""
@@ -411,8 +413,8 @@ def _rent_basis_section(state: DealState, detail) -> list[str]:
             f"footage, fit to {detail.model_training_rows:,} listings{trained}. Every "
             f"listing was scored by a version of the model that had not been shown it, "
             f"and on that basis it missed by "
-            f"**{_money(detail.model_holdout_mae_dollars)}/mo on average** "
-            f"({detail.model_holdout_mae_ratio:.3f} in ratio terms). That is the error "
+            f"**{_money(detail.model_mae_dollars)}/mo on average** "
+            f"({detail.model_mae_ratio:.3f} in ratio terms). That is the error "
             f"band on the figure above, and it is wide."
         )
         lines.append("")
@@ -433,7 +435,7 @@ def _rent_basis_section(state: DealState, detail) -> list[str]:
                     "materially worse than the figure above, see the disclosure below."
                     if detail.subject_metro_mae_dollars
                     > config.RENT_MODEL_METRO_ERROR_RATIO_THRESHOLD
-                    * detail.model_holdout_mae_dollars
+                    * detail.model_mae_dollars
                     else "in line with the figure above."
                 )
             )
@@ -645,8 +647,8 @@ def _findings_section(state: DealState) -> list[str]:
         # spread with it. $2,431 and "$2,431 give or take $519" support different
         # decisions, and the second one is what this model actually supports.
         value = f"{_money(state.rent_estimate)}/mo per unit"
-        if detail and detail.model_holdout_mae_dollars is not None:
-            value += f" ± {_money(detail.model_holdout_mae_dollars)} overall"
+        if detail and detail.model_mae_dollars is not None:
+            value += f" ± {_money(detail.model_mae_dollars)} overall"
             # Rendered whenever the subject's market resolves, elevated or not — Q2(a):
             # the point is a reader in a good market can see what good looks like too.
             if (detail.subject_metro and detail.subject_metro_mae_dollars is not None):

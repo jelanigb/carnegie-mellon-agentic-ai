@@ -422,9 +422,12 @@ ENGINEERED_CASES: list[EvalCase] = [
         verdict_source=VerdictSource.PREDICTED,
         targets=(FlagKind.RENT_ESTIMATE_UNAVAILABLE,),
         note=(
-            "Two bedrooms across 5,000 sq ft drives the predicted rent-to-FMR ratio "
-            "outside the band the model's own training set was bounded to, so the "
-            "estimate is refused rather than reported. Escalates because the refusal is "
+            "Two bedrooms across 5,000 sq ft puts the subject outside the range of "
+            "properties the model learned from, so the estimate is refused rather "
+            "than reported. **Note corrected at U8.10**: it described the refusal as "
+            "the *output* ratio band, and U11.1 moved the guard to the model's "
+            "*input* domain — same flag kind, different sentence to the reader. The "
+            "declared verdict and target are untouched. Escalates because the refusal is "
             "critical-severity: there is no rent figure, and a report without one is not "
             "an ordinary result."
         ),
@@ -511,7 +514,16 @@ ENGINEERED_CASES: list[EvalCase] = [
             "comparables outside the band instead of two, which crosses the line and "
             "raises the drift disclosure. Predicted to report anyway: one warn does not "
             "reach the escalation threshold, so this pair measures the *flag's* "
-            "brittleness rather than the verdict's."
+            "brittleness rather than the verdict's. "
+            "**Measured after U8.6e's ungate (Aug 30, 2026): the prediction above is "
+            "wrong and stays as written.** Ungating the Critic's first interaction "
+            "check made `comps_outside_match_criteria` draw a critical objection, so "
+            "this side escalates and the row is a MISMATCH. The pair now flips the "
+            "*verdict* on 200 sq ft, which makes it the sharpest instrument in the "
+            "batch. The declared verdict is not edited to match — that is what "
+            "`VerdictSource.PREDICTED` exists to prevent, and the same rule kept "
+            "`la-three-bedroom-comp-drift` honest when it failed in the other "
+            "direction."
         ),
         terms=golden_fixtures.CHI_UPTOWN_BAND_OVER.terms,
     ),

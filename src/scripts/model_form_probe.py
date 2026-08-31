@@ -235,7 +235,7 @@ def bundle_for(
     frame-shaped counts (rows dropped, counties, anchoring basis) are properties of the
     training frame and are identical across candidates; only the scored fields differ.
 
-    `mae_dollars_at_holdout_fmr` carries the **cross-validated** figure, which is what
+    `mae_dollars` carries the **cross-validated** figure, which is what
     makes the metro ratio internally consistent: `_attach_metro_error` divides a market's
     error by this number, so a per-metro CV figure over a single-split headline would
     report a ratio between two different measurements.
@@ -246,9 +246,9 @@ def bundle_for(
         # exactly one, so both counts are the whole frame rather than a split of it —
         # which is the property that makes the per-metro slices thick enough to read.
         rows_trained=rows,
-        holdout_rows=rows,
+        rows_scored=rows,
         mae_ratio=cv.oof_mae_ratio,
-        mae_dollars_at_holdout_fmr=cv.oof_mae_dollars,
+        mae_dollars=cv.oof_mae_dollars,
         r2=cv.oof_r2,
         mae_dollars_by_metro=cv.by_metro,
     )
@@ -489,7 +489,7 @@ def main() -> None:
     df, frame_report = rent_model.build_training_frame()
     print(f"Frame {len(df):,} rows, {frame_report.counties} counties, "
           f"FY {frame_report.fiscal_years}")
-    print(f"  features {list(config.RENT_MODEL_FEATURES)}, target rent/FMR ratio")
+    print(f"  features {list(config.RENT_MODEL_FEATURES)}, target rent/anchor ratio")
 
     shipped = rent_model.load()
     if shipped is not None:
@@ -498,7 +498,7 @@ def main() -> None:
         ny = by_metro.get(config.INDEXED_MARKETS["NY"][0], {})
         print(
             f"  shipped artifact, for reference (single 20% split): "
-            f"${report.get('mae_dollars_at_holdout_fmr', 0):,.2f} overall"
+            f"${report.get('mae_dollars', 0):,.2f} overall"
             + (f", ${ny['mae_dollars']:,.2f} New York" if ny else "")
         )
 

@@ -81,7 +81,7 @@ class TrainingReport:
     rows_missing_anchor: int
     rows_outside_ratio_bounds: int
     rows_trained: int
-    holdout_rows: int
+    rows_scored: int
     counties: int
     fiscal_years: list[int] = field(default_factory=list)
     # Anchor tier, split. The mixed basis is a real limitation of the target and has to
@@ -94,13 +94,13 @@ class TrainingReport:
     rows_anchored_at_county: int = 0
     distinct_zctas: int = 0
     mae_ratio: float = 0.0
-    mae_dollars_at_holdout_fmr: float = 0.0
+    mae_dollars: float = 0.0
     baseline_mae_ratio: float = 0.0
     baseline_mae_dollars: float = 0.0
     r2: float = 0.0
     # How the scores above were obtained. 0 means the single-split protocol this model
     # used before U11.1; anything else is the number of cross-validation folds, in which
-    # case `holdout_rows` equals `rows_trained` because every row is held out exactly once.
+    # case `rows_scored` equals `rows_trained` because every row is held out exactly once.
     cv_folds: int = 0
     # In-fold training error, in dollars, averaged across folds. Reported beside the
     # held-out figure because the *gap* between them is the overfitting guard §6 cut-list
@@ -137,17 +137,17 @@ class TrainingReport:
             f"  anchored at ZIP        {self.rows_anchored_at_zip:>7,}"
             f"   ({self.distinct_zctas} distinct ZCTAs)",
             f"  anchored at county     {self.rows_anchored_at_county:>7,}",
-            f"holdout rows             {self.holdout_rows:>7,}",
+            f"rows scored              {self.rows_scored:>7,}",
             "",
             f"scored by                {self.cv_folds}-fold cross-validation"
             if self.cv_folds
             else "scored by                a single holdout split",
-            f"MAE (rent/FMR ratio)     {self.mae_ratio:>7.4f}",
-            f"MAE (dollars)            {self.mae_dollars_at_holdout_fmr:>7.2f}",
+            f"MAE (rent/anchor ratio)  {self.mae_ratio:>7.4f}",
+            f"MAE (dollars)            {self.mae_dollars:>7.2f}",
             f"R^2                      {self.r2:>7.4f}",
             f"MAE in-fold (dollars)    {self.train_mae_dollars:>7.2f}",
             f"  train/holdout gap      "
-            f"{self.mae_dollars_at_holdout_fmr - self.train_mae_dollars:>7.2f}"
+            f"{self.mae_dollars - self.train_mae_dollars:>7.2f}"
             f"   <- the overfitting guard",
             "",
             "Baseline — predict the training-set mean ratio for every row:",
@@ -537,7 +537,11 @@ def county_zip_count(tables: AnchorTables, county_fips: str, month: str) -> int:
 def build_training_frame(
     client: Optional[hud_fmr.HudFmrClient] = None,
 ) -> tuple[pd.DataFrame, TrainingReport]:
-    """Assemble the FMR-normalized training set from the Kaggle corpus.
+    """Assemble the anchor-normalized training set from the Kaggle corpus.
+
+    "Anchor" is the hybrid #19 adopted — ZORI at the row's own ZIP and listing month
+    for the rent *level*, times the HUD bedroom *step* for its county. Named for the
+    quantity rather than for one of its two sources, since either could change again.
 
     Returns the frame and a report of everything dropped on the way, so a caller can
     see the shape of what survived rather than only its size.
@@ -552,7 +556,7 @@ def build_training_frame(
         rows_missing_anchor=0,
         rows_outside_ratio_bounds=0,
         rows_trained=0,
-        holdout_rows=0,
+        rows_scored=0,
         counties=0,
     )
 
@@ -697,11 +701,13 @@ def _mae_dollars_by_metro(
     y_test: np.ndarray,
     fmr_test: np.ndarray,
 ) -> dict:
-    """Break the holdout residuals already computed down by metro (U8.4, OQ-3).
+    """Break the out-of-fold residuals already computed down by metro (U8.4, OQ-3).
 
     A groupby over an existing result, not a second fit: `predicted`, `y_test` and
     `fmr_test` are the same arrays `train()` already scored, in the same order as
-    `holdout_index` because all four came out of the same `train_test_split` call.
+    `holdout_index` — which under the cross-validated protocol (#18) is every row, each
+    scored once by a fold that never saw it, rather than the 20% slice the parameter name
+    is left over from.
 
     Grouped by `config.INDEXED_MARKETS`, whose own docstring already names it "the
     inference trio plus New York" — exactly the comparison OQ-3 needs: the model's error
@@ -711,8 +717,8 @@ def _mae_dollars_by_metro(
     whose `ignore_index=True` re-indexing silently breaks that join (see that script's
     module docstring for the bug this repeats the fix for, not the mistake).
 
-    `n` travels with each figure: a holdout slice can be thin, and a MAE over forty rows
-    should not be presented like one over five thousand.
+    `n` travels with each figure: a market can be thin in this corpus, and a MAE over
+    forty rows should not be presented like one over five thousand.
     """
     residual_dollars = np.abs((predicted - y_test) * fmr_test)
     holdout = df.loc[holdout_index]
@@ -827,12 +833,12 @@ def train(
 
     report.cv_folds = int(config.RENT_MODEL_CV_FOLDS)
     report.rows_trained = int(len(df))
-    report.holdout_rows = int(len(df))
+    report.rows_scored = int(len(df))
     report.mae_ratio = float(mean_absolute_error(y, out_of_fold))
     report.r2 = float(r2_score(y, out_of_fold))
-    # Dollar error is the ratio error re-expressed at each row's own FMR, which is what a
-    # reader of the report actually experiences.
-    report.mae_dollars_at_holdout_fmr = float(np.mean(np.abs((out_of_fold - y) * fmr)))
+    # Dollar error is the ratio error re-expressed at each row's own anchor, which is what
+    # a reader of the report actually experiences.
+    report.mae_dollars = float(np.mean(np.abs((out_of_fold - y) * fmr)))
     report.train_mae_dollars = float(np.mean(in_fold_mae))
     report.mae_dollars_by_metro = _mae_dollars_by_metro(
         df, df.index.to_numpy(), out_of_fold, y, fmr
@@ -901,7 +907,7 @@ def load() -> Optional[dict]:
 
 def predict_ratio(bundle: dict, bedrooms: float, bathrooms: float,
                   square_feet: float) -> float:
-    """Predict rent-to-FMR ratio for one subject. Returns the raw model output.
+    """Predict the rent-to-anchor ratio for one subject. Returns the raw model output.
 
     Bounds are applied by the caller rather than here, so that a prediction landing
     outside the plausible range stays visible as a modeling result instead of being

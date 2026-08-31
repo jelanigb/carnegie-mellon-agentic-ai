@@ -310,7 +310,8 @@ KAGGLE_MAX_RENT = 10_000.0
 # rent model reads Redfin at no point, so Cincinnati is selected here with 798 usable
 # rows. Boston is excluded as blocked rather than unselected: county_crosswalk.py
 # returns None throughout New England (TODO(geography)), so its rows cannot be
-# FMR-normalized and would drop silently at training time.
+# anchor-normalized — the bedroom step is keyed on the county — and would drop
+# silently at training time.
 #
 # Keyed state -> city-name patterns, the shape tools/kaggle_data.filter_markets consumes.
 # Matching is word-boundary, not substring, so "Cleveland" rolls up "Cleveland Heights"
@@ -411,9 +412,9 @@ RENT_MODEL_PATH = DATA_DIR / "processed" / "rent_model.joblib"
 # Features. Deliberately small and all structural — no free text, no market identifier.
 # Excluding the metro is the point rather than an omission: a metro dummy would let the
 # model memorize a per-market rent level, which is exactly the dollar-level dependence
-# the FMR ratio exists to remove. What generalizes to an unseen market is how much a
-# bedroom or a square foot moves rent *relative to local FMR*, and that is all these
-# columns carry.
+# the anchor ratio exists to remove. What generalizes to an unseen market is how much a
+# bedroom or a square foot moves rent *relative to the local anchor*, and that is all
+# these columns carry.
 RENT_MODEL_FEATURES = ("bedrooms", "bathrooms", "square_feet")
 
 # **A note kept because it explains why the competence check moved, not because the
@@ -490,7 +491,8 @@ RENT_MODEL_RANDOM_SEED = 42
 # missing corpus rather than on ordinary variation.
 RENT_MODEL_MIN_TRAINING_ROWS = 1_000
 
-# Ratio bounds. A rent/FMR ratio outside this range is a data defect, not a luxury unit:
+# Ratio bounds. A rent-to-anchor ratio outside this range is a data defect, not a luxury
+# unit:
 # the corpus carries rows whose square_feet or bedrooms are transcription errors, and an
 # unbounded ratio lets one of them dominate a least-squares fit. Bounds are wide enough
 # to keep genuine high-end and subsidized units.

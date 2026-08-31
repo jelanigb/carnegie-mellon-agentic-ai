@@ -1410,11 +1410,11 @@ def test_a_rent_estimate_discloses_the_anchor_it_was_built_from(monkeypatch):
     assert "90026" in raised.detail
 
     detail = result.get("valuation_detail")
-    assert detail.model_holdout_mae_dollars > 0, (
+    assert detail.model_mae_dollars > 0, (
         "The report prints an error band beside the estimate; without the persisted "
         "training metrics it would print a point estimate reading as exact."
     )
-    assert f"{detail.model_holdout_mae_dollars:,.0f}" in result["report_markdown"]
+    assert f"{detail.model_mae_dollars:,.0f}" in result["report_markdown"]
 
 
 @pytest.mark.skipif(not _rent_model_available(), reason="rent model not trained")

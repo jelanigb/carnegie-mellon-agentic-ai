@@ -1,4 +1,4 @@
-"""Train and persist the FMR-normalized rent regression (U5).
+"""Train and persist the anchor-normalized rent model (U5; form and anchor per #18/#19).
 
 A script rather than a test, per §8's split: this makes real HUD FMR calls and reads the
 full Kaggle corpus, so a failure here *is* the finding and must not be hidden behind a
@@ -55,7 +55,7 @@ def main() -> None:
     # importances, and the label has to say which, because "per unit change in the ratio"
     # is a true statement about one and a false one about the other.
     if report.coefficients:
-        print("coefficients (per unit change in rent/FMR ratio):")
+        print("coefficients (per unit change in the rent-to-anchor ratio):")
         for name, value in report.coefficients.items():
             print(f"  {name:<16} {value:>12.6f}")
     elif report.feature_importances:

@@ -247,6 +247,12 @@ def _consistency_objections(state: DealState) -> list[Objection]:
     vaguer words and attribute them to the listing's stated rent. See U8.7 for the open
     decision and what evidence would reopen it.
 
+    **That reasoning covers the rent comparison only.** The price comparison against the
+    benchmark was carried along by the phrase "checks A and B" and has had no measurement
+    of its own — and its confound is a different one, since #11 set every fixture's asking
+    price from the *metro* median while U8.8 made the benchmark *ZIP*-level. Tracked as
+    OQ-20, with what closing it would take.
+
     This stays the single seam the Critic calls and the tests substitute, even though
     every surviving check it delegates to is one family, `_interaction_objections()`.
     """
