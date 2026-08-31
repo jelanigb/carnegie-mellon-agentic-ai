@@ -380,6 +380,21 @@ def _rent_basis_section(state: DealState, detail) -> list[str]:
     Rendered even when the cross-check did not run. A report that silently omits the
     check whenever it fails would show its working only on the runs where the working
     looked good, which is the opposite of what disclosure is for.
+
+    **Two false claims corrected here Aug 30, 2026 (U11.5 item 1), and they are the only
+    ones on that list a reader could see.** This paragraph said "A linear regression" —
+    the estimator has been gradient boosting since #18 — and "on a held-out slice", which
+    described the single 20% split #18 replaced with k-fold cross-validation plus a
+    full-data refit. The second is the subtler error: under the new protocol every row is
+    scored exactly once by a fold that never saw it, so the figure is stronger evidence
+    than "a held-out slice" implies, and the per-metro n is the market's full row count
+    rather than a fifth of it. Both are stated in plain words rather than named, on this
+    file's rule that reader-facing text carries no vocabulary the reader cannot resolve.
+
+    `ValuationDetail.model_holdout_mae_dollars` and `TrainingReport.
+    mae_dollars_at_holdout_fmr` keep their FMR-and-holdout names for now — the second is
+    serialized into the persisted bundle and read by string key, so renaming it needs a
+    retrain or a both-keys read. Tracked as U11.5 item 2.
     """
     if detail is None or state.rent_estimate is None:
         return []
@@ -392,9 +407,11 @@ def _rent_basis_section(state: DealState, detail) -> list[str]:
             if detail.model_trained_at else ""
         )
         lines.append(
-            f"A linear regression on bedrooms, bathrooms and square footage, fit to "
-            f"{detail.model_training_rows:,} listings{trained}. On a held-out slice it "
-            f"missed by **{_money(detail.model_holdout_mae_dollars)}/mo on average** "
+            f"A gradient-boosted tree model over bedrooms, bathrooms and square "
+            f"footage, fit to {detail.model_training_rows:,} listings{trained}. Every "
+            f"listing was scored by a version of the model that had not been shown it, "
+            f"and on that basis it missed by "
+            f"**{_money(detail.model_holdout_mae_dollars)}/mo on average** "
             f"({detail.model_holdout_mae_ratio:.3f} in ratio terms). That is the error "
             f"band on the figure above, and it is wide."
         )
@@ -409,9 +426,9 @@ def _rent_basis_section(state: DealState, detail) -> list[str]:
             lines.append(
                 f"That figure is the model's error averaged across every market it was "
                 f"trained on. In **{detail.subject_metro}** specifically, the same "
-                f"held-out measurement missed by "
+                f"measurement missed by "
                 f"**{_money(detail.subject_metro_mae_dollars)}/mo** "
-                f"(n={detail.subject_metro_mae_n} held-out listings) — "
+                f"(n={detail.subject_metro_mae_n} listings) — "
                 + (
                     "materially worse than the figure above, see the disclosure below."
                     if detail.subject_metro_mae_dollars

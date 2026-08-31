@@ -317,7 +317,7 @@ report should say that the transfer question is open rather than let the cross-v
 MAE imply it was settled. OQ-12 stays open in
 [`../open_questions.md`](../open_questions.md) for exactly that reason.
 
-### U11.5 🟨 — The FMR vocabulary the rename pass did not reach *(item 6 done; 1–5 close with U8's documentation close-out)*
+### U11.5 🟨 — The FMR vocabulary the rename pass did not reach *(items 1 and 6 done; 2–5 close with U8's documentation close-out)*
 
 **Opened Aug 30, 2026 by the architect**, after an audit of this unit against the code
 found that U11.3's item-1 rename covered the `FlagKind` members, the `ValuationDetail`
@@ -331,7 +331,7 @@ this unit are correct as they stand; what is wrong is what the code *says* about
 
 | | Site | What is wrong |
 | --- | --- | --- |
-| **1** | `agents/summarizer.py:395` | **A false claim in reader-facing text, and the only item here that a demo audience can see.** The report says *"A linear regression on bedrooms, bathrooms and square footage"* — the estimator has been gradient boosting since U11.4. One line. **Raise ahead of the rest if the demo is recorded before U8.10.** |
+| **1** ✅ | `agents/summarizer._rent_basis_section` | **Done Aug 30, 2026, pulled ahead of U8.10 at the architect's direction.** It was *two* false claims rather than one: *"A linear regression on bedrooms, bathrooms and square footage"* (gradient boosting since #18) and *"On a held-out slice"* (the single 20% split #18 replaced with cross-validation plus a full-data refit). The second understated the evidence — every row is now scored once by a fold that never saw it, and the per-metro n is the market's full row count rather than a fifth of it, so "n=2,372 listings" replaces "n=2,372 held-out listings". Verified in a live report; no re-record, since the model description reaches no prompt |
 | **2** | `TrainingReport.mae_dollars_at_holdout_fmr` | The name says FMR; the quantity is dollars at the hybrid anchor. **The one item that is not purely cosmetic:** the field is serialized into the persisted bundle and `valuation_rent._attach_model_provenance` reads it by string key, so a rename needs a retrain or a both-keys read. Name it in the change set rather than discovering it mid-rename |
 | **3** | `rent_model.predict_ratio` | Docstring: "Predict rent-to-FMR ratio for one subject" |
 | **4** | `rent_model.build_training_frame` | Docstring: "Assemble the FMR-normalized training set from the Kaggle corpus" |
