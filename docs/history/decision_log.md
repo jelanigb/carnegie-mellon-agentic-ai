@@ -7,7 +7,7 @@ plan of record and states the *current* design; this file holds the reasoning th
 produced it, the premises that were measured and disproved, and the corrections made
 along the way.
 
-**Section numbers (§1–§9) and decision numbers (#1–#19) throughout this repository refer
+**Section numbers (§1–§9) and decision numbers (#1–#20) throughout this repository refer
 to [`implementation_plan.md`](../implementation_plan.md)** — §-numbers to its sections,
 #-numbers to the decisions register in its §7. That register is the index to this file.
 
@@ -25,7 +25,7 @@ and its date, so a chronological or by-unit lookup still works via search.
 - [Data & sources](#data--sources) — #2, #4, #7, #11
 - [Geography & anchoring](#geography--anchoring) — #10
 - [Retrieval](#retrieval) — #5, and U4's design and ablation record
-- [Rent & valuation](#rent--valuation) — #15, #20, and the deferred model-form probe
+- [Rent & valuation](#rent--valuation) — #15, #18, #19, #20, and cut-list 1a's deferral
 - [Forecasting & reasoning](#forecasting--reasoning) — #12, #13, #14, #16, #17
 - [Orchestration & control flow](#orchestration--control-flow) — #1, #6, #9, U2's findings, and U7's Critic record
 - [Models & infrastructure](#models--infrastructure) — #8, #13, and the free-tier accounting
@@ -502,6 +502,196 @@ in the Chicago deal's note, where a reader of the fixture will meet it.
 
 ---
 
+### #18 · U11 · Aug 30, 2026 — gradient boosting, and the better-scoring form was not the one taken
+
+**Logged Aug 30, 2026 at U8's close-out, later than it should have been.** #18 and #19 both
+landed with register rows and changelog entries and no reasoning here, which is the failure
+this file exists to prevent: the register says *what*, and a reader who wants *why* had only
+`tasks/task_list_u11.md`, which is a plan rather than a record. Written from that file's own
+measurements rather than reconstructed.
+
+**What was shipped before, and why it was not obviously wrong.** A vanilla
+`LinearRegression` on three raw features. Cut-list 1a had measured its weakness as
+*underfitting* — a train-versus-holdout gap of $0.04 — so there was unused capacity but no
+variance problem, and the deferral (Aug 22, 2026) had two stated reasons: the project's
+subject is agent architecture rather than regression quality, and the poly-3 row of that
+same probe (R² −13.3) was a live warning about what added capacity can do. The deferral also
+set its own condition for reopening: **proper validation, not a single split.**
+
+**The probe, which met that condition.** `scripts/model_form_probe.py`, 5-fold CV over the
+whole 5,686-row frame, identical features and identical target across candidates.
+
+| Candidate | CV MAE $ | fold sd | R² | train MAE $ | **train/holdout gap** |
+| --- | --- | --- | --- | --- | --- |
+| LinearRegression (shipped) | 513.67 | 13.51 | 0.263 | 513.35 | **0.32** |
+| RandomForest | **428.83** | 8.55 | 0.454 | 288.42 | **140.41** |
+| GradientBoosting | 450.71 | 7.29 | 0.427 | 432.37 | **18.34** |
+
+Two things settle out of that table before any decision is taken. **Cut-list 1a's "~17% of
+error is model form alone" survives proper validation** — RandomForest is 16.5% better under
+CV against the 17% the single split had measured, which was the open question about the
+number. And **the gap column is the finding the headline hides**: RandomForest buys its win
+with a $140 train-versus-holdout gap, memorizing heavily; GradientBoosting takes 12.2% of
+the error for $18.
+
+**The decision: gradient boosting, i.e. not the lowest MAE on the table.** The trade is
+variance against error, and it was taken on variance. The reasoning is the deferral's own
+warning cashed out — this project ships a model whose estimates carry a *disclosed* error
+band into an investor-facing report, and a form that scores well while memorizing is the
+one whose band is least trustworthy off the corpus. A 5% MAE difference does not buy back a
+$122 difference in how much the model has learned versus remembered.
+
+**The probe was also asked whether form changes system *behavior*, not only its score, and
+that triage rule returned its second branch.** Two fixtures moved across flag boundaries:
+
+- **`la-oversized-loft` stopped being refused.** The linear form predicted a ratio outside
+  `RENT_MODEL_MIN/MAX_RATIO` and the agent declined to produce an estimate — the entire
+  point of that fixture, and the only case targeting `RENT_ESTIMATE_UNAVAILABLE`. Both trees
+  predict inside the band and would have produced a number instead. **This is why the
+  refusal band moved from the model's *output* to its *input*** (`rent_model.subject_is_out_of_domain`):
+  a tree cannot extrapolate an implausible ratio, because every prediction is an average of
+  training targets already inside the band, so the old output guard would have gone quiet
+  without anyone deciding it should. Adopting the form without moving the guard would have
+  retired a degradation path silently, which is the opposite of what this system claims to
+  do.
+- **`chicago-uptown-duplex` came close to no longer diverging** — +46.6% under the linear
+  form, +26.2% under RandomForest (inside the ±30% line, so the flag stops firing), +33.2%
+  under GradientBoosting. The case exists because *nothing about the property is
+  engineered*, so losing the divergence would have cost the argument rather than the
+  coverage. 3.2 points of margin is thin and was accepted as thin.
+
+**And a limitation the accuracy table understates, recorded because it is about
+extrapolation rather than about fit.** On `chicago-uptown-oversized` the two trees disagree
+by **$1,650** on the same subject (−$1,151 under RF, +$498 under GBM). Beyond the corpus's
+ordinary footprint the forms do not agree with each other, which is a sharper statement
+about the model's reach than either one's MAE.
+
+**What shipped with it:** `config.RENT_MODEL_ESTIMATOR` and `RENT_MODEL_CV_FOLDS`, k-fold CV
+replacing the single 20% split in `rent_model.train()`, a refit on all 5,686 rows,
+`TrainingReport` carrying `cv_folds` / `train_mae_dollars` / `feature_importances`. Persisted
+figures: CV MAE $450.71, R² 0.427, gap $18.34; per metro Chicago $453.67, Los Angeles
+$449.75, Cleveland $366.36, **New York $981.51 (2.18x)**. Importances square_feet 0.43,
+bedrooms 0.32, bathrooms 0.25 — the negative-bedrooms artifact of the linear form is gone.
+
+**Two things were deliberately not done and are not oversights.** Hyperparameter tuning
+under the same CV — the form ships at library defaults, stated at
+`config.RENT_MODEL_ESTIMATOR` — and a leave-one-metro-out run, both cut to §6 cut-list 1a.
+**LOMO is worth naming as a limitation rather than only as a cut:** OQ-12's first half asks
+whether the model transports to a market it never trained on, and k-fold structurally cannot
+answer that, since every fold still contains all four markets. A cross-validated MAE must
+not be read as having settled it.
+
+**New York got absolutely better and relatively worse, under every candidate.** $1,050 →
+$982, while the overall figure improved faster, so the ratio the
+`RENT_ESTIMATE_MARKET_ERROR_ELEVATED` message quotes moved from 2.04x to 2.18x. No form on
+the table retires that disclosure. **The model is not the reason New York is hard**, which is
+the finding that sent the next decision at the anchor instead.
+
+Reproduce with `.venv/bin/python scripts/model_form_probe.py`.
+
+---
+
+### #19 · U11 · Aug 30, 2026 — the anchor is a market index, and Chicago is why
+
+**The decision this project had been circling since U8.0.** Every rent figure was a modelled
+ratio times HUD Fair Market Rent, and #16's ZORI half had already found that arrangement
+drifting: FMR rose 51.9% against market rent's 33.5% since the corpus vintage, so the model
+over-predicted by the spread. U8.4b patched that with a per-ZCTA drift correction. §6
+cut-list item 6 carried the real fix — re-anchor on ZORI — priced as a U5-scale rewrite
+costing ~27% of training rows, and therefore not obviously affordable.
+
+**Five candidates, one CV, gradient boosting, scored in dollars on the 5,671 rows all five
+can price** (`scripts/anchor_probe.py`):
+
+| Anchor | MAE $ | Chicago | Los Angeles | Cleveland | New York |
+| --- | --- | --- | --- | --- | --- |
+| `fmr` — status quo | 453.10 | 458 | **451** | 372 | 995 |
+| `zori` — ZIP, county fallback | 443.78 | **322** | 494 | 361 | **751** |
+| `hyb` — ZORI × FMR bedroom shape | **439.03** | 337 | 484 | **356** | 812 |
+| `fmr+` — FMR, ZORI where absent | 453.10 | 458 | 451 | 372 | 995 |
+| `fmr/z` — FMR where ZIP-grain, ZORI where county | 484.17 | 444 | 550 | 361 | 772 |
+
+**Three findings, and the third is the one that changed the reasoning.**
+
+1. **`fmr/z` is worse than doing nothing, and it was the idea that looked cheapest.** Swap
+   ZORI into only the three markets where FMR is county-grain, leave Chicago's ZIP-level
+   schedule alone: it targets the defect precisely and costs least. It measures **$484
+   against $453**, and it is worse even where it was meant to help (Los Angeles 550, against
+   `fmr`'s 451 *and* `zori`'s 494). The stated risk — a third denominator inside one
+   training set — is real and exceeds the grain it buys. **Measured and rejected**, which is
+   the outcome the probe existed to make possible.
+2. **`fmr+` is identical to `fmr` by construction.** No training row is dropped for a missing
+   FMR, so the fallback never fires. A coverage lever with nothing to cover.
+3. **Chicago is already 100% ZIP-anchored under FMR, and still improves 26–30%.** Grain
+   cannot explain that. **ZORI is simply a better reference series than an administrative
+   schedule, independent of resolution** — a broader claim than cut-list item 6 makes, and a
+   stronger argument for taking it than the one that was written down.
+
+**A hypothesis tested and not supported, recorded so nobody re-runs it.** Los Angeles is the
+market ZORI makes worse and also the one leaning hardest on the county fallback (14% of its
+rows, in a county spanning Malibu to Compton), so the fallback looked like the culprit. Split
+by tier it is not: within Los Angeles the county tier scores **468** against the ZIP tier's
+**487**. The fallback is sound; Los Angeles genuinely prices better against FMR. (The
+headline split — county $337.53 against ZIP $462.94 — is confounded by metro mix and must not
+be read as the county tier being better in general.)
+
+**Taken: the hybrid, on breadth over depth.** `zori` is stronger in the two markets whose
+disclosures this work exists to improve; `hyb` is best overall and keeps something the table
+does not show. **FMR stays in the system as the bedroom step**, so `FMR_BEDROOM_CAP_EXCEEDED`
+still means what it means — ZORI publishes one figure per ZIP across all unit types, with no
+bedroom dimension at all, and an anchor built from it alone would price a studio and a
+four-bedroom against the same reference. Dividing FMR's *level* out of a within-year ratio
+keeps only the schedule's relative structure across unit sizes, so the drift U8.0 measured
+cancels rather than transferring.
+
+**What it cost, against what cut-list item 6 said it would cost. Both stated figures were
+wrong, in the same direction.** The item priced this at ~27% of training rows and at
+abandoning FMR. In fact 1,515 of 5,686 rows do sit before their own ZIP's ZORI series
+begins — the 27% is real — but the county-median fallback recovers **99.0%** of them
+(`scripts/zori_county_tier.py`), so the net loss is **0.3%**. And FMR is retained rather than
+abandoned. A cut-list price that had stood unchallenged for two units was overstated by two
+orders of magnitude on one axis and simply mistaken on the other, which is the argument for
+re-pricing a deferred item before declining it again rather than inheriting its estimate.
+
+**Retrained:** CV MAE $452.40 against the FMR-anchored GBM's $450.71 — **flat overall**, and
+the flatness is the trap. Underneath: **New York $981 → $855, Chicago $454 → $343**, Cleveland
+$366 → $357, **Los Angeles $450 → $509**. Los Angeles is 41% of the frame and drags the
+headline. New York's ratio to the overall figure falls 2.18x → 1.89x, so
+`RENT_ESTIMATE_MARKET_ERROR_ELEVATED` still fires and still should. **Per-metro reporting is
+standard for every retrain from here**, because an overall figure hid a result in both
+directions at once.
+
+**Three consequences that reach the reader.**
+
+- **Los Angeles gains ZIP-grain anchoring it never had.** Under FMR every Los Angeles
+  subject was county-anchored and carried `RENT_ANCHOR_COUNTY_LEVEL` unconditionally. It no
+  longer does — a real disclosure change that moves confidence scores.
+- **U8.4b's drift correction retired structurally rather than by deletion.** Both ends read
+  the index at the same month, so the schedule-versus-market gap divides out where it
+  arises. `tools/rent_drift.py` and its tests are gone; `RENT_DRIFT_CORRECTION_APPLIED` was
+  **retired** on the `LLM_RENT_FALLBACK_USED` precedent (a kind nothing can raise corrupts
+  the coverage census), and `RENT_DRIFT_CORRECTION_UNAVAILABLE` was **repurposed** as
+  `RENT_ANCHOR_INDEX_STALE`. Taken as a decision rather than allowed to happen as a side
+  effect.
+- **It moved a Critic objection's premise, and the correction came a day later.** I3 had
+  argued that a centroid fallback moves the comp set while leaving the estimate untouched,
+  *because* the model is location-blind below the county — and said so in the objection text
+  a reader sees. Under the hybrid the fallback moves the ZIP, hence the anchor, hence the
+  estimate. Both sides shift and neither is the reference. Fixed at U8.6e; recorded here
+  because it is the shape of thing an anchor change does at a distance.
+
+**What it did not settle.** The stability assumption did not disappear; it narrowed. The
+model still learns a ratio from 2018-19 and applies it to today's index, and whether *that*
+ratio is stable over seven years cannot be measured with the data this project has — it
+would need current-vintage rents for individual units. `scripts/anchor_stability.py` bounds
+it cheaply over the corpus's own 13-month window (+3.6% cost to extrapolating in time,
+6.3% peak-to-trough monthly spread) and it survives that floor. Carried as **OQ-19** rather
+than closed.
+
+Reproduce with `.venv/bin/python scripts/anchor_probe.py`.
+
+---
+
 ### #15 · U6 · Aug 22, 2026 — no property-level value estimate
 
 **Decision #15 detail (Aug 22, 2026) — no property-level value estimate.** The question
@@ -596,6 +786,16 @@ genuine overfitting (R² −13.3) of exactly the kind the linear model cannot ex
 Any future pass needs proper validation rather than a single split, and should be
 weighed against the §2 finding that location — the dominant driver — is unavailable in
 this corpus at useful granularity, which may cap the real ceiling well below the probe.
+
+**Half of this closed at U11 (Aug 30, 2026), and the closing half is worth reading against
+the deferral above.** The model-form question was taken up as **#18** once its own stated
+condition — proper validation rather than a single split — could be met, and the 17% figure
+survived 5-fold CV. **The location caution above was also right, and the next decision
+acted on it:** the anchor is the only channel through which location enters an estimate at
+all, and **#19** moved it from an administrative schedule to a ZIP-level market index,
+which bought more in the two hardest markets than model form did. What remains deferred
+under this item is narrower than it was: **hyperparameter tuning** under the same CV (both
+forms ship at library defaults) and the **leave-one-metro-out** transfer run.
 
 ---
 

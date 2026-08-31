@@ -1,7 +1,7 @@
 # U11 — Rent model v2 — task list
 
 > **Conventions for this file are in [`README.md`](README.md).** Section numbers (§1–§9)
-> and decision numbers (#1–#19) refer to
+> and decision numbers (#1–#20) refer to
 > [`../implementation_plan.md`](../implementation_plan.md).
 
 **Created Aug 29, 2026, by the architect's direction during U8.6.** Model quality had no
@@ -317,7 +317,7 @@ report should say that the transfer question is open rather than let the cross-v
 MAE imply it was settled. OQ-12 stays open in
 [`../open_questions.md`](../open_questions.md) for exactly that reason.
 
-### U11.5 ⬜ — The FMR vocabulary the rename pass did not reach *(open — closes with U8's documentation close-out)*
+### U11.5 🟨 — The FMR vocabulary the rename pass did not reach *(item 6 done; 1–5 close with U8's documentation close-out)*
 
 **Opened Aug 30, 2026 by the architect**, after an audit of this unit against the code
 found that U11.3's item-1 rename covered the `FlagKind` members, the `ValuationDetail`
@@ -336,7 +336,7 @@ this unit are correct as they stand; what is wrong is what the code *says* about
 | **3** | `rent_model.predict_ratio` | Docstring: "Predict rent-to-FMR ratio for one subject" |
 | **4** | `rent_model.build_training_frame` | Docstring: "Assemble the FMR-normalized training set from the Kaggle corpus" |
 | **5** | `rent_model.train` | Comment at the CV block: "Dollar error is the ratio error re-expressed at each row's own FMR" |
-| **6** | [`../open_questions.md`](../open_questions.md) OQ-4 | Stale on both halves: it reads "Deferred deliberately… **closes only if** schedule allows and proper validation replaces the single split", and U11.1 ran 5-fold CV while U11.4 adopted gradient boosting — its own stated closing condition is met, with the remainder (features, tuning, LOMO) cut to §6 1a. Both citations are also dead: `config.py:272` is now `REDFIN_TARGET_METROS` and `agents/valuation_rent.py:78` is the LLM-fallback TODO. Needs the "retargeted rather than closed" treatment U8.10 already uses |
+| **6** ✅ | [`../open_questions.md`](../open_questions.md) OQ-4 | **Done Aug 30, 2026**, with U8's close-out. Retargeted rather than closed: the model-form half closes as #18, tuning / LOMO / feature engineering stay deferred, both dead citations replaced, and the original wording is kept above the change so the retarget is legible. *What was wrong:* stale on both halves: it reads "Deferred deliberately… **closes only if** schedule allows and proper validation replaces the single split", and U11.1 ran 5-fold CV while U11.4 adopted gradient boosting — its own stated closing condition is met, with the remainder (features, tuning, LOMO) cut to §6 1a. Both citations are also dead: `config.py:272` is now `REDFIN_TARGET_METROS` and `agents/valuation_rent.py:78` is the LLM-fallback TODO. Needs the "retargeted rather than closed" treatment U8.10 already uses |
 
 **Already done, recorded so the next reader does not redo it:** `tools/model/rent_model.py`'s
 **module docstring** was rewritten Aug 30, 2026. It had described the retired anchor as

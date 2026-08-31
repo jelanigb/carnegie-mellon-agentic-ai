@@ -1,5 +1,5 @@
 **Reference map for the plan of record, §2 — [`implementation_plan.md`](../implementation_plan.md).**
-Section numbers (§1–§9) and decision numbers (#1–#19) anywhere in this repository refer
+Section numbers (§1–§9) and decision numbers (#1–#20) anywhere in this repository refer
 to that file: §-numbers to its sections, #-numbers to the **decisions register in §7**,
 which names every decision and links to its full reasoning in
 [`decision_log.md`](../history/decision_log.md). A

@@ -179,10 +179,25 @@ mix shifts 51 percentage points between the window's halves — so any future te
 analysis of it must hold geography constant or it will measure the scrape's schedule
 instead. `config.py`, `tools/model/rent_model.py`.
 
-### OQ-4 · cut list 1a — rent-model feature engineering and model form
-Measured: ~17% of rent error is available to model form alone, no new data. Deferred
-deliberately. **Closes only if** schedule allows and proper validation replaces the single
-split. `config.py:272`, `agents/valuation_rent.py:78`.
+### OQ-4 · cut list 1a — rent-model feature engineering, tuning, and transfer
+**Retargeted Aug 30, 2026, not closed, and the original wording is kept above the change
+so the retarget is visible.** As written it read: *"Measured: ~17% of rent error is
+available to model form alone, no new data. Deferred deliberately. **Closes only if**
+schedule allows and proper validation replaces the single split"* — citing `config.py:272`
+and `agents/valuation_rent.py:78`, both of which have since become unrelated code.
+
+**The model-form half CLOSED Aug 30, 2026 as #18.** Its own condition was met — k-fold CV
+replaced the single split — and the 17% survived it (RandomForest 16.5% better than the
+shipped linear form). Gradient boosting was adopted rather than the lower-MAE random
+forest, on a $18 versus $140 train/holdout gap. **Still open under this item, and narrower
+than it was:** hyperparameter tuning under the same CV (the form ships at library
+defaults, deliberately) and the **leave-one-metro-out** run — which is the only thing that
+can answer OQ-12's transfer half, since every k-fold fold still contains all four markets.
+Feature engineering is the third, and the §2 caution the original deferral raised still
+applies to it: location is the dominant driver and this corpus does not carry it at useful
+granularity, which may cap the ceiling well below the probe. **Closes when** the schedule
+allows all three, or when they are written up as gaps. `config.RENT_MODEL_ESTIMATOR` and
+`config.py:479`.
 
 ---
 

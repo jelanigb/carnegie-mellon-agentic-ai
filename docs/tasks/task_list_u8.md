@@ -1,7 +1,7 @@
 # U8 — Evaluation harness — task list
 
 > **Conventions for this file are in [`README.md`](README.md).** Section numbers (§1–§9)
-> and decision numbers (#1–#19) refer to
+> and decision numbers (#1–#20) refer to
 > [`../implementation_plan.md`](../implementation_plan.md).
 
 **Feeds Checkpoint 6.1, the final report, and the video.** §6 sizes this unit as *8–10
