@@ -42,7 +42,7 @@ having as a **disclosure** structure instead; full reasoning and the rejected tw
 design in [`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.6d.
 
 **CLOSED Aug 30, 2026 — held on measurement, and the sub-question dissolved.**
-`scripts/confidence_sensitivity.py` swept an 80-point grid over the 21-case batch and
+`scripts/confidence_sensitivity.py` swept a 160-point grid over the 21-case batch and
 wrote `eval/results/sensitivity.md`. Threshold 0.60 and warn 0.15 are **held**, with the
 stable region published: through the shipped point, the threshold moves 0.30–0.70 and the
 warn weight 0.100–0.200 without changing a single verdict. **This is a robustness claim,

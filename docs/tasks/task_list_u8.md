@@ -54,7 +54,7 @@ bullets that never landed (U8.6c).
 | ✅ | **U8.7** checks A and B | **Closed Aug 30, 2026 as #20** — a disclosure, held on a measured reason after the original one expired |
 | ✅ | **U8.8** sub-metro price benchmark | **Built Aug 30, 2026, two days inside the drop-dead.** ZIP tier live for New York and Chicago; Los Angeles keeps the metro figure, disclosed. Verdict- and recording-inert, verified |
 | ✂️ | **U8.9** live runs, traces, diagram | Dropped Aug 30, 2026 by the architect |
-| ⬜ | **U8.10** close-out | Not started |
+| 🟨 | **U8.10** close-out | **Planned Aug 30, 2026** — six change sets, four blocking questions open |
 | 🟨 | **U8.M** maintenance | TODO inventory reconciled; remainder open |
 
 **Both decisions that were waiting on the architect were taken on Aug 30, 2026.** The
@@ -1164,8 +1164,10 @@ and start reading as what they are: correct escalations of a genuinely shakier e
 produces no evidence the threshold is wrong — which is a real result and a limited one.**
 
 **The batch it closes against.** 28 cases, no errors, **18/21 verdict agreement** on the
-predicted set, **7/7** against U7.8's published baselines, and — after U8.6e's two
-repairs — **30 of 30 flag kinds raised, none uncovered and none unreachable**. Five rows
+predicted set, **6/7** against U7.8's published baselines — it read 7/7 when this was
+written, and the `chicago` row moved when U8.6e ungated I1, which is a behavior change
+rather than a stale table — and, after U8.6e's two repairs, **30 of 30 flag kinds
+raised, none uncovered and none unreachable**. Five rows
 carry † (escalated on a critical while the score alone would have reported) and one carries
 ‡ (escalated on the rework budget), so both independent escalation grounds are demonstrated
 by rows rather than asserted.
@@ -1195,7 +1197,7 @@ U8.10 to decide on.
 
 **What that leaves for decision #6.** Zero of 21 predicted cases give evidence that 0.60
 is the wrong threshold or that 0.15 is the wrong warn weight. The sweep
-(`eval/results/sensitivity.md`) measures how much room that leaves: **41 of 80 grid points
+(`eval/results/sensitivity.md`) measures how much room that leaves: **63 of 160 grid points
 decide the batch identically to the shipped configuration**, and through the shipped point
 specifically, **any threshold from 0.30 to 0.70** and **any warn weight from 0.100 to
 0.200** decides all 21 cases identically. Nothing here changes the shipped values — the
@@ -1640,8 +1642,9 @@ decision, and it has a real cost on both sides**: they are the live end-to-end e
 and recording them removes exactly the property that makes them that. The narrower option
 is to keep them live and state the noise band beside the regression figure — across three
 full batch runs this session, `coord-conflict` varied by one critical and `staten-island`
-returned 0 comps twice and 1 comp once, so "7/7 against U7.8's table" should be read as
-±1 row rather than as an exact match.
+returned 0 comps twice and 1 comp once, so the regression figure against U7.8's table
+(7/7 when this was written, 6/7 since U8.6e) should be read as ±1 row rather than as an
+exact match.
 
 ### U8.6b ✅ — Straddle pairs: measuring brittleness at the per-flag thresholds
 
@@ -2241,27 +2244,256 @@ added at U9 — flagged here so the dependency is not discovered at capture time
 the account identifier, and Week 7's deliverable is a terminal capture. **Redact before
 recording.**
 
-### U8.10 ⬜ — Close-out
+### U8.10 ⬜ — Close-out — **planned Aug 30, 2026**
 
-Review the changelog rows this unit's commits already wrote; move #6 and #11 to their
-settled state in §7's register with reasoning in
-[`history/decision_log.md`](../history/decision_log.md); delete the closed entries from
-[`open_questions.md`](../open_questions.md) — and, where a question is *retargeted* rather
-than closed, say so with its reason, per U7.8's precedent.
+**Six change sets.** Five open questions retire, two decisions reach their settled state,
+and U11.5's remaining items ride along by the architect's direction (Aug 30, 2026) so the
+two documentation passes are one review rather than two.
 
-**Carries U11.5 with it**, by the architect's direction (Aug 30, 2026): U11's rename pass
-left the rent model's own prose and identifiers on the retired FMR vocabulary, and one
-reader-facing string still calls the estimator a linear regression. Documentation and
-naming, one artifact-key exception, scoped in full at
-[`task_list_u11.md`](task_list_u11.md) §U11.5 — batched here so the two documentation
-passes are one review rather than two.
+**Ordering principle: the passes that cannot move a number go first.** U8.10a–d touch
+prose only. U8.10e and U8.10f touch `src/` — one comment-only, one a rename that reaches a
+persisted artifact — so they land last, where a regression is attributable to them alone
+and the batch is re-run once behind them rather than after every commit.
 
-**Five open questions can close here** — OQ-1 (#6 tuned), OQ-3, OQ-6, OQ-15, and OQ-7
-either as built or as a written gap. **OQ-12's first half does not close** (Q2(b)): its
-leave-one-metro-out run is a transfer question that U8.4's flag does not ask. Its second
-half — confirming something still trips the rent-comp divergence flag — closes at U8.2. That would be the largest single
-close in the project, which is also the reason to review each one against what actually
-shipped rather than against this plan.
+**What close-out is not.** The changelog rows for U8 already exist — §8 requires each
+commit to write its own as it lands, and every one did, through U8.8. This subsection
+*reviews* them against what shipped; it does not reconstruct them. Same for the register:
+#6 and #20 are already ✅ in §7. What is missing is **#6's reasoning in
+[`history/decision_log.md`](../history/decision_log.md)**, which §7 claims to index — its
+Contents line lists "#1, #6, #9" under Orchestration and the file contains only #9.
+
+| | Change set | Touches |
+| --- | --- | --- |
+| **a** | `open_questions.md` — five closes, three retargets, two new entries | docs |
+| **b** | #6's missing reasoning entry; #11 to settled in §7 and in the log | docs |
+| **c** | §6 — the U8 unit row, and cut-list item 2 spent | docs |
+| **d** | The two stale straddle-pair notes | docs + one fixture note |
+| **e** | U11.5 items 3–5 — two docstrings and one comment | `src/`, comments only |
+| **f** | U11.5 item 2 — the FMR-and-holdout names | `src/`, retrain |
+
+#### U8.10a — `open_questions.md`: the closes, the retargets, and what U8 opened
+
+**Five close. Each was verified against the code, not against this file's prose.**
+
+| OQ | Closes on | Verdict lands in |
+| --- | --- | --- |
+| **OQ-1** · #6 | `scripts/confidence_sensitivity.py` + `eval/results/sensitivity.md`; both halves of the entry are already written as CLOSED | §7 #6 (written) + a new `decision_log.md` entry (U8.10b) |
+| **OQ-3** | `FlagKind.RENT_ESTIMATE_MARKET_ERROR_ELEVATED` (`state.py:181`), raised at `valuation_rent.py:342` against `config.py:593`'s per-metro ratio | §6's U8 row; the flag is its own record |
+| **OQ-6** · #16/#20 | U8.0 measured it, U8.4b corrected it, U11.3 retired the correction structurally, U8.7 closed the promotion question as #20 | §7 #16 and #20 (both written) |
+| **OQ-7** · #11 | U8.8 shipped `tools/sale_benchmarks.py` + the committed 304-ZIP table; ZIP tier live for New York and Chicago, **Los Angeles and Cleveland keep the metro figure with the reason stated** | §7 #11 → ✅ (U8.10b) |
+| **OQ-15** / **OQ-16** | `Flag.planner_invocations`, `critic._kinds`, `EvalCase.geocoder_fallback_override`; coverage 30 of 30 | §6 cut-list 2a (already records the close) |
+
+OQ-7 closes **as built with a stated partial**, not as complete. Two of four inference-set
+markets keep a metro-wide benchmark because California assessor rolls publish assessed
+value rather than transaction price, and a Prop 13 base-year value is a different
+instrument. That sentence has to survive into the close, or the close overstates it.
+
+**Three retarget rather than close** — U7.8's precedent: say so, and say why.
+
+- **OQ-12, first half.** Its second half closed at U8.2. The leave-one-metro-out run is
+  now owned twice: here, and as a bullet under OQ-4 after U11's split. **One owner.**
+  Proposed: OQ-12 is deleted entirely and its transfer argument — *LOMO measures transfer
+  to a market the model never saw, and New York is in the training set, so a LOMO figure
+  would overstate what a Staten Island subject faces* — moves into OQ-4's LOMO bullet,
+  which is the entry that will still be open after U8. Losing that argument would let the
+  next reader fold LOMO back into a per-metro breakdown, which is the mistake it exists to
+  prevent.
+- **OQ-5** (ToT constants). U8 planned no subsection for it and built none, so carrying U8
+  in the label overstates what was scheduled — the same correction U8.4 made to OQ-3's
+  label. It did not come away empty: U8.6b measured `TOT_TIE_EPSILON` as **not
+  meaningfully straddleable** (the gap is noise-dominated, OQ-17), and U8.6c published the
+  depth-2 cut margins, which is the first evidence about any of the four constants. What
+  is still missing is what the entry always said it needed — a known-correct branch — and
+  nothing in the remaining schedule supplies one. **Blocking question 2 below.**
+- **OQ-18** (a replay row missed its recordings once). Labelled U8, unresolved, and the
+  cause was searched for and not found. **Blocking question 1 below.**
+
+**Two entries U8 opened that exist only in this file and at a code site.** Both are live
+decisions with stated expiry conditions, which is exactly what `open_questions.md` is for:
+
+- **Should the sale benchmark's *tier* raise a flag** the way `RENT_ANCHOR_COUNTY_LEVEL`
+  does for the rent anchor? U8.8 deliberately did not take it. The argument for not doing
+  so is at `valuation_rent._attach_benchmark` — nothing computes from the benchmark, so
+  charging confidence for its width would say this deal's numbers are shakier when none of
+  them moved — **and it expires the moment check B is promoted.** An argument with an
+  expiry condition that lives only in a docstring is one nobody re-reads on the day it
+  expires. Target: no unit; re-opens with check B.
+- **The demo set now has one clean-reporting deal, not two.** After U8.6e's ungate,
+  `chicago` escalates on `comps_outside_match_criteria` (3 of 8 comps outside the band) and
+  `los-angeles` is the only deal reaching 1.00. Whether the surface needs a second clean
+  deal — and whether that means re-siting `chicago` or accepting that the middle-of-the-road
+  demo goes to review — is a **U9** question about what the surface shows, not a defect.
+
+Also updates the file's `Last reviewed:` line.
+
+#### U8.10b — #6's reasoning, and #11 to settled
+
+**#6 has no entry in `decision_log.md` and the Contents line says it does.** That is the
+same gap U11 filled for #18/#19 the day before, and it is worth filling while the pattern
+is fresh. The entry goes under *Orchestration & control flow* and records what the register
+row compresses: the demo deals were rejected as a tuning instrument for being calibrated to
+run clean; an engineered batch calibrated to *fail* is the same error with the sign
+reversed; Q1's triage rule was fixed **before** the first run, which is what separates
+tuning from fitting; the 80-point sweep then produced a stable region rather than an
+optimum, and the close says *robustness* rather than *optimality* because a batch that
+cannot separate two settings has no evidence either way. The critical weight being inert
+across its whole range including 0.00 is the confirmation U7 left open, from the opposite
+direction to the one U7 expected.
+
+`decision_log.md`'s Contents also claims **#1** under the same heading and the file has no
+#1 entry either. Named here rather than fixed silently — proposed fix is to correct the
+Contents line, since #1 (LangGraph from day one) is evidenced in §3 and in
+`design/architecture.md` rather than in the log, which is the same treatment #2 and #7
+already carry ("taken and evidenced entirely inside `data_strategy.md` §2 — not duplicated
+here").
+
+**#11 moves 🟨 → ✅ in §7** and its `decision_log.md` entry gains the U8.8 outcome. Two
+things in that entry are now answered rather than planned, and one is *wrong* if left as
+written: it says the planned work is "county assessor open data (Cook, LA County, NYC)"
+and that LA County was chosen — LA County's roll turned out to carry no sale price at all,
+so the entry as it stands describes a dataset that cannot do the job it names. The
+correction and the two-of-four partial land together.
+
+#### U8.10c — §6: the unit row and cut-list item 2
+
+The **U8 row** goes ⬜ → ✅ and is restated as what it produced rather than as what it was
+sized as. Its build target still reads *"8–10 synthetic listings each engineered to trip a
+specific flag"*; what shipped is **21 predicted cases across three tiers plus 7 baseline
+rows, 30 of 30 flag kinds covered, verdict agreement 18/21**, a published sensitivity
+sweep, six straddle fixtures, and a sub-metro price benchmark that was a cut-list item.
+The `Findings` column gets its `decision_log.md` link like every other completed unit.
+
+**Cut-list item 2 leaves the list by being spent**, like items 3 and 6 — with the same
+treatment those two got, including the part where its stated cost was wrong. Q3 priced it
+as an address-to-parcel join; the respecified deliverable needs a median over the subject's
+ZIP and never identifies the subject's parcel, so no fuzzy matching exists anywhere in the
+change set. **That is the third cut-list item in two units whose price described work the
+item no longer contained** (2a's 37 call sites, 6's 27% of rows, and now this) — the
+generalization belongs in §6 next to the item, not in a task file that closes.
+
+#### U8.10d — the two stale straddle-pair notes
+
+U8.6e consequence 2, and the one thing this unit created that close-out has to catch.
+
+1. **`task_list_u8.md` §U8.6b**, the `COMP_MAX_OUTSIDE_MATCH_SHARE` row: "Exactly one flag
+   differs" is no longer what the pair measures. Under the ungate, I1 fires on the
+   band-over side, so 200 sq ft of floor area flips `reports` to `escalates`. The pair got
+   sharper, not broken, and the corrected row should say that.
+2. **`eval/cases.py`, `chicago-uptown-band-over`'s note**: "Predicted to report anyway: one
+   warn does not reach the escalation threshold, so this pair measures the *flag's*
+   brittleness rather than the verdict's." **The declared `verdict=Verdict.REPORTS` is not
+   touched** — editing a prediction after seeing the run is exactly what
+   `VerdictSource.PREDICTED` exists to prevent, and the row stays a MISMATCH. **Blocking
+   question 3** is what to do with the prose *around* the declaration.
+
+#### U8.10e — U11.5 items 3–5
+
+Three sites naming the retired anchor, all comment-only, none reaching a reader or a
+prompt: `rent_model.predict_ratio`'s docstring ("Predict rent-to-FMR ratio for one
+subject"), `rent_model.build_training_frame`'s ("Assemble the FMR-normalized training
+set"), and the comment at `train`'s CV block ("Dollar error is the ratio error re-expressed
+at each row's own FMR"). Kept as one commit because they are one class of error and a
+reviewer reading three of them together can check the *rule* — U11.5 names what is
+deliberately **not** on the list, and that boundary is the thing worth reviewing.
+
+#### U8.10f — U11.5 item 2: the FMR-and-holdout names
+
+The one item on U11.5's list that is not cosmetic. Two identifiers, and the note at
+`summarizer._rent_basis_section:394` that tracks them:
+
+- `TrainingReport.mae_dollars_at_holdout_fmr` → serialized into the persisted bundle and
+  read back by **string key** at `valuation_rent._attach_model_provenance:299`.
+- `ValuationDetail.model_holdout_mae_dollars` → state only, but "holdout" is as wrong here
+  as it is there: since #18 the figure is out-of-fold across every row.
+
+**The persisted bundle is not in the repository.** `config.RENT_MODEL_PATH` resolves under
+`data/processed/`, which is gitignored, so a fresh clone retrains regardless and a retrain
+is not a new cost this change introduces. `config.RENT_MODEL_RANDOM_SEED` is passed to the
+estimator and to the fold split, so the retrain is reproducible. **Blocking question 4** is
+whether to retrain or to read both keys.
+
+**Whichever is chosen, the check is the same and it is not optional:** the replay tier's
+recordings key on prompts that embed the rent estimate, so a bundle that predicts even a
+cent differently would surface as a batch-wide `CacheMiss` (OQ-18's mechanism, exactly).
+Both offline tiers get re-run behind this commit and the tables compared byte-for-byte,
+which is the check U8.8 used for the same class of risk.
+
+---
+
+## U8.10's blocking questions — for the architect, before U8.10a
+
+**Q7 — OQ-18: what happens to a defect whose cause was searched for and not found?**
+A replay row raised `CacheMiss` once and has passed every run since, including two later
+full batches with identical ordering. Live-tier and golden-tier interference were ruled out
+by re-running each ahead of it; the Census geocoder was ruled out by 20 rapid calls and 6
+byte-identical repeats. It is labelled U8, and U8 is closing.
+
+- **(a) Keep it open, retargeted to no unit, as a recorded reproducibility risk.** Honest,
+  costs nothing, and OQ-17 sets the precedent for an open entry with no owner.
+- **(b) Take the cheap mitigation now** — round the rent figure `scenario_forecast.
+  _context_block` quotes, so replay stops riding on sub-dollar drift. It is a small change
+  and it **forces a full re-record of the replay tier**, five days before the freeze,
+  against a defect that has not reproduced in three batches.
+- **(c) Close it as accepted**, on the argument that every replay failure is loud and
+  fails the batch rather than corrupting a number.
+
+**Recommendation: (a).** (b) spends the one thing that is genuinely scarce — a re-record
+close to the freeze — to fix a fault that has not recurred, and the mitigation would itself
+be unverifiable, since a batch that already passes cannot show it helped. (c) understates
+it: the coupling between ZIP resolution and every replay prompt is new since U8.4b and is
+worth a reader knowing about.
+
+**Q8 — OQ-5: the ToT constants were never tuned, and U8 was where they were scheduled.**
+No U8 subsection was written for them and none was built. Partial evidence did arrive:
+`TOT_TIE_EPSILON` is measured as not meaningfully straddleable (noise-dominated, OQ-17),
+and U8.6c published the depth-2 cut margins the beam width decides on — including the
+finding that the discarded pairing often *outscored* the reported one and lost on
+`tot._rank`'s conservatism preference.
+
+- **(a) Retarget to no unit and write it up as a disclosed gap**, carrying the two
+  measurements that did land as what is known about the four constants.
+- **(b) Retarget to U9**, on the argument that the report needs a sentence about it anyway.
+- **(c) Tune two of the four against the golden batch** — branching factor and beam width
+  are the two whose effect is visible in the ledger — accepting that "known-correct branch"
+  is still missing.
+
+**Recommendation: (a).** The entry's own closing condition is a labelled branch set, and
+nothing in five days produces one; (c) would fit constants to fixtures this unit authored,
+which is the error Q1 was written to prevent, applied to a different tunable. Naming it a
+gap with two measurements attached is a better artifact than a tuned number with no ground
+truth behind it.
+
+**Q9 — `chicago-uptown-band-over`'s note: correct the prose, or leave the whole
+declaration untouched?**
+The declared verdict stays either way. The question is the sentence beside it, which now
+misdescribes what the pair measures.
+
+- **(a) Append a dated line to the note** — "Measured after U8.6e's ungate: I1 fires here,
+  so this pair now flips the verdict, not just the flag" — leaving the original prediction
+  text verbatim above it. The reader sees the prediction *and* what it got wrong.
+- **(b) Leave it entirely**, and let `task_list_u8.md` §U8.6b carry the correction.
+- **(c) Rewrite the note** to describe current behavior.
+
+**Recommendation: (a).** (c) is the one that is actually forbidden — it would make a
+pre-run declaration read as if it had predicted the outcome. (b) is defensible but puts the
+correction in a file the next reader of `cases.py` will not have open.
+
+**Q10 — U11.5 item 2: retrain, or read both keys?**
+`mae_dollars_at_holdout_fmr` is read back from the persisted bundle by string key.
+
+- **(a) Rename and retrain.** The bundle is gitignored and every clone retrains anyway;
+  the seed is fixed, so the refit is reproducible. Clean single-name end state. Costs one
+  retrain and the byte-for-byte batch comparison behind it.
+- **(b) Rename the field, read both keys** (`new or old`), no retrain. Cheaper, and it
+  leaves a compatibility shim in the code for a bundle that no reviewer has.
+- **(c) Leave both names**, close U11.5 item 2 as a documented wart.
+
+**Recommendation: (a).** (b)'s shim exists to protect an artifact that is not in the
+repository, which makes it dead code the day it lands; (c) leaves the report's own
+provenance line named after a validation protocol #18 replaced. The retrain is verifiable
+in one batch re-run, which is the same check U8.10f already owes.
+
+---
 
 ### U8.M 🟨 — Maintenance *(separate commit, per §8)*
 
