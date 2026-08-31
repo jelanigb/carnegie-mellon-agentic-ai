@@ -48,7 +48,7 @@ bullets that never landed (U8.6c).
 | ✅ | **U8.5** pass-scoped flags | Built (`critic._kinds`) |
 | ✅ | **U8.6** decision #6's numbers | **Closed** — held on measurement, stable region published |
 | ✅ | **U8.6b** straddle pairs | 6 fixtures, 3 clean pairs, 1 documented negative result |
-| 🟨 | **U8.6c** near-tie split + evaluator scores | **Half built.** Severity split ✅; `evaluator_score` still unrendered ❌; depth-2 cut boundary unmeasured ❌ |
+| ✅ | **U8.6c** near-tie split + evaluator scores | **Completed Aug 30, 2026** — the two audited gaps built; the cut-boundary measurement found the tie-break deciding the reported scenario set |
 | ✅ | **U8.6d** confidence decomposition | Built, plus the stale Critic stub-node claim it surfaced |
 | ✅ | **U8.6e** the objection gate *(unplanned)* | Repairs built; **one open decision for the architect** |
 | 🟨 | **U8.7** checks A and B | Re-measured; **the veto's premise expired, so the decision is open** |
@@ -957,12 +957,12 @@ predicted — `ny-bedstuy-triplex` escalates at 0.55 on a *third*, deal-specific
 (Brooklyn's corpus rows sharing one coordinate), not on the market alone. The U8.6b
 Manhattan fixture is what would demonstrate a New York deal reporting.
 
-### U8.6c 🟨 — Near-tie split *(landed early, with U8.4c)*
+### U8.6c ✅ — Near-tie split *(landed early, with U8.4c)*
 
-> **🟨 because the severity split landed and the other half of U8.6c did not** —
-> `Scenario.evaluator_score` is still not rendered, and the depth-2 cut boundary is still
-> unmeasured. The audit table is at the end of the full U8.6c section below. This block
-> covers only the severity split, which *is* complete.
+> **This block covers the severity split only**, which landed here with U8.4c's
+> re-record. The subsection's other two items — rendering `Scenario.evaluator_score` and
+> measuring the depth-2 cut boundary — were found unbuilt by the Aug 30 audit and were
+> built later the same day; both are written up in the full U8.6c section below.
 
 Built ahead of its place in the sequence because the re-record had to happen once, and
 this change moves the same flag sets. Full design in the U8.6 scope revision above.
@@ -1616,7 +1616,7 @@ wrong rather than infeasible.**
    their own flag — it cannot be varied alone. Kept as a case, published as a negative
    result.
 
-### U8.6c 🟨 — Near-tie split, and the evaluator's scores reach the reader — **half built**
+### U8.6c ✅ — Near-tie split, and the evaluator's scores reach the reader
 
 **Taken Aug 29, 2026 by the architect.** `FORECAST_BRANCHES_NEAR_TIED` turned out to be
 two different disclosures sharing one kind, and the reading path shows they deserve
@@ -1659,13 +1659,77 @@ so the section read as done.
 | --- | --- | --- |
 | Pairing near-tie → INFO, framing near-tie stays WARN | ✅ | `scenario_forecast.py` raises `FORECAST_BRANCHES_NEAR_TIED` at `Severity.WARN` for the framing tie and `Severity.INFO` for the two pairing ties. This is what moved the `chicago` demo deal off its 0.55 escalation |
 | Both messages rewritten to stop overclaiming | ✅ | The pairing message now says both tied candidates reach the scenario table and no reported figure depends on the ordering |
-| **`Scenario.evaluator_score` rendered** | ❌ **not built** | The field is populated (`scenario_forecast.py:621`) and carried on state (`state.py:699`), and `grep evaluator_score agents/summarizer.py` returns **nothing**. The evaluator's credibility judgment is still computed and still invisible — exactly the state this bullet was written to end |
-| **Depth-2 cut boundary (#3 vs #4) measured** | ❌ **not built** | No such measurement exists in `scenario_forecast.py` |
+| **`Scenario.evaluator_score` rendered** | ✅ **built Aug 30, 2026** | Was: populated at `scenario_forecast.py:621`, carried at `state.py:699`, and `grep evaluator_score agents/summarizer.py` returned nothing. Now rendered per scenario in `_scenario_section` |
+| **Depth-2 cut boundary (#3 vs #4) measured** | ✅ **built Aug 30, 2026** | `tot.SearchResult.cut_boundary_gap_by_depth`, disclosed at INFO when the cut lands inside `TOT_TIE_EPSILON` |
 
 **Neither gap is a regression — they were never built** — and neither is blocked by
 anything. Rendering the score is small: a per-scenario figure in
 `summarizer._scenarios_section` with the OQ-17 caveat beside it, labels left outcome-based.
 The cut-boundary measurement is a probe rather than a product change.
+
+---
+
+**Both built Aug 30, 2026, and the measurement found something the plan only suspected.**
+
+**1. The scores reach the reader.** `_scenario_section` renders each surviving scenario as
+`**Base** *(scored 0.80)* — rationale`, with one paragraph beneath saying what the number
+is, that the labels come from projected outcome rather than from it, and that a single
+draw of this judge is not a rank (OQ-17). Put with the rationale rather than in the table
+because the score is a judgment *about* that rationale, and because the branch ledger
+below already renders every discarded hypothesis as `id (score) — summary` — so a survivor
+now reads the same way as the branches that lost.
+
+**2. The cut boundary is measured, and it is not the number the plan expected to find.**
+`tot.beam_search` now records, per depth, the margin at the line the beam width actually
+cut on: last survivor minus best-discarded. That is a different question from
+`score_gap_by_depth`, which compares #1 against #2 *among survivors* — the comparison
+U8.6c's own demotion argument shows is inert, since both of those reach the report.
+
+**The margin is frequently zero or negative**, which the plan did not anticipate and which
+is the finding. Measured across the 15 golden cases, the depth-2 cut margins run
+`-0.05, 0.00, 0.05, 0.20, 0.25` and similar. A **negative** margin means the discarded
+pairing *outscored* the one that reached the report and lost on `tot._rank`'s conservatism
+tie-break. `chicago-uptown-band-under` is the clean illustration, and both halves of it are
+now visible in the same report: the ledger shows `f-01-optibase` **scored 0.60, discarded**
+while the reported "Pessimistic" scenario **scored 0.55**. Before this change a reader
+could see both numbers and had no way to learn why the lower one was kept.
+
+So the disclosure says the specific true thing rather than a generic tie sentence — it
+branches on the sign, because "separated by 0.050, inside the 0.05 threshold" would be
+self-contradictory *and* weaker than the truth in the case that actually occurs.
+
+**Severity: INFO, and it is a judgment rather than a fact.** The argument for WARN is the
+framing tie's: a discarded candidate is a real loss. The argument for INFO, taken here, is
+that the discarded pairing is already published in the ledger with its score and its prune
+reason — so this names a margin the reader can already see rather than revealing a hidden
+one — and that the gap is measured with the instrument whose single-draw noise (OQ-17)
+exceeds `TOT_TIE_EPSILON` by an order of magnitude, which is the same argument that
+demoted the pairing tie in the first place. **It is a one-word change if the architect
+prices it differently**, and the code comment says so at the site.
+
+**Measured consequence on the batch, which is bounded and was checked rather than
+assumed.** The new disclosure fires on 6 of 15 golden cases and 3 of 6 replay cases
+(`chicago-geocoder-outage` once per pass, as every forecast flag is). INFO costs 0.00
+confidence, so **no confidence score, no verdict and no coverage figure moves** — golden
+verdict agreement stays 12/15 and replay 6/6, with the same three mismatches. The only
+change to the published table is the disclosure count on those rows.
+`eval/results/results.md` is **deliberately not republished here**: re-deriving it means
+re-running the seven live rows, which U8.6's own close records as non-reproducible at ±1
+row, so the table is re-cut once with the next change that needs it rather than spending a
+live run on a column of INFO counts. The delta is measured above, so nothing about it is
+unknown.
+
+**Replay was verified clean.** A forecast flag's kind reaches the *next* pass's scoring
+prompt through `_context_block`'s upstream-flag list, so a new kind on a reworking case
+could have invalidated recordings. `forecast_branches_near_tied` was already in that set
+for `chicago-geocoder-outage`, so the prompt string is unchanged and all six replay cases
+reproduce with no `CacheMiss`. Checked rather than reasoned about.
+
+**Tests:** `tests/test_forecast_tie_disclosures.py` — the cut margin is recorded distinctly
+from the top-two gap, a cut taken inside a tie group records a non-positive margin, both
+message branches, silence when the cut is decisive, and the two rendering cases (a scored
+scenario and one carrying no score). Kept out of `test_flag_propagation.py` on
+`test_stated_rent_disclosure.py`'s precedent: nothing here decides anything. 73 tests pass.
 
 **How this went unnoticed is the part worth keeping.** The severity split had visible
 downstream consequences — a demo deal's verdict changed, several documents cite it — so the
@@ -1894,13 +1958,6 @@ settled state in §7's register with reasoning in
 [`history/decision_log.md`](../history/decision_log.md); delete the closed entries from
 [`open_questions.md`](../open_questions.md) — and, where a question is *retargeted* rather
 than closed, say so with its reason, per U7.8's precedent.
-
-**Five open questions can close here** — OQ-1 (#6 tuned), OQ-3, OQ-6, OQ-15, and OQ-7
-either as built or as a written gap. **OQ-12's first half does not close** (Q2(b)): its
-leave-one-metro-out run is a transfer question that U8.4's flag does not ask. Its second
-half — confirming something still trips the rent-comp divergence flag — closes at U8.2. That would be the largest single
-close in the project, which is also the reason to review each one against what actually
-shipped rather than against this plan.
 
 ### U8.M 🟨 — Maintenance *(separate commit, per §8)*
 

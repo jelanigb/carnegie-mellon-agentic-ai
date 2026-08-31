@@ -9,7 +9,7 @@ which names every decision and links to its full reasoning in
 project and when to read it.
 
 **Chronological record of code changes.**
-Author: Jelani Gould-Bailey · Last updated: Aug 29, 2026
+Author: Jelani Gould-Bailey · Last updated: Aug 30, 2026
 
 ## Why this file exists
 
@@ -51,6 +51,18 @@ rows. The unit of a row is the change, not the file.
 - Work predating the unit numbering is labelled by the `implementation_plan.md` section
   that specifies it (`§2`, `§9`), so it stays findable by the same identifier the plan
   uses.
+
+---
+
+## Aug 30, 2026 — U8.6c: the forecast search's own scores reach the reader
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Aug 30, 2026 | U8.6c | **The evaluator's per-scenario score is rendered.** `agents/summarizer.py` — `Scenario.evaluator_score` had been populated since U6 and carried on state, and no reader had ever seen it: the search's own judgment of each surviving hypothesis was computed and invisible. Each scenario now renders as `**Base** *(scored 0.80)* — rationale`, beside the branch ledger's existing `id (score) — summary` for the ones that lost, with one paragraph stating what the number is, that the labels come from projected outcome and not from it, and that a single draw of this judge is not a rank (OQ-17) | 6.1 |
+| Aug 30, 2026 | U8.6c | **The rank line that decides the reported scenario set is measured.** `tools/tot.py` — `SearchResult.cut_boundary_gap_by_depth` records, per level, the margin at the line the beam width cut on (last survivor minus best discarded), which is a different question from `score_gap_by_depth`'s comparison of #1 against #2 *among survivors*. At depth 2 it governs which pairings reach the report at all — the one comparison at that level whose outcome the reader sees | 6.1 |
+| Aug 30, 2026 | U8.6c | **A cut taken inside the tie threshold is disclosed, and the common case is the tie-break's.** `agents/scenario_forecast.py` — `FORECAST_BRANCHES_NEAR_TIED` at INFO when the depth-2 cut margin falls inside `TOT_TIE_EPSILON`. Measured across the golden batch, the margin is often **zero or negative**: the discarded pairing outscored the one reported and lost on `tot._rank`'s conservatism preference. `chicago-uptown-band-under` shows both halves in one report — the ledger prints `f-01-optibase` at 0.60 discarded while the reported pessimistic scenario scored 0.55. The message branches on the sign rather than claiming a margin it does not have. Fires on 6 of 15 golden and 3 of 6 replay cases; INFO costs 0.00, so no confidence, verdict or coverage figure moves | 6.1 |
+| Aug 30, 2026 | U8.6c | **Tests for both.** `tests/test_forecast_tie_disclosures.py` — the cut margin recorded distinctly from the top-two gap, a cut inside a tie group recording a non-positive margin, both message branches, silence on a decisive cut, and the two rendering cases. Kept out of `test_flag_propagation.py` on `test_stated_rent_disclosure.py`'s precedent, since an INFO disclosure decides nothing. 73 pass | 6.1 |
+| Aug 30, 2026 | U11.M | **The rent model's module docstring still described the anchor U11.3 retired.** `tools/model/rent_model.py` — U11.3's rename pass reached the flag kinds, the `ValuationDetail` fields and the Summarizer's basis line, but not this file's own header, which still said rent is divided by the county FMR and multiplied by today's FMR, and that `tools/rent_drift.py` corrects the drift. Both false since U11.3; the module whose docstring carries the design reasoning was describing the previous design. Rewritten for the hybrid, with the stability assumption restated as what it now is — narrower, cleared at a floor by `scripts/anchor_stability.py`, and open as OQ-19 | maintenance |
 
 ---
 
