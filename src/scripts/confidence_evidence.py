@@ -13,14 +13,19 @@ exact case each is named for:
 What neither test can show is **how today's actual system distributes across that
 mechanism** — real LLM extraction, real geocoding, real Chroma retrieval, real HUD FMR,
 real rent model, real ToT forecast, run on the six demo deals `main.py` ships. That is
-what this script measures, and it is not decoration: `critic.confidence_from_flags`
-carries a `TODO(U8)` claiming a "two-warn floor" — every deal checked so far (three, as
-of Aug 26, 2026) paid 0.30 of the 0.40 separating a clean run from
+what this script measures, and it is not decoration: `critic.confidence_from_flags` then
+claimed a "two-warn floor" — every deal checked so far (three, as of Aug 26, 2026) paid
+0.30 of the 0.40 separating a clean run from
 `config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD` before anything deal-specific was observed.
 Whether that holds, and whether the critical-flag rule is currently exercised by any real
 deal independent of a low score, are both empirical questions this script answers rather
-than assumes. Per U7.6: mechanism is not touched here — only measured. The severity
-weights and threshold stay `config.PROVISIONAL`, tuned in U8 against the eval batch.
+than assumes. Per U7.6: mechanism is not touched here — only measured.
+
+**Both questions are now answered and this script is what answered the first.** The floor
+does not generalize (see the finding printed below), and the critical-flag rule is isolated
+by five golden eval rows rather than by any demo deal. The weights and threshold stopped
+being provisional on Aug 30, 2026: #6 **held** them on
+`scripts/confidence_sensitivity.py`'s sweep of the eval batch.
 
 **What this check could have returned, stated up front so the finding is falsifiable:**
 
@@ -268,7 +273,7 @@ def main() -> None:
             f"  Warn-severity flags common to every deal: "
             f"{', '.join(sorted(common_warns))}"
         )
-        print("  The TODO(U8) 'floor' claim holds on this six-deal set.")
+        print("  The 'floor' claim holds on this six-deal set.")
     else:
         print(
             "  No warn-severity flag is common to all six deals — the 'floor' claim "

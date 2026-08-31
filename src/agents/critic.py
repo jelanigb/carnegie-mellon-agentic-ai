@@ -91,9 +91,12 @@ def confidence_from_flags(state: DealState) -> float:
     rather than a weakness, and charging them would make the score fall on runs where
     nothing went wrong.
 
-    The weights are PROVISIONAL and tuned in U8 — they live in `config` for exactly
-    that reason (§8). The shape of the function is the U2 commitment; the numbers are
-    not.
+    The weights were PROVISIONAL until U8 and are now **held on measurement** (#6): an
+    80-point sweep over threshold and warn weight decides the 21-case batch identically at
+    63 of 160 grid points, and no case gives evidence the shipped numbers are wrong. They
+    live in `config` for the reason they always did (§8), and the claim is robustness
+    rather than optimality — a batch that cannot separate two settings has no evidence
+    either way. The shape of the function is the U2 commitment; the numbers are held.
 
     **Identical observations are counted once (U7.4).** `state.flags` is append-only
     across rework laps, deliberately, so the raw run history stays inspectable — the same
@@ -115,7 +118,29 @@ def confidence_from_flags(state: DealState) -> float:
     different relaxations, and those are two real observations that should both be
     charged. Identical text from the same agent is the same observation reported again.
     """
-    # TODO(U8): superseded, Aug 27, 2026 — this previously claimed a "two-warn floor"
+    # **ANSWERED at U8, Aug 30-31, 2026 — both halves. Kept rather than deleted, because
+    # the correction below is the record of a claim that was wrong twice.**
+    #
+    # *The demo-set skew was an artifact, and stopped mattering for a second reason.* The
+    # eval batch was the instrument this note asked for — 21 predicted cases sited across
+    # four markets rather than one county reused. It did not have to adjudicate the skew:
+    # #19's hybrid anchor resolves at ZIP tier in every indexed market, so
+    # `rent_anchor_county_level` became rare, and it now co-occurs with the elevated
+    # market-error flag on **0 of 21 cases**. The causal-pair double-charge that skew
+    # implied dissolved rather than being re-priced (OQ-1's close).
+    #
+    # *The critical-flag rule is now isolated by real deals, not only by an ablation.*
+    # This note recorded that no demo *deal* separated the rule from the score — every one
+    # carrying a critical already sat below threshold — and that only
+    # `--deal chicago --no-retrieval` reached the boundary. The batch owes that no longer:
+    # **five golden rows escalate on a critical while the score alone would have reported**
+    # (`eval/results/results.md`, the rows marked †), each reaching the boundary through a
+    # property of the listing. The sweep confirms it from the other side —
+    # `eval/results/sensitivity.md` finds the critical weight behaviorally inert across its
+    # entire range **including 0.00**, which is the rule's independence measured rather
+    # than argued.
+    #
+    # Superseded, Aug 27, 2026 — this previously claimed a "two-warn floor"
     # from a three-deal sample. `scripts/confidence_evidence.py` (U7.6) measured all six
     # demo deals and it does not generalize: **no warn-severity flag is common to every
     # deal.** `rent_anchor_county_level` fires on `los-angeles`, `overpriced` and
@@ -126,21 +151,6 @@ def confidence_from_flags(state: DealState) -> float:
     # genuine ToT near-tie rather than a constant. `chicago` reaches 0.55 and escalates
     # on three deal-specific warns (search-radius relaxation, comps outside the match
     # band, and the near-tie) — not on any pair every deal shares.
-    #
-    # What is still open for U8: three of six demo deals sharing one county's FMR-anchor
-    # warn is a fact about the demo set (§2's Los Angeles / Chicago / Cleveland trio,
-    # reused across deals), not evidence about real-world deal distribution. The eval
-    # batch, sampled across counties rather than reusing one three times, is what would
-    # show whether that skew is a demo-set artifact or a real one worth re-pricing.
-    #
-    # Also open, and narrowed by the U7.8 re-measurement: no demo *deal* isolates the
-    # critical-flag escalation rule from the score — every deal carrying a critical flag
-    # already sits below threshold anyway. One live invocation does, though:
-    # `main.py --deal chicago --no-retrieval` lands at exactly 0.60 with a single
-    # critical `retrieval_disabled` flag, so the score does not escalate it and this rule
-    # does. That is the boundary the U2 defect sat on. It is a live case for the rule but
-    # not a *deal* — only the ablation flag raises that kind — so U8 still owes an eval
-    # case that reaches the boundary through a property of the listing itself.
     return confidence_breakdown(state).score
 
 
@@ -300,8 +310,8 @@ class Objection(NamedTuple):
 
 
 def _kinds(state: DealState) -> frozenset[FlagKind]:
-    """Flag kinds this pass should judge the deal on (U8.5/OQ-15, closes the TODO(U8)
-    `_interaction_objections` carried).
+    """Flag kinds this pass should judge the deal on (U8.5/OQ-15, which closed the
+    deferred-work marker `_interaction_objections` carried).
 
     `DealState.flags` is append-only across rework laps so the raw run history stays
     inspectable, and until this landed, every reader of it — this function included —
@@ -606,15 +616,17 @@ def critic_agent(state: DealState) -> dict:
     # threshold is a judgment about *accumulated* uncertainty and is the right tool for
     # a pile of warnings; it is the wrong tool for a single disqualifying observation.
     #
-    # TODO(U8): decision #6 sets both the 0.60 threshold and the severity weights as
-    # PROVISIONAL, and **U8 is where they get tuned, not U7** — the eval batch is what
-    # exercises the range, and the five demo deals were calibrated to run clean, so they
-    # cannot. U7 lands the mechanism; U8 supplies the numbers.
-    #
-    # Confirm this rule when they are tuned — if the weights were retuned so that one
-    # critical flag falls clearly below the threshold, the two conditions would coincide
-    # and this one could fold back into the score. Keeping them separate is deliberate
-    # even then: it makes the guarantee independent of the weights.
+    # **Confirmed at U8 and the rule stays separate (#6, Aug 30, 2026).** This block used
+    # to end by asking that the rule be re-checked once the weights were tuned, on the
+    # reasoning that a re-pricing could make one critical flag fall clearly below the
+    # threshold, at which point the two conditions would coincide and this one could fold
+    # back into the score. The sweep answers it from the opposite direction and more
+    # strongly: the **critical weight is behaviorally inert across its entire range,
+    # including 0.00** (`eval/results/sensitivity.md`). Every deal carrying a critical
+    # escalates on this rule whatever the weight says, so the two conditions never
+    # coincide — the guarantee is independent of the weights as a measured fact rather
+    # than as a design intention. Five golden rows in `eval/results/results.md` carry †,
+    # meaning they escalated here while the score alone would have reported.
     low_confidence = confidence < config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD
     # Over the flags this pass *raises* as well as the ones it inherited. Reading only
     # `state.flags` was a latent defect until U7.4: nothing the Critic raised could

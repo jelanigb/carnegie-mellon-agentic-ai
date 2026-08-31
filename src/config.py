@@ -110,10 +110,17 @@ HUMAN_REVIEW_CONFIDENCE_THRESHOLD = 0.60  # PROVISIONAL — tune in U8
 MAX_REWORKS = 2  # PROVISIONAL — tune in U8
 
 # Severity weights used when aggregating flags into a confidence score.
-# Before re-pricing these, read the TODO(U8) on `critic.confidence_from_flags`:
-# `scripts/confidence_evidence.py` (U7.6) measured no warn flag common to all six demo
-# deals, so a "floor" every deal pays is not what's happening — the shared warns a
-# smaller sample suggested track which county a deal is sited in, not the mechanism.
+#
+# **HELD on measurement Aug 30, 2026 (#6), not tuned.** `scripts/confidence_sensitivity.py`
+# swept these against the 21-case eval batch: 63 of 160 grid points decide it identically
+# to the shipped values, and holding the threshold at 0.60 every warn weight from 0.100 to
+# 0.200 changes no verdict. Zero cases argue the shipped numbers are wrong — which is a
+# robustness result, not an optimality one, and a batch that cannot separate two settings
+# is saying it has no evidence either way. **The critical weight is inert across its whole
+# range including 0.00**: every deal carrying a critical escalates on the independent rule
+# at `critic.escalation_decision` regardless. Before re-pricing, read that sweep and the
+# note at `critic.confidence_from_flags` — the "two-warn floor" this comment used to cite
+# was measured false at U7.6.
 FLAG_SEVERITY_PENALTY = {
     "info": 0.0,
     "warn": 0.15,
@@ -682,8 +689,9 @@ RENT_COMP_DIVERGENCE_THRESHOLD_PCT = 0.30
 # calls the gap out rather than only reporting it. `None` means the comparison is always
 # rendered and never editorialized, which is the shipped state.
 #
-# TODO(U8): set a number, or delete this and the emphasis it gates. It was None rather than
-# tuned because the gap measured on the demo listings was ~-29% on all three (Aug 24, 2026:
+# **DECIDED Aug 30, 2026 as #20: hold at `None`, and do not delete the constant.** The
+# history below is kept because the reason changed twice and the second reason is the one
+# that holds. It was None rather than tuned because the gap measured on the demo listings was ~-29% on all three (Aug 24, 2026:
 # Los Angeles -28.8%, Chicago -29.0%, Staten Island -26.8%), and that offset was structural
 # rather than a property of any listing. FMR is a 40th-percentile rent; the corpus the rent
 # model learned from rented at ~1.40x FMR; #11 calibrated these listings to FMR itself. A
@@ -697,18 +705,23 @@ RENT_COMP_DIVERGENCE_THRESHOLD_PCT = 0.30
 # range -39.4% to +66.6%.** Dispersed and sign-varying, which is what a property of the
 # deal looks like rather than a property of the anchor.
 #
-# **So this is now tunable and was not before, and that is a decision for the architect
-# rather than a value to pick here.** Three live options: set a threshold against the
-# measured spread; delete the constant and keep the disclosure unconditional (U8.7's
-# original veto branch, whose justifying measurement has itself changed); or promote the
-# comparison to a Critic objection, which U7.5 declined only because the gap was
-# structural. Held at None pending that call — the shipped behavior is unchanged either
-# way, and the reason for it is now stated honestly instead of citing a dead offset.
+# **So it became tunable, and a second measurement then argued against tuning it.**
+# `scripts/stated_rent_gap.py` prints beside each fixture's gap the flags its report
+# already raises. **Every fixture a 20-35% threshold would fire on already carries a flag
+# naming a more specific cause** — comps matched outside the band, the bedroom cap, a
+# market whose scored error is elevated — 6 of 6 at 25%. So the emphasis would restate an
+# existing disclosure in vaguer words and attribute it to the listing's stated rent, which
+# is the one thing in the comparison the system did not derive.
 #
-# The demo deals cannot settle it: `demo_deals.DemoDeal.rent_basis` is `hud_fmr:2`, so #11
-# set their stated rents from the old anchor. Their gap measures the FMR-versus-market
-# spread. That is a finding about the demo set (#11 needs re-calibrating to the market
-# index), not evidence about this threshold.
+# **Hence #20: a disclosure, never a check, held on a measured reason rather than on the
+# expired one.** The constant stays at `None` and is **not deleted**, because the option is
+# now foreclosed by evidence rather than by arithmetic, and the evidence could change: a
+# fixture set whose gaps are not already explained by a more specific flag would reopen it.
+#
+# The demo deals cannot settle it either way: `demo_deals.DemoDeal.rent_basis` is
+# `hud_fmr:2`, so #11 set their stated rents from the old anchor and their gap measures the
+# schedule-versus-market spread. That is a finding about the demo set (#11's rent side needs
+# re-calibrating to the market index), not evidence about this threshold.
 RENT_CLAIM_DIVERGENCE_DISCLOSURE_THRESHOLD = None
 
 # --- ZORI comparison (U8.0, OQ-6) -----------------------------------------

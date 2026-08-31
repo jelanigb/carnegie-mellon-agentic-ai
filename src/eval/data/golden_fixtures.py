@@ -44,11 +44,13 @@ and keeps one derived value from being hand-copied into a place it could go stal
 Why these three metros and not one
 ------------------------------------
 Los Angeles, Chicago and Cleveland are §2's inference trio, and the fixtures are spread
-across them on purpose. `agents/critic.confidence_from_flags` carries a `TODO(U8)` noting
-that three of the six demo deals share one county's FMR-anchor warning — a fact about the
-demo set reusing one county, not about deals in general — and that the eval batch is what
-would show whether that skew is an artifact. A batch sited in one county would reproduce
-the artifact instead of measuring it.
+across them on purpose. `agents/critic.confidence_from_flags` recorded that three of the
+six demo deals share one county's rent-anchor warning — a fact about the demo set reusing
+one county, not about deals in general — and that the eval batch is what would show whether
+that skew is an artifact. A batch sited in one county would reproduce the artifact instead
+of measuring it. **Answered at U8:** the skew did not have to be adjudicated, because #19's
+hybrid anchor resolves at ZIP tier in every indexed market and that warning became rare —
+it now co-occurs with the elevated market-error flag on 0 of 21 cases.
 
 The consequence shows up immediately and is worth stating rather than leaving as a
 coincidence: Cook County publishes Small Area (ZIP-level) FMRs and Los Angeles and Cuyahoga
