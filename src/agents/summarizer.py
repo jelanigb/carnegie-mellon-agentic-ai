@@ -731,9 +731,30 @@ def _scenario_section(state: DealState) -> list[str]:
         )
     lines.append("")
 
+    # The score sits with the rationale rather than in the table above, because it is a
+    # judgment *about* that rationale — and because the branch ledger below already
+    # renders every discarded hypothesis as `id (score) — summary`, so a survivor read as
+    # "label (score) — summary" is the same statement about the branches that lived
+    # (U8.6c). Rendered for every scenario that carries one, never used to order them.
+    scored = False
     for scenario in state.scenarios:
         if scenario.rationale:
-            lines.append(f"- **{scenario.name.title()}** — {scenario.rationale}")
+            score = ""
+            if scenario.evaluator_score is not None:
+                scored = True
+                score = f" *(scored {scenario.evaluator_score:.2f})*"
+            lines.append(f"- **{scenario.name.title()}**{score} — {scenario.rationale}")
+    if scored:
+        lines.append("")
+        lines.append(
+            "Each score is how well the forecast search judged that hypothesis to be "
+            "supported by the evidence it was given, from 0 to 1 — shown because a "
+            "scenario the system itself rated weakly should be read as one. Two cautions: "
+            "the scenario names above come from each row's projected outcome and not from "
+            "these scores, so a higher-scoring row is not a more likely one; and the "
+            "scores come from a single model call whose repeat runs measurably vary, so "
+            "small differences between them are not reliable."
+        )
     lines.append("")
 
     if detail is not None:

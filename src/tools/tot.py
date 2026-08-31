@@ -86,6 +86,15 @@ class SearchResult:
     # whole forecast rests on a near-arbitrary reading of the data, which is a larger
     # claim than two scenarios scoring alike.
     score_gap_by_depth: dict[int, float] = field(default_factory=dict)
+    # Per level, the margin at the line the beam width actually cut on: the last
+    # survivor's score minus the best discarded candidate's. **A different question from
+    # `score_gap_by_depth`, which measures ordering *among* survivors.** This one measures
+    # whether the cut itself was decidable — at depth 2 it is the rank line that governs
+    # which pairings reach the report at all, so a margin inside `tie_epsilon` means the
+    # reported scenario set could as defensibly have been a different one (U8.6c).
+    # Negative where the tie-break moved a higher-scoring candidate below the line, which
+    # can only happen inside a tie group and is itself the finding.
+    cut_boundary_gap_by_depth: dict[int, float] = field(default_factory=dict)
     # Set when the beam emptied. Not a failure - it means no hypothesis survived contact
     # with the data, which is a reportable finding rather than a reason to lower the bar.
     exhausted_reason: Optional[str] = None
@@ -223,6 +232,13 @@ def beam_search(
         width = width_for(depth)
         ranked = _rank(above, tie_epsilon, conservatism_key)
         survivors, cut = ranked[:width], ranked[width:]
+        if survivors and cut:
+            # Read off `ranked` rather than off the raw scores, because `ranked` is the
+            # order the cut was actually taken in — including the conservatism tie-break,
+            # which is the thing this margin exists to expose.
+            result.cut_boundary_gap_by_depth[depth] = (survivors[-1].score or 0.0) - (
+                cut[0].score or 0.0
+            )
         for candidate in cut:
             result.ledger.append(
                 replace(

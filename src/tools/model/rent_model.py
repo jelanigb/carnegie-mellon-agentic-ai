@@ -1,4 +1,4 @@
-"""FMR-normalized rent regression (U5, §2's rent-anchoring design).
+"""Index-normalized rent regression (U5, §2's rent-anchoring design; re-anchored at U11.3).
 
 **The problem this module exists to solve is vintage, not accuracy.** The Kaggle rental
 corpus is a scrape spanning Dec 2018 - Dec 2019. A regression fit on its rent column
@@ -8,31 +8,44 @@ could catch. §8 states the invariant that follows: never let an unanchored Kagg
 figure reach the Summarizer.
 
 **The fix is to model a ratio instead of a level.** For every training row, rent is
-divided by the HUD Fair Market Rent for that row's own county and its own fiscal year.
-What the model learns is therefore how bedrooms, bathrooms, and square footage move rent
-*relative to the local FMR* — a structural relationship that ages far more slowly than a
-dollar level does. At prediction time the predicted ratio is multiplied by *today's* FMR
-for the subject's county, producing a current-dollar figure anchored to a dated public
+divided by an anchor for that row's own place, unit size and *month*. What the model
+learns is therefore how bedrooms, bathrooms and square footage move rent *relative to
+what its location rents for* — a structural relationship that ages far more slowly than a
+dollar level does. At prediction time the predicted ratio is multiplied by the subject's
+anchor read at **today's** month, producing a current-dollar figure anchored to a public
 reference the report can cite.
+
+**The anchor is a hybrid since U11.3 (#19), and which half supplies what matters.**
+Zillow's ZORI series gives the rent *level* at the row's own ZIP and listing month,
+falling back to the county median where a ZIP's series has not started; HUD's Fair Market
+Rent schedule gives only the *bedroom step* — the ratio between unit sizes, with the
+schedule's own level divided out (see `bedroom_shape`). The predecessor divided by the
+county FMR level itself and multiplied by today's FMR; `fmr_baseline` keeps that retired
+anchor in one place for the evidence scripts that still compare against it.
 
 Three consequences worth stating, because each is a limitation rather than a feature:
 
 1. **The anchoring is disclosed, always.** Every estimate on this path raises
    `RENT_ANCHORED_TO_MARKET_INDEX` (info). The number is not a market observation; it is a
-   modeled ratio times a government reference figure, and the report says so.
-2. **No FMR, no estimate.** A subject whose county will not resolve — New England, or no
-   coordinates at all — has no anchor, so this path produces nothing and raises
-   `RENT_ANCHOR_UNAVAILABLE` rather than falling back to a raw comp mean. A raw comp
-   mean is precisely the unanchored 2019 figure the design forbids.
-3. **The ratio assumption is load-bearing, and it has been measured and found false.**
-   It holds that rent-to-FMR structure is stable over ~7 years. U8.0 tested that against
-   Zillow's ZORI series and found the FMR schedule rising +51.9% while market rents rose
-   +33.5% over the same interval, so the anchor drifted ~18 points away from the market
-   it prices and the raw product reads high. `tools/rent_drift.py` corrects for it per
-   ZCTA at prediction time and discloses the correction; §6's cut-list item 6 carries the
-   structural fix the correction stands in for. This paragraph previously said nothing in
-   the project verified the assumption, which was true when written and stopped being
-   true at U8.0.
+   modeled ratio times a published reference figure, and the report says so.
+2. **No anchor, no estimate.** A subject whose county will not resolve — New England, or
+   no coordinates at all — has no bedroom step, and one whose place has no index reading
+   has no level, so this path produces nothing and raises `RENT_ANCHOR_UNAVAILABLE`
+   rather than falling back to a raw comp mean. A raw comp mean is precisely the
+   unanchored 2019 figure the design forbids.
+3. **The stability assumption is load-bearing, and the anchor change is what it turns
+   on.** The design holds that a unit's rent *relative to its reference series* is stable
+   over the ~7 years between the corpus and today. U8.0 tested that for the FMR anchor
+   against ZORI and **found it false** — the schedule rose +51.9% while market rents rose
+   +33.5%, so the anchor drifted ~18 points from the market it priced and the raw product
+   read high. U8.4b corrected that per-ZCTA at prediction time; U11.3 removed the cause
+   instead, since both ends of the ratio now read the same market series at their own
+   months and the schedule-versus-market gap divides out where it arises. The assumption
+   the current anchor rests on is narrower but not proven: `scripts/anchor_stability.py`
+   falsifies it over the corpus's own 13-month window and it survives at +3.6%, which is
+   a floor it clears rather than a demonstration over seven years. **OQ-19 stays open for
+   exactly that gap**, and closing it needs a current-vintage rent sample this project
+   does not have.
 
 Feature choice is deliberately narrow and excludes any market identifier — see
 `config.RENT_MODEL_FEATURES` for why a metro dummy would defeat the ratio design. The

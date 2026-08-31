@@ -930,7 +930,22 @@ def _disclosure_flags(
     #   under this project's measured negative correlation, and the evaluator scoring
     #   them identically is the scoring working, not a degradation.
     #
-    # Both messages state the one-sample caveat OQ-17 measured: a live scoring call is
+    # - A *cut-boundary* tie at depth 2 is INFO, and it is the one U8.6c added because
+    #   nothing measured it. The pairing tie above compares #1 against #2, which the
+    #   demotion argument shows is inert: both survive. The line between #3 and #4 is
+    #   where the beam width bites, so it decides which pairings are reported at all —
+    #   the one rank comparison at this depth that does reach the reader. It is INFO
+    #   rather than WARN for two reasons: the discarded pairing is already published in
+    #   the branch ledger with its own score and the reason it was dropped, so this
+    #   disclosure names a margin the reader can already see rather than revealing a
+    #   hidden loss; and the gap is measured with the same instrument whose single-draw
+    #   noise (OQ-17) exceeds `TOT_TIE_EPSILON` by an order of magnitude, which is
+    #   exactly the argument that demoted the pairing tie. **Recorded as a judgment
+    #   rather than a fact** — the framing tie is WARN on the reasoning that a discarded
+    #   candidate is a real loss, and that reasoning transfers here in weakened form. It
+    #   is a one-word change if the architect prices it differently.
+    #
+    # All three messages state the one-sample caveat OQ-17 measured: a live scoring call is
     # not perfectly deterministic even at temperature 0 (OpenRouter routes across
     # non-identical backend deployments, and even one pinned deployment's scores swing
     # call to call — see docs/design/architecture.md §3), so a near-tie can be a property
@@ -975,6 +990,44 @@ def _disclosure_flags(
                 f"project measured. The scores also come from a single model call whose "
                 f"repeat runs measurably vary, so a gap this small can be a property of "
                 f"this one sample.",
+                Severity.INFO,
+                planner_invocations,
+            )
+        )
+
+    cut_gap = result.cut_boundary_gap_by_depth.get(2)
+    if cut_gap is not None and cut_gap < config.TOT_TIE_EPSILON:
+        # Two different sentences, because a non-positive margin is the stronger finding
+        # and describing it as "separated by 0.05, inside the 0.05 threshold" would be
+        # both self-contradictory and a weaker claim than the truth. `tot._rank` groups
+        # candidates within `TOT_TIE_EPSILON` and sorts that group by conservatism, so a
+        # margin at or below zero means the tie-break, not the evaluator, chose which
+        # pairing was reported.
+        if cut_gap > 0:
+            margin = (
+                f"were separated by {cut_gap:.3f}, inside the "
+                f"{config.TOT_TIE_EPSILON} threshold this system treats as no meaningful "
+                f"difference"
+            )
+        else:
+            margin = (
+                f"were not separated on score at all — the pairing left out scored "
+                f"{abs(cut_gap):.3f} *above* the one kept, and the order was settled by "
+                f"this system's standing preference for the more conservative reading, "
+                f"which applies wherever two scores sit within "
+                f"{config.TOT_TIE_EPSILON} of each other"
+            )
+        flags.append(
+            flag(
+                AGENT,
+                FlagKind.FORECAST_BRANCHES_NEAR_TIED,
+                f"The last scenario pairing to make the table and the best one left out "
+                f"of it {margin}. This line matters in a way a tie between two reported "
+                f"scenarios does not: it decides which pairings are shown at all, so the "
+                f"set of scenarios below could as defensibly have been a different set. "
+                f"The pairing that missed it is listed in the search ledger with its own "
+                f"score and the reason it was dropped. As with every score here, it comes "
+                f"from a single model call whose repeat runs measurably vary.",
                 Severity.INFO,
                 planner_invocations,
             )
