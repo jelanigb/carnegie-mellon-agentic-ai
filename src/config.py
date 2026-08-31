@@ -64,8 +64,12 @@ MAX_RETRIEVAL_ITERATIONS = 4  # PROVISIONAL — tune in U4
 #
 # 3 is therefore the value that separates the case that is arguably fine (LA) from the
 # two that need saying out loud, rather than a bar every metro clears — per §2's tuning
-# principle, a signal that never fires conveys nothing. PROVISIONAL — U8 has the case
-# volume to settle it.
+# principle, a signal that never fires conveys nothing.
+#
+# **HELD Aug 30, 2026 (U8.6b).** The corpus's own distribution supplies both sides of
+# this line without any fixture engineering: a Bed-Stuy subject returns 8 comps on **1**
+# coordinate, a Hell's Kitchen subject 8 on **5**. A threshold that real geography
+# straddles unaided is discriminating; 3 is kept.
 COMP_MIN_DISTINCT_LOCATIONS = 3
 
 # Decimal places for a reported comp distance. Was 3 (~1.6 m implied precision), which
@@ -92,8 +96,16 @@ COMP_MATCH_SQFT_TOLERANCE_PCT = 0.25  # PROVISIONAL — tune in U4
 # comp and one 510 sqft comp pull in opposite directions. A count of comps outside the
 # band separates them cleanly, which is why the check is written on the count.
 #
-# 0.25 admits one outlier in a set of eight and discloses two. PROVISIONAL — tune in U8
-# against the eval batch, where a case can be built to sit either side of the line.
+# 0.25 admits one outlier in a set of eight and discloses two.
+#
+# **HELD Aug 30, 2026 on the straddle pair U8.6b built, rather than tuned.** Chicago
+# Uptown at 1,100 sq ft returns 2 of 8 outside the band (0.25, clears) and at 1,300
+# sq ft returns 3 of 8 (0.38, fires) — the same building, 200 sq ft apart. Since
+# U8.6e ungated the Critic's first interaction check, that difference decides the
+# **verdict** and not only the disclosure, which makes this the most brittle line in
+# the system and the reason the pair is published rather than only measured
+# (`eval/results/results.md`, `chicago-uptown-band-under` / `-over`). Nothing in the
+# batch argues for a different value; the brittleness is disclosed instead.
 COMP_MAX_OUTSIDE_MATCH_SHARE = 0.25
 
 
@@ -102,7 +114,11 @@ COMP_MAX_OUTSIDE_MATCH_SHARE = 0.25
 # --------------------------------------------------------------------------
 
 # Below this confidence, the deal routes to human review instead of the Summarizer.
-HUMAN_REVIEW_CONFIDENCE_THRESHOLD = 0.60  # PROVISIONAL — tune in U8
+# **HELD Aug 30, 2026 (#6)** — not tuned. Through this point the threshold moves
+# 0.30-0.70 without changing a verdict in the 21-case eval batch, and no case argues
+# it is wrong; `eval/results/sensitivity.md` publishes the region and says why that is
+# a robustness claim rather than an optimum.
+HUMAN_REVIEW_CONFIDENCE_THRESHOLD = 0.60
 
 # Bounds the Critic -> Planner rework cycle. §3 requires every cycle to be bounded by
 # an explicit counter in state rather than by LangGraph's recursion_limit, so that
@@ -125,7 +141,7 @@ FLAG_SEVERITY_PENALTY = {
     "info": 0.0,
     "warn": 0.15,
     "critical": 0.40,
-}  # PROVISIONAL — tune in U8
+}  # HELD Aug 30, 2026 (#6) — see the note above
 
 
 # --------------------------------------------------------------------------
@@ -261,7 +277,8 @@ SALE_BENCHMARK_COOK_CLASS = "211"
 # latest complete year is used rather than the newest partial one.
 SALE_BENCHMARK_COOK_PARCEL_YEAR = "2025"
 
-# PROVISIONAL — how many sales a ZIP needs before its median replaces the metro figure.
+# How many sales a ZIP needs before its median replaces the metro figure. **Set on the
+# measured distribution at U8.8, not provisional** — the reasoning is below.
 #
 # Measured over the window (`scripts/build_sale_benchmarks.py` re-prints it): New York
 # 164 ZIPs, min 1 / p10 8 / median 131 / max 659; Chicago 140 ZIPs, min 1 / p10 4 /
@@ -603,14 +620,17 @@ RENT_MODEL_BACKCAST_ZIP_FMR = False
 # A ratio to the overall figure rather than a fixed dollar amount, so the line does not
 # need re-tuning every time a retrain moves the headline MAE.
 #
-# Measured Aug 29, 2026, on `TrainingReport.mae_dollars_by_metro`: overall $524.03;
-# Chicago $492.14, Los Angeles $530.46, Cleveland $452.49 — all within 1.1x of the
-# overall figure — against New York's $1,048.38, at 2.00x. 1.5x sits with wide margin on
-# both sides of that gap and is set here on that one measurement rather than a search
-# over candidates.
+# First measured Aug 29, 2026 on the FMR anchor: overall $524.03, the trio within 1.1x,
+# New York at 2.00x. **Re-measured Aug 31, 2026 under #19's hybrid anchor and the gap
+# survives the anchor change**: overall $452.40; Chicago 0.76x, Cleveland 0.79x, Los
+# Angeles 1.13x, New York **1.89x**. Every figure moved and the shape did not.
 #
-# PROVISIONAL — retune in U8.6 against the eval batch, same as
-# RENT_COMP_DIVERGENCE_THRESHOLD_PCT and COMP_MAX_OUTSIDE_MATCH_SHARE.
+# **HELD rather than tuned, and U8.6b measured why it cannot be tuned.** No listing can
+# straddle this line: it compares a *market's* error to the overall figure, and a
+# subject cannot move its own market's ratio. With markets sitting at <=1.13x and
+# 1.89x, any threshold between them decides identically — so the batch has no evidence
+# to choose within that interval, and 1.5 is kept as its midpoint rather than as a
+# tuned value. Published as a negative result in U8.6b's table.
 RENT_MODEL_METRO_ERROR_RATIO_THRESHOLD = 1.5
 
 
@@ -679,10 +699,20 @@ RENT_COMP_CROSSCHECK_MIN_COMPS = 3
 # rather than on an anomaly, which is a real limitation of the check and not a tuning
 # problem. §2, "The rent estimate is location-blind below the county."
 #
-# PROVISIONAL on both counts. Five subjects show the signal separates but cannot place the
-# line precisely — Chicago straddling it is the proof. Retune in U8 against the eval batch,
-# and revisit the whole check if a ZIP-level anchor lands (docs/design/data_sources.md, "The
-# sub-metro gap"). `scripts/valuation_evidence.py --diagnose-divergence` reproduces it.
+# **The revisit condition this comment set has since been met, and the paragraph above is
+# now history rather than current.** It said to revisit the whole check if a ZIP-level
+# anchor landed. #19 landed one (ZORI at the subject's own ZIP), so the model is no
+# longer blind to sub-metro rent variation and this threshold no longer fires on a
+# structural blind spot. The effect is measurable on one fixture: `chicago-uptown-duplex`
+# read +48% against the comps under the FMR anchor and reads **-6.1%** under the hybrid.
+#
+# **HELD at 0.30 Aug 30, 2026 on U8.6b's straddle pair, not tuned.** A Cleveland subject
+# at 1,000 sq ft measures **-30.8%** (fires) and the same building at 1,050 sq ft
+# measures **-28.9%** (clears) — same coordinate, same eight comps, none out of band. A
+# 5% change in floor area flips it, which is the tightest line measured anywhere in this
+# system and is published as such rather than tuned away.
+# `scripts/valuation_evidence.py --diagnose-divergence` reproduces the original
+# diagnosis; `scripts/straddle_probe.py` reproduces the pair.
 RENT_COMP_DIVERGENCE_THRESHOLD_PCT = 0.30
 
 # How far the listing's **stated** rents may sit from the modelled rent before the report
@@ -998,9 +1028,22 @@ LANGSMITH_ENABLED = os.environ.get("LANGSMITH_TRACING", "").lower() == "true"
 # `agents/comps_retrieval.py`) are pure functions over `state.flags` — no LLM call, no
 # generated candidates, nothing to search over. See `history/decision_log.md` #12.
 #
-# Every value below is PROVISIONAL and tuned in U8, where the eval harness supplies
-# synthetic cases whose correct branch is known by construction. They are named here
-# rather than inside the agent because a tunable hardcoded in an agent is a defect (§8).
+# Every value below is PROVISIONAL. **Retargeted U8 -> U9 on Aug 30, 2026 (OQ-5): U8
+# planned no subsection for these and built none**, so naming U8 here overstated what was
+# scheduled. The condition is unchanged and unmet — tuning needs cases whose correct
+# branch is known by construction, and none exist.
+#
+# **Two measurements did land and are what is known about any of these.**
+# `TOT_TIE_EPSILON` is not meaningfully straddleable: the gap it compares is
+# noise-dominated (OQ-17), so a recorded straddle would measure the recording (U8.6b).
+# And U8.6c published the depth-2 **cut margin** — the line the beam width actually cuts
+# on — which across the golden batch is often zero or negative, meaning the discarded
+# pairing outscored the reported one and lost on `tot._rank`'s conservatism preference.
+# Tuning against the golden batch was considered and declined: those fixtures were
+# authored by the unit that would have tuned against them.
+#
+# They are named here rather than inside the agent because a tunable hardcoded in an
+# agent is a defect (§8).
 
 # Candidate hypotheses generated per expansion. Anchored to the Tree-of-Thought paper's
 # b=5 on Game of 24 (4% -> 74% over chain-of-thought), not yet to this project's data.

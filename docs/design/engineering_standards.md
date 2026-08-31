@@ -137,13 +137,17 @@ in a focused session or across a fragmented week.
   | ~~`TODO(U5)`~~ | `state.py`, `build_comps_index.py` | ✅ **closed Aug 22, 2026** — `listed_epoch` indexed and decoded to `Comp.listed_date`. Landed in the same re-index as `location_precision`, since both are metadata changes and a corpus rebuild is the cost either way |
   | ~~`TODO(U5)`~~ | `county_crosswalk.py` | ✅ **moot as of Aug 15, 2026** — the principal-county approximation this described is gone; `county_fips` now resolves the exact county from the subject's coordinates. `FlagKind.COUNTY_FROM_PRINCIPAL_COUNTY` removed rather than left unraisable |
   | ~~`TODO(U7)`~~ | `critic.py` | ✅ **closed Aug 27, 2026** — cross-agent consistency checks built as three *interaction* checks (U7.2) and wired (U7.4); `_consistency_objections()` no longer returns empty. The four checks this named did not survive contact with the built system — see `agents/critic.py` for the accounting |
-  | ~~`TODO(U7)`~~ | `critic.py` | ➡️ **became `TODO(U8)` Aug 27, 2026** — confirming the critical-flag escalation rule requires the tuned weights, and #6's numbers were deliberately left to U8's eval batch. Now at `critic.py:393` |
+  | ~~`TODO(U7)`~~ | `critic.py` | ➡️ **became `TODO(U8)` Aug 27, 2026, and closed with the rest at U8.M** — confirming the critical-flag escalation rule was thought to require the tuned weights. It did not: the sweep found the critical weight **inert across its whole range including 0.00**, so the rule's independence is measured rather than contingent, and the confirmation arrived from the opposite direction to the one this row expected |
   | ~~`TODO(U2)`~~ | `hud_fmr.py` | ✅ **cleared Aug 10, 2026** — writes are atomic; the residual concurrency limit is documented on `_DiskCache` as accepted |
-  | `TODO(U8)` | `critic.py` ×4, `config.py` ×2 | **Six sites, down from nine (Aug 30, 2026).** Still open: #6's threshold and severity weights (`critic.py`, `config.py`), pass-scoped flags, and promoting checks A and B — whose *veto* was overturned by re-measurement (U8.7), so it is a live decision rather than a settled one. **Closed:** leave-one-metro-out (cut to §6 1a, transfer question disclosed via OQ-12), the rent-comp divergence confirmation (answered twice — see `config.RENT_COMP_DIVERGENCE_THRESHOLD_PCT`), and the stated-rent emphasis threshold's blocking measurement. Planned per subsection in [`../tasks/task_list_u8.md`](../tasks/task_list_u8.md) |
+  | ~~`TODO(U8)`~~ | — | ✅ **all cleared Aug 31, 2026 at U8.M — nine sites at U8's start, zero now.** Each was replaced by what U8 measured rather than deleted. #6's threshold and weights are **held** on an 80-point sweep (`eval/results/sensitivity.md`) rather than tuned; pass-scoped flags shipped at U8.5; the demo-set county skew **dissolved** when #19's anchor resolved at ZIP tier everywhere; the critical-flag rule is isolated by five golden rows instead of one ablation invocation; the stated-rent threshold closed as **#20** (hold at `None`, do not delete); the rent-comp divergence confirmation and leave-one-metro-out closed at U8.2 and §6 1a. **One thing this row used to claim is corrected rather than carried:** "promoting checks A and B" was one item and is two. Check A closed on its own measurement as #20; **check B was never separately measured or decided** and is now tracked as [OQ-20](../open_questions.md#data--sources) with what closing it would take |
   | `TODO(cut-list)` | `valuation_rent.py` | **One site, down from three (Aug 30, 2026).** Only the descoped LLM rent fallback remains (§6 item 3, taken Aug 21). Model form was **spent** rather than deferred — U11.1 measured three candidates under cross-validation and gradient boosting was adopted; feature engineering, hyperparameter tuning and LOMO were **cut** to §6 item 1a the same day |
   | `TODO(security)` | `hud_fmr.py`, `llm_client.py` | Whether to drop on-disk credential fallbacks in favour of env-var-only |
   | `TODO(security)` | `diagnostics.py` | Full error text to stdout deliberately includes the account identifier the report strips. Correct for a terminal, wrong for a recording — and Week 7's deliverable is a terminal capture. Redact that one field, or gate verbosity behind an env var defaulting quiet before recording |
   | `TODO(geography)` | `county_crosswalk.py`, `config.py` | New England town-based FMR verified for Boston only, not the other five states |
+
+  **Six live sites remain**, all genuinely deferred and none owned by a unit that has
+  closed: `security` ×3, `geography` ×2, `cut-list` ×1. Reconciled against
+  `grep -rn "TODO(" src/` on Aug 31, 2026.
 
   **This table is reviewed at unit close, and was found stale at U8 planning (Aug 28,
   2026).** It carried two `TODO(U7)` rows as open after U7 shipped, and listed none of the
@@ -151,6 +155,14 @@ in a focused session or across a fragmented week.
   whole value is that `grep -rn "TODO(U8)" src/` and this table agree; when they do not,
   the table is the one that misleads, because it is the one a reader consults instead of
   grepping. Regenerate it against a grep rather than editing it from memory.
+
+  **A second failure mode, found at U8.M and not covered by that rule.** A `TODO` is not the
+  only way this repository defers work — `config.py` marks a value `PROVISIONAL` and names
+  the unit that will tune it, and **nothing reconciles those against closed units.** Six
+  constants named U4 or U8 as their tuning owner after both had closed, including three that
+  decision #5 had actually settled. A marker naming a closed unit reads as scheduled work and
+  is really unowned work, which is worse than an honest gap because it looks handled. Grep
+  `PROVISIONAL` at unit close alongside `TODO(`.
 
 ### Testing
 
