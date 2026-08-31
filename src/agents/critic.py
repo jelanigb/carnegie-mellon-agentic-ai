@@ -229,11 +229,23 @@ def _consistency_objections(state: DealState) -> list[Objection]:
 
     Two further comparisons — the listing's *stated* rents against `rent_estimate`, and
     its asking price against `ValuationDetail.benchmark_median_sale_price` — are
-    deliberately **not** objections in U7. They ship as Summarizer disclosures instead
-    (U7.5), because the rent one currently reports ~-29% on every demo deal: FMR is a
-    40th-percentile rent while the model predicts ~1.40x FMR, so the gap measures a
-    percentile mismatch rather than the deal. TODO(U8): promote both once Zillow ZORI
-    settles which baseline is right.
+    deliberately **not** objections. They ship as Summarizer disclosures instead (U7.5).
+
+    **The reason U7.5 gave has expired and been replaced, so read this paragraph as
+    current rather than as history.** It used to be that the rent comparison reported
+    ~-29% on every demo deal — FMR is a 40th-percentile rent, the model predicted ~1.40x
+    FMR, so the gap measured a percentile mismatch rather than the deal — and a check
+    cannot be built on a constant offset. U11.3's market-index anchor removed that offset,
+    and the re-measurement (U8.7, `scripts/stated_rent_gap.py`) found a dispersed,
+    sign-varying distribution: 13 fixtures, mean -11.4%, range -39.4% to +66.6%. On that
+    evidence the comparison *is* about the deal.
+
+    It stays a disclosure anyway, for a second reason the same measurement supplied: every
+    fixture a threshold in the 20-35% region would fire on already carries a flag naming a
+    more specific cause — comps matched outside the band, the bedroom cap, a market whose
+    holdout error is elevated. An objection raised from the gap would restate those in
+    vaguer words and attribute them to the listing's stated rent. See U8.7 for the open
+    decision and what evidence would reopen it.
 
     This stays the single seam the Critic calls and the tests substitute, even though
     every surviving check it delegates to is one family, `_interaction_objections()`.
