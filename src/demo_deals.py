@@ -39,6 +39,26 @@ its market by construction. That is acceptable for a demo and would not be accep
 an accuracy benchmark, which is a separate job wanting a separate dataset (see the
 public-records item in §7).
 
+**That reasoning was superseded on Aug 30, 2026 (#19), and the figures were kept as
+committed anyway.** The rent estimate is no longer anchored to FMR at all — the anchor is
+Zillow's ZIP-level market rent index, and FMR is reduced to the bedroom step — so these
+listings are calibrated against a benchmark the system otherwise no longer uses. The
+consequence shows on one deal: `chicago`'s stated rents sit ~25% below Logan Square's own
+market index, because HUD's 40th percentile runs about a third under the market in that
+ZIP. Los Angeles, Staten Island and the mispriced Los Feliz listing are all within 10%.
+
+Re-calibrating was measured at U8.7 and declined, on the same reasoning that kept
+`staten-island`'s asking price: **nothing computes from a stated rent** — no flag, no
+confidence contribution, no verdict — so a stale basis here cannot make the system wrong,
+only make one listing less lifelike, and saying so is worth more than moving figures the
+write-up and the video quote. Two things would change that answer: an audience who would
+read Chicago's rents as implausible, or promoting the stated-rent comparison to a check,
+which U8.7 also declined. A third consideration cuts against re-calibrating outright —
+the estimate *is* that index times a modelled ratio, so calibrating stated rents to it
+would make every demo report's stated-versus-modelled section print the same figure. That
+is the defect `price_premium_to_basis` exists to prevent on the price side, and it would
+need the same device on this one.
+
 The Staten Island exception, which is deliberate
 --------------------------------------------------
 Redfin's extract covers Chicago, Cleveland, and Los Angeles only, so the Staten Island
@@ -153,6 +173,13 @@ DEMO_DEALS: dict[str, DemoDeal] = {
         unit_rents=(1_750, 1_800),
         price_basis="redfin_metro_median:Chicago",
         rent_basis="hud_fmr:2",
+        notes=(
+            "Stated rents predate the anchor change (#19) and sit ~25% below this ZIP's "
+            "market rent index: HUD's 40th-percentile schedule runs about a third under "
+            "the market in Logan Square, and these were calibrated to HUD. Retained as "
+            "committed per U8.7 — see the module docstring for why, and for what would "
+            "change the answer."
+        ),
     ),
     "staten-island": DemoDeal(
         key="staten-island",

@@ -25,7 +25,7 @@ and its date, so a chronological or by-unit lookup still works via search.
 - [Data & sources](#data--sources) — #2, #4, #7, #11
 - [Geography & anchoring](#geography--anchoring) — #10
 - [Retrieval](#retrieval) — #5, and U4's design and ablation record
-- [Rent & valuation](#rent--valuation) — #15, and the deferred model-form probe
+- [Rent & valuation](#rent--valuation) — #15, #20, and the deferred model-form probe
 - [Forecasting & reasoning](#forecasting--reasoning) — #12, #13, #14, #16, #17
 - [Orchestration & control flow](#orchestration--control-flow) — #1, #6, #9, U2's findings, and U7's Critic record
 - [Models & infrastructure](#models--infrastructure) — #8, #13, and the free-tier accounting
@@ -422,6 +422,85 @@ of both runs supply the same evidence in a second form.
 ---
 
 ## Rent & valuation
+
+### #20 · U7 → U8 · Aug 30, 2026 — the stated-rent comparison stays a disclosure, and the second reason is not the first one
+
+**A decision taken twice, on two different grounds, with the first ground dead by the time
+the second arrived.** That is the whole reason it is worth a log entry: the verdict never
+changed, so a register row alone would read as though nothing happened, when in fact the
+argument underneath it was replaced entirely.
+
+**What the check would be.** The report already renders the listing's *stated* rents beside
+the modelled rent (`summarizer._stated_rents_section`).
+`config.RENT_CLAIM_DIVERGENCE_DISCLOSURE_THRESHOLD` gates whether a large gap is
+*emphasized*; U7's Q5 additionally asked whether the comparison should become a Critic
+objection, which would escalate.
+
+**The first reason, and why it expired.** U7.5 declined both, because the gap measured
+~−29% on every demo listing — Los Angeles −28.8%, Chicago −29.0%, Staten Island −26.8%. A
+near-constant is what a *structural* offset looks like, and the structure was identifiable:
+the estimate was `ratio × FMR`, FMR is a 40th-percentile administrative rent, and the corpus
+the ratio was learned from rented at ~1.40x it. An objection raised from that would have
+charged the listing for the anchor's percentile. **#19 replaced that anchor with a market
+rent index, which removed the offset and with it the reason.** Re-measured across the 13
+eval fixtures whose rents were set independently of any anchor: mean −11.4%, median −9.7%,
+range −39.4% to +66.6% — dispersed and sign-varying, which is what a property of the *deal*
+looks like. On that evidence the check became placeable for the first time.
+
+**The second reason, which is the one that now holds.** `scripts/stated_rent_gap.py` prints
+each fixture's gap beside the flags the report already raised on that deal, and the result
+is uniform:
+
+| threshold | fires on | of which already carry a more specific flag |
+| --- | --- | --- |
+| 20% | 6 | **6 of 6** |
+| 25% | 6 | **6 of 6** |
+| 30% | 5 | **5 of 5** |
+| 35% | 3 | **3 of 3** |
+
+The named causes are `comps_outside_match_criteria` (the comp set drifted onto another unit
+type), `rent_estimate_market_error_elevated` (the New York cluster, whose holdout error runs
+1.9x the headline), `fmr_bedroom_cap_exceeded` and `sparse_comps` (the five-bedroom
+subject), and `rent_diverges_from_comps`. The earlier analysis had already observed that
+"the tails are explainable, individually" and read it as *support* for a threshold; the
+consequence runs the other way. **If every tail is individually explained by a disclosure
+the reader already has, a threshold over the tail adds no information** — it restates a
+specific finding in vaguer words and attributes it to the listing's stated rent rather than
+to the part of the system that produced it. The middle behaves correctly for symmetry: four
+of the seven rows inside ±16% carry no rent-related flag at all, so the quiet region is
+genuinely quiet. The problem is not false positives; the positives are redundant.
+
+**Three things recorded so they are not re-derived.**
+
+1. **The evidence path that was supposed to settle this does not exist.** U8.7 proposed
+   re-calibrating `demo_deals.DemoDeal.rent_basis` from `hud_fmr:2` to the market-index
+   anchor, on the reasoning that it would add six observations from outside the fixture set.
+   Measured, it does the opposite: a stated rent set equal to the anchor is compared against
+   `ratio × anchor`, so the gap is `1/ratio − 1` and nothing else — −5.9% on the three demo
+   deals sharing a unit spec, to the decimal. It would replace circularity through FMR with
+   tighter circularity through the model.
+2. **The 13 fixtures are independent of the anchor but are not observations.** Their rents
+   were chosen to look plausible for the unit. A distribution over them describes how the
+   model prices unit types, sampled at 13 invented points — which is enough to rule a check
+   out and would not have been enough to rule one in.
+3. **The constant is held at `None` rather than deleted.** U8.7's original plan was
+   deletion, taken when the gap was structural and a threshold would have been meaningless.
+   That is no longer the situation: the check is redundant on *this* evidence, not
+   impossible in principle, so deleting the constant would discard the option along with the
+   measurement. **What would reopen it:** stated rents observed from outside the anchor
+   chain — actual asked rents for comparable units in the subject's ZIP, from a public
+   listing source. Not more fixtures, and not a re-calibration of the existing ones.
+
+**One finding fell out of the same measurement and belongs to #11 rather than here.** The
+demo listings' rents are calibrated to a schedule the system no longer uses, and on one deal
+that shows: `chicago`'s stated rents sit ~25% below Logan Square's own market index, because
+HUD's 40th percentile runs about a third under the market in that ZIP. Re-calibrating was
+declined on the ground that nothing computes from a stated rent, so a stale basis there can
+make a listing less lifelike but cannot make the system wrong — the same reasoning that kept
+`staten-island`'s asking price as committed. Recorded in `demo_deals.py`'s own docstring and
+in the Chicago deal's note, where a reader of the fixture will meet it.
+
+---
 
 ### #15 · U6 · Aug 22, 2026 — no property-level value estimate
 

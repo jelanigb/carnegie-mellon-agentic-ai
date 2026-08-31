@@ -51,16 +51,18 @@ bullets that never landed (U8.6c).
 | ✅ | **U8.6c** near-tie split + evaluator scores | **Completed Aug 30, 2026** — the two audited gaps built; the cut-boundary measurement found the tie-break deciding the reported scenario set |
 | ✅ | **U8.6d** confidence decomposition | Built, plus the stale Critic stub-node claim it surfaced |
 | ✅ | **U8.6e** the objection gate *(unplanned)* | Repairs built; **decision taken Aug 30, 2026** — I1 and I3 ungated, I2 keeps the gate |
-| 🟨 | **U8.7** checks A and B | Re-measured twice; the veto's premise expired, and **the evidence the file said would settle it turns out not to exist** — still the architect's call |
+| ✅ | **U8.7** checks A and B | **Closed Aug 30, 2026 as #20** — a disclosure, held on a measured reason after the original one expired |
 | ✅ | **U8.8** sub-metro price benchmark | **Built Aug 30, 2026, two days inside the drop-dead.** ZIP tier live for New York and Chicago; Los Angeles keeps the metro figure, disclosed. Verdict- and recording-inert, verified |
 | ✂️ | **U8.9** live runs, traces, diagram | Dropped Aug 30, 2026 by the architect |
 | ⬜ | **U8.10** close-out | Not started |
 | 🟨 | **U8.M** maintenance | TODO inventory reconciled; remainder open |
 
-**One decision is still waiting on the architect** — what to do with the stated-rent
-comparison now that its veto no longer holds (U8.7). The other, the divergence gate in
-front of the Critic's objections (U8.6e), was taken on Aug 30, 2026 and is built; the
-write-up below is kept as the case that was put rather than rewritten as a conclusion.
+**Both decisions that were waiting on the architect were taken on Aug 30, 2026.** The
+divergence gate in front of the Critic's objections (U8.6e) was ungated for I1 and I3 and
+kept for I2, and is built; the stated-rent comparison (U8.7) stays a disclosure and closes
+as **#20**. In both places the case that was put is kept as written rather than rewritten
+into a conclusion — the losing half of an argument is what makes the file usable the next
+time the question comes up.
 
 ---
 
@@ -2030,9 +2032,11 @@ of the seven rows inside ±16% carry no rent-related flag at all, so the quiet r
 genuinely quiet. The threshold's problem is not false positives; it is that its positives
 are redundant.
 
-### Recommendation — hold at `None`, and do not delete the constant
+### TAKEN Aug 30, 2026 — hold at `None`, and do not delete the constant
 
-**Not A, not B, and not C as they are written above.**
+**The architect took this recommendation; it closes as decision #20**, with the reasoning
+in [`../history/decision_log.md`](../history/decision_log.md#rent--valuation). **Not A, not
+B, and not C as they are written above.**
 
 - **Not A (set a threshold).** The measurement that made it look placeable is the same one
   that shows it would not discriminate. 6 of 6 firing rows already explained is not a
@@ -2059,8 +2063,32 @@ baseline is right` — ZORI has settled it, and the answer is no.
 **What would genuinely reopen this**, stated so it is not re-derived: stated rents observed
 from a source outside the anchor chain — actual asked rents for comparable units in the
 subject's ZIP, from a public listing source. Not a re-calibration of the fixtures, and not
-more fixtures. That is a data acquisition, it is out of scope before the freeze, and it
-belongs in `open_questions.md` rather than in this unit.
+more fixtures. That is a data acquisition and is out of scope before the freeze; it is
+recorded in #20 rather than left as a live question.
+
+### The demo-set finding this surfaced, and why it was not acted on
+
+**It belongs to #11, not to this subsection, and the answer was to state it rather than fix
+it.** The demo listings' rents are calibrated to `hud_fmr:2` — a schedule the system now
+uses only for the bedroom step — and on one deal that shows: `chicago`'s stated rents sit
+**~25% below Logan Square's own market index**, because HUD's 40th percentile runs about a
+third under the market in that ZIP. The other four are within 10%.
+
+Re-calibrating was declined on the architect's test — *is it meaningfully broken?* Nothing
+computes from a stated rent: no flag, no confidence contribution, no verdict. A stale basis
+there can make one listing less lifelike; it cannot make the system wrong.
+`verify_demo_calibration.py` still passes, because the figures do match the basis they
+claim — the basis is stale, not false. And `staten-island`'s asking price set the precedent
+already: a demo figure whose basis went stale, kept as committed with the staleness stated
+in the deal's own note.
+
+Two things would change that answer, and both are recorded at the site: an audience who
+would read Chicago's rents as implausible, or promoting the stated-rent comparison to a
+check. A third cuts against re-calibrating even then — the estimate *is* the market index
+times a modelled ratio, so calibrating stated rents to that index would make every demo
+report's stated-versus-modelled section print the same figure. That is exactly the defect
+`price_premium_to_basis` and the `overpriced` fixture exist to prevent on the price side,
+so a re-calibration would need the same device built on the rent side to be worth doing.
 
 ### U8.8 ✅ — Public-record sub-metro price benchmark (OQ-7, #11) — **built Aug 30, 2026**
 
