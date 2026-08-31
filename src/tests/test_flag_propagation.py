@@ -88,6 +88,7 @@ from state import (
     LocationPrecision,
     RentEstimateSource,
     Severity,
+    ValuationDetail,
     flag,
 )
 from tools import hud_fmr, zcta_crosswalk, zori
@@ -1689,6 +1690,11 @@ def test_an_interaction_objection_reaches_the_report_and_escalates(monkeypatch):
         graph_module.NODE_FUNCTIONS,
         nodes.VALUATION_RENT,
         lambda state: {
+            # The median as well as the flag: I1 and I3 are statements *about* the comp
+            # cross-check, so since U8.6 they require it to have produced a verdict —
+            # a stub that raised the divergence flag without one would describe a
+            # comparison the real agent never wrote down.
+            "valuation_detail": ValuationDetail(comp_implied_rent_median=2_000.0),
             "flags": [
                 flag(
                     nodes.VALUATION_RENT,
@@ -1697,7 +1703,7 @@ def test_an_interaction_objection_reaches_the_report_and_escalates(monkeypatch):
                     Severity.WARN,
                     state.planner_invocations,
                 )
-            ]
+            ],
         },
     )
     # Silenced for the reason the rework case documents at length: an agent correctly

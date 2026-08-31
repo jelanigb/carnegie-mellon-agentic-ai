@@ -17,13 +17,24 @@ from __future__ import annotations
 
 import nodes
 from agents.critic import Objection, _interaction_objections, _kinds
-from state import DealState, FlagKind, Severity, flag
+from state import DealState, FlagKind, Severity, ValuationDetail, flag
 
 
-def _state(*kinds: FlagKind) -> DealState:
-    """A DealState carrying exactly the named flags and nothing else."""
+def _state(*kinds: FlagKind, cross_checked: bool = True) -> DealState:
+    """A DealState carrying exactly the named flags, and a comp cross-check verdict.
+
+    `cross_checked` mirrors what `valuation_rent._cross_check` writes: a
+    `comp_implied_rent_median` exists only once
+    `config.RENT_COMP_CROSSCHECK_MIN_COMPS` comps survive normalization, and I1/I3 are
+    statements about that median. The default is True because that is the ordinary case
+    — a deal with enough comps to compare against — and the False path has its own test.
+    """
+    detail = ValuationDetail()
+    if cross_checked:
+        detail.comp_implied_rent_median = 2_000.0
     return DealState(
         raw_listing_text="irrelevant to an interaction check",
+        valuation_detail=detail,
         flags=[flag("test", kind, f"synthetic {kind}", Severity.WARN, 1) for kind in kinds],
     )
 
@@ -33,23 +44,56 @@ def _messages(objections: list[Objection]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# The gate: no divergence, no interaction
+# What each check requires (revised U8.6, Aug 30 2026)
+#
+# I1 and I3 need the comp cross-check to have produced a median; I2 additionally needs
+# that median to have disagreed with the estimate. See `_interaction_objections`'
+# docstring for why the three do not share one rule.
 # ---------------------------------------------------------------------------
 
 
-def test_no_objections_when_the_cross_check_did_not_diverge():
-    """Every interaction here is about how to read a divergence. Without one there is
-    nothing to misread, however degraded the comp set was."""
-    assert _interaction_objections(_state()) == []
-    assert _interaction_objections(_state(FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA)) == []
+def test_a_degraded_comp_set_objects_even_where_the_numbers_agreed():
+    """The U8.6 change, asserted directly.
+
+    Agreement between an estimate and a median built on the wrong units, or around the
+    wrong location, is a coincidence rather than a confirmation. The divergence gate used
+    to read exactly that coincidence as "nothing to report".
+    """
+    assert len(_interaction_objections(_state(FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA))) == 1
+    assert len(_interaction_objections(_state(FlagKind.COORDINATES_FROM_CITY_CENTROID))) == 1
+
+
+def test_spatial_concentration_alone_still_raises_nothing():
+    """I2 keeps the gate. Imprecision is a reason to discount a disagreement, not a
+    finding on its own — and every Cleveland and Brooklyn comp set in this corpus is
+    single-coordinate, so ungating it would object to a market rather than to a deal."""
     assert _interaction_objections(_state(FlagKind.COMPS_SPATIALLY_CONCENTRATED)) == []
-    assert _interaction_objections(_state(FlagKind.COORDINATES_FROM_CITY_CENTROID)) == []
+
+
+def test_nothing_raised_when_no_flags_at_all():
+    assert _interaction_objections(_state()) == []
 
 
 def test_a_divergence_on_its_own_raises_nothing():
     """The single-flag case must stay quiet, or the check is just a second copy of the
     divergence flag with a louder severity."""
     assert _interaction_objections(_state(FlagKind.RENT_DIVERGES_FROM_COMPS)) == []
+
+
+def test_no_objection_about_a_comparison_that_never_happened():
+    """What replaces the gate for I1 and I3.
+
+    Below `config.RENT_COMP_CROSSCHECK_MIN_COMPS` surviving comps the cross-check returns
+    without a median, and the report carries the comp counts instead of a comparison. An
+    objection here would describe a median the reader cannot see — the thin-market deals
+    are exactly the ones that would collect it.
+    """
+    assert _interaction_objections(
+        _state(FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA, cross_checked=False)
+    ) == []
+    assert _interaction_objections(
+        _state(FlagKind.GEOCODER_SERVICE_UNAVAILABLE, cross_checked=False)
+    ) == []
 
 
 # ---------------------------------------------------------------------------
@@ -111,9 +155,12 @@ def test_spatially_concentrated_comps_with_divergence_are_critical():
 
 
 def test_centroid_fallback_with_divergence_is_warn_not_critical():
-    """Deliberately weaker than I1 and I2. The rent model is location-blind below the
-    county, so a centroid fallback moves the comps without moving the estimate — that
-    degrades the comparison and points at which side to doubt, rather than voiding it."""
+    """Deliberately weaker than I1 and I2.
+
+    A centroid fallback moves both halves of the comparison — the comp set and, since the
+    hybrid anchor, the rent level the estimate is anchored to. That degrades the
+    comparison without voiding it, and the severity says so.
+    """
     objections = _interaction_objections(
         _state(
             FlagKind.RENT_DIVERGES_FROM_COMPS,
@@ -195,6 +242,7 @@ def test_a_resolved_geocode_clears_the_stale_centroid_objection():
         raw_listing_text="irrelevant to an interaction check",
         planner_invocations=2,
         plan=[nodes.EXTRACTOR, nodes.COMPS_RETRIEVAL, nodes.VALUATION_RENT],
+        valuation_detail=ValuationDetail(comp_implied_rent_median=2_000.0),
         flags=[
             flag(
                 nodes.EXTRACTOR,
@@ -226,6 +274,7 @@ def test_an_agent_skipped_this_pass_is_not_read_as_cleared():
         raw_listing_text="irrelevant to an interaction check",
         planner_invocations=2,
         plan=[nodes.COMPS_RETRIEVAL, nodes.VALUATION_RENT],
+        valuation_detail=ValuationDetail(comp_implied_rent_median=2_000.0),
         flags=[
             flag(
                 nodes.EXTRACTOR,

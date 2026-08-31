@@ -335,6 +335,24 @@ def _kinds(state: DealState) -> frozenset[FlagKind]:
     return frozenset(kinds)
 
 
+def _cross_check_ran(state: DealState) -> bool:
+    """Did the comp cross-check actually produce a median to read?
+
+    `valuation_rent._cross_check` writes `comp_implied_rent_median` only once
+    `config.RENT_COMP_CROSSCHECK_MIN_COMPS` comps survive normalization; below that it
+    returns silently and the report carries the comp counts instead of a comparison.
+    I1 and I3 are statements *about that comparison*, so they need it to exist —
+    the only reason this function reads `valuation_detail` rather than flags alone.
+
+    Not pass-scoped the way `_kinds` is, and it does not need to be:
+    `DealState.valuation_detail` is replaced wholesale on each Valuation run rather than
+    appended to, so it already describes the most recent look — which is exactly the rule
+    `_kinds` applies to an agent that did not run this pass.
+    """
+    detail = state.valuation_detail
+    return detail is not None and detail.comp_implied_rent_median is not None
+
+
 def _interaction_objections(state: DealState) -> list[Objection]:
     """Contradictions that exist only in the *combination* of upstream disclosures.
 
@@ -353,14 +371,47 @@ def _interaction_objections(state: DealState) -> list[Objection]:
     longer applied. `_kinds` now resolves that per source agent, judging an agent that
     ran this pass on this pass alone and an agent skipped this pass on its last
     examination — never as cleared.
+
+    **What each check requires changed on Aug 30, 2026 (U8.6, the architect's call).**
+    Until then one line at the top of this function returned early unless
+    `RENT_DIVERGES_FROM_COMPS` had been raised, so every objection here — and therefore
+    the only critical the Critic produces, and the only thing that can start a rework —
+    existed only where the estimate and the comp median already disagreed. The argument
+    for that gate was that these checks reinterpret a *disagreement*, and that there is
+    nothing to reinterpret when the two figures agree.
+
+    That argument survives for one of the three checks and not for the other two,
+    because they are not making the same kind of claim:
+
+    - **I1 and I3 say the comp set is the wrong set for this subject** — matched on
+      attributes the model prices on, or drawn around a location that is not the
+      property's. That holds however the numbers came out, and agreement between two
+      mis-specified quantities is not evidence about either. **Ungated.**
+    - **I2 says the comp median is imprecise** — a point sample over one coordinate that
+      decision #15 measured carrying 150 listings spanning $760-$6,995. Imprecision
+      degrades a *disagreement*; on its own it is what `COMPS_SPATIALLY_CONCENTRATED`
+      already discloses at WARN. Ungating it would make a market's data density a
+      critical objection on every listing in Cleveland and Brooklyn — a large behavioral
+      change, and the wrong instrument for it. **Keeps the gate.**
+
+    **What replaces the gate for I1 and I3 is `_cross_check_ran`, not nothing.** These
+    objections describe how to read the comp cross-check, so one has to have happened:
+    below `config.RENT_COMP_CROSSCHECK_MIN_COMPS` surviving comps
+    `valuation_rent._cross_check` returns before computing a median, and an objection
+    about a median that was never produced would describe a comparison the report does
+    not contain.
     """
     kinds = _kinds(state)
     objections: list[Objection] = []
 
     # The comp cross-check is the only independent check on the rent estimate in this
     # system, so every interaction below is about when its verdict stops being readable.
-    if FlagKind.RENT_DIVERGES_FROM_COMPS not in kinds:
-        return objections
+    # I1 and I3 need only that the check produced a verdict; I2 needs that verdict to
+    # have been a disagreement — see the docstring for why the three differ. Each check
+    # carries its own precondition rather than sharing an early return, so that the
+    # difference between them is visible at the check it applies to.
+    cross_checked = _cross_check_ran(state)
+    diverged = FlagKind.RENT_DIVERGES_FROM_COMPS in kinds
 
     # I1 — the comp set came back unlike the subject on an attribute the model prices on.
     #
@@ -374,19 +425,23 @@ def _interaction_objections(state: DealState) -> list[Objection]:
     #
     # Why it matters that the attribute is one the model prices on:
     # `config.RENT_MODEL_FEATURES` is ("bedrooms", "bathrooms", "square_feet"), so the
-    # comp median then describes a different population than the model predicted for, and
-    # a gap between them is the expected consequence of the widening rather than evidence
-    # about the estimate.
-    if FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA in kinds:
+    # comp median then describes a different population than the model predicted for, so
+    # the comparison is uninformative in both directions — a gap is the expected
+    # consequence of the widening rather than evidence about the estimate, and a match is
+    # two differently-specified quantities landing near each other. **Ungated Aug 30,
+    # 2026 (U8.6)**: that second half is why, and it is the half the divergence gate used
+    # to suppress. `la-three-bedroom-comp-drift` is the worked example — 6 of 8 comps out
+    # of band, and the numbers agreed.
+    if cross_checked and FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA in kinds:
         objections.append(
             Objection(
                 "The comp set was widened on an attribute the rent estimate depends "
                 "on — bedrooms, bathrooms or floor area — so the comparable-implied "
                 "median describes a different kind of unit than the one being priced. "
-                "The divergence "
-                "between them is the expected consequence of that relaxation, not a "
-                "finding about the estimate — the rent figure has no usable independent "
-                "check on this deal.",
+                "Whether the two figures agree or disagree, the comparison is not a "
+                "check on this estimate: a median for the wrong kind of unit landing "
+                "near the modelled rent is a coincidence rather than a confirmation. "
+                "The rent figure has no usable independent check on this deal.",
                 Severity.CRITICAL,
             )
         )
@@ -397,7 +452,14 @@ def _interaction_objections(state: DealState) -> list[Objection]:
     # rents span $760-$6,995, CV 48.7% against 49.7% for the whole metro. A median over
     # comps clustered like that carries almost no locational information, so diverging
     # from it is weak evidence in either direction.
-    if FlagKind.COMPS_SPATIALLY_CONCENTRATED in kinds:
+    #
+    # **The one check that keeps the divergence gate (U8.6).** This says the median is
+    # imprecise, not that it describes the wrong thing, and imprecision is a reason to
+    # discount a disagreement rather than a finding on its own. Every Cleveland and every
+    # Brooklyn comp set in this corpus is single-coordinate, so ungating would turn a
+    # market's data density into a critical objection on every listing in it —
+    # `COMPS_SPATIALLY_CONCENTRATED` already discloses that at WARN.
+    if diverged and FlagKind.COMPS_SPATIALLY_CONCENTRATED in kinds:
         objections.append(
             Objection(
                 "The comparables cluster at one location, so their median is a point "
@@ -426,11 +488,16 @@ def _interaction_objections(state: DealState) -> list[Objection]:
     # unaffected; what it can still say is that neither side describes the address on the
     # listing. That is a weaker claim and a more honest one, and it stays WARN rather than
     # CRITICAL for the same reason it always did — the comparison is degraded, not void.
+    #
+    # **Ungated Aug 30, 2026 (U8.6).** "Neither side describes this address" is true of
+    # the comparison whether or not the two sides agree, and this is the only retryable
+    # objection in the system, so leaving it behind the divergence gate also left the
+    # bounded-rework cycle reachable only on deals that happened to diverge.
     geocode_fallbacks = {
         FlagKind.COORDINATES_FROM_CITY_CENTROID,
         FlagKind.GEOCODER_SERVICE_UNAVAILABLE,
     }
-    if kinds & geocode_fallbacks:
+    if cross_checked and kinds & geocode_fallbacks:
         # Only the service-outage cause is worth a rework: re-running the Extractor
         # re-attempts the Census call, and the same listing may resolve to a parcel on a
         # later run. An address with no street number will not, however often it is
@@ -443,8 +510,8 @@ def _interaction_objections(state: DealState) -> list[Objection]:
                 "rather than around this property, and the rent estimate is anchored to "
                 "that same fallback location's rent level rather than to this address's. "
                 "Both halves of the comparison therefore describe a neighborhood the "
-                "property may not be in, so their disagreement says little about this "
-                "deal either way."
+                "property may not be in, so the comparison says little about this deal "
+                "either way — including where the two figures happen to agree."
                 + (
                     " The geocoder was unreachable rather than the address being "
                     "unresolvable, so a re-run may resolve it to a parcel."

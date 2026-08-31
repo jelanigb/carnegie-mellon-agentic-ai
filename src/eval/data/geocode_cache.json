@@ -29,5 +29,18 @@
     "longitude": -87.707345398786,
     "matched_address": "2500 N KEDZIE BLVD, CHICAGO, IL, 60647",
     "source": "census_geocoder"
+  },
+  "42 Quarry Ridge Rd, Tallow Bend, WY, 82001": "no_match",
+  "1801 N Vermont Ave, Los Angeles, CA, 90027": {
+    "latitude": 34.104562436659,
+    "longitude": -118.291849496791,
+    "matched_address": "1801 N VERMONT AVE, LOS ANGELES, CA, 90027",
+    "source": "census_geocoder"
+  },
+  "7001 Amboy Rd, Staten Island, NY, 10307": {
+    "latitude": 40.515995940567,
+    "longitude": -74.23339264599,
+    "matched_address": "7001 AMBOY RD, STATEN ISLAND, NY, 10307",
+    "source": "census_geocoder"
   }
 }
