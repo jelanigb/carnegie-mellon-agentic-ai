@@ -639,20 +639,47 @@ class ValuationDetail(BaseModel):
     divergence_pct: Optional[float] = None
 
     # --- Market benchmark (not a value estimate; see the Summarizer) ------------
-    # Redfin's median sale price for Multi-Family (2-4 unit) in the subject's metro,
-    # smoothed over `config.REDFIN_ROLLING_WINDOW_PERIODS`. Deliberately *not* written
-    # to `DealState.value_estimate`: the extract is pre-aggregated to one median per
-    # metro-period and exposes no individual sales, so it carries no property-level
-    # signal at all — the same figure describes a 2-unit duplex and a 4-unit building
-    # in the same metro. It is a market reference the asking price can be read against,
+    # The median sale price for comparable multi-family property near the subject.
+    # Deliberately *not* written to `DealState.value_estimate`: however local it gets,
+    # it is a median over other people's transactions and carries nothing about this
+    # property's condition, so it is a reference the asking price can be read against
     # and the report labels it as one.
+    #
+    # **Two tiers since U8.8, and `benchmark_tier` says which one produced the headline
+    # figure.** The ZIP tier comes from county-assessor sale records
+    # (`tools/sale_benchmarks.py`); the metro tier is Redfin's pre-aggregated extract,
+    # one median per metro-period, which describes a 2-unit duplex and a 4-unit building
+    # in the same metro identically. The tier is a field rather than an inference from
+    # which numbers are populated, because a reader is being told how local the
+    # comparison is and that should not depend on reading the absence of something.
     benchmark_metro: Optional[str] = None
     benchmark_median_sale_price: Optional[float] = None
     benchmark_periods_averaged: Optional[int] = None
     benchmark_homes_sold_per_period: Optional[float] = None
-    # Why there is no benchmark, in words, for the metros Redfin's extract never
+    # "zip" or "metro". None when no benchmark resolved at all.
+    benchmark_tier: Optional[str] = None
+    # The ZIP tier's own figures, kept beside the headline rather than replacing it:
+    # when the ZIP tier wins, the metro median stays in `benchmark_metro_median_sale_price`
+    # so the report can show the local figure against the wide one. That contrast is
+    # what makes #11's demo calibration visible — those asking prices were set *from*
+    # the metro median, so every one of them reads cheap against its own ZIP.
+    benchmark_zip: Optional[str] = None
+    benchmark_zip_n_sales: Optional[int] = None
+    benchmark_zip_window_start: Optional[str] = None
+    benchmark_zip_attribution: Optional[str] = None
+    # What the local records count as multi-family, which is **not the same in every
+    # market**: New York publishes a unit count so its rows are 2-4 units, while Cook
+    # County publishes a class whose closest match spans 2-6. The definition travels
+    # with the figure rather than being averaged away.
+    benchmark_zip_definition: Optional[str] = None
+    benchmark_metro_median_sale_price: Optional[float] = None
+    # Why there is no benchmark at all, in words, for the metros Redfin's extract never
     # reached — New York is the standing case (§2). Absence stated rather than omitted.
     benchmark_unavailable_reason: Optional[str] = None
+    # Why there is no *local* benchmark, when a metro one exists. Distinct from the
+    # field above: "we have a wide figure and not a narrow one" is a different fact from
+    # "we have nothing", and collapsing them would make a degraded report look empty.
+    benchmark_local_unavailable_reason: Optional[str] = None
 
 
 class Scenario(BaseModel):

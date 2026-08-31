@@ -37,7 +37,9 @@ one is derived from the code and is the one to trust.
 | --- | --- | --- | --- | --- |
 | **Kaggle rent corpus** | Dec 7 2018 – Dec 26 2019, static | Street address (**8% of rows**), else city | Latitude/longitude per row (city-area placeholder for 92%) | Rent-model training · comp index |
 | **HUD FMR API** | Live, by federal fiscal year, **FY2017–2026 history** | **ZIP** (SAFMR counties only) | **County** | Anchor's **bedroom step** only (U11.3) · demo calibration · **rent-growth series (U6)** |
-| **Redfin sale medians** | Jan 2018 – Jun 2026, monthly | Metro (this extract); ZIP extract exists unused | Metro | Market benchmark · **price** appreciation (U6) · demo calibration |
+| **Redfin sale medians** | Jan 2018 – Jun 2026, monthly | Metro (this extract); ZIP extract exists unused | Metro | Market benchmark **where no local records exist** · **price** appreciation (U6) · demo calibration |
+| **NYC DOF sales** | 2023-01 – present, per transaction | Parcel (`bbl`, lat/lon) | **ZIP** | Market benchmark, New York (U8.8) |
+| **Cook County Assessor** | 2023-01 – present, per transaction | Parcel (`pin`) | **ZIP**, via the parcel universe | Market benchmark, Chicago (U8.8) |
 | **Zillow ZORI** | 2015-01 – present, monthly | **ZIP** (8,543 nationally) | **ZIP**, county median where a ZIP's series does not reach | Anchor's **rent level** — training denominator, inference anchor, comp cross-check (U11.3) · the independent rent check (#16, U8.0) |
 | **Census Geocoder** | Live | Parcel / street address | Parcel, with city-centroid fallback | Subject-property coordinates |
 | **Census county boundaries** | TIGER/Line 2023 | County polygon | County | Coordinate → county FIPS |
@@ -48,13 +50,16 @@ one is derived from the code and is the one to trust.
 system's precision is lost by choice rather than by the data's limits, and it is the
 single most useful thing on this page — writing this file is what surfaced the HUD row's
 gap, which had gone unnoticed through three units and was closed the same day (below).
-One gap remains open: Redfin.
+Every gap on this map has now been closed or narrowed with its residue stated; the last
+one, Redfin's, closed Aug 30, 2026 from an unexpected direction — see "The same gap on
+the price side" below.
 
 | Source | Gap | Status |
 | --- | --- | --- |
 | HUD FMR | County used where ZIP published | ✅ **Closed Aug 22, 2026**, then **superseded Aug 30, 2026** — HUD no longer supplies the rent level at all, so its ZIP/county gap stopped mattering. See "The anchor moved" below |
 | Zillow ZORI | Some ZIP series begin after the corpus's 2018-19 vintage, so a row's own listing month may have no observation at its own ZIP | 🟨 **Disclosed, not closed** — and much smaller than it looked. Measured Aug 30, 2026: the gap is 27% of training rows at ZIP grain, and a county-median fallback recovers 99.0% of it, leaving **0.3%** with no anchor. Where the fallback fires, `rent_anchor_county_level` says so at warn severity |
-| Redfin | Metro used; a ZIP extract sits unused on disk | 🟨 **Not a defect.** §2's metro choice is correct and settled for the *appreciation series* — measured, the ZIP extract has a median of **2 sales per period** nationally, and a YoY growth rate off 2 sales is noise. The only open question is the far narrower one of whether the *market benchmark* (a level, not a growth rate) could be ZIP-level where volume allows: 90026 / 60647 / 44109 carry 15 / 42 / 35 sales per period. A possible refinement to a figure already labelled "not this property's value", not a gap |
+| Redfin | Metro used; a ZIP extract sits unused on disk | ✅ **Narrowed Aug 30, 2026 (U8.8), from a different direction than this row proposed.** The *appreciation series* stays metro and that remains correct — measured, the ZIP extract has a median of **2 sales per period** nationally, and a YoY growth rate off 2 sales is noise. The *benchmark* is now ZIP-level in New York and Chicago, sourced from county-assessor transaction records rather than from the unused Redfin ZIP extract: those carry every sale rather than a pre-aggregated median, so the sample question this row raised does not arise. Los Angeles and Cleveland keep the metro figure, disclosed per deal |
+| NYC DOF / Cook Assessor | Parcel carried, ZIP used | 🟨 **By design, not a gap.** The deliverable is a *benchmark*, which needs a median over the subject's neighborhood and never needs to identify the subject's parcel — which is also why U8's Q3 priced this item at an address-to-parcel join it turned out not to contain |
 
 ---
 
@@ -415,6 +420,44 @@ multiply a county-relative ratio by a FY2026 ZIP-level figure.
 publishes no polygons); the boundary file is 2020 vintage; and 92% of corpus coordinates
 are city-area placeholders, so for those rows this resolves the placeholder's ZIP rather
 than the property's.
+
+## The same gap on the price side — closed for two markets of four (U8.8, Aug 30, 2026)
+
+The section above is about rent. The **price** benchmark had the identical shape of
+problem for longer: `ValuationDetail.benchmark_median_sale_price` was one Redfin median
+per *metro*, so every 2-4 unit property in Chicago was read against the same number. What
+closed it is county-assessor transaction records, aggregated per ZIP into a committed
+table (`scripts/build_sale_benchmarks.py` → `tools/data/zip_sale_benchmarks.json`, read
+by `tools/sale_benchmarks.py`).
+
+| Market | Route | Local tier? |
+| --- | --- | --- |
+| **New York** | NYC Open Data `w2pb-icbu` — ZIP, unit count and sale price in one table | ✅ 164 ZIPs, 27,309 sales since 2023 |
+| **Chicago** | Cook County `wvhk-k5uv` (sales) joined to `nj4t-kc8j` (parcels) on an exact `pin`, 96.8% matched | ✅ 140 ZIPs, 18,251 sales |
+| **Los Angeles** | — | ❌ California rolls publish **assessed value** under Proposition 13, not transaction price. A different instrument; not substituted silently |
+| **Cleveland** | — | ❌ Not in scope for this pass |
+
+**Three properties of this worth carrying**, because each is the kind of thing that
+misleads if it is not stated:
+
+- **The two markets do not define multi-family identically.** New York publishes a unit
+  count, so its rows are 2-4 units with no commercial space — Redfin's own definition.
+  Cook publishes a property *class*, and the closest, 211, spans **2-6 units**; neither
+  Cook dataset carries a unit count to narrow it. The definition travels with each figure
+  into the report rather than being averaged away.
+- **Cook's own non-arm's-length screens are used** (`is_multisale`,
+  `sale_filter_deed_type`, `sale_filter_same_sale_within_365`, `sale_filter_less_than_10k`)
+  rather than a price floor invented here — the publisher's judgment about which
+  transfers are not market sales, better sourced than this project's own would be.
+- **Neither dataset carries a licence field in its Socrata metadata.** Admissibility under
+  §8 rests on the "public record" clause rather than on an open licence, and each figure
+  carries the issuing office's attribution into the report.
+
+**It makes the demo listings look cheap, and that is #11 showing through rather than a
+defect.** Those asking prices were set *from* the metro median, so against their own ZIP
+they read low — a Chicago Uptown fixture asking $530,000 sits 39% below ZIP 60640's
+$867,500 median while that ZIP itself runs 77% above the Chicago metro's $490,903. The
+figures stand as committed and the gap is written up rather than calibrated away.
 
 ## Metro scopes
 

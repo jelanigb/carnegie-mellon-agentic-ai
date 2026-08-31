@@ -52,7 +52,7 @@ bullets that never landed (U8.6c).
 | ✅ | **U8.6d** confidence decomposition | Built, plus the stale Critic stub-node claim it surfaced |
 | ✅ | **U8.6e** the objection gate *(unplanned)* | Repairs built; **one open decision for the architect** |
 | 🟨 | **U8.7** checks A and B | Re-measured; **the veto's premise expired, so the decision is open** |
-| 🟨 | **U8.8** sub-metro price benchmark | Spike done for 2 of 3 metros; **ingest unbuilt**; drop-dead Sept 1 |
+| ✅ | **U8.8** sub-metro price benchmark | **Built Aug 30, 2026, two days inside the drop-dead.** ZIP tier live for New York and Chicago; Los Angeles keeps the metro figure, disclosed. Verdict- and recording-inert, verified |
 | ✂️ | **U8.9** live runs, traces, diagram | Dropped Aug 30, 2026 by the architect |
 | ⬜ | **U8.10** close-out | Not started |
 | 🟨 | **U8.M** maintenance | TODO inventory reconciled; remainder open |
@@ -1878,7 +1878,7 @@ observations and removes the one source in the project whose gap is circular by
 construction. It is small work and it is not scheduled anywhere — flagged here rather than
 left in conversation.
 
-### U8.8 🟨 — Public-record sub-metro price benchmark (OQ-7, #11) — **spike done, ingest unbuilt** — drop-dead Mon Sept 1
+### U8.8 ✅ — Public-record sub-metro price benchmark (OQ-7, #11) — **built Aug 30, 2026**
 
 Per Q3, and specified as what it can deliver rather than as what the cut list promised:
 county-assessor open data (Cook, LA County, NYC) joined to the subject's parcel, producing
@@ -1936,6 +1936,84 @@ why, which is the call U8.4c made when Staten Island's $875,000 was re-benchmark
 **Recording-safe, verified rather than assumed:** nothing flags on the benchmark value
 (checks A and B were not promoted at U8.7) and `scenario_forecast._context_block` does not
 carry it, so no prompt changes and no re-record. The ingest itself is not yet built.
+
+---
+
+**Built Aug 30, 2026 — two days inside the drop-dead, in two separable change sets.**
+
+**1. The ingest** — `scripts/build_sale_benchmarks.py` (pull and aggregate),
+`tools/data/zip_sale_benchmarks.json` (**committed**, 304 ZIPs, 28 KB),
+`tools/sale_benchmarks.py` (read side), and the `SALE_BENCHMARK_*` block in `config.py`.
+Committed rather than fetched at runtime for the same reason `EVAL_RECORDINGS_DIR` is: a
+report figure that depends on a live municipal portal renders differently depending on
+whether that portal is up, and a fresh clone must reproduce the published numbers.
+
+| Market | Route | Result |
+| --- | --- | --- |
+| New York | `w2pb-icbu`, direct | 27,309 qualifying sales, **164 ZIPs** |
+| Chicago | `wvhk-k5uv` → `nj4t-kc8j` on an exact `pin` | 18,251 sales, **96.8% joined**, 140 ZIPs |
+| Los Angeles | — | metro figure kept, disclosed per deal |
+
+**2. The wiring** — `ValuationDetail`'s benchmark block gains a tier and the local
+figures, `_attach_benchmark` prefers the ZIP tier and keeps the metro one beside it, and
+`summarizer._benchmark_section` renders whichever applies with the sample size, the
+window, the issuing office and the market's own definition of a multi-family sale.
+
+**Q3's unbounded risk never materialized, and the reason generalizes past this item.** It
+was priced as an address-to-parcel join. A *benchmark* needs a median over the subject's
+ZIP and never needs to identify the subject's parcel, so no fuzzy address matching exists
+anywhere in the change set. The only join is Cook's, on the assessor's own primary key,
+and it either matches or it does not — measured at 96.8%, with the misses counted in the
+build output rather than dropped silently.
+
+**Three measurements that changed a design decision rather than confirming one:**
+
+1. **Filtering New York on the unit count alone was wrong.** 2-4 residential units with
+   no commercial space admits 27,504 sales — of which **125 are labelled ONE FAMILY
+   DWELLING**, 47 are vacant land, and a tail are garages and religious facilities
+   carrying a unit count through a data-entry artifact. The category filter in
+   `SALE_BENCHMARK_NYC_CATEGORIES` exists because of that measurement.
+2. **Cook publishes its own non-arm's-length screens**, and they are better sourced than
+   anything this project would invent: 20,369 class-211 sales since 2023, of which
+   **18,335 pass all four** (`is_multisale`, deed type, same-sale-within-365, under-$10k).
+   Used instead of a price floor alone.
+3. **The two markets do not define multi-family identically and cannot be made to.** New
+   York publishes a unit count; Cook publishes a class whose closest match, 211, spans
+   **2-6 units**, and neither Cook dataset carries a unit count to narrow it with. The
+   definition therefore travels with each figure into the report rather than being
+   averaged away — the reader is told which one they are looking at.
+
+**The sample-size floor is set on the distribution, not on a guess.** New York's 164 ZIPs
+run min 1 / p10 8 / median 131 / max 659; Chicago's 140 run min 1 / p10 4 / median 34 /
+max 851. `SALE_BENCHMARK_MIN_SALES = 20` keeps 136 and 86 of them; every fixture ZIP is
+far above it. A ZIP below the floor falls back to the metro median **with the count
+named**, since "too thin to publish" and "not covered" are different facts.
+
+**The spike's numbers moved slightly and the reason is the filters, not the source.**
+Bed-Stuy 11216 reads $1,800,000 over 312 sales here against the spike's $1,750,000 over
+402, and Logan Square 60647 $720,000/709 against $735,000/864 — the shipped filters are
+stricter than the spike's exploratory ones on both sides.
+
+**Verified verdict-inert and recording-safe rather than argued to be.** Both offline tiers
+were re-run and their tables are **byte-identical** to the pre-U8.8 runs — no `CacheMiss`,
+same confidence, same verdicts, same coverage. That is the claim the spike made about
+prompts and flag sets, now measured.
+
+**#11's calibration is now visible in the report, as predicted.** The demo asking prices
+were set *from* the metro median, so against their own ZIP they read cheap:
+`chicago-uptown-duplex` asks $530,000, **39% below** ZIP 60640's $867,500 median, while
+that ZIP runs **77% above** the Chicago metro's $490,903. The figures stand as committed
+and the report shows both, which is what makes the calibration legible rather than
+mysterious.
+
+**One design decision is the architect's and is deliberately not taken:** whether the
+benchmark's *tier* should raise a flag the way `RENT_ANCHOR_COUNTY_LEVEL` does for the
+rent anchor. The case for not doing so is written at `_attach_benchmark` — a coarse rent
+anchor propagates into the estimate, the forecast and the cross-check, while nothing
+computes from the benchmark, so charging confidence for its width would say this deal's
+numbers are shakier when none of them moved. **That argument stops holding the moment
+check B is promoted** (U8.7), which is why this subsection had to land before that
+decision rather than after it.
 
 ### U8.9 ✂️ — Absorbed U10: live runs, traces, diagram, screenshots — **dropped Aug 30, 2026**
 

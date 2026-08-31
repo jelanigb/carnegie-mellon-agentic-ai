@@ -225,6 +225,13 @@ set without a benchmark *because of* that belief; it now measures about 11% belo
 metro's multi-family median (~$981K), a plausible Staten Island discount, so the figure
 stands as committed and the report benchmarks it like any other deal.
 
+**Updated Aug 30, 2026 (U8.8): the benchmark this deal is read against is now
+Tottenville's, not New York's.** County-assessor sale records give ZIP 10307 a median of
+**$1,054,490** over 152 recorded sales since 2023, so the committed $875,000 reads **17%
+below its own neighborhood** rather than 11% below the metro. The figure still stands as
+committed; what changed is that the comparison is now to the borough's south shore rather
+than to a median that includes Manhattan.
+
 The distinction matters for the same reason it did when U8.2b fixed the FMR anchor
 label: **"the source publishes nothing" and "this system never looked" read identically
 in a report and are completely different facts.** What remains genuinely missing here is
@@ -328,11 +335,22 @@ checked against.
 Identical in almost every respect to the Los Angeles deal — same market, same unit mix,
 same FMR-anchored rents — except the asking price is set 55% above the Redfin metro
 median on purpose (`price_premium_to_basis=0.55` in `demo_deals.py`). This exists to
-solve a specific problem: every *other* demo listing is calibrated exactly to its
-benchmark, so the report's "asking price vs. market benchmark" disclosure reads 0% on
-all of them — a real check the demo set otherwise has no listing that can exercise. This
+solve a specific problem: every *other* demo listing was calibrated exactly to its
+benchmark, so the report's "asking price vs. market benchmark" disclosure read 0% on all
+of them — a real check the demo set otherwise had no listing that could exercise. This
 deal isn't a claim that this Los Feliz property actually trades at this price; it's a
 fixture built to make that one disclosure show something.
+
+**Half of that reasoning expired on Aug 30, 2026 (U8.8), and the way it expired is the
+finding.** The benchmark is now the subject's own ZIP wherever county-assessor records
+reach it, and #11 calibrated these asking prices against the *metro* median — so the two
+demo deals in covered ZIPs stopped reading 0% on their own: `chicago` asks $499,000
+against Logan Square's $720,000 (**31% below**) and `staten-island` $875,000 against
+Tottenville's $1,054,490 (**17% below**). Neither listing changed; the benchmark got
+local and the calibration became visible. This deal is still the only one engineered to
+read *above* its benchmark, and it still reads 55% above because Los Angeles has no local
+tier — California publishes assessed value rather than sale price — so it is measured
+against the metro median exactly as it was designed to be.
 
 ### Coordinate Conflict — supplied coordinates disagree with the address
 

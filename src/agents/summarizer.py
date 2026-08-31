@@ -286,14 +286,21 @@ def _build_status_section(stub_nodes: list[str]) -> list[str]:
 
 
 def _benchmark_section(state: DealState, detail) -> list[str]:
-    """Redfin's metro sale-price median, framed as a reference rather than an estimate.
+    """The sale-price benchmark, framed as a reference rather than an estimate.
 
-    **The framing is the whole point of this section, not its wording.** The figure is a
-    median over one metro-month series with no individual sales behind it, so it says
-    what a typical 2-4 unit property in this metro sold for — and nothing whatsoever
-    about *this* property's square footage, unit count, or condition. Printed in the
+    **The framing is the whole point of this section, not its wording.** Whichever tier
+    supplies it, the figure is a median over *other* properties' transactions and says
+    nothing about this property's square footage, unit count or condition. Printed in the
     findings table it would read as a value estimate; printed here, next to the asking
     price it is meant to be read against, it reads as what it is.
+
+    **Two tiers since U8.8, and the section says which one it is reading**, because the
+    reader's response differs: a neighborhood median is a comparison they can act on,
+    and a metro-wide one describes a 2-unit duplex and a 4-unit building forty miles
+    apart identically. When the local figure exists the metro figure is printed beneath
+    it as contrast rather than dropped — the gap between them is information, and on this
+    project's own demo listings it is the visible consequence of #11 having set their
+    asking prices *from* the metro median.
     """
     lines = ["### Market benchmark", ""]
 
@@ -304,12 +311,24 @@ def _benchmark_section(state: DealState, detail) -> list[str]:
         lines.extend([f"**Not available.** {reason}", ""])
         return lines
 
-    lines.append(
-        f"Typical **Multi-Family (2-4 unit)** sale in the {detail.benchmark_metro} "
-        f"metro: **{_money(detail.benchmark_median_sale_price)}**, the median over the "
-        f"last {detail.benchmark_periods_averaged} monthly periods "
-        f"(~{detail.benchmark_homes_sold_per_period:,.0f} sales per period, Redfin)."
-    )
+    local = detail.benchmark_tier == "zip"
+    if local:
+        lines.append(
+            f"Typical **{detail.benchmark_zip_definition}** sale in **ZIP "
+            f"{detail.benchmark_zip}**: "
+            f"**{_money(detail.benchmark_median_sale_price)}**, the median of "
+            f"{detail.benchmark_zip_n_sales:,} recorded sales since "
+            f"{detail.benchmark_zip_window_start} "
+            f"({detail.benchmark_zip_attribution})."
+        )
+    else:
+        lines.append(
+            f"Typical **Multi-Family (2-4 unit)** sale in the {detail.benchmark_metro} "
+            f"metro: **{_money(detail.benchmark_median_sale_price)}**, the median over "
+            f"the last {detail.benchmark_periods_averaged} monthly periods "
+            f"(~{detail.benchmark_homes_sold_per_period:,.0f} sales per period, Redfin)."
+        )
+
     if state.deal_terms.price:
         drift = (state.deal_terms.price - detail.benchmark_median_sale_price) / (
             detail.benchmark_median_sale_price
@@ -319,13 +338,37 @@ def _benchmark_section(state: DealState, detail) -> list[str]:
             f"This listing asks {_money(state.deal_terms.price)} — "
             f"**{abs(drift):.0%} {side}** that benchmark."
         )
+
+    lines.append("")
+    if local and detail.benchmark_metro_median_sale_price:
+        wide = detail.benchmark_metro_median_sale_price
+        spread = (detail.benchmark_median_sale_price - wide) / wide
+        lines.append(
+            f"For contrast, the median across the whole {detail.benchmark_metro} metro is "
+            f"{_money(wide)} (Redfin, 2-4 unit) — this neighborhood runs "
+            f"**{abs(spread):.0%} {'above' if spread >= 0 else 'below'}** it. The "
+            f"neighborhood figure is the one used above, because a metro-wide median "
+            f"describes properties an hour apart identically."
+        )
+        lines.append("")
+    elif detail.benchmark_local_unavailable_reason:
+        lines.append(f"*{detail.benchmark_local_unavailable_reason}*")
+        lines.append("")
+
+    caveat = (
+        "The records behind it are other properties' sales in this ZIP over the period "
+        "named, with no adjustment for size, unit count or condition — and the local "
+        "definition of a multi-family sale is the one quoted above, which differs "
+        "between markets because the counties publishing the records define it "
+        "differently."
+        if local
+        else "The source is pre-aggregated to one median per metro per month and "
+        "exposes no individual sales, so it carries no square footage, unit count or "
+        "condition — the same figure describes every 2-4 unit property in the metro."
+    )
     lines.extend([
-        "",
-        "> **This is not an estimate of this property's value.** The source is "
-        "pre-aggregated to one median per metro per month and exposes no individual "
-        "sales, so it carries no square footage, unit count, or condition — the same "
-        "figure describes every 2-4 unit property in the metro. It is a market "
-        "reference for reading the asking price against, and nothing more.",
+        f"> **This is not an estimate of this property's value.** {caveat} It is a "
+        f"market reference for reading the asking price against, and nothing more.",
         "",
     ])
     return lines

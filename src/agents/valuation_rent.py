@@ -72,7 +72,14 @@ from state import (
     ValuationDetail,
     flag,
 )
-from tools import hud_fmr, kaggle_data, redfin_data, zcta_crosswalk, zori
+from tools import (
+    hud_fmr,
+    kaggle_data,
+    redfin_data,
+    sale_benchmarks,
+    zcta_crosswalk,
+    zori,
+)
 from tools.model import rent_model
 
 AGENT = "valuation_rent"
@@ -168,13 +175,66 @@ def _resolve_market_label(terms: DealTerms) -> Optional[str]:
     )
 
 
+def _resolve_subject_zip(terms: DealTerms) -> Optional[str]:
+    """The subject's ZIP, preferring what the listing stated over a polygon join.
+
+    Extracted at U8.8 because two independent lookups now key on it — the rent anchor's
+    market index and the sale-price benchmark — and a report that anchored rent to one
+    ZIP while benchmarking price against another would be describing two places in one
+    paragraph. The ZCTA fallback is a Census tabulation area rather than a postal ZIP;
+    the two agree for the great majority of residential ZIPs and the difference is not
+    worth a second geography for a benchmark keyed at this grain.
+    """
+    return terms.zip_code or zcta_crosswalk.lookup_zcta(terms.latitude, terms.longitude)
+
+
 def _attach_benchmark(detail: ValuationDetail, terms: DealTerms) -> None:
-    """Resolve the subject to a Redfin metro and record the benchmark, or why not.
+    """Record the most local sale-price benchmark available, and say which tier it is.
 
     Runs regardless of whether a rent estimate turns out to be possible, because the two
-    fail for unrelated reasons: a subject with no county has no FMR anchor but is still
+    fail for unrelated reasons: a subject with no county has no rent anchor but is still
     in a metro the price series covers, and a reader comparing the asking price to the
     market should not lose that because the rent path stopped earlier.
+
+    **Two tiers since U8.8 (OQ-7, #11), preferring the local one.** County-assessor sale
+    records give a median for the subject's own ZIP; Redfin gives one for the whole
+    metro. The ZIP figure is the headline wherever it exists, the metro figure is kept
+    beside it, and `benchmark_tier` states which is which — the price-side counterpart to
+    the ZIP-resolution anchoring the rent side already had, and the thing that makes
+    check B (asking price against the benchmark) a local comparison rather than a
+    metro-wide one.
+
+    **The metro tier is resolved first and unconditionally**, even when the ZIP tier wins.
+    It costs nothing (the extract is already cached) and it is what the local figure is
+    shown against; resolving it only on the fallback path would mean the contrast that
+    exposes #11's calibration is available exactly where it is least interesting.
+
+    **Raises no flag, and the reason is what the benchmark does rather than what a flag
+    would cost.** The obvious objection is symmetry: `RENT_ANCHOR_COUNTY_LEVEL` is a WARN
+    for exactly this situation one field over — an anchor resolved at a coarser grain
+    than the ideal — so why is a metro-grain benchmark not one too? Because the two
+    figures have different jobs. **A coarse rent anchor propagates**: the estimate is
+    `ratio x anchor`, the forecast projects from that estimate, and the comp cross-check
+    compares against it, so its imprecision reaches every downstream number — which is
+    precisely U8.6d's argument for keeping market-scoped doubt inside the confidence
+    score. **The benchmark propagates nowhere.** Nothing computes from
+    `benchmark_median_sale_price`; check B was not promoted at U8.7, so no objection
+    reads it either. It is printed beside the asking price and read by a human. Charging
+    confidence for the width of a figure that enters no calculation would say this deal's
+    *numbers* are shakier when none of them moved.
+
+    **The condition under which that stops being true is worth naming**, because it is a
+    live decision rather than a closed one (U8.7): if check B is ever promoted to a
+    Critic objection, the benchmark becomes an input to a check, its grain starts
+    deciding an outcome, and it earns a flag on the same reasoning the rent anchor has
+    one. Sequencing the promotion after this subsection is what makes that decision
+    answerable, since deciding it against a metro-wide median would be deciding it
+    against the number this replaces.
+
+    **A cost that is real but is not the argument:** a new `FlagKind` raised here would
+    join `scenario_forecast._context_block`'s upstream-flag list, change every forecast
+    prompt and invalidate the recorded eval batch. That is a reason to take the decision
+    deliberately and batch its re-record, not a reason to answer it this way.
     """
     if not terms.city:
         detail.benchmark_unavailable_reason = (
@@ -204,8 +264,27 @@ def _attach_benchmark(detail: ValuationDetail, terms: DealTerms) -> None:
     median, periods, homes_sold = benchmark
     detail.benchmark_metro = metro
     detail.benchmark_median_sale_price = median
+    detail.benchmark_metro_median_sale_price = median
     detail.benchmark_periods_averaged = periods
     detail.benchmark_homes_sold_per_period = homes_sold
+    detail.benchmark_tier = "metro"
+
+    # The same ZIP the rent anchor resolves (`_resolve_subject_zip`), so the two halves
+    # of the report describe one place rather than two nearby ones.
+    local = sale_benchmarks.lookup(_resolve_subject_zip(terms))
+    if local is None:
+        detail.benchmark_local_unavailable_reason = sale_benchmarks.unavailable_reason(
+            _resolve_subject_zip(terms), terms.city
+        )
+        return
+
+    detail.benchmark_median_sale_price = local.median_sale_price
+    detail.benchmark_tier = "zip"
+    detail.benchmark_zip = local.zip_code
+    detail.benchmark_zip_n_sales = local.n_sales
+    detail.benchmark_zip_window_start = local.window_start
+    detail.benchmark_zip_attribution = local.attribution
+    detail.benchmark_zip_definition = local.definition
 
 
 def _attach_model_provenance(detail: ValuationDetail, bundle: dict) -> None:
@@ -474,9 +553,7 @@ def valuation_rent_agent(state: DealState) -> dict:
     # county-anchored. Asking for a ZIP anchor there would apply a ZIP-level figure to a
     # county-relative ratio. The persisted training report carries the counties that were
     # ZIP-anchored, and only those get ZIP resolution here.
-    subject_zip = terms.zip_code or zcta_crosswalk.lookup_zcta(
-        terms.latitude, terms.longitude
-    )
+    subject_zip = _resolve_subject_zip(terms)
 
     # **The anchor is ZORI for the level and FMR only for the bedroom step (U11.3).** The
     # subject is read at the market index's newest observation rather than at a fiscal
