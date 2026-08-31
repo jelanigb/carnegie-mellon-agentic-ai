@@ -1959,6 +1959,20 @@ settled state in §7's register with reasoning in
 [`open_questions.md`](../open_questions.md) — and, where a question is *retargeted* rather
 than closed, say so with its reason, per U7.8's precedent.
 
+**Carries U11.5 with it**, by the architect's direction (Aug 30, 2026): U11's rename pass
+left the rent model's own prose and identifiers on the retired FMR vocabulary, and one
+reader-facing string still calls the estimator a linear regression. Documentation and
+naming, one artifact-key exception, scoped in full at
+[`task_list_u11.md`](task_list_u11.md) §U11.5 — batched here so the two documentation
+passes are one review rather than two.
+
+**Five open questions can close here** — OQ-1 (#6 tuned), OQ-3, OQ-6, OQ-15, and OQ-7
+either as built or as a written gap. **OQ-12's first half does not close** (Q2(b)): its
+leave-one-metro-out run is a transfer question that U8.4's flag does not ask. Its second
+half — confirming something still trips the rent-comp divergence flag — closes at U8.2. That would be the largest single
+close in the project, which is also the reason to review each one against what actually
+shipped rather than against this plan.
+
 ### U8.M 🟨 — Maintenance *(separate commit, per §8)*
 
 Clear the `TODO(U8)` markers this unit resolves, and the ones Q5 closes by deletion rather

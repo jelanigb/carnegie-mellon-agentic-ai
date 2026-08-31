@@ -317,6 +317,41 @@ report should say that the transfer question is open rather than let the cross-v
 MAE imply it was settled. OQ-12 stays open in
 [`../open_questions.md`](../open_questions.md) for exactly that reason.
 
+### U11.5 ⬜ — The FMR vocabulary the rename pass did not reach *(open — closes with U8's documentation close-out)*
+
+**Opened Aug 30, 2026 by the architect**, after an audit of this unit against the code
+found that U11.3's item-1 rename covered the `FlagKind` members, the `ValuationDetail`
+fields and the Summarizer's basis line — and stopped there. The rent model's own prose
+and identifiers still describe the anchor the unit retired. **Sequenced deliberately with
+U8.10 rather than now**: it is documentation and naming, one item excepted, and batching
+it with the other doc close-out is one review pass instead of two.
+
+**None of this changes a number.** The estimates, the anchor and every measured figure in
+this unit are correct as they stand; what is wrong is what the code *says* about them.
+
+| | Site | What is wrong |
+| --- | --- | --- |
+| **1** | `agents/summarizer.py:395` | **A false claim in reader-facing text, and the only item here that a demo audience can see.** The report says *"A linear regression on bedrooms, bathrooms and square footage"* — the estimator has been gradient boosting since U11.4. One line. **Raise ahead of the rest if the demo is recorded before U8.10.** |
+| **2** | `TrainingReport.mae_dollars_at_holdout_fmr` | The name says FMR; the quantity is dollars at the hybrid anchor. **The one item that is not purely cosmetic:** the field is serialized into the persisted bundle and `valuation_rent._attach_model_provenance` reads it by string key, so a rename needs a retrain or a both-keys read. Name it in the change set rather than discovering it mid-rename |
+| **3** | `rent_model.predict_ratio` | Docstring: "Predict rent-to-FMR ratio for one subject" |
+| **4** | `rent_model.build_training_frame` | Docstring: "Assemble the FMR-normalized training set from the Kaggle corpus" |
+| **5** | `rent_model.train` | Comment at the CV block: "Dollar error is the ratio error re-expressed at each row's own FMR" |
+| **6** | [`../open_questions.md`](../open_questions.md) OQ-4 | Stale on both halves: it reads "Deferred deliberately… **closes only if** schedule allows and proper validation replaces the single split", and U11.1 ran 5-fold CV while U11.4 adopted gradient boosting — its own stated closing condition is met, with the remainder (features, tuning, LOMO) cut to §6 1a. Both citations are also dead: `config.py:272` is now `REDFIN_TARGET_METROS` and `agents/valuation_rent.py:78` is the LLM-fallback TODO. Needs the "retargeted rather than closed" treatment U8.10 already uses |
+
+**Already done, recorded so the next reader does not redo it:** `tools/model/rent_model.py`'s
+**module docstring** was rewritten Aug 30, 2026. It had described the retired anchor as
+the shipped design — rent divided by the county FMR and multiplied by today's FMR, with
+`tools/rent_drift.py` correcting the drift — in the file whose docstring carries this
+model's design reasoning. Fixed there and then because it was a false description of the
+system rather than a naming inconsistency; the rest waits.
+
+**What is deliberately *not* on this list.** `agents/valuation_rent.py:664` and
+`rent_model.py:645` name `LinearRegression` in the past tense, describing what shipped
+*before* U11.1 and why the input-domain guard replaced its refusal path. Those are
+correct history and rewriting them would delete the reasoning. `FMR_BEDROOM_CAP_EXCEEDED`
+and `fmr_shape_year` likewise keep their names on purpose — the bedroom step really is
+the federal schedule's.
+
 ### U11.M ✅ — Maintenance *(separate commit, per §8)*
 
 Clear the `TODO(cut-list)` at `config.py:295` and `agents/valuation_rent.py` as
