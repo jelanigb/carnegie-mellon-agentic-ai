@@ -54,6 +54,15 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Aug 30, 2026 — U8.8: the market benchmark stops being metro-wide
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Aug 30, 2026 | U8.8 | **Sub-metro sale-price ingest.** `scripts/build_sale_benchmarks.py`, the committed `tools/data/zip_sale_benchmarks.json` (304 ZIPs, 28 KB) and `tools/sale_benchmarks.py`, plus the `SALE_BENCHMARK_*` block in `config.py`. New York comes straight from NYC Open Data `w2pb-icbu` (27,309 qualifying sales, 164 ZIPs); Chicago joins Cook's sales table `wvhk-k5uv` to the parcel universe `nj4t-kc8j` on an exact `pin` (18,251 sales, **96.8% joined**, 140 ZIPs). Committed rather than fetched at runtime for `EVAL_RECORDINGS_DIR`'s reason — a fresh clone must reproduce the published figures without a municipal portal being up. **Q3's unbounded address-to-parcel join never appears**: a benchmark needs a median over the ZIP, never the subject's parcel | 6.1, 7.1 |
+| Aug 30, 2026 | U8.8 | **Three filter decisions taken on measurement.** Filtering New York on unit count alone admits 125 sales labelled ONE FAMILY DWELLING plus vacant land and garages carrying a unit count through a data-entry artifact, so `SALE_BENCHMARK_NYC_CATEGORIES` exists; Cook's own non-arm's-length screens are used rather than an invented floor (20,369 class-211 sales since 2023, **18,335 pass all four**); and `SALE_BENCHMARK_MIN_SALES = 20` is set on the measured per-ZIP distribution (NY median 131, Chicago median 34) rather than picked. The two markets' definitions of multi-family differ irreconcilably — NY 2-4 units, Cook class 211 at 2-6 — so the definition travels with each figure into the report | 6.1 |
+
+---
+
 ## Aug 30, 2026 — U8.6c: the forecast search's own scores reach the reader
 
 | Date added | Unit | Work done | Related checkpoint |

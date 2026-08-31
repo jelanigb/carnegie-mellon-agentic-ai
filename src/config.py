@@ -194,6 +194,106 @@ REDFIN_ROLLING_WINDOW_PERIODS = 3
 # average including it carries kind="anomalous_period_included".
 ANOMALOUS_PERIOD = ("2020-01-01", "2022-12-31")
 
+# --------------------------------------------------------------------------
+# Sub-metro sale-price benchmark (U8.8, OQ-7, #11)
+# --------------------------------------------------------------------------
+#
+# The price-side counterpart to ZIP-resolution rent anchoring. Until U8.8 the market
+# benchmark was one Redfin median per *metro*, so every 2-4 unit property in Chicago was
+# read against the same number — §2's "location-blind below the county" limitation,
+# surviving on the price side after the rent side had fixed it.
+#
+# Built by `scripts/build_sale_benchmarks.py` into a committed table, so the pipeline
+# never makes a network call to render a benchmark. That script's docstring carries the
+# source-by-source reasoning; what belongs here is the tunables.
+
+SALE_BENCHMARK_PATH = SRC_DIR / "tools" / "data" / "zip_sale_benchmarks.json"
+
+# How far back sales are pooled. A median needs a sample, and a ZIP does not produce one
+# in a month: pooling widens the sample at the cost of mixing price levels across the
+# window, which is the same trade REDFIN_ROLLING_WINDOW_PERIODS makes over three months
+# with a metro's volume behind it. Set at ~3.5 years because the alternative is a table
+# whose thin ZIPs are all below any usable floor.
+SALE_BENCHMARK_WINDOW_START = "2023-01-01"
+
+# Sales below this are not market transactions. $10,000 rather than a figure of this
+# project's own choosing, because Cook County's assessor publishes its own screen at
+# exactly that level (`sale_filter_less_than_10k`) and the New York side should not
+# apply a different definition of "not a real sale" than the market it is printed
+# beside. Distinct from REDFIN_MIN_MEDIAN_SALE_PRICE, which floors a *median* of many
+# sales rather than one sale.
+SALE_BENCHMARK_MIN_SALE_PRICE = 10_000
+
+# Redfin's own "Multi-Family (2-4 unit)" definition, applied to the New York rows so the
+# ZIP tier and the metro tier are describing the same kind of property. Cook County
+# publishes no unit count — see SALE_BENCHMARK_COOK_CLASS.
+SALE_BENCHMARK_MIN_UNITS = 2
+SALE_BENCHMARK_MAX_UNITS = 4
+
+# New York building-class categories kept. **Measured rather than assumed** — filtering
+# on the unit count alone (2-4 residential, 0 commercial, $10k floor, since 2023) returns
+# 27,504 sales, of which 20,439 are two-family, 5,536 three-family and 1,333 walk-up
+# rentals. The remaining 195 are the reason this list exists: 125 labelled ONE FAMILY
+# DWELLING, 47 vacant land, and a tail of garages, religious and educational facilities
+# carrying a residential unit count through a data-entry artifact.
+SALE_BENCHMARK_NYC_CATEGORIES = (
+    "02 TWO FAMILY DWELLINGS",
+    "03 THREE FAMILY DWELLINGS",
+    "07 RENTALS - WALKUP APARTMENTS",
+    "14 RENTALS - 4-10 UNIT",
+)
+
+# Cook County's closest class to "2-4 unit multi-family", and it is **2-6 units**, not
+# 2-4: class 211 is "apartment building with two to six units". Neither Cook dataset
+# carries a unit count to narrow it with, so the widening is disclosed per market rather
+# than hidden — `SALE_BENCHMARK_SOURCES[...]["definition"]` travels into the report.
+SALE_BENCHMARK_COOK_CLASS = "211"
+
+# Which assessment year's parcel universe supplies the pin -> ZIP join. A parcel's ZIP
+# does not move, so this only decides how many parcels exist to match against; the
+# latest complete year is used rather than the newest partial one.
+SALE_BENCHMARK_COOK_PARCEL_YEAR = "2025"
+
+# PROVISIONAL — how many sales a ZIP needs before its median replaces the metro figure.
+#
+# Measured over the window (`scripts/build_sale_benchmarks.py` re-prints it): New York
+# 164 ZIPs, min 1 / p10 8 / median 131 / max 659; Chicago 140 ZIPs, min 1 / p10 4 /
+# median 34 / max 851. Both distributions have a long thin tail and a dense middle, so
+# the floor is picking where the tail starts rather than trading much away — at 20 it
+# keeps 136 of 164 New York ZIPs and 86 of 140 Chicago ones; at 50 it would keep 117 and
+# 61. Every fixture ZIP this project uses is far above it (Bed-Stuy 11216, Tottenville
+# 10307, Logan Square 60647, Uptown 60640).
+#
+# The report always names the count behind the figure, so a reader can discount a thin
+# median whatever this is set to, and a ZIP below the floor falls back to the metro
+# median with the reason disclosed rather than silently.
+SALE_BENCHMARK_MIN_SALES = 20
+
+# Portals, datasets and what each market's rows actually contain. Here rather than in
+# the builder because the *definition* string reaches the reader through the report, and
+# a reader-facing description of what a number covers is not a script's private detail.
+# Los Angeles is deliberately absent: California assessor rolls publish assessed value
+# under Proposition 13, not transaction price, so this build has no local sale-price
+# tier there and says so.
+SALE_BENCHMARK_SOURCES: dict[str, dict] = {
+    "new_york": {
+        "label": "New York",
+        "portal": "https://data.cityofnewyork.us",
+        "sales_dataset": "w2pb-icbu",
+        "attribution": "NYC Department of Finance, via NYC Open Data",
+        "definition": "2-4 unit residential buildings with no commercial space",
+    },
+    "chicago": {
+        "label": "Chicago",
+        "portal": "https://datacatalog.cookcountyil.gov",
+        "sales_dataset": "wvhk-k5uv",
+        "parcel_dataset": "nj4t-kc8j",
+        "attribution": "Cook County Assessor's Office, via Cook County Open Data",
+        "definition": "2-6 unit apartment buildings (assessor class 211)",
+    },
+}
+
+
 # Kaggle: outlier bounds. The extract is 99.5% complete on core features, with only
 # 79 rows outside these bounds, so this trims noise rather than reshaping the data.
 KAGGLE_MIN_RENT = 300.0

@@ -1,0 +1,1538 @@
+{
+ "built_at": "2026-08-30",
+ "markets": {
+  "chicago": {
+   "attribution": "Cook County Assessor's Office, via Cook County Open Data",
+   "definition": "2-6 unit apartment buildings (assessor class 211)",
+   "label": "Chicago"
+  },
+  "new_york": {
+   "attribution": "NYC Department of Finance, via NYC Open Data",
+   "definition": "2-4 unit residential buildings with no commercial space",
+   "label": "New York"
+  }
+ },
+ "window_start": "2023-01-01",
+ "zips": {
+  "10001": {
+   "market": "new_york",
+   "median_sale_price": 4350000.0,
+   "n_sales": 1
+  },
+  "10003": {
+   "market": "new_york",
+   "median_sale_price": 7100000.0,
+   "n_sales": 6
+  },
+  "10009": {
+   "market": "new_york",
+   "median_sale_price": 3225000.0,
+   "n_sales": 2
+  },
+  "10011": {
+   "market": "new_york",
+   "median_sale_price": 7275000.0,
+   "n_sales": 22
+  },
+  "10012": {
+   "market": "new_york",
+   "median_sale_price": 6100000.0,
+   "n_sales": 7
+  },
+  "10013": {
+   "market": "new_york",
+   "median_sale_price": 6000000.0,
+   "n_sales": 3
+  },
+  "10014": {
+   "market": "new_york",
+   "median_sale_price": 7452021.0,
+   "n_sales": 51
+  },
+  "10016": {
+   "market": "new_york",
+   "median_sale_price": 3700000.0,
+   "n_sales": 13
+  },
+  "10017": {
+   "market": "new_york",
+   "median_sale_price": 5125000.0,
+   "n_sales": 1
+  },
+  "10021": {
+   "market": "new_york",
+   "median_sale_price": 5825000.0,
+   "n_sales": 10
+  },
+  "10022": {
+   "market": "new_york",
+   "median_sale_price": 4600000.0,
+   "n_sales": 5
+  },
+  "10023": {
+   "market": "new_york",
+   "median_sale_price": 6600000.0,
+   "n_sales": 9
+  },
+  "10024": {
+   "market": "new_york",
+   "median_sale_price": 5300000.0,
+   "n_sales": 23
+  },
+  "10025": {
+   "market": "new_york",
+   "median_sale_price": 4575000.0,
+   "n_sales": 10
+  },
+  "10026": {
+   "market": "new_york",
+   "median_sale_price": 1800000.0,
+   "n_sales": 9
+  },
+  "10027": {
+   "market": "new_york",
+   "median_sale_price": 2062500.0,
+   "n_sales": 40
+  },
+  "10028": {
+   "market": "new_york",
+   "median_sale_price": 7297500.0,
+   "n_sales": 4
+  },
+  "10029": {
+   "market": "new_york",
+   "median_sale_price": 1675000.0,
+   "n_sales": 10
+  },
+  "10030": {
+   "market": "new_york",
+   "median_sale_price": 1744625.0,
+   "n_sales": 21
+  },
+  "10031": {
+   "market": "new_york",
+   "median_sale_price": 1787500.0,
+   "n_sales": 34
+  },
+  "10032": {
+   "market": "new_york",
+   "median_sale_price": 1225000.0,
+   "n_sales": 12
+  },
+  "10033": {
+   "market": "new_york",
+   "median_sale_price": 850000.0,
+   "n_sales": 6
+  },
+  "10034": {
+   "market": "new_york",
+   "median_sale_price": 1545000.0,
+   "n_sales": 3
+  },
+  "10035": {
+   "market": "new_york",
+   "median_sale_price": 1950000.0,
+   "n_sales": 33
+  },
+  "10036": {
+   "market": "new_york",
+   "median_sale_price": 4125000.0,
+   "n_sales": 2
+  },
+  "10037": {
+   "market": "new_york",
+   "median_sale_price": 2669519.0,
+   "n_sales": 5
+  },
+  "10065": {
+   "market": "new_york",
+   "median_sale_price": 6750000.0,
+   "n_sales": 9
+  },
+  "10075": {
+   "market": "new_york",
+   "median_sale_price": 5425000.0,
+   "n_sales": 8
+  },
+  "10128": {
+   "market": "new_york",
+   "median_sale_price": 4900000.0,
+   "n_sales": 6
+  },
+  "10301": {
+   "market": "new_york",
+   "median_sale_price": 700000.0,
+   "n_sales": 254
+  },
+  "10302": {
+   "market": "new_york",
+   "median_sale_price": 630000.0,
+   "n_sales": 145
+  },
+  "10303": {
+   "market": "new_york",
+   "median_sale_price": 650000.0,
+   "n_sales": 148
+  },
+  "10304": {
+   "market": "new_york",
+   "median_sale_price": 753000.0,
+   "n_sales": 215
+  },
+  "10305": {
+   "market": "new_york",
+   "median_sale_price": 860000.0,
+   "n_sales": 260
+  },
+  "10306": {
+   "market": "new_york",
+   "median_sale_price": 850000.0,
+   "n_sales": 261
+  },
+  "10307": {
+   "market": "new_york",
+   "median_sale_price": 1054490.0,
+   "n_sales": 152
+  },
+  "10308": {
+   "market": "new_york",
+   "median_sale_price": 890000.0,
+   "n_sales": 191
+  },
+  "10309": {
+   "market": "new_york",
+   "median_sale_price": 1034500.0,
+   "n_sales": 376
+  },
+  "10310": {
+   "market": "new_york",
+   "median_sale_price": 636500.0,
+   "n_sales": 158
+  },
+  "10312": {
+   "market": "new_york",
+   "median_sale_price": 950000.0,
+   "n_sales": 360
+  },
+  "10314": {
+   "market": "new_york",
+   "median_sale_price": 880000.0,
+   "n_sales": 582
+  },
+  "10451": {
+   "market": "new_york",
+   "median_sale_price": 920000.0,
+   "n_sales": 25
+  },
+  "10452": {
+   "market": "new_york",
+   "median_sale_price": 802500.0,
+   "n_sales": 46
+  },
+  "10453": {
+   "market": "new_york",
+   "median_sale_price": 820000.0,
+   "n_sales": 81
+  },
+  "10454": {
+   "market": "new_york",
+   "median_sale_price": 947000.0,
+   "n_sales": 43
+  },
+  "10455": {
+   "market": "new_york",
+   "median_sale_price": 857500.0,
+   "n_sales": 70
+  },
+  "10456": {
+   "market": "new_york",
+   "median_sale_price": 817500.0,
+   "n_sales": 122
+  },
+  "10457": {
+   "market": "new_york",
+   "median_sale_price": 845000.0,
+   "n_sales": 167
+  },
+  "10458": {
+   "market": "new_york",
+   "median_sale_price": 830000.0,
+   "n_sales": 131
+  },
+  "10459": {
+   "market": "new_york",
+   "median_sale_price": 800000.0,
+   "n_sales": 116
+  },
+  "10460": {
+   "market": "new_york",
+   "median_sale_price": 850000.0,
+   "n_sales": 155
+  },
+  "10461": {
+   "market": "new_york",
+   "median_sale_price": 865000.0,
+   "n_sales": 373
+  },
+  "10462": {
+   "market": "new_york",
+   "median_sale_price": 882500.0,
+   "n_sales": 228
+  },
+  "10463": {
+   "market": "new_york",
+   "median_sale_price": 947500.0,
+   "n_sales": 94
+  },
+  "10464": {
+   "market": "new_york",
+   "median_sale_price": 745000.0,
+   "n_sales": 27
+  },
+  "10465": {
+   "market": "new_york",
+   "median_sale_price": 827500.0,
+   "n_sales": 360
+  },
+  "10466": {
+   "market": "new_york",
+   "median_sale_price": 750000.0,
+   "n_sales": 412
+  },
+  "10467": {
+   "market": "new_york",
+   "median_sale_price": 815000.0,
+   "n_sales": 233
+  },
+  "10468": {
+   "market": "new_york",
+   "median_sale_price": 867500.0,
+   "n_sales": 60
+  },
+  "10469": {
+   "market": "new_york",
+   "median_sale_price": 775000.0,
+   "n_sales": 479
+  },
+  "10470": {
+   "market": "new_york",
+   "median_sale_price": 800000.0,
+   "n_sales": 96
+  },
+  "10471": {
+   "market": "new_york",
+   "median_sale_price": 962500.0,
+   "n_sales": 45
+  },
+  "10472": {
+   "market": "new_york",
+   "median_sale_price": 900000.0,
+   "n_sales": 233
+  },
+  "10473": {
+   "market": "new_york",
+   "median_sale_price": 765000.0,
+   "n_sales": 240
+  },
+  "10474": {
+   "market": "new_york",
+   "median_sale_price": 840927.5,
+   "n_sales": 34
+  },
+  "10475": {
+   "market": "new_york",
+   "median_sale_price": 773000.0,
+   "n_sales": 33
+  },
+  "11001": {
+   "market": "new_york",
+   "median_sale_price": 785000.0,
+   "n_sales": 11
+  },
+  "11004": {
+   "market": "new_york",
+   "median_sale_price": 950000.0,
+   "n_sales": 8
+  },
+  "11040": {
+   "market": "new_york",
+   "median_sale_price": 890000.0,
+   "n_sales": 11
+  },
+  "11101": {
+   "market": "new_york",
+   "median_sale_price": 1536343.0,
+   "n_sales": 62
+  },
+  "11102": {
+   "market": "new_york",
+   "median_sale_price": 1265000.0,
+   "n_sales": 100
+  },
+  "11103": {
+   "market": "new_york",
+   "median_sale_price": 1340000.0,
+   "n_sales": 139
+  },
+  "11104": {
+   "market": "new_york",
+   "median_sale_price": 1404000.0,
+   "n_sales": 52
+  },
+  "11105": {
+   "market": "new_york",
+   "median_sale_price": 1347500.0,
+   "n_sales": 223
+  },
+  "11106": {
+   "market": "new_york",
+   "median_sale_price": 1380000.0,
+   "n_sales": 85
+  },
+  "11201": {
+   "market": "new_york",
+   "median_sale_price": 4830000.0,
+   "n_sales": 81
+  },
+  "11203": {
+   "market": "new_york",
+   "median_sale_price": 800000.0,
+   "n_sales": 447
+  },
+  "11204": {
+   "market": "new_york",
+   "median_sale_price": 1568105.0,
+   "n_sales": 475
+  },
+  "11205": {
+   "market": "new_york",
+   "median_sale_price": 2120000.0,
+   "n_sales": 125
+  },
+  "11206": {
+   "market": "new_york",
+   "median_sale_price": 1800000.0,
+   "n_sales": 142
+  },
+  "11207": {
+   "market": "new_york",
+   "median_sale_price": 880000.0,
+   "n_sales": 547
+  },
+  "11208": {
+   "market": "new_york",
+   "median_sale_price": 838000.0,
+   "n_sales": 571
+  },
+  "11209": {
+   "market": "new_york",
+   "median_sale_price": 1380000.0,
+   "n_sales": 247
+  },
+  "11210": {
+   "market": "new_york",
+   "median_sale_price": 999950.0,
+   "n_sales": 153
+  },
+  "11211": {
+   "market": "new_york",
+   "median_sale_price": 2275000.0,
+   "n_sales": 140
+  },
+  "11212": {
+   "market": "new_york",
+   "median_sale_price": 861500.0,
+   "n_sales": 260
+  },
+  "11213": {
+   "market": "new_york",
+   "median_sale_price": 1350000.0,
+   "n_sales": 218
+  },
+  "11214": {
+   "market": "new_york",
+   "median_sale_price": 1380000.0,
+   "n_sales": 456
+  },
+  "11215": {
+   "market": "new_york",
+   "median_sale_price": 2600000.0,
+   "n_sales": 405
+  },
+  "11216": {
+   "market": "new_york",
+   "median_sale_price": 1800000.0,
+   "n_sales": 312
+  },
+  "11217": {
+   "market": "new_york",
+   "median_sale_price": 3300000.0,
+   "n_sales": 131
+  },
+  "11218": {
+   "market": "new_york",
+   "median_sale_price": 1700000.0,
+   "n_sales": 264
+  },
+  "11219": {
+   "market": "new_york",
+   "median_sale_price": 1800000.0,
+   "n_sales": 385
+  },
+  "11220": {
+   "market": "new_york",
+   "median_sale_price": 1460000.0,
+   "n_sales": 373
+  },
+  "11221": {
+   "market": "new_york",
+   "median_sale_price": 1337500.0,
+   "n_sales": 598
+  },
+  "11222": {
+   "market": "new_york",
+   "median_sale_price": 2200000.0,
+   "n_sales": 143
+  },
+  "11223": {
+   "market": "new_york",
+   "median_sale_price": 1250000.0,
+   "n_sales": 454
+  },
+  "11224": {
+   "market": "new_york",
+   "median_sale_price": 775000.0,
+   "n_sales": 51
+  },
+  "11225": {
+   "market": "new_york",
+   "median_sale_price": 1590000.0,
+   "n_sales": 110
+  },
+  "11226": {
+   "market": "new_york",
+   "median_sale_price": 960000.0,
+   "n_sales": 168
+  },
+  "11228": {
+   "market": "new_york",
+   "median_sale_price": 1420000.0,
+   "n_sales": 380
+  },
+  "11229": {
+   "market": "new_york",
+   "median_sale_price": 995000.0,
+   "n_sales": 285
+  },
+  "11230": {
+   "market": "new_york",
+   "median_sale_price": 1675000.0,
+   "n_sales": 223
+  },
+  "11231": {
+   "market": "new_york",
+   "median_sale_price": 3060000.0,
+   "n_sales": 231
+  },
+  "11232": {
+   "market": "new_york",
+   "median_sale_price": 1300000.0,
+   "n_sales": 101
+  },
+  "11233": {
+   "market": "new_york",
+   "median_sale_price": 1157588.0,
+   "n_sales": 527
+  },
+  "11234": {
+   "market": "new_york",
+   "median_sale_price": 880000.0,
+   "n_sales": 527
+  },
+  "11235": {
+   "market": "new_york",
+   "median_sale_price": 999000.0,
+   "n_sales": 315
+  },
+  "11236": {
+   "market": "new_york",
+   "median_sale_price": 800000.0,
+   "n_sales": 659
+  },
+  "11237": {
+   "market": "new_york",
+   "median_sale_price": 1240000.0,
+   "n_sales": 110
+  },
+  "11238": {
+   "market": "new_york",
+   "median_sale_price": 2650000.0,
+   "n_sales": 197
+  },
+  "11239": {
+   "market": "new_york",
+   "median_sale_price": 849000.0,
+   "n_sales": 5
+  },
+  "11249": {
+   "market": "new_york",
+   "median_sale_price": 2800000.0,
+   "n_sales": 31
+  },
+  "11354": {
+   "market": "new_york",
+   "median_sale_price": 1403000.0,
+   "n_sales": 115
+  },
+  "11355": {
+   "market": "new_york",
+   "median_sale_price": 1405000.0,
+   "n_sales": 228
+  },
+  "11356": {
+   "market": "new_york",
+   "median_sale_price": 996500.0,
+   "n_sales": 224
+  },
+  "11357": {
+   "market": "new_york",
+   "median_sale_price": 1350000.0,
+   "n_sales": 222
+  },
+  "11358": {
+   "market": "new_york",
+   "median_sale_price": 1330000.0,
+   "n_sales": 197
+  },
+  "11360": {
+   "market": "new_york",
+   "median_sale_price": 1535000.0,
+   "n_sales": 76
+  },
+  "11361": {
+   "market": "new_york",
+   "median_sale_price": 1370000.0,
+   "n_sales": 142
+  },
+  "11362": {
+   "market": "new_york",
+   "median_sale_price": 1500000.0,
+   "n_sales": 35
+  },
+  "11363": {
+   "market": "new_york",
+   "median_sale_price": 1265000.0,
+   "n_sales": 19
+  },
+  "11364": {
+   "market": "new_york",
+   "median_sale_price": 1360000.0,
+   "n_sales": 98
+  },
+  "11365": {
+   "market": "new_york",
+   "median_sale_price": 1185000.0,
+   "n_sales": 103
+  },
+  "11366": {
+   "market": "new_york",
+   "median_sale_price": 1155000.0,
+   "n_sales": 65
+  },
+  "11367": {
+   "market": "new_york",
+   "median_sale_price": 1150000.0,
+   "n_sales": 78
+  },
+  "11368": {
+   "market": "new_york",
+   "median_sale_price": 1092500.0,
+   "n_sales": 338
+  },
+  "11369": {
+   "market": "new_york",
+   "median_sale_price": 980000.0,
+   "n_sales": 223
+  },
+  "11370": {
+   "market": "new_york",
+   "median_sale_price": 1094000.0,
+   "n_sales": 168
+  },
+  "11372": {
+   "market": "new_york",
+   "median_sale_price": 1305000.0,
+   "n_sales": 43
+  },
+  "11373": {
+   "market": "new_york",
+   "median_sale_price": 1152500.0,
+   "n_sales": 248
+  },
+  "11374": {
+   "market": "new_york",
+   "median_sale_price": 1075000.0,
+   "n_sales": 56
+  },
+  "11375": {
+   "market": "new_york",
+   "median_sale_price": 1287500.0,
+   "n_sales": 86
+  },
+  "11377": {
+   "market": "new_york",
+   "median_sale_price": 1165000.0,
+   "n_sales": 285
+  },
+  "11378": {
+   "market": "new_york",
+   "median_sale_price": 985000.0,
+   "n_sales": 273
+  },
+  "11379": {
+   "market": "new_york",
+   "median_sale_price": 1012499.5,
+   "n_sales": 278
+  },
+  "11385": {
+   "market": "new_york",
+   "median_sale_price": 1050000.0,
+   "n_sales": 574
+  },
+  "11411": {
+   "market": "new_york",
+   "median_sale_price": 760000.0,
+   "n_sales": 39
+  },
+  "11412": {
+   "market": "new_york",
+   "median_sale_price": 776925.0,
+   "n_sales": 235
+  },
+  "11413": {
+   "market": "new_york",
+   "median_sale_price": 850000.0,
+   "n_sales": 273
+  },
+  "11414": {
+   "market": "new_york",
+   "median_sale_price": 950000.0,
+   "n_sales": 136
+  },
+  "11415": {
+   "market": "new_york",
+   "median_sale_price": 995000.0,
+   "n_sales": 22
+  },
+  "11416": {
+   "market": "new_york",
+   "median_sale_price": 850000.0,
+   "n_sales": 223
+  },
+  "11417": {
+   "market": "new_york",
+   "median_sale_price": 900000.0,
+   "n_sales": 219
+  },
+  "11418": {
+   "market": "new_york",
+   "median_sale_price": 880000.0,
+   "n_sales": 161
+  },
+  "11419": {
+   "market": "new_york",
+   "median_sale_price": 832500.0,
+   "n_sales": 218
+  },
+  "11420": {
+   "market": "new_york",
+   "median_sale_price": 850000.0,
+   "n_sales": 254
+  },
+  "11421": {
+   "market": "new_york",
+   "median_sale_price": 875000.0,
+   "n_sales": 223
+  },
+  "11422": {
+   "market": "new_york",
+   "median_sale_price": 850000.0,
+   "n_sales": 189
+  },
+  "11423": {
+   "market": "new_york",
+   "median_sale_price": 890000.0,
+   "n_sales": 117
+  },
+  "11426": {
+   "market": "new_york",
+   "median_sale_price": 836250.0,
+   "n_sales": 54
+  },
+  "11427": {
+   "market": "new_york",
+   "median_sale_price": 875100.0,
+   "n_sales": 55
+  },
+  "11428": {
+   "market": "new_york",
+   "median_sale_price": 757500.0,
+   "n_sales": 54
+  },
+  "11429": {
+   "market": "new_york",
+   "median_sale_price": 806000.0,
+   "n_sales": 109
+  },
+  "11430": {
+   "market": "new_york",
+   "median_sale_price": 875000.0,
+   "n_sales": 2
+  },
+  "11432": {
+   "market": "new_york",
+   "median_sale_price": 1015908.0,
+   "n_sales": 131
+  },
+  "11433": {
+   "market": "new_york",
+   "median_sale_price": 838000.0,
+   "n_sales": 263
+  },
+  "11434": {
+   "market": "new_york",
+   "median_sale_price": 855308.0,
+   "n_sales": 344
+  },
+  "11435": {
+   "market": "new_york",
+   "median_sale_price": 905000.0,
+   "n_sales": 181
+  },
+  "11436": {
+   "market": "new_york",
+   "median_sale_price": 847500.0,
+   "n_sales": 122
+  },
+  "11691": {
+   "market": "new_york",
+   "median_sale_price": 753500.0,
+   "n_sales": 272
+  },
+  "11692": {
+   "market": "new_york",
+   "median_sale_price": 770000.0,
+   "n_sales": 183
+  },
+  "11693": {
+   "market": "new_york",
+   "median_sale_price": 623218.0,
+   "n_sales": 47
+  },
+  "11694": {
+   "market": "new_york",
+   "median_sale_price": 990000.0,
+   "n_sales": 101
+  },
+  "60004": {
+   "market": "chicago",
+   "median_sale_price": 800000.0,
+   "n_sales": 5
+  },
+  "60005": {
+   "market": "chicago",
+   "median_sale_price": 904500.0,
+   "n_sales": 4
+  },
+  "60007": {
+   "market": "chicago",
+   "median_sale_price": 860000.0,
+   "n_sales": 1
+  },
+  "60008": {
+   "market": "chicago",
+   "median_sale_price": 300000.0,
+   "n_sales": 2
+  },
+  "60010": {
+   "market": "chicago",
+   "median_sale_price": 355000.0,
+   "n_sales": 12
+  },
+  "60016": {
+   "market": "chicago",
+   "median_sale_price": 655500.0,
+   "n_sales": 37
+  },
+  "60018": {
+   "market": "chicago",
+   "median_sale_price": 775000.0,
+   "n_sales": 21
+  },
+  "60025": {
+   "market": "chicago",
+   "median_sale_price": 789900.0,
+   "n_sales": 9
+  },
+  "60026": {
+   "market": "chicago",
+   "median_sale_price": 895000.0,
+   "n_sales": 6
+  },
+  "60053": {
+   "market": "chicago",
+   "median_sale_price": 514000.0,
+   "n_sales": 9
+  },
+  "60056": {
+   "market": "chicago",
+   "median_sale_price": 700000.0,
+   "n_sales": 38
+  },
+  "60062": {
+   "market": "chicago",
+   "median_sale_price": 981500.0,
+   "n_sales": 18
+  },
+  "60067": {
+   "market": "chicago",
+   "median_sale_price": 430000.0,
+   "n_sales": 7
+  },
+  "60068": {
+   "market": "chicago",
+   "median_sale_price": 630000.0,
+   "n_sales": 21
+  },
+  "60070": {
+   "market": "chicago",
+   "median_sale_price": 705000.0,
+   "n_sales": 7
+  },
+  "60074": {
+   "market": "chicago",
+   "median_sale_price": 848000.0,
+   "n_sales": 37
+  },
+  "60076": {
+   "market": "chicago",
+   "median_sale_price": 650000.0,
+   "n_sales": 51
+  },
+  "60077": {
+   "market": "chicago",
+   "median_sale_price": 675000.0,
+   "n_sales": 51
+  },
+  "60090": {
+   "market": "chicago",
+   "median_sale_price": 750000.0,
+   "n_sales": 16
+  },
+  "60091": {
+   "market": "chicago",
+   "median_sale_price": 1162000.0,
+   "n_sales": 4
+  },
+  "60093": {
+   "market": "chicago",
+   "median_sale_price": 790000.0,
+   "n_sales": 5
+  },
+  "60103": {
+   "market": "chicago",
+   "median_sale_price": 443750.0,
+   "n_sales": 2
+  },
+  "60104": {
+   "market": "chicago",
+   "median_sale_price": 350000.0,
+   "n_sales": 53
+  },
+  "60120": {
+   "market": "chicago",
+   "median_sale_price": 567500.0,
+   "n_sales": 8
+  },
+  "60130": {
+   "market": "chicago",
+   "median_sale_price": 460000.0,
+   "n_sales": 112
+  },
+  "60131": {
+   "market": "chicago",
+   "median_sale_price": 490000.0,
+   "n_sales": 15
+  },
+  "60133": {
+   "market": "chicago",
+   "median_sale_price": 485000.0,
+   "n_sales": 5
+  },
+  "60153": {
+   "market": "chicago",
+   "median_sale_price": 305000.0,
+   "n_sales": 89
+  },
+  "60154": {
+   "market": "chicago",
+   "median_sale_price": 503500.0,
+   "n_sales": 18
+  },
+  "60155": {
+   "market": "chicago",
+   "median_sale_price": 440000.0,
+   "n_sales": 19
+  },
+  "60160": {
+   "market": "chicago",
+   "median_sale_price": 430000.0,
+   "n_sales": 66
+  },
+  "60162": {
+   "market": "chicago",
+   "median_sale_price": 460000.0,
+   "n_sales": 7
+  },
+  "60163": {
+   "market": "chicago",
+   "median_sale_price": 515000.0,
+   "n_sales": 3
+  },
+  "60164": {
+   "market": "chicago",
+   "median_sale_price": 344900.0,
+   "n_sales": 4
+  },
+  "60165": {
+   "market": "chicago",
+   "median_sale_price": 336000.0,
+   "n_sales": 11
+  },
+  "60171": {
+   "market": "chicago",
+   "median_sale_price": 705000.0,
+   "n_sales": 31
+  },
+  "60176": {
+   "market": "chicago",
+   "median_sale_price": 580000.0,
+   "n_sales": 29
+  },
+  "60193": {
+   "market": "chicago",
+   "median_sale_price": 755000.0,
+   "n_sales": 5
+  },
+  "60201": {
+   "market": "chicago",
+   "median_sale_price": 502500.0,
+   "n_sales": 74
+  },
+  "60202": {
+   "market": "chicago",
+   "median_sale_price": 560000.0,
+   "n_sales": 91
+  },
+  "60203": {
+   "market": "chicago",
+   "median_sale_price": 730000.0,
+   "n_sales": 3
+  },
+  "60301": {
+   "market": "chicago",
+   "median_sale_price": 745000.0,
+   "n_sales": 2
+  },
+  "60302": {
+   "market": "chicago",
+   "median_sale_price": 617500.0,
+   "n_sales": 80
+  },
+  "60304": {
+   "market": "chicago",
+   "median_sale_price": 535000.0,
+   "n_sales": 58
+  },
+  "60305": {
+   "market": "chicago",
+   "median_sale_price": 621000.0,
+   "n_sales": 7
+  },
+  "60402": {
+   "market": "chicago",
+   "median_sale_price": 418000.0,
+   "n_sales": 321
+  },
+  "60406": {
+   "market": "chicago",
+   "median_sale_price": 291000.0,
+   "n_sales": 98
+  },
+  "60409": {
+   "market": "chicago",
+   "median_sale_price": 270000.0,
+   "n_sales": 125
+  },
+  "60411": {
+   "market": "chicago",
+   "median_sale_price": 175000.0,
+   "n_sales": 123
+  },
+  "60415": {
+   "market": "chicago",
+   "median_sale_price": 576500.0,
+   "n_sales": 20
+  },
+  "60418": {
+   "market": "chicago",
+   "median_sale_price": 630000.0,
+   "n_sales": 13
+  },
+  "60419": {
+   "market": "chicago",
+   "median_sale_price": 275000.0,
+   "n_sales": 31
+  },
+  "60426": {
+   "market": "chicago",
+   "median_sale_price": 140450.0,
+   "n_sales": 52
+  },
+  "60429": {
+   "market": "chicago",
+   "median_sale_price": 200000.0,
+   "n_sales": 11
+  },
+  "60430": {
+   "market": "chicago",
+   "median_sale_price": 422500.0,
+   "n_sales": 8
+  },
+  "60438": {
+   "market": "chicago",
+   "median_sale_price": 326500.0,
+   "n_sales": 34
+  },
+  "60439": {
+   "market": "chicago",
+   "median_sale_price": 390000.0,
+   "n_sales": 11
+  },
+  "60443": {
+   "market": "chicago",
+   "median_sale_price": 495000.0,
+   "n_sales": 7
+  },
+  "60445": {
+   "market": "chicago",
+   "median_sale_price": 495000.0,
+   "n_sales": 21
+  },
+  "60452": {
+   "market": "chicago",
+   "median_sale_price": 620000.0,
+   "n_sales": 19
+  },
+  "60453": {
+   "market": "chicago",
+   "median_sale_price": 587500.0,
+   "n_sales": 40
+  },
+  "60455": {
+   "market": "chicago",
+   "median_sale_price": 630000.0,
+   "n_sales": 24
+  },
+  "60457": {
+   "market": "chicago",
+   "median_sale_price": 685000.0,
+   "n_sales": 4
+  },
+  "60458": {
+   "market": "chicago",
+   "median_sale_price": 612000.0,
+   "n_sales": 34
+  },
+  "60459": {
+   "market": "chicago",
+   "median_sale_price": 590000.0,
+   "n_sales": 32
+  },
+  "60462": {
+   "market": "chicago",
+   "median_sale_price": 868750.0,
+   "n_sales": 10
+  },
+  "60465": {
+   "market": "chicago",
+   "median_sale_price": 660000.0,
+   "n_sales": 11
+  },
+  "60469": {
+   "market": "chicago",
+   "median_sale_price": 260000.0,
+   "n_sales": 8
+  },
+  "60471": {
+   "market": "chicago",
+   "median_sale_price": 415000.0,
+   "n_sales": 7
+  },
+  "60472": {
+   "market": "chicago",
+   "median_sale_price": 186500.0,
+   "n_sales": 3
+  },
+  "60473": {
+   "market": "chicago",
+   "median_sale_price": 190000.0,
+   "n_sales": 2
+  },
+  "60475": {
+   "market": "chicago",
+   "median_sale_price": 152525.5,
+   "n_sales": 2
+  },
+  "60476": {
+   "market": "chicago",
+   "median_sale_price": 259900.0,
+   "n_sales": 3
+  },
+  "60477": {
+   "market": "chicago",
+   "median_sale_price": 544000.0,
+   "n_sales": 23
+  },
+  "60478": {
+   "market": "chicago",
+   "median_sale_price": 575000.0,
+   "n_sales": 1
+  },
+  "60480": {
+   "market": "chicago",
+   "median_sale_price": 665000.0,
+   "n_sales": 3
+  },
+  "60482": {
+   "market": "chicago",
+   "median_sale_price": 462000.0,
+   "n_sales": 6
+  },
+  "60501": {
+   "market": "chicago",
+   "median_sale_price": 350000.0,
+   "n_sales": 76
+  },
+  "60513": {
+   "market": "chicago",
+   "median_sale_price": 569500.0,
+   "n_sales": 50
+  },
+  "60525": {
+   "market": "chicago",
+   "median_sale_price": 562500.0,
+   "n_sales": 22
+  },
+  "60526": {
+   "market": "chicago",
+   "median_sale_price": 653750.0,
+   "n_sales": 19
+  },
+  "60534": {
+   "market": "chicago",
+   "median_sale_price": 440000.0,
+   "n_sales": 31
+  },
+  "60546": {
+   "market": "chicago",
+   "median_sale_price": 634000.0,
+   "n_sales": 24
+  },
+  "60558": {
+   "market": "chicago",
+   "median_sale_price": 730000.0,
+   "n_sales": 3
+  },
+  "60607": {
+   "market": "chicago",
+   "median_sale_price": 857500.0,
+   "n_sales": 58
+  },
+  "60608": {
+   "market": "chicago",
+   "median_sale_price": 461250.0,
+   "n_sales": 462
+  },
+  "60609": {
+   "market": "chicago",
+   "median_sale_price": 265000.0,
+   "n_sales": 616
+  },
+  "60610": {
+   "market": "chicago",
+   "median_sale_price": 1570000.0,
+   "n_sales": 22
+  },
+  "60611": {
+   "market": "chicago",
+   "median_sale_price": 1600000.0,
+   "n_sales": 4
+  },
+  "60612": {
+   "market": "chicago",
+   "median_sale_price": 492500.0,
+   "n_sales": 340
+  },
+  "60613": {
+   "market": "chicago",
+   "median_sale_price": 1000000.0,
+   "n_sales": 171
+  },
+  "60614": {
+   "market": "chicago",
+   "median_sale_price": 1395000.0,
+   "n_sales": 231
+  },
+  "60615": {
+   "market": "chicago",
+   "median_sale_price": 626000.0,
+   "n_sales": 89
+  },
+  "60616": {
+   "market": "chicago",
+   "median_sale_price": 549500.0,
+   "n_sales": 172
+  },
+  "60617": {
+   "market": "chicago",
+   "median_sale_price": 195000.0,
+   "n_sales": 543
+  },
+  "60618": {
+   "market": "chicago",
+   "median_sale_price": 665000.0,
+   "n_sales": 680
+  },
+  "60619": {
+   "market": "chicago",
+   "median_sale_price": 275000.0,
+   "n_sales": 577
+  },
+  "60620": {
+   "market": "chicago",
+   "median_sale_price": 289000.0,
+   "n_sales": 522
+  },
+  "60621": {
+   "market": "chicago",
+   "median_sale_price": 173000.0,
+   "n_sales": 611
+  },
+  "60622": {
+   "market": "chicago",
+   "median_sale_price": 900000.0,
+   "n_sales": 472
+  },
+  "60623": {
+   "market": "chicago",
+   "median_sale_price": 299000.0,
+   "n_sales": 851
+  },
+  "60624": {
+   "market": "chicago",
+   "median_sale_price": 285000.0,
+   "n_sales": 608
+  },
+  "60625": {
+   "market": "chicago",
+   "median_sale_price": 675000.0,
+   "n_sales": 399
+  },
+  "60626": {
+   "market": "chicago",
+   "median_sale_price": 758000.0,
+   "n_sales": 93
+  },
+  "60628": {
+   "market": "chicago",
+   "median_sale_price": 175000.0,
+   "n_sales": 376
+  },
+  "60629": {
+   "market": "chicago",
+   "median_sale_price": 340000.0,
+   "n_sales": 340
+  },
+  "60630": {
+   "market": "chicago",
+   "median_sale_price": 547000.0,
+   "n_sales": 297
+  },
+  "60631": {
+   "market": "chicago",
+   "median_sale_price": 702500.0,
+   "n_sales": 28
+  },
+  "60632": {
+   "market": "chicago",
+   "median_sale_price": 330000.0,
+   "n_sales": 392
+  },
+  "60633": {
+   "market": "chicago",
+   "median_sale_price": 200000.0,
+   "n_sales": 49
+  },
+  "60634": {
+   "market": "chicago",
+   "median_sale_price": 510000.0,
+   "n_sales": 187
+  },
+  "60636": {
+   "market": "chicago",
+   "median_sale_price": 195000.0,
+   "n_sales": 402
+  },
+  "60637": {
+   "market": "chicago",
+   "median_sale_price": 355000.0,
+   "n_sales": 514
+  },
+  "60638": {
+   "market": "chicago",
+   "median_sale_price": 459900.0,
+   "n_sales": 71
+  },
+  "60639": {
+   "market": "chicago",
+   "median_sale_price": 430000.0,
+   "n_sales": 477
+  },
+  "60640": {
+   "market": "chicago",
+   "median_sale_price": 867500.0,
+   "n_sales": 148
+  },
+  "60641": {
+   "market": "chicago",
+   "median_sale_price": 550000.0,
+   "n_sales": 385
+  },
+  "60642": {
+   "market": "chicago",
+   "median_sale_price": 1100000.0,
+   "n_sales": 132
+  },
+  "60643": {
+   "market": "chicago",
+   "median_sale_price": 262500.0,
+   "n_sales": 70
+  },
+  "60644": {
+   "market": "chicago",
+   "median_sale_price": 319000.0,
+   "n_sales": 500
+  },
+  "60645": {
+   "market": "chicago",
+   "median_sale_price": 650000.0,
+   "n_sales": 130
+  },
+  "60646": {
+   "market": "chicago",
+   "median_sale_price": 579750.0,
+   "n_sales": 90
+  },
+  "60647": {
+   "market": "chicago",
+   "median_sale_price": 720000.0,
+   "n_sales": 709
+  },
+  "60649": {
+   "market": "chicago",
+   "median_sale_price": 337000.0,
+   "n_sales": 291
+  },
+  "60651": {
+   "market": "chicago",
+   "median_sale_price": 365000.0,
+   "n_sales": 599
+  },
+  "60652": {
+   "market": "chicago",
+   "median_sale_price": 379995.0,
+   "n_sales": 16
+  },
+  "60653": {
+   "market": "chicago",
+   "median_sale_price": 610000.0,
+   "n_sales": 93
+  },
+  "60655": {
+   "market": "chicago",
+   "median_sale_price": 500000.0,
+   "n_sales": 7
+  },
+  "60656": {
+   "market": "chicago",
+   "median_sale_price": 756500.0,
+   "n_sales": 42
+  },
+  "60657": {
+   "market": "chicago",
+   "median_sale_price": 1112889.0,
+   "n_sales": 258
+  },
+  "60659": {
+   "market": "chicago",
+   "median_sale_price": 647450.0,
+   "n_sales": 196
+  },
+  "60660": {
+   "market": "chicago",
+   "median_sale_price": 850000.0,
+   "n_sales": 97
+  },
+  "60706": {
+   "market": "chicago",
+   "median_sale_price": 738000.0,
+   "n_sales": 18
+  },
+  "60707": {
+   "market": "chicago",
+   "median_sale_price": 547500.0,
+   "n_sales": 150
+  },
+  "60712": {
+   "market": "chicago",
+   "median_sale_price": 693000.0,
+   "n_sales": 6
+  },
+  "60714": {
+   "market": "chicago",
+   "median_sale_price": 725000.0,
+   "n_sales": 62
+  },
+  "60803": {
+   "market": "chicago",
+   "median_sale_price": 553000.0,
+   "n_sales": 22
+  },
+  "60804": {
+   "market": "chicago",
+   "median_sale_price": 335000.0,
+   "n_sales": 462
+  },
+  "60805": {
+   "market": "chicago",
+   "median_sale_price": 387500.0,
+   "n_sales": 6
+  },
+  "60827": {
+   "market": "chicago",
+   "median_sale_price": 200000.0,
+   "n_sales": 44
+  }
+ }
+}
