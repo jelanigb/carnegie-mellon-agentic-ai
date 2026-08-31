@@ -55,7 +55,7 @@ bullets that never landed (U8.6c).
 | ✅ | **U8.8** sub-metro price benchmark | **Built Aug 30, 2026, two days inside the drop-dead.** ZIP tier live for New York and Chicago; Los Angeles keeps the metro figure, disclosed. Verdict- and recording-inert, verified |
 | ✂️ | **U8.9** live runs, traces, diagram | Dropped Aug 30, 2026 by the architect |
 | ✅ | **U8.10** close-out | **Done Aug 31, 2026.** Five OQs closed, two retargeted, two opened; #6 and #11 settled; U11.5 absorbed and its list found short by eight sites |
-| 🟨 | **U8.M** maintenance | TODO inventory reconciled; remainder open |
+| ✅ | **U8.M** maintenance | **Done Aug 31, 2026.** Every `TODO(U8)` cleared; seven `PROVISIONAL` constants reconciled against closed units; `MAX_REWORKS` swept and held |
 
 **Both decisions that were waiting on the architect were taken on Aug 30, 2026.** The
 divergence gate in front of the Critic's objections (U8.6e) was ungated for I1 and I3 and
@@ -2582,8 +2582,50 @@ in one batch re-run, which is the same check U8.10f already owes.
 
 ---
 
-### U8.M 🟨 — Maintenance *(separate commit, per §8)*
+### U8.M ✅ — Maintenance *(separate commits, per §8)* — **done Aug 31, 2026**
 
 Clear the `TODO(U8)` markers this unit resolves, and the ones Q5 closes by deletion rather
 than by measurement. Update the `TODO` inventory table in
 [`design/engineering_standards.md`](../design/engineering_standards.md).
+
+---
+
+**Done in three commits, and the unit turned out to be twice the size it was scoped as —
+because `TODO(` is not the only marker this repository defers work with.**
+
+**1. Every `TODO(U8)` cleared: nine at U8's start, zero now.** Each is replaced by what U8
+measured rather than deleted. Two are worth naming because the answer was not the one the
+marker expected: the demo-set county skew **dissolved** rather than being adjudicated —
+#19's anchor resolves at ZIP tier in every indexed market, so the flag it worried about now
+co-occurs with the market-error flag on 0 of 21 cases — and the critical-flag escalation
+rule, which the marker said would need the *tuned* weights to confirm, was confirmed from
+the opposite direction: the sweep found the critical weight **inert across its whole range
+including 0.00**, so the rule was never contingent on the weights at all. Six `TODO` sites
+survive, all genuinely deferred: `security` ×3, `geography` ×2, `cut-list` ×1.
+
+**2. The scope this subsection did not anticipate.** `config.py` marks a value
+`PROVISIONAL` and names the unit that will tune it — the same deferral mechanism as a
+`TODO`, in a file loaded by every module, and **nothing has ever reconciled those against
+closed units.** Seven constants named U4 or U8 after both had closed. Two of them
+(`MIN_QUALIFYING_COMPS`, `MAX_RETRIEVAL_ITERATIONS`) are decision #5's Y and Z, **settled at
+U4 and mislabeled for three units since** — a marker naming a closed unit reads as scheduled
+work and is really unowned work, which is worse than an honest gap because it looks handled.
+The rule is now in `engineering_standards.md`: grep `PROVISIONAL` at unit close alongside
+`TODO(`.
+
+**One of those comments had had its own revisit condition met without anyone noticing.**
+`RENT_COMP_DIVERGENCE_THRESHOLD_PCT` said to revisit the whole check if a ZIP-level anchor
+landed. #19 landed one. The structural blind spot the threshold was firing on is gone, and
+the fixture that proves it is in the batch: `chicago-uptown-duplex` read **+48%** against the
+comps under the FMR anchor and reads **−6.1%** now.
+
+**3. `MAX_REWORKS` swept rather than relabeled** (architect's call, Aug 31, over the
+recommendation to label it). `scripts/rework_budget_sweep.py` runs the replay tier at
+budgets of 1, 2 and 3: **no verdict changes at any value.** The result is *unfalsified*
+rather than *optimal*, and the limitation is specific — the batch's only rework case carries
+an outage injected for the whole run, which is exactly the condition under which no budget
+can beat another. **A transient outage clearing on the second pass is where 1 and 2 would
+part company, and the harness's `Fault` mechanism cannot express one.** The sweep also gives
+**§6 cut-list item 5 a measured price for the first time: zero behavior change**, costing the
+demonstration rather than the behavior. That is the fourth cut-list item in three units whose
+price was estimated or absent until someone measured it.
