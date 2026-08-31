@@ -6,6 +6,14 @@ that cannot be tuned without a code change.
 
 Values marked PROVISIONAL are initial guesses awaiting empirical tuning; the unit that
 tunes each one is named alongside it.
+
+**Reconciled Aug 31, 2026 (U8.M), because that convention had quietly decayed.** Seven
+constants still named U4 or U8 as their tuning owner after both units had closed — two of
+them settled by decision #5 three units earlier — which reads as scheduled work and is
+really unowned work. Every value that U8 measured now states *what* was measured and that
+it is **held** rather than tuned; every value nothing measured says so plainly and names no
+unit. The one PROVISIONAL block left is the Tree-of-Thought group, retargeted to U9 with
+its condition unchanged (OQ-5). Grep `PROVISIONAL` at unit close alongside `TODO(`.
 """
 
 from __future__ import annotations
@@ -37,7 +45,13 @@ SRC_DIR = Path(__file__).resolve().parent
 # X=2.0 lets the two dense markets clear the threshold on the first pass, so a
 # relaxation flag now means something specific happened rather than being routine.
 INITIAL_SEARCH_RADIUS_MILES = 2.0
-RADIUS_EXPANSION_FACTOR = 2.0  # PROVISIONAL — tune in U4
+# **Never tuned, and no unit owns tuning it — stated Aug 31, 2026 rather than left
+# naming a unit that closed.** U4 tuned the *initial* radius against measured density
+# curves (1.0 -> 2.0 mi) and set this multiplier by inspection alongside it. Doubling
+# reaches the 15-mile ceiling in three expansions, which is the property that was
+# wanted; whether a gentler factor would return better comps before giving up has not
+# been measured.
+RADIUS_EXPANSION_FACTOR = 2.0
 MAX_SEARCH_RADIUS_MILES = (
     15.0  # hard ceiling; beyond this a "comp" is not comparable
 )
@@ -45,11 +59,19 @@ MAX_SEARCH_RADIUS_MILES = (
 # Y: exit condition. The loop stops once this many qualifying comps are found.
 # Also the number of results retrieved, which Checkpoint 3.1 asks to be stated
 # explicitly as a design decision rather than left implicit.
-MIN_QUALIFYING_COMPS = 8  # PROVISIONAL — tune in U4
+# **Settled as decision #5's Y at U4** — the label here read PROVISIONAL until Aug 31,
+# 2026, three units after the decision that closed it. U8.6b added a second measurement
+# and it is a negative one: a 144-point grid across the four indexed markets returned
+# exactly 8 comps at 98 points, 0 at 30, and 7 at **none**, so this line cannot be
+# straddled on its own — reaching 7 requires the loop to exhaust its radius expansions
+# and match relaxations first, each of which raises its own flag.
+MIN_QUALIFYING_COMPS = 8
 
 # Z: iteration cap. On exhaustion the loop exits with a sparse-comps flag rather
 # than returning a silently weak result.
-MAX_RETRIEVAL_ITERATIONS = 4  # PROVISIONAL — tune in U4
+# **Settled as decision #5's Z at U4**; the PROVISIONAL label here was stale from U4's
+# close until Aug 31, 2026.
+MAX_RETRIEVAL_ITERATIONS = 4
 
 # Hard match criteria, relaxed in order as the loop widens its search.
 # Minimum number of *distinct coordinates* a comp set should represent before it is
@@ -79,7 +101,11 @@ COMP_MIN_DISTINCT_LOCATIONS = 3
 COMP_DISTANCE_DECIMALS = 1
 
 COMP_MATCH_BEDROOM_TOLERANCE = 0  # exact bed match before relaxation
-COMP_MATCH_SQFT_TOLERANCE_PCT = 0.25  # PROVISIONAL — tune in U4
+# **Never tuned, and no unit owns tuning it (Aug 31, 2026).** Set by inspection at U4.
+# It is more load-bearing than it looks: `COMP_MAX_OUTSIDE_MATCH_SHARE` measures drift
+# *against this band*, so widening it would quiet the drift disclosure without changing
+# a single comp — which is why the two should be re-read together if either moves.
+COMP_MATCH_SQFT_TOLERANCE_PCT = 0.25
 
 # Share of the returned comp set that may fall outside the *unrelaxed* match criteria
 # above before the drift is disclosed (U7.3).
@@ -123,7 +149,30 @@ HUMAN_REVIEW_CONFIDENCE_THRESHOLD = 0.60
 # Bounds the Critic -> Planner rework cycle. §3 requires every cycle to be bounded by
 # an explicit counter in state rather than by LangGraph's recursion_limit, so that
 # exhaustion escalates gracefully instead of raising.
-MAX_REWORKS = 2  # PROVISIONAL — tune in U8
+#
+# **SWEPT Aug 31, 2026 (U8.M) and held at 2 — the budget is behaviorally inert across
+# 1, 2 and 3.** `scripts/rework_budget_sweep.py` runs the replay tier at each value;
+# **no verdict changes at any of them.** Only one case in the batch reworks at all
+# (`chicago-geocoder-outage`), it spends exactly whatever budget it is given, and it
+# escalates on `rework_limit_reached` at 1, 2 and 3 alike, at confidence 0.70 every
+# time. The golden tier is inert by construction and is not swept: a rework needs a
+# *retryable* objection, only I3-on-outage is retryable, and no golden case raises it.
+#
+# **Read that as unfalsified rather than optimal, and the limitation is specific.** The
+# one case that reworks carries an outage injected for the whole run, so a later lap
+# cannot reach a geocoder that is not coming back — which is precisely the condition
+# under which no budget can outperform any other. **A *transient* outage, clearing on
+# the second pass, is where 1 and 2 would differ, and no case simulates one.** Testing
+# it needs a fault that lifts partway through a run, which the harness's `Fault`
+# mechanism does not currently express.
+#
+# **A consequence for §6's cut list, which priced this without measuring it.** Item 5
+# is "reduce the rework depth to `MAX_REWORKS = 1`". On this batch that cut costs
+# **nothing measurable** — same verdicts, same confidence, same escalation ground. It
+# would cost the *demonstration* rather than the behavior: at 1, the bounded cycle is
+# still exercised but only once, so the case stops showing that the counter survives a
+# second lap.
+MAX_REWORKS = 2
 
 # Severity weights used when aggregating flags into a confidence score.
 #
@@ -179,7 +228,13 @@ REQUIRED_DEAL_FIELDS = ("full_address", "price", "unit_count")
 # because the flag escalates rather than blocks, and because a threshold wide enough to
 # never fire is the failure mode §2 warns about in the search-radius tuning.
 #
-# PROVISIONAL — one data point is not a tuning. U8 has the volume to settle it.
+# **Still one data point, and U8 did not supply a second — stated Aug 31, 2026 rather
+# than left naming a closed unit.** The eval batch reaches this threshold through a
+# single case (`coord-conflict`, a demo baseline), so it has no more volume here than
+# U2 did. Settling it needs listings carrying deliberately-offset coordinates at a
+# range of distances, which no fixture supplies. Held at 0.5 on the reasoning above:
+# the flag escalates rather than blocks, and a threshold wide enough never to fire is
+# the failure mode §2 warns about.
 COORDINATE_CONFLICT_THRESHOLD_MILES = 0.5
 
 

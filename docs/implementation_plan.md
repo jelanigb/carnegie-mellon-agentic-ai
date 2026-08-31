@@ -316,6 +316,19 @@ If the schedule slips, shed scope in this order rather than improvising:
 5. **Critic rework-loop depth** — reduce to single-pass review with escalation,
    keeping the cycle in the graph but capping `MAX_REWORKS = 1`.
 
+   **Priced by measurement Aug 31, 2026 (U8.M), which is the discipline item 2's close
+   asked for — and this one's estimate was not wrong, it was absent.**
+   `scripts/rework_budget_sweep.py` runs the replay tier at budgets of 1, 2 and 3: **no
+   verdict changes at any of them.** The single case that reworks spends whatever budget it
+   is given and escalates on the exhausted budget every time, at the same confidence. So
+   this cut costs **nothing measurable in behavior** — what it costs is the
+   *demonstration*: at 1 the bounded cycle is exercised once rather than twice, and the
+   case stops showing that the counter survives a second lap. **That is a cheaper cut than
+   its position implies**, and it is left at position 5 anyway, because the batch's only
+   rework case carries a permanently-injected outage — the one condition under which no
+   budget can beat another. A transient outage clearing on the second pass is where a
+   budget of 1 and 2 would part company, and nothing simulates one.
+
 6. **Re-anchor the rent model on ZORI instead of FMR** (added Aug 28, 2026, on U8.0's
    finding). U8.0 measured the FMR schedule rising +51.9% against market rent's +33.5%
    since the corpus vintage, so the ratio the model learned is anchored to a series that
