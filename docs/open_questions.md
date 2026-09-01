@@ -21,6 +21,16 @@ entries were **retargeted rather than closed** — OQ-5 to U9, OQ-18 to no unit 
 says why at the entry. Two are new, both opened by U8 and both live decisions rather than
 deferred work.
 
+**Documentation audit, Aug 31, 2026 — no entries closed, one gap surfaced.** A prose
+cross-check of `task_list_u7.md`, `task_list_u8.md`, `task_list_u11.md`,
+`maintenance.md` and `changelog.md` against the code found no discrepancy in anything
+already ✅ or already tracked here — this project's own audits (U8.6c, U8.6b, U11.5) had
+already caught what there was to catch. One thing wasn't previously written down: OQ-20's
+tier-flag argument (below) has an expiry condition with no independent trigger, now noted
+at the entry. Two `maintenance.md` items (M1, M2) were reconfirmed still open and two more
+(M4, M5) were added there — the §6 unit table omits U8.9's drop and carries no row for U11
+at all, despite U11 being closed.
+
 ---
 
 ## Rent & valuation
@@ -115,6 +125,89 @@ with the tier rule that promotion requires. Recorded here rather than left in a 
 because an argument with an expiry condition is one nobody re-reads on the day it expires.
 `agents/valuation_rent._attach_benchmark`, `agents/critic._consistency_objections`,
 [`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.7–U8.8.
+
+**Documentation audit, Aug 31, 2026: the coupling has no independent trigger.** Both
+halves — check B's own measurement and the tier-flag question — still share no owner and
+no unit. The tier-flag argument's stated expiry ("the moment check B is promoted") isn't
+wired to anything: a future unit that promotes check B without also re-reading this entry
+could leave the expired argument standing uncorrected in `_attach_benchmark`'s docstring.
+No code follows from this — it's a reminder that closing check B has to include revisiting
+the tier-flag half, not a separate question.
+
+### OQ-22 · U9.3 — the forecast's pairing search rests on a relationship too weak to support it
+**Raised Aug 31, 2026 at U9.3, and it is what is *left over* after #21 rather than what #21
+fixes.** The Tree-of-Thought's depth-2 level exists to choose which rent band to pair with
+which price band, and the evidence it reasons from is the measured rent/price growth
+correlation. Re-measured across three passes (`scripts/growth_correlation.py`), **r² never
+exceeds 0.10** — 4% to 10% of variance — and the *sign* flips depending on which rent series
+is used and which market is examined.
+
+**#21 stops the evaluator being told something false.** It will be told the relationship is
+weak, sign-unstable, and not a basis for preferring anti-correlated pairings. **What it does
+not answer is whether a pairing search should exist at all** when its governing relationship
+is this weak: a level that enumerates nine combinations and keeps three, on a signal that
+explains under a tenth of the variance, may be reasoning about noise.
+
+**#21 made this sharper rather than milder, and that is the honest framing.** Before #21 the
+level had a clear decision criterion — prefer anti-correlated pairings — which was wrong.
+After #21 it has no directional prior at all, and scores nine candidates on flags, band
+widths and sample sizes. The false criterion is gone and **nothing replaced it.**
+
+**The closing condition first written here was unreachable** — "a longer panel, or a rent
+series matched to multi-family" — neither of which this project will acquire, which made
+this an entry that could never close. **Restated and decided Aug 31, 2026 by the architect:
+depth 2 ships as-is with #21's corrected instructions, and the re-purposing below is adopted
+as the answer, deferred on schedule rather than left open.**
+
+**What ships now.** The nine-way enumeration, beam of 3 with a reserved base/base slot, and
+an evaluator told the relationship is weak and supports no directional rule. **This is
+knowingly thin** — a level that enumerates nine and keeps three on grounds that explain
+under a tenth of the variance — and the final report should describe it that way rather than
+as settled reasoning.
+
+**What it becomes.** Stop asking *which pairing is most likely*, which needs a joint
+distribution this data cannot supply. Ask instead: **which projections does this deal's
+evidence support showing, and how wide should the starting point be?** The bands describe
+what the *market* did; the deal's evidence describes how far to trust the *estimate the
+projection compounds from*, and depth 2 ignores the second entirely today:
+
+| | `los-angeles` | `staten-island` |
+| --- | --- | --- |
+| Rent estimate | $2,861 **±$509** | $2,654 **±$855** |
+| Comps | 8, all ZIP-anchored | **0** |
+| Comp cross-check | implies $2,875 — **1% away** | **not run** |
+| Anchor | ZIP 90026 | **county-wide** |
+
+Both get the same three growth bands today, and both are projected five years forward with
+equal apparent confidence. Re-purposed: `los-angeles` projects the bands from the point
+estimate because eight comparables corroborate it within 1%; `staten-island` projects from
+the **edges of its error band**, or declines the optimistic case as unsupported, because
+nothing checks it and the anchor is county-wide.
+
+**Deal-specific, grounded in evidence already in the evaluator's prompt, and needing no
+correlation at all** — which is exactly what makes it survive #21.
+
+**Why it is deferred rather than built.** The prompt changes from *"score this pairing's
+plausibility"* to *"score what this evidence supports showing"*; the candidate payload gains
+a starting-point treatment beside `(rent_band, price_band)`, so `_pairings` and the scenario
+assembly both change shape; `Scenario`/`ForecastDetail` need a field for it; and everything
+re-records. That is a full change set of **new design** inside a five-day window, against a
+unit already estimated at seven of twelve landing.
+
+**Closes when** the re-purposing is built, or when a later pass decides the pairing level is
+not worth its evidence and deletes it in favour of forecasting the two series independently.
+
+**Its real subject is broader than the forecast.** Only two agents in this system call a
+model, and #12's Critic half was retired on evidence at U7.7, so the forecast's search is
+the *only* reasoning locus in the build — one 4→1 selection and one 9→3 selection. Whether
+that is enough reasoning for the system's claims is a question the final report has to
+answer either way. **Named candidates if a second locus is wanted**, strongest first:
+**retrieval relaxation** (today a fixed ladder — size band, then radius, then bedroom count
+— where *which criterion to relax for this deal* is a genuine judgment with a measurable
+outcome, and U4's ablation harness could score it); and the **recommendation**, where
+model-proposes/rule-decides with disagreement disclosed is already designed and deferred at
+U9.4. `agents/scenario_forecast.py`, `agents/comps_retrieval.py`,
+[`design/evaluator.md`](design/evaluator.md).
 
 ### OQ-4 · cut list 1a — rent-model feature engineering, tuning, and transfer
 **Retargeted Aug 30, 2026, not closed, and the original wording is kept above the change

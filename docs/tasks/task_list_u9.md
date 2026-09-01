@@ -1,394 +1,539 @@
-# U9 — Summarizer polish + Streamlit demo surface — task list
+# U9 — Report, recommendation, and the demo surface — task list
 
 > **Conventions for this file are in [`README.md`](README.md).** Section numbers (§1–§9)
 > and decision numbers (#1–#20) refer to
 > [`../implementation_plan.md`](../implementation_plan.md).
 
-**The last build unit. Feeds the final report and the video (Checkpoint 7.1).** §6 sizes
-U9 as *"Summarizer polish + Streamlit demo app"*, and that sizing is now three units
-short of what U9 actually owes: five open questions were retargeted here, decision #8 has
-a half waiting on it, and **U8.9's absorbed U10 scope was dropped on Aug 30 with no
-successor** — live end-to-end runs, LangSmith traces, the graph diagram, and demo
-screenshots have had no owner since. The architect took all of it into U9 on Aug 31.
+**The last build unit. Feeds the final report and the video (Checkpoint 7.1).**
 
-**The schedule is the binding constraint and it is stated here rather than discovered on
-Sept 3.** Today is Aug 31; the code freeze is **Fri Sept 4**. That is four build days for
-nine change sets, against §6's ~2–3 hrs of review per unit. The plan manages that
-structurally — see *Sequence* and *What sheds* — not by optimism.
-
----
-
-## What U9 owes, and where each obligation came from
-
-| Obligation | Source | Lands in |
-| --- | --- | --- |
-| Streamlit demo surface | §6 U9 row; decision **#3**; §6 cut-list item **4** | U9.4 |
-| Summarizer polish | §6 U9 row; `agents/summarizer.py` docstring | U9.2b |
-| Summarizer model role | decision **#8** (🟨 part open), **OQ-9** | U9.2 |
-| A sixth demo deal, in Chicago | **OQ-21** | U9.1 |
-| ToT constants written up as a disclosed gap | **OQ-5** (retargeted U8 → U9) | U9.6 |
-| Checkpoint criteria as build artifacts | **OQ-14** (5.1 half) | Q3 |
-| LangSmith account and trace capture | **OQ-13** | U9.7 |
-| Live runs, traces, diagram, screenshots | **U8.9**, dropped Aug 30 | U9.7 |
-| On-disk credential fallback, before a public demo | **OQ-10** | U9.6 / Q4 |
-| Root `README.md` | **Checkpoint 7.1**, graded | U9.5 |
-| `TODO` inventory reconciliation | **U8.M**, still 🟨 | U9.M |
-
-**The root README is 0 bytes today.** 7.1 grades the submission on *"a link to a public
-GitHub repository that is accessible and includes a README, core project files, and clear
-instructions for review or use."* Nothing in the plan owned it before this unit. It is
-listed above with the rest, but it is the only line whose absence is scored directly.
+**Rewritten Aug 31, 2026, after the architect ran the pipeline and read two reports.**
+The first draft of this file planned "Summarizer polish + a Streamlit app" against §6's
+sizing. Reading actual output changed the unit: the report has no recommendation, the
+reports-versus-escalates distinction was never defined against any user, the forecast
+pairs two series built by different methods, and the demo deals cannot be reproduced from
+a fresh clone. **None of that was visible from the code; all of it was visible from one
+run.** The lesson belongs at the top of this file rather than in its close-out: this
+project's own principle is to test premises against data, and the report's readability was
+a premise nobody had tested for seven units.
 
 ---
 
-## Sequence, and why
+## The schedule, stated first because it decides the rest
 
-**Three ordering rules, in priority order.**
+**Today is Aug 31. Code freezes Fri Sept 4, extending to Sat Sept 5 if tweaks are still
+landing** — the architect's clarification Aug 31: the Sept 4 date assumed two full days for
+recording and the write-up, and there is wiggle room inside that. **Five build days, not
+four.** Against §6's ~2–3 hrs of review per unit that is realistically **six to seven
+change sets, not twelve.**
 
-1. **Anything that can move a published number lands before anything that captures one.**
-   U9.1 adds a row to the demo set and U9.2 adds a model call inside the pipeline; both
-   precede U9.7's capture, or the screenshots and the results table describe different
-   builds. This is the same rule U8.10 used to put its prose passes ahead of its `src/`
-   passes, applied in the opposite direction because U9's risk is in the code.
-2. **The forced re-record follows its cause immediately.** U9.2 puts an LLM call in a node
-   every eval row reaches, so both offline tiers `CacheMiss` until U9.3 re-records them.
-   The tree is red between those two commits — permitted by §8 when the completing
-   subsection is named, which it is.
-3. **Capture runs last and runs late.** LangSmith's free tier expires traces after 14 days
-   (OQ-13), so trace capture belongs beside the write-up, not ahead of it. Screenshots
-   have to show the surface that ships, which is not known until U9.4 is done.
+**Sept 5 is elastic, not free.** It is the reserve for finishing something already in
+flight, not room to start another subsection — spending it on new work re-creates the
+failure mode §6's freeze exists to prevent, which is arriving at the deadline still
+integrating.
 
-**Why the demo deal (U9.1) goes first rather than last.** It is the only subsection that
-changes an input, and every artifact downstream quotes the demo table. It is also the
-cheapest — U8.6b already found and measured the siting, so nothing has to be searched for.
+The subsections below are in build order, revised by the architect Aug 31: the README
+first, the live tier pinned before new deals are added to it. The **cut line** before U9.8
+marks where I expect the freeze to land.
+
+**Nothing below the shed line is speculative work** — each item is either a disclosed gap
+the report names or a deliberate deferral with its reasoning recorded. That is the same
+treatment §6's cut list gives, applied inside a unit.
 
 ---
 
-## Unit-level open questions
+## Personas, and the two axes — the design this unit rests on
 
-**Q1–Q2 block U9.1 and U9.2 and are needed before coding starts. Q3–Q5 block only their
-own subsections and can be answered in flight.**
+**Settled Aug 31, 2026 by the architect.** No persona, user journey, or intended-user
+definition existed anywhere in this repository before today; it was skipped, not
+documented elsewhere. Checkpoint 7.1 asks for "the intended user" directly, so this is a
+report section as much as a design input.
 
-### Q1 — When the narrative call fails, does that raise a flag or a sentence?
+| | Persona | Relationship to the system | Reads |
+| --- | --- | --- | --- |
+| **a** | **IT / operations** | Confirms the system is working as intended | Eval batches, logs, traces — never an individual deal |
+| **b** | **Real-estate agent** — *the core internal user* | Reviews deals before they reach an investor | The full report, including its evidence |
+| **c** | **Investor** — *the external customer* | Holds capital, makes the buy decision | The recommendation and the figures behind it |
+| **d** | **Another agent** — *future, unsupported today* | Calls this system for an evaluation on a human's behalf | The state object, via a protocol |
 
-The lede is a live model call inside a node, so it can fail — quota, a dead ID, a schema
-refusal. Transparent Degradation says the report must say so. The question is *how*.
+**(d) is not speculative and the report should say why.** The MCP reference server
+(decision #13) already exposes this project's tools to an external host. The unbuilt half
+is the inverse — exposing *the evaluation itself* as a callable capability — and naming
+that as the concrete next step is stronger than a generic "future work" line.
 
-- **(a) Render an in-report sentence**, no new `FlagKind`: *"A written summary could not be
-  generated for this run; the disclosures and figures below are unaffected."*
-- **(b) Add `FlagKind.SUMMARY_NARRATIVE_UNAVAILABLE`** at info severity and let it render
-  through `_flag_section` like every other disclosure.
+### Escalation routes by flag type — not to one desk
 
-**Recommendation: (a), on two reasons, the second of which is principled rather than
-cheap.** First, cost: U8's headline census is **30 of 30 flag kinds raised, none uncovered
-and none unreachable**, and a 31st kind breaks that claim unless a case covers it — which
-needs a *new declared fault*, because `Fault.LLM_UNAVAILABLE` kills the run at extraction
-and never reaches the Summarizer (`cleveland-model-outage` escalates with 0 comps). That is
-a fault, a case, and a recording, for one sentence. Second, and this is the part worth
-keeping: **every other flag in this system propagates.** A flag exists so downstream
-agents and the Critic can act on it. The Summarizer is terminal — a flag raised there has
-no consumer except the report it is already printed in, so it would be flag-shaped
-notation rather than a flag. Naming that boundary is better than blurring it.
+**Chosen over routing everything to the agent, because it is what the flags already
+mean.** A geocoder outage and a sparse comp set are both "escalate" today, and they call
+for different people:
 
-### Q2 — `DemoDeal.rent_basis` is stale across the whole set. Re-base six, or one?
+- **Infrastructure flags → (a) IT.** The geocoder was unreachable, the model was
+  unavailable, no rent index covers this county. Nothing about the deal is in question;
+  the system could not do its job.
+- **Deal-substance flags → (b) the agent.** Sparse comps, a price far off its benchmark,
+  a rent claim the model disputes. The system worked correctly and found something a
+  person should judge.
 
-U8.7 found every demo deal carries `rent_basis="hud_fmr:2"` — rents set from the anchor
-**#19 retired**. OQ-21 requires the *new* deal to declare against the current anchor "or it
-ships stale on day one." It does not say what happens to the other five.
+This needs a routing rule and it changes the human-review payload, which is why it is
+U9.2 rather than a note in the Summarizer.
 
-- **(a) The new deal declares against #19's hybrid anchor; the five existing deals stay as
-  they are, with the staleness stated** in `demo_deals.py` and in the report's limitations.
-- **(b) Re-base all six** under #19, re-derive every figure, update
-  `verify_demo_calibration.py`'s expectations, re-run the live tier.
+### The two axes — the fix for "reports vs. escalates"
 
-**Recommendation: (a), and it is a schedule judgment I want on the record as one.** (b) is
-the better end state and I am not pretending otherwise: a set with two rent bases is a wart,
-and the report has to explain it. But (b) changes the stated rents in six listings three
-days before the freeze, which moves every live-tier baseline row, every demo report, and the
-asking-price and stated-rent disclosures that #20 was just closed against. The cost is not
-the re-derivation; it is that the published table would be re-derived after the unit that
-scored it closed. (a) costs a paragraph. **If Q2 goes to (b), it must land as U9.1 and
-nothing else in the unit may start until its batch re-run is green.**
+**The report currently states one axis and readers assume it is the other.**
 
-### Q3 — OQ-14's 5.1 half: already discharged, or does U9 owe artifacts?
+- **Axis 1 — can the system stand behind its own numbers?** `reports` / `escalates`.
+  Computed today. This is a statement about the *software*.
+- **Axis 2 — is this a good deal?** **The system has never stated this.** Neither report
+  says whether the property is worth buying.
 
-OQ-14 asks that checkpoints publishing completion criteria have the unit *produce* each
-one rather than write it up afterward, and names 5.1 as the remaining half (6.1's was
-discharged at U7.8). But 5.1 is an **architecture-design** checkpoint — roles, coordination
-strategy, communication approach — and `docs/private/checkpoints/checkpoint_5.1_response.md`
-exists, so it has been submitted.
-
-- **(a) Close OQ-14 as discharged**, recording that 5.1 asked for design rationale rather
-  than build artifacts, so the treatment U4 got does not apply to it — and that 6.1's half
-  closed at U7.8.
-- **(b) U9 produces the 5.1 artifacts anyway** — the regenerated topology diagram and a
-  trace showing the back edge firing, both of which U9.7 captures regardless.
-
-**Recommendation: (a), noting that (b) happens as a side effect.** U9.7 regenerates the
-diagram and captures traces for the report; if the architect wants those attributed to 5.1
-it costs a sentence in the close-out rather than a subsection.
-
-### Q4 — OQ-10: drop the on-disk credential fallback before the public demo?
-
-OQ-10 says "raise before any public demo," and U9 *is* the public demo. Three sites:
-`tools/hud_fmr.py:24`, `tools/llm_client.py:41`, `tools/diagnostics.py:36`.
-
-- **(a) Keep the fallback, document it, and fix the one real exposure.**
-- **(b) Drop the fallback, require env vars**, and update the README's setup instructions.
-
-**Recommendation: (a), because the two halves of this question have different answers and
-the entry conflates them.** The fallback itself leaks nothing: `ignore/` is gitignored, so
-a public repository never carries a key, and requiring env vars would make a fresh clone
-harder to run — which is the thing 7.1 grades the README on. The *real* exposure is
-`diagnostics.py:36`, which deliberately prints the account identifier and is fine in a
-terminal and wrong in a recording, and **Week 7's deliverable is a recording.** That is
-fixed by redaction at U9.M regardless of which way (a)/(b) goes, and it should be fixed
-whether or not the fallback stays.
-
-### Q5 — What sheds if U9.4 is not working on the morning of Sept 3?
-
-The Streamlit surface is §6 cut-list **item 4**, and it is the only item on that list with
-a *pre-agreed* fallback: a terminal recording plus LangSmith traces. §6 kept it in scope on
-Aug 26 precisely because the fallback is available late — "which is precisely what makes it
-safe to keep rather than shed early."
-
-**Recommendation: shed in this order, and state the decision date.** U9.2b (polish) first —
-it is cosmetic and the report never quotes it. Then U9.4 to its documented fallback, taken
-**no later than the morning of Wed Sept 3**, so U9.7's capture has a full day against
-whichever surface exists. **U9.5 (README) and U9.7 (capture) never shed**: one is graded
-directly and the other is the report's evidence. The lede (U9.2) does not shed after U9.3
-lands, because un-landing it would force a second re-record.
+A reader sees "🚩 Escalated to human review" and concludes the deal is bad. On
+`staten-island` that is precisely backwards: it escalates because there are no
+comparables, while asking **17% below its ZIP median**. **The two axes are rendered as two
+separate lines that never merge**, and that single change is the largest readability gain
+available in this unit.
 
 ---
 
 ## Subsections
 
-### U9.1 ⬜ — The sixth demo deal (OQ-21)
+### U9.1 ⬜ — Root `README.md` and the committed model *(never sheds)*
 
-**Nothing here needs searching for.** U8.6b already measured the siting: **Chicago Uptown
-at 1,100 sq ft** returns 8 comparables with 2 outside the size band — the share the
-threshold admits — raises **no warn-severity disclosure at all**, and runs at confidence
-**1.00**. It exists in the eval set today as the golden fixture
-`chicago-uptown-band-under`, whose 1,300 sq ft sibling escalates, so the pair also
-documents how narrow the clean margin is.
+0 bytes today, and 7.1 requires *"a README that explains the project, architecture, setup,
+and usage"* plus *"clear instructions for running or reviewing the project."*
 
-**Why the set needs it.** After U8.6e's ungate, `chicago` escalates on
-`comps_outside_match_criteria` (3 of 8 comps outside the band) and `los-angeles` is the
-only demo deal reaching 1.00 and reporting clean. One clean run against five escalations
-understates a system whose whole argument is that it reports cleanly when it can.
-**`chicago` is not touched** — that escalation is the system working, and re-siting it
-would spend the escalating deal to buy the clean one.
+**Written for reviewing rather than running, per the architect's Aug 31 call** — the
+instructions ask a technical audience to *understand and review*, and the graded artifact
+is the repository's legibility, not a working install on someone else's machine. So: what
+the system is, the architecture, how to run it, where the evidence lives
+(`eval/results/`, the diagram, saved reports), and **stated limitations**, because a README
+that hides them contradicts the principle the system implements.
 
-- New `DemoDeal` in `demo_deals.py`, calibrated under **#11**: every figure names the
-  public source it derives from, `_check_listing_states` holds the prose and the fields
-  together, and `scripts/verify_demo_calibration.py` re-derives it from live sources.
-- `rent_basis` declared per **Q2**.
-- `main.py`'s `--deal` choices and the docstring's usage block pick it up automatically
-  from `DEMO_DEALS`; the docstring's hand-written line list does not, and needs the row.
-- A `live`-tier baseline row in `eval/cases.py`, with `VerdictSource` set the way every
-  other demo row is — a **measured** baseline, never a predicted verdict. It must not be
-  scored in the 21-case agreement figure.
-- Re-derive the demo table.
+**Commit the 196 KB rent model**, and commit the two demo reports as sample outputs. The
+Chroma index (51 MB) and the source CSVs stay out — Kaggle-licensed, and large — with the
+rebuild path documented. Worth stating plainly in the README that a clone cannot run the
+pipeline without that step, rather than letting a reviewer discover it.
 
-**Review attention:** the calibration, and specifically that the new deal's figures are
-derived rather than chosen to produce a clean run. A demo deal calibrated *toward* an
-outcome is the error #6 rejected the demo set as a tuning instrument for.
+**Must not reference** `docs/private/`, `ignore/`, `data/` or `CLAUDE.md` — all gitignored,
+and §8 forbids describing private paths in public files.
 
-### U9.2 ⬜ — The Summarizer's narrative lede (decision #8, OQ-9)
+### U9.2 ⬜ — Personas, journeys, and the escalation routing rule
 
-**Decided Aug 31, 2026 by the architect: the Summarizer gets a model call.** A short
-executive summary above the report, with the full deterministic report intact beneath it.
+**Doc-first, then the one code change that follows from it.**
+`docs/design/personas.md`: the four personas above, each with its journey, and the
+routing rule. Referenced from the document map in §6 and from the report.
 
-**The model is `config.MODEL_SUMMARIZER`, unchanged — and that is a zero-change decision,
-not an omission.** All five `MODEL_*` roles already hold
-`nvidia/nemotron-3-nano-30b-a3b`, and `MODEL_SUMMARIZER` is already in
-`verify_models_live()`'s default set (`tools/llm_client.py:164`), so it is already guarded
-at launch. A second ID would add a second thing that can be dead on demo day, which is
-decision #8's own durable lesson.
+The code half is small and is the reason this is not purely a doc commit: the
+`human_review` interrupt payload currently says only *"Confidence below threshold or
+rework budget exhausted."* It should name **which desk** the deal is waiting on, derived
+from the flag kinds that caused the escalation. `agents/critic.py`,
+`agents/human_review.py`.
 
-**How #8 and OQ-9 close, and the wording matters.** OQ-9's stated condition is met — the
-Summarizer calls a model, so the role is exercised rather than untested. But the ID was
-selected in U3's bake-off on **schema-valid extraction**, not on prose quality, and it is
-inherited here rather than measured for this job. #8 closes as ✅ with the role exercised
-and **the inheritance stated as an inheritance**. Claiming it was chosen on evidence for
-summarization would be a claim the record does not support.
+**Also fixes the note bug the architect found.** `main.py`'s canned resume text says *"A
+real reviewer would resolve the disclosures above before proceeding"* — true in the
+terminal, where the interrupt payload prints the flags above it, and **false once the same
+string is replayed into the report banner**, where disclosures render below. The layout is
+right; the string is wrong. It also stops being a placeholder once a real reviewer persona
+exists.
 
-**Four constraints, each of which is a property something else in the system depends on:**
+### U9.3 ⬜ — The forecast: re-source rent growth, and repair the search
 
-1. **Additive only.** The lede is prepended; nothing in the existing report is removed,
-   reworded by the model, or summarized away. §1 requires every flag rendered, never
-   counted, and a stochastic component in front of the disclosure text would put that
-   guarantee at the mercy of a sampler. The model writes *about* the run; the report still
-   states it.
-2. **The prompt quotes rounded, reader-facing figures.** This is what a lede needs anyway,
-   and it also sidesteps **OQ-18's mechanism** by construction: the existing replay
-   fragility comes from `scenario_forecast._context_block` embedding a freshly-computed
-   float, and the new call must not add a second instance of it.
-3. **Reader-facing text carries no internal vocabulary** (§8). The lede is the most
-   reader-facing string in the repository. The prompt states that constraint explicitly and
-   passes plain-language inputs, not enum values or config names.
-4. **Failure renders per Q1** and never blocks the report.
+**The largest change in this unit, and it supersedes half of decision #16.** Full
+investigation, all four defects and the re-measurement, in
+[`../design/evaluator.md`](../design/evaluator.md). This section is what gets built.
 
-Also: `config.SUMMARY_NARRATIVE_ENABLED`, because `config.py` is the only home for a
-tunable, and because the eval runner and the hermetic suites need one switch to reach.
+**Raised by the architect Aug 31, 2026**, reading the LA report: rent compounds +7.26%/yr
+while the price falls −0.80%/yr, in two of three rows including the one labelled
+*Optimistic*.
 
-**The test suites must not start making live calls.** `tests/` calls `summarizer_agent()`
-directly in ~76 places and has an `offline_scenario_evaluator` fixture that replaces
-`LlmClient` with a refusing stub. The same treatment is needed here, in `conftest.py`, and
-**one test should exercise the failure path** so Q1's rendering is covered rather than
-assumed.
+#### The premise that failed
 
-### U9.2b ⬜ — Summarizer polish *(sheddable, per Q5)*
+`scripts/growth_correlation.py` — written for this, because **#16's number was measured
+once before U6 and never committed as a script.**
 
-Wording and layout of the deterministic report — the "polished in U9" the module docstring
-has promised since U2. The **structure and the disclosure rules are settled and are not in
-scope**; this is prose. Kept as its own commit so that shedding it costs nothing and so a
-reviewer is not reading cosmetic diffs alongside a new model call.
+| Pass | Rent series | Pooled | Chicago | LA | Cleveland | New York |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | HUD FMR | **−0.317** (r² 0.100) | −0.200 | −0.337 | −0.654 | **+0.120** |
+| 2 | FMR, FY2023–24 removed | **−0.197** (r² 0.039) | **+0.229** | −0.228 | −0.360 | **+0.390** |
+| 3 | **Zillow ZORI** | **+0.222** (r² 0.049) | −0.537 | **+0.233** | **+0.715** | −0.089 |
 
-### U9.3 ⬜ — Re-record the offline tiers, and prove the lede verdict-inert
+The evaluator is told rent and price *"move opposite each other here."* **They do not.**
+That is true of the HUD schedule against Redfin prices and **false of market rent against
+the same prices** — and this system's published estimate has been anchored to market rent
+since #19. Pass 2 shows ~40% of the negative signal is two fiscal years HUD moved the
+schedule nationally, which this project's own cohort screen exists to identify as
+non-market.
 
-**Forced by U9.2**, and the reason is exact: the Summarizer is a node every eval row
-reaches, so under `LLM_CACHE_MODE=replay` a lede prompt with no recording raises
-`CacheMiss` and both offline tiers die. `.venv/bin/python -m eval.runner --tier golden
---record`, same for `replay`, then re-run without the flag.
+#### What is built
 
-**The claim to verify — not assume — is that the batch is unchanged.** The Summarizer runs
-last and computes nothing (its docstring: *"Nothing here re-derives an upstream figure"*),
-so confidence, flags, verdicts and coverage are all fixed before it is invoked. That makes
-the lede **verdict-inert by construction**, which is exactly the kind of claim U8.8 and
-U8.10f checked rather than asserted: re-run both tiers and compare the results table
-**byte-for-byte** on confidence, disclosures, outcome, target-fired and verdict. Any
-difference is a defect in U9.2, not a new baseline.
+**1. Rent growth re-sourced from HUD FMR to Zillow ZORI.** #16 chose FMR on an
+architectural argument — *"the rent estimate is `ratio × FMR`, so projecting the anchor
+forward forecasts rent by the same mechanism that produced the estimate."* **That argument
+now selects ZORI**: since #19 the estimate is `ratio × ZORI(ZIP) × FMR-bedroom-step`, so
+projecting the anchor forward means projecting ZORI. This follows #16's reasoning to where
+the system moved rather than overturning it.
 
-**Review attention:** the diff of `eval/data/llm_recordings/` should be **additions only**.
-A modified existing recording means U9.2 changed a prompt it had no business touching.
+Measured, both series windowed 2018+ under one estimator with 2020–22 excluded on both:
 
-### U9.4 ⬜ — The Streamlit demo surface (decision #3, §6 cut-list item 4)
+| | | pess | base | opti | width |
+| --- | --- | --- | --- | --- | --- |
+| **Los Angeles** | ZORI rent | +1.25 | **+2.65** | +4.83 | **3.6pp** |
+| | price | −0.80 | **+2.10** | +4.50 | 5.3pp |
+| **Chicago** | ZORI rent | +1.58 | +4.13 | +6.66 | 5.1pp |
+| | price | −1.56 | +6.76 | +10.51 | 12.1pp |
+| **Cleveland** | ZORI rent | −0.11 | +5.43 | +11.27 | 11.4pp |
+| | price | −4.66 | +7.26 | +15.72 | 20.4pp |
+| **New York** | ZORI rent | +3.12 | +7.12 | +12.31 | 9.2pp |
+| | price | +1.65 | +3.73 | +5.90 | 4.3pp |
 
-`src/app.py`, run as `.venv/bin/streamlit run app.py` from `src/`.
+Against LA's FMR bands today — **−0.68 / +7.26 / +14.49, width 15.2pp** — the band is four
+times narrower and the base case a third of the size.
 
-**Execution model, decided Aug 31: replay by default, and a paste box that forces live.**
-The six (or seven, after U9.1) calibrated demo deals run from the committed recordings —
-instant, reproducible on any fresh clone, no quota. A pasted listing has no recording, so
-it cannot replay; the app switches that run to live **and says so on the surface**.
+**Two windowing decisions, explicit rather than default, both found by measurement:**
 
-**That default is a direct answer to OQ-17, not a convenience.** OQ-17 names "any future
-live surface, including a Streamlit demo that calls the model live" as exposed to run-to-run
-variance — measured at roughly 1 in 15–20 live attempts flipping a near-tie into an extra
-warn, which happened unprompted to the `los-angeles` demo deal itself. A demo that replays
-cannot drift mid-presentation. Making the replay/live distinction **visible** rather than
-hidden also puts the recording design itself into the demo, which is one of the more
-defensible things this repository has built.
+- **Window ZORI to 2018+ to match Redfin's span.** Unwindowed, New York's pessimistic band
+  is **−22.6%**, a real Bronx figure from a stretch ending **2017-05** — before the price
+  series begins.
+- **Apply the 2020–22 exclusion to the rent side too.** Only the price side has it today.
 
-What it renders:
+**FMR history stays as the documented fallback** where ZORI has no county — the same shape
+as #19's hybrid, and it keeps `tools/fmr_history.py` earning its place.
 
-- The listing text, then the run, then `report_markdown` — the same string `main.py`
-  prints, so the surface and the terminal cannot disagree about what the system said.
-- Confidence, the disclosure counts by severity, and the comp table.
-- **The `human_review` interrupt as a genuine pause.** `main.py` auto-resumes with a canned
-  note so one command produces a complete report; the app should let a person type the
-  note and resume, which is the honest version of what the interrupt is for and the
-  clearest demonstration of human oversight that 7.1 asks about.
-- `verify_models_live()` on the live path only — a replay run must not fail because a model
-  ID died.
+**2. The estimator asymmetry closes as a side effect.** Both series become monthly, so
+`redfin_data.compute_growth_bands` serves both: one estimator, one exclusion window, one
+span. The 15.2-vs-5.3-point mismatch was an artifact of single-fiscal-year extremes against
+12-month sustained stretches, and re-sourcing removes the cause rather than patching it.
 
-**Two mechanical risks worth naming in advance**, since both are how Streamlit demos
-usually break: the script re-runs top to bottom on **every** widget interaction, so the
-graph invoke must be guarded and its result held in `st.session_state` or a cached
-resource, and the checkpointer needs a stable per-session `thread_id` — reusing one across
-deals resumes a paused thread instead of starting a new deal, which `main.py`'s
-`--thread-id` help already warns about.
+**3. The cohort-shift machinery retires.** It exists solely to screen HUD's administrative
+step-ups. A market series has none, so the screen, its `ForecastDetail` fields and its
+report text go — and the depth-1 rent fork becomes *include or exclude 2020–22*, the same
+question already asked of price. **Four framings, one question asked of two series**, which
+is easier to explain than the asymmetric pair it replaces.
 
-### U9.5 ⬜ — Root `README.md` (Checkpoint 7.1)
+**4. The evaluator's instructions are corrected.** Two independent errors:
 
-Currently 0 bytes, and graded directly. Written for a reviewer who has never seen the
-repository:
+- **It is told something false.** Replace with the measured truth: the relationship is weak
+  (r² 0.04–0.10 across every pass), its sign differs by market and flips with the rent
+  series, so **no directional pairing rule is supported** — do not assume the diagonal, and
+  do not assume its opposite.
+- **It misread its task.** It scored base/base down for *"limited evidence of extremity."*
+  State that the base case is the default the others depart from and needs no such evidence.
 
-- What the system is and who it is for — §1's seven-agent pipeline and Transparent
-  Degradation, in plain words.
-- **Install and run**, verbatim-runnable: the venv at `src/.venv`, commands run from
-  `src/`, `main.py --deal <key>`, the Streamlit app, `pytest`, and the eval harness.
-- Where the evidence lives: `eval/results/results.md`, `eval/results/sensitivity.md`, the
-  diagram, and the document map in `implementation_plan.md`.
-- **Stated limitations**, because the system's own design principle is disclosure and a
-  README that hides them contradicts the thing it is describing.
+**This lands as its own commit.** It changes what every forecast is scored against, and a
+prompt change with that reach should be attributable to one diff.
 
-**Two hard constraints.** It must not reference `docs/private/`, `ignore/`, `data/`, or
-`CLAUDE.md` — all gitignored, and §8 forbids describing private paths in public files. And
-it must not carry internal vocabulary a reviewer cannot resolve.
+**5. A beam slot reserved for base/base**, so the neutral case is always reported. It
+scored 0.70, cleared the 0.40 threshold, and lost on rank to three anti-correlated
+pairings — so today the row labelled *Base* is base-rent with pessimistic-price and the
+true base case appears nowhere.
 
-### U9.6 ⬜ — The disclosed gaps: OQ-5's ToT constants, and OQ-10's answer
+**6. The report leads with two tables, and the search is untouched.** Rent and price get a
+three-row table each, which is also how #16 forecasts them; the combined scenarios become a
+secondary view with base/base present. **In separate tables the labels become true again** —
+each names its own band rather than a combined outcome that may contain neither extreme.
+All 9 pairings and the full ledger survive, so nothing is lost from the reasoning.
 
-Docs and comments only; no logic.
+**7. The reasoning is made visible, and this is the demo beat.** Depth 1 and depth 2 render
+as separate blocks with the question each answers, and **the winning framing's score is
+shown** — today only pruned branches carry scores, so a reader sees three losers and never
+learns what beat them:
 
-**OQ-5** was retargeted here over the recommendation, on the architect's argument that the
-constants get a sentence written by the unit that builds the surface a reader meets them
-through. What is written: `TOT_BRANCHING_FACTOR`, `TOT_MAX_DEPTH`, `TOT_BEAM_WIDTH` and
-`TOT_PRUNE_THRESHOLD` were set by reading output rather than by tuning; the two
-measurements that exist are that `TOT_TIE_EPSILON` is **not meaningfully straddleable**
-because the gap it compares is noise-dominated (U8.6b/OQ-17), and U8.6c's published depth-2
-**cut margins**, which found the discarded pairing often outscoring the reported one and
-losing on `tot._rank`'s conservatism preference. Tuning against the golden batch was
-**considered and declined** — those fixtures were authored by the unit that would have
-tuned against them. The closing condition is unchanged and unmet: a known-correct branch.
+```
+Step 1 — Which reading of the history?        4 considered, 1 chosen
+  f-01  0.85  Keep every rent year; exclude the 2020-22 price surge   ← chosen
+  f-11  0.80  ...also screen the step-up years
+  f-00  0.30  Include everything
+  f-10  0.20  Screen rent years; include the price surge
+Step 2 — Which band combinations to report?   9 considered, 3 kept
+```
 
-**OQ-10** closes per **Q4**, whichever way it goes, with the reasoning recorded rather than
-the verdict alone.
+This is where the system visibly *reasons* rather than computes, and it needs no new
+machinery — every framing already carries a score and a written rationale; the report just
+flattens both levels into one undifferentiated list.
 
-### U9.7 ⬜ — Absorbed U8.9: live runs, traces, diagram, screenshots
+**It must also say the reasoning is a sample.** OQ-17 measured this model's scores swinging
+widely on identical prompts. The *bands are deterministic*, so the numbers a reader takes
+away do not move; only the commentary does, and the panel should say so.
 
-**Dropped from U8 on Aug 30 with no successor; taken into U9 on Aug 31.** Runs last, per
-ordering rule 3.
+#### Not taken
 
-- **Live end-to-end runs** across the metros as `live` rows in the same table — the thing
-  `eval/README.md` says belongs beside the offline tiers so *"works against a real model"*
-  is demonstrated rather than assumed. Expect run-to-run variation and report what was
-  observed; per OQ-17 a live row is a sample, not a fixed value, and saying so is the
-  honest framing.
-- **LangSmith** (OQ-13): no key was present in `ignore/` as of Aug 24, so the account is
-  set up here. Free-tier traces expire after **14 days**, which is why this is last.
-- **Graph diagram** regenerated from the compiled graph via
-  `scripts/export_graph_diagram.py`, which asserts the topology including the single
-  Critic→Planner back edge.
-- **Screenshots** off the Streamlit surface — or terminal captures, if Q5's fallback was
-  taken.
-- **Redact `tools/diagnostics.py:36` before any capture.** The full error text
-  deliberately includes the account identifier; correct for a terminal, wrong for a
-  recording, and the deliverable is a recording.
+**Splitting rent and price into separate forecasts entirely.** It would delete depth 2 —
+nothing left to pair — collapsing the search to four framings at beam width 1, reducing "13
+hypotheses evaluated" to four, and stranding U8.6c's cut-margin measurement. Decoupling the
+*presentation* gets the readability without spending the reasoning level.
+
+#### Consequences for the sequence
+
+**This is why U9.3 moved ahead of the report and the recording pass.** It changes every
+forecast prompt, so it must land before U9.5 records anything — otherwise the tiers are
+recorded twice. Also a text bug it fixes: the report says *"the base case is their compound
+average"* right after naming two fiscal years, which reads as the average of those two; the
+code takes the geometric mean of all retained years.
+
+**Adopted Aug 31, 2026 by the architect as decision #21**, superseding #16's rent half. The
+cohort-shift screen retires with the switch rather than being kept — the alternative was
+offered and declined, on the reasoning that code whose only purpose was masking an FMR
+artifact should not outlive the artifact.
+
+### U9.4 ⬜ — The report: two axes, a recommendation and its cross-check, a lede, a template
+
+**The architect's first priority, and the thing the demo actually shows.** Four changes to
+one surface, landing together because they are one reviewable rework of the report's top.
+
+**1. The recommendation is computed by the Critic, not the Summarizer.** The Critic
+already aggregates flags into confidence and decides routing; a recommendation is the same
+kind of judgment over the same state, and putting it there keeps the Summarizer's rule
+that it *reports* rather than computes. A new `DealState` field carries the verdict and
+the reasons behind it.
+
+**Deterministic, and the reasoning is measured rather than stylistic.** OQ-17 found this
+model scoring an identical prompt 0.05 on one call and 0.95 on the next, same deployment,
+`temperature=0`. A recommendation behind that would make the same deal "proceed" on
+Tuesday and "do not proceed" on Wednesday with nothing able to explain why, and it would
+create a second axis the eval harness cannot score. **"Agentic" is not "stochastic"** —
+the Critic's escalate decision is already a pure function and it is what makes this system
+autonomous rather than advisory.
+
+**1b. The model-proposes / rule-decides cross-check — ADOPTED Aug 31, 2026**, having been
+written into this file as a deferral earlier the same day. The architect took it after
+establishing that this system has only **one reasoning locus** (OQ-22): the forecast's
+search is the only place a model exercises judgment, since #12's Critic half was retired on
+evidence at U7.7 and only two agents call a model at all. This is the cheapest place to add
+a second, and it lands where the reader is actually looking.
+
+**How it works.** The model produces **its own independent verdict from the same state**,
+used only as a cross-check. On the `overpriced` deal:
+
+- **Rule:** asking price 55% above the ZIP benchmark → exceeds threshold → *"Proceed with
+  caution — priced materially above comparable sales."*
+- **Model, same state, independently:** may weigh it differently — the premium is declared,
+  the rents are corroborated — and reach *"Do not proceed; the premium is not supported by
+  the rent it generates."*
+- **The report shows the rule's verdict, always.** On disagreement it adds a line saying an
+  independent review of the same evidence reached a different conclusion, that the verdict
+  follows the system's stated rule, and that the disagreement is **disclosed rather than
+  resolved**.
+
+**The disagreement is the product.** A deal where both agree is more trustworthy than one
+where they split, and the reader learns which they are holding. **Reproducibility is
+untouched** — the rule always decides, so the model can never move a verdict, only annotate
+it. That is what makes this safe against OQ-17 where a model-decides design would not be.
+
+**Cost:** one extra call, the comparison, a disclosure line, tests, and a recording per eval
+row — the recordings ride U9.5's pass at no extra cost if the sequence holds.
+
+**2. Two axes, two lines, never merged** — per the section above.
+
+**3. The lede.** A short model-written summary above the report, `config.MODEL_SUMMARIZER`
+unchanged (all five roles already hold the same ID, already guarded by
+`verify_models_live()`). It **renders the verdict the rule computed; it does not reach
+one.** Constraints: additive only, nothing removed or reworded by the model; the prompt
+quotes rounded reader-facing figures, so it does not add a second instance of OQ-18's
+float-in-prompt fragility; no internal vocabulary (§8); `config.SUMMARY_NARRATIVE_ENABLED`
+so tests and the runner have one switch.
+
+**On failure it renders a sentence, not a flag** — *"A written summary could not be
+generated for this run; the disclosures and figures below are unaffected."* **Q1, answered
+Aug 31.** A 31st `FlagKind` would break U8's 30-of-30 census unless a new declared fault
+could reach it, and more fundamentally **every other flag in this system propagates** — a
+flag raised in the terminal node has no consumer but the report already printing it.
+
+**4. The template and the layout.** The architect's finding: a reader seeing many of these
+reports meets the same boilerplate disclosures every time, and the pricing is buried. One
+report with **progressive detail** — recommendation and headline figures first,
+disclosures condensed with full text expandable, evidence (branch ledger, comp table, band
+derivations) below.
+
+**Two renderings — one investor-facing, one internal — is the cleaner design and is
+deliberately not taken**, on timeline. Recorded so the report can say the demo reflects
+seven weeks rather than the idealized end state, and so the next reader sees a choice
+rather than an oversight.
+
+**Tests must not start making live calls.** `tests/` calls `summarizer_agent()` directly
+in ~76 places; `conftest.py` needs the same treatment `offline_scenario_evaluator` gives
+the forecast, plus one test exercising the failure sentence.
+
+### U9.5 ⬜ — Pin the live tier, and settle Staten Island
+
+**The architect's second priority.** `staten-island` publishes 1 comp / 12 disclosures in
+`eval/results/results.md` and produces 0 comps / 9 disclosures today, reproducibly across
+two runs.
+
+**The cause is structural and was found while explaining the tiers.** `_case_environment`
+overrides the response cache for `golden` and `replay` only; **`live` rows fall through to
+the default `LLM_CACHE_MODE=read_write` against `data/processed/llm_cache/` — 258 files,
+gitignored.** So a live row is served from a *development* cache when warm and calls the
+model when not. Two consequences:
+
+1. **The seven live rows cannot be reproduced from a fresh clone**, by construction —
+   against `eval/README.md`'s own argument that a figure a clone cannot re-derive is an
+   assertion rather than evidence. They are unscored baselines, so it is defensible; it is
+   nowhere stated.
+2. It is the likely Staten Island mechanism: comp retrieval keys off the Extractor's
+   bed/bath/floor-area parse, the deal sits at 1 comp against a threshold of 8, and one
+   different cached extraction moves it to 0.
+
+**The fix is to record the demo deals like every other tier**, which retires the class
+rather than the instance and makes all 28 rows reproducible. **Confirm the mechanism
+first** — clear the two cache entries, re-run, see whether the parse differs — because
+recording a wrong extraction would freeze the defect instead of fixing it.
+
+**This lands behind U9.4 deliberately, and the architect's ordering is right on a
+dependency they may not have priced:** the lede adds a model call to a node every row
+reaches, so both offline tiers need re-recording anyway. Recording after the Summarizer
+rework makes that **one recording pass covering both** instead of two.
+
+**The check is U8.8's and U8.10f's:** re-run both offline tiers and compare the table
+byte-for-byte on confidence, disclosures, outcome and verdict. The recording diff should
+be **additions only**.
+
+### U9.6 ⬜ — The demo deals: one new, one shadow
+
+**OQ-21's sixth deal.** Chicago Uptown at **1,100 sq ft** — U8.6b already found and
+measured it: 8 comparables, 2 outside the size band, **no warn-severity disclosure**,
+confidence **1.00**. It exists as the golden fixture `chicago-uptown-band-under`, whose
+1,300 sq ft sibling escalates, so the pair also documents how narrow the clean margin is.
+Calibrated under #11; `rent_basis` declared against #19's hybrid anchor.
+
+**Plus one shadow deal, not five.** `los-angeles-current` beside `los-angeles`: the same
+property re-based on the current anchor, originals untouched. **The architect proposed five
+shadows and this is the counter-proposal they accepted** — five would need five
+calibrations, five sets of `verify_demo_calibration.py` expectations and five new rows in a
+table U9.5 is already repairing. One proves the method and gives a visible before/after on
+the anchor change; four more are mechanical repeats if the schedule allows, and shedding
+four unbuilt deals costs nothing while shedding four half-built ones costs the batch.
+
+### U9.7 ⬜ — The Streamlit surface (decision #3, §6 cut-list item 4)
+
+`src/app.py`, run as `.venv/bin/streamlit run app.py` from `src/`. Pure Python: the
+pipeline is untouched and the app is a form plus `st.markdown(report)`.
+
+**Replay by default, paste forces live.** The demo deals run from committed recordings —
+instant, deterministic, no quota. A pasted listing has no recording, so it runs live and
+**the surface says so**. That default is a direct answer to OQ-17, which names a live
+Streamlit demo as exposed to run-to-run variance measured at ~1 in 15–20 attempts, on the
+`los-angeles` deal specifically. A demo that replays cannot drift mid-presentation.
+
+Renders: the listing → status strip (recommendation, confidence, threshold, disclosure
+counts, comps) → lede → disclosures, property-scoped first → findings → comps → forecast
+and ledger collapsed. **The `human_review` interrupt as a genuine pause**, with the desk it
+routed to (U9.2), a note box and a Resume control — `main.py` auto-resumes with a canned
+note, and letting a person type it is the honest version and the clearest human-oversight
+evidence 7.1 asks for.
+
+**A fault selector**, exposing `eval/cases.Fault` — `LLM_UNAVAILABLE`, `GEOCODER_OUTAGE`,
+`STALE_RENT_INDEX` — which exist and are well-built but are reachable only from the eval
+runner today. Needed for the demo's degraded-path moment, because a model outage cannot be
+produced on demand. **Three demo deals already degrade naturally** (`no-geography`,
+`staten-island`, `coord-conflict`) and those are the stronger demonstration, so the
+selector is for the one failure a real input cannot reach.
+
+**Two mechanical risks, named because they are how Streamlit demos break:** the script
+re-runs top to bottom on every interaction, so the graph invoke must be guarded and its
+result held in `st.session_state`; and the checkpointer needs a stable per-session
+`thread_id`, since reusing one resumes a paused thread instead of starting a deal.
+
+---
+
+### ✂️ Cut line — I expect the freeze to land here
+
+Everything below is real and none of it is speculative. If Sept 4 arrives with U9.7
+unfinished, **stop at the line and write the rest up as gaps** rather than half-landing
+them. §6's cut-list item 4 has a pre-agreed fallback — a terminal recording plus traces —
+available late, which is what made keeping Streamlit safe.
+
+**U9.9 sits below the line and is marked never sheds, which is not a contradiction.** If
+the line is reached, capture happens *instead of* what stands above it, not after. The
+report's own evidence outranks a further improvement to a surface.
+
+---
+
+
+### U9.8 ⬜ — Gross rent multiplier *(below the line; first thing built if the schedule allows)*
+
+**The computable subset of investor criteria.** Matching against investor targets was
+explored Aug 31 and is blocked honestly: cap rate needs **NOI**, which needs operating
+expenses — taxes, insurance, vacancy, maintenance, management — and this project models
+none of them. Assuming an expense ratio would put an unanchored number at the center of
+the investment recommendation, which is the exact thing §2's invariants forbid.
+
+**GRM needs nothing new**: price ÷ annual gross rent. Measured on the two reports —
+**LA 15.3, Staten Island 9.2** — and it inverts the impression the banner gives, since the
+escalated deal is the cheaper one per dollar of rent. An implied market GRM (ZIP benchmark
+÷ modelled rent) gives it a comparison from data already committed. Roughly U9.6's size:
+a Valuation computation, a state field, a report block.
+
+### U9.9 ⬜ — Capture: live runs, traces, diagram, screenshots *(absorbed U8.9)*
+
+Dropped from U8 on Aug 30 with no successor. Runs last: LangSmith free-tier traces expire
+after **14 days** (OQ-13, no key present as of Aug 24), and screenshots must show the
+surface that ships.
+
+Live end-to-end runs; traces; the diagram regenerated via `scripts/export_graph_diagram.py`,
+which asserts the topology including the single Critic→Planner back edge; screenshots off
+the Streamlit surface. **Redact `tools/diagnostics.py:36` before any capture** — it
+deliberately prints the account identifier, correct for a terminal and wrong for a recording.
+
+**Demo shape, settled Aug 31:** the architect narrates as architect, not in persona. Clean
+run, then an escalated run, then under the hood, with the investor-facing sections named
+verbally. Live runs included, with waiting time edited out.
+
+### U9.10 ⬜ — OQ-5, OQ-10 and OQ-14 written up
+
+**OQ-5** — the four ToT constants were set by reading output, not tuning. What is known:
+`TOT_TIE_EPSILON` is **not meaningfully straddleable** (noise-dominated, U8.6b/OQ-17), and
+U8.6c's depth-2 cut margins found the discarded pairing often *outscoring* the reported one
+and losing on `tot._rank`'s conservatism preference. Tuning against the golden batch was
+**considered and declined** — those fixtures were authored by the unit that would tune
+against them. Closing condition unchanged and unmet: a known-correct branch.
+
+**OQ-10 closes Aug 31, 2026 by the architect: keep the fallback, fix the real exposure.**
+`ignore/` is gitignored, so no key reaches the public repository, and requiring env vars
+would only make a fresh clone harder to run — which is what 7.1 grades. The actual exposure
+is `tools/diagnostics.py:36` printing an account identifier into a **recording**, fixed at
+U9.M regardless of which way this went. The two halves of this question had different
+answers and the entry conflated them.
+
+**OQ-14 closes as discharged, same date.** Checkpoint 5.1 asked for design rationale —
+roles, coordination strategy, communication approach — not build artifacts, so the treatment
+U4 gave its acceptance criteria does not apply, and 5.1's response is submitted. 6.1's half
+closed at U7.8. U9.9 regenerates the diagram and captures traces regardless, so attributing
+those to 5.1 costs a sentence in the close-out rather than a subsection here.
 
 ### U9.M ⬜ — Maintenance *(separate commit, per §8)*
 
-- **U8.M's remainder**, still 🟨: reconcile the `TODO` inventory in
-  `design/engineering_standards.md` against `grep -rn "TODO(" src/`. The inventory's whole
-  value is that the two agree.
-- The six `TODO(U8)` sites (`critic.py` ×4, `config.py` ×2) — U8 is closed, so each is
-  resolved, re-scoped, or deleted. `config.py:685`'s says outright *"set a number, or
-  delete this and the emphasis it gates"*, and **#20 answered it**: the threshold stays
-  `None` deliberately, foreclosed by evidence rather than by arithmetic. That is a rewrite,
-  not a deletion.
-- **M2**: `main.py`'s CLI help says *"the U4 ablation"*, which a demo audience can see —
-  the one site M2's scan found that is genuinely reader-facing.
-- The `TODO(security)` redaction, per Q4.
+- **Logging.** 193 lines of HuggingFace/`sentence-transformers` HTTP noise print before
+  every report. **Keep it as debug logging behind a toggle, defaulting quiet** (architect,
+  Aug 31), so a demo recording is clean and a developer can still get it back.
+- The `TODO(security)` redaction at `diagnostics.py:36`.
+- **U8.M's remainder**: reconcile the `TODO` inventory in `engineering_standards.md`
+  against `grep -rn "TODO(" src/`, and resolve the six `TODO(U8)` sites now U8 is closed —
+  `config.py:685`'s says *"set a number, or delete this"*, and **#20 answered it**: the
+  threshold stays `None` deliberately, foreclosed by evidence. A rewrite, not a deletion.
+- **M2**: `main.py`'s CLI help says *"the U4 ablation"* — the one reader-facing site.
+- **M6's docstring half**: `agents/comps_retrieval.py` states the relaxation order is set by
+  "how much accuracy each concession costs", calling square footage the weakest signal — the
+  rent model measures it as the **strongest** (0.502 against bedrooms' 0.300). Correct the
+  docstring to say the order is inherited from U4 and that the measured importances do not
+  support the claim. **Reordering the ladder is not U9 scope** — it would move comp sets
+  across all 28 eval rows.
+- **M4 and M5** from `maintenance.md`: §6's U8 row does not disclose that U8.9 was dropped,
+  and §6's unit table has no U11 row at all.
 
-### U9.8 ⬜ — Close-out
+### U9.11 ⬜ — Close-out
 
-Per §8: review the changelog rows this unit's commits already wrote — do not reconstruct
-them — then settle the register and empty the open questions.
+Review the changelog rows each commit already wrote; do not reconstruct them.
 
-- **§6**: the U9 row ⬜ → ✅, restated as what it produced. **Cut-list item 4 leaves the
-  list** — by being spent if the app shipped, by being *taken* if Q5's fallback was
-  invoked, and the difference must be stated. §6's own lesson from three consecutive
-  mis-priced items applies: re-measure the item's cost before recording the outcome.
-- **§7**: **#3** (Streamlit) confirmed as landed rather than merely scheduled; **#8** 🟨 → ✅
-  with both halves resolved and the Summarizer's model recorded as *inherited*, per U9.2.
-- **`open_questions.md`**: OQ-5, OQ-9, OQ-13, OQ-21 close; OQ-14 closes per Q3; OQ-10
-  closes per Q4. **OQ-17 and OQ-18 stay open** — U9 does not resolve either, and the
-  Streamlit surface's replay default is a mitigation of OQ-17's exposure, not an answer to
-  it. Update the `Last reviewed:` line.
-- **`decision_log.md`**: #8's Summarizer half under *Models & infrastructure*; #3's outcome
-  under *Evaluation & demo*, which currently records only that the decision was taken early
-  and never revisited.
-- **`tasks/README.md`**: the U9 row, and U8's row 🚧 → ✅.
+- **§6**: U9 ⬜ → ✅, restated as produced. **Cut-list item 4 leaves the list** — spent if
+  the app shipped, *taken* if the fallback was used, and the difference stated.
+- **§7**: **#3** confirmed landed; **#8** 🟨 → ✅ with both halves resolved and the
+  Summarizer's model recorded as **inherited** — selected in U3's bake-off on schema-valid
+  extraction, not on prose quality, and claiming otherwise is a claim the record does not
+  support.
+- **`open_questions.md`**: OQ-5, OQ-9, OQ-10, OQ-13, OQ-14, OQ-21 close. **OQ-17, OQ-18 and OQ-22 stay open** — OQ-22 is what #21 leaves behind rather than what it fixes. **OQ-17 and
+  OQ-18 stay open** — the replay default mitigates OQ-17's exposure without answering it.
+  **New entries**: #16's rent-growth source (U9.3 finding 1), and the two-renderings and
+  model-proposes deferrals.
+- **`decision_log.md`**: #8's Summarizer half; #3's outcome; the recommendation design.
+- **`tasks/README.md`**: the U9 row.
 
 ---
 
@@ -396,18 +541,35 @@ them — then settle the register and empty the open questions.
 
 | | Subsection | Status |
 | --- | --- | --- |
-| ⬜ | **U9.1** sixth demo deal (OQ-21) | Blocked on Q2 |
-| ⬜ | **U9.2** Summarizer narrative lede (#8, OQ-9) | Blocked on Q1 |
-| ⬜ | **U9.2b** Summarizer polish | Sheddable (Q5) |
-| ⬜ | **U9.3** re-record offline tiers | Forced by U9.2 |
-| ⬜ | **U9.4** Streamlit surface (#3) | Fallback pre-agreed (Q5) |
-| ⬜ | **U9.5** root README (7.1) | Never sheds |
-| ⬜ | **U9.6** OQ-5 and OQ-10 written up | Q4 |
-| ⬜ | **U9.7** live runs, traces, diagram, screenshots | Never sheds; runs last |
+| ⬜ | **U9.1** README + committed model | **First — graded directly, and short** |
+| ⬜ | **U9.2** personas, journeys, routing | Doc + one small code change |
+| ⬜ | **U9.3** forecast: ZORI re-source, evaluator, two tables | **Largest; supersedes half of #16** |
+| ⬜ | **U9.4** report: axes, recommendation + cross-check, lede, template | Renders U9.3; adds the 2nd reasoning locus |
+| ⬜ | **U9.5** pin the live tier; Staten Island | One recording pass, behind U9.3+U9.4 |
+| ⬜ | **U9.6** sixth deal + one shadow | Recorded correctly the first time |
+| ⬜ | **U9.7** Streamlit surface | Pre-agreed fallback if it slips |
+| | *✂️ cut line* | |
+| ⬜ | **U9.8** gross rent multiplier | First below the line if U9.1–U9.7 land early |
+| ⬜ | **U9.9** capture: runs, traces, diagram, screenshots | Never sheds |
+| ⬜ | **U9.10** OQ-5 / OQ-10 / OQ-14 written up | All three settled Aug 31 |
 | ⬜ | **U9.M** maintenance | — |
-| ⬜ | **U9.8** close-out | — |
+| ⬜ | **U9.11** close-out | — |
 
-**Nine change sets, four days, against a review budget sized for two or three.** The unit
-is over-subscribed and the shed order in **Q5** is the mechanism for that, decided in
-advance rather than improvised on Sept 3 — which is the discipline §6's cut list exists to
-enforce, applied inside a unit for the first time.
+**Twelve change sets against five days; the honest read is that seven land** — and U9.3
+grew substantially on Aug 31, so that estimate is tighter than it was. The cut line is where
+it falls.
+
+**The ordering is the architect's, revised twice on Aug 31, and each revision fixed a
+dependency rather than a preference.**
+
+- **README first.** Graded directly, short, and leaving a graded deliverable to the end is
+  how it gets written badly at midnight.
+- **The forecast before the report**, because the report renders what the forecast
+  produces, and rewriting the scenario section against bands that are about to change is
+  work done twice.
+- **Both before the recording pass.** U9.3 changes every forecast prompt and U9.4's lede
+  adds a model call to a node every eval row reaches. Landing them first makes U9.5 **one
+  recording pass covering the lede, the new bands and the demo deals together** instead of
+  three.
+- **The live tier pinned before new deals are added to it**, so the deals are recorded
+  correctly on their first run.
