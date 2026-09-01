@@ -47,6 +47,20 @@ consequence shows on one deal: `chicago`'s stated rents sit ~25% below Logan Squ
 market index, because HUD's 40th percentile runs about a third under the market in that
 ZIP. Los Angeles, Staten Island and the mispriced Los Feliz listing are all within 10%.
 
+**A second basis exists as of U9.6 and the four original listings do not use it.**
+`market_anchor:<beds>` re-derives the figure the estimate is genuinely built on, and it is
+what any deal added after #19 declares. The four deals below stay on `hud_fmr:2` — that is
+the U8.7 decision immediately following, not an oversight — so the set now carries both
+bases deliberately, and `los-angeles-current` exists to show the same property under each.
+
+**One thing the per-deal measurement corrected in the paragraph above (Sept 2, 2026).**
+"HUD's 40th percentile runs about a third under the market" describes Logan Square and
+nothing else. Measured at FY2026 against the index at 2026-07, the schedule runs **33.1%
+under** the market index in 60647, **13.8% under** in 60640, and **7.3% over** it in
+90026 — where the FMR lookup returns `used_msa_fallback`, so the figure describes Los
+Angeles County from Malibu to Compton rather than Echo Park. The staleness is real in
+every market; its direction is not uniform, and the sentence generalized from one deal.
+
 Re-calibrating was measured at U8.7 and declined, on the same reasoning that kept
 `staten-island`'s asking price: **nothing computes from a stated rent** — no flag, no
 confidence contribution, no verdict — so a stale basis here cannot make the system wrong,
@@ -103,10 +117,24 @@ class DemoDeal:
 
     # How to re-derive each figure. `redfin_metro_median` names a metro in
     # `tools/redfin_data.py`; `zip_sale_benchmark` names a ZIP in
-    # `tools/data/zip_sale_benchmarks.json`; `hud_fmr` names the bedroom count to look up
-    # against the county the listing's own address resolves to. `None` means the figure
-    # has no market basis, which is a statement rather than an omission — see the module
-    # docstring on Staten Island.
+    # `tools/data/zip_sale_benchmarks.json`. `None` means the figure has no market basis,
+    # which is a statement rather than an omission — see the module docstring on Staten
+    # Island.
+    #
+    # **Two rent bases exist, and which one a deal declares is a claim about its
+    # vintage** (U9.6). Both name the bedroom count to look up against the county the
+    # listing's own address resolves to:
+    #
+    # - `hud_fmr:<beds>` — HUD's Fair Market Rent for that county. What #11 calibrated
+    #   the original four listings against, and the anchor #19 retired.
+    # - `market_anchor:<beds>` — the market rent index at the subject's own ZIP times
+    #   FMR's bedroom step, which is what `agents/valuation_rent` actually anchors the
+    #   estimate to today. **A new deal declares this one**; OQ-21 is explicit that a deal
+    #   copying the existing basis ships stale on day one.
+    #
+    # `scripts/verify_demo_calibration.py` re-derives either, and the market anchor goes
+    # through `rent_model.anchor_for_row` — the same function the pipeline calls — rather
+    # than a second copy of the formula.
     #
     # **A deal should be calibrated to the benchmark its own report reads** (U9.4). The
     # Valuation agent prefers the ZIP tier and falls back to the metro median, so a deal

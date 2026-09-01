@@ -54,6 +54,14 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 2, 2026 — U9.6: the demo deals
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 2, 2026 | U9.6 | **A second rent basis, so a new demo deal can be declared against the anchor the system actually uses.** `demo_deals.py` + `scripts/verify_demo_calibration.py` — `market_anchor:<beds>` joins `hud_fmr:<beds>`, re-derived through `rent_model.anchor_for_row` (the same function training and the Valuation agent call) rather than a second copy of the formula. OQ-21 requires a new deal to declare the current anchor or ship stale on day one; nothing about the four existing listings changes, and all six still verify. **Measured while building it: the FMR-to-market gap is not a fixed offset and not one-signed** — the schedule runs 33.1% under the market index in ZIP 60647, 13.8% under in 60640, and **7.3% over** in 90026, where the FMR lookup returns `used_msa_fallback` and so describes Los Angeles County rather than Echo Park. `demo_deals.py`'s docstring had generalized Logan Square's direction to the whole set; corrected | 7.1 |
+
+---
+
 ## Sept 1, 2026 — U9.5: pin the tier, settle Staten Island, re-record
 
 | Date added | Unit | Work done | Related checkpoint |

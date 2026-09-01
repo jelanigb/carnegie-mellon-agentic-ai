@@ -11,9 +11,25 @@ Each deal now names the basis for its figures and this script re-derives them:
 
 - **Asking price** against `tools/redfin_data.py`'s median sale price for Multi-Family
   (2-4 unit) properties in the named metro, most recent period available.
-- **Stated rents** against `tools/hud_fmr.py`'s FY2026 Fair Market Rent for the county
-  the listing's *own address* geocodes to — so the check exercises the same geocoding and
+- **Stated rents** against whichever anchor the deal declares, both resolved from the
+  listing's *own address* — so the check exercises the same geocoding and
   county-resolution path the pipeline uses, rather than a county name written down here.
+
+  - `hud_fmr:<beds>` — `tools/hud_fmr.py`'s Fair Market Rent for the resolved county.
+    What #11 calibrated the original listings against.
+  - `market_anchor:<beds>` — **the figure the rent estimate is actually built on today**
+    (#19): the market rent index at the subject's own ZIP times FMR's bedroom step,
+    composed by `rent_model.anchor_for_row`, the same function training and the Valuation
+    agent call. Added U9.6, because a deal declared against the retired anchor ships
+    stale on day one (OQ-21).
+
+  **The two are not a fixed offset apart, and a reader should not assume one.** Measured
+  Sept 2, 2026 at FY2026 against the index at 2026-07: the schedule runs **7.3% above**
+  the market index in ZIP 90026, **13.8% below** it in 60640 and **33.1% below** it in
+  60647. `demo_deals.py`'s docstring explains the gap as HUD's 40th percentile running
+  under the market, which holds in Chicago and is backwards in Echo Park — where the
+  figure returns `used_msa_fallback`, so it describes Los Angeles County rather than any
+  sub-market at all.
 
 **What this check could return if the system were misbehaving** (§8). It is not a
 formality: it compares committed constants against live API responses that this repo does
@@ -38,7 +54,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from demo_deals import DEMO_DEALS, PRICE_TOLERANCE, RENT_TOLERANCE, DemoDeal
-from tools import county_crosswalk, geocoding, hud_fmr, redfin_data, sale_benchmarks
+import pandas as pd
+
+from tools import (
+    county_crosswalk,
+    geocoding,
+    hud_fmr,
+    redfin_data,
+    sale_benchmarks,
+    zcta_crosswalk,
+    zori,
+)
+from tools.model import rent_model
 
 
 def _redfin_median(metro: str) -> float | None:
@@ -49,19 +76,24 @@ def _redfin_median(metro: str) -> float | None:
     return float(rows.iloc[-1]["median_sale_price"])
 
 
-def _resolve_county(deal: DemoDeal) -> tuple[str | None, str]:
-    """Geocode the listing's address the way the pipeline does, then resolve its county.
+def _resolve_geography(deal: DemoDeal) -> tuple[str | None, str | None, str]:
+    """Geocode the listing's address the way the pipeline does, then resolve county and ZIP.
 
     Deliberately re-runs the real lookups rather than accepting a county written into the
     fixture: a calibration that trusted a hand-entered county would keep passing after
     the geocoder started placing the address somewhere else.
+
+    **The ZCTA is resolved exactly as `valuation_rent._resolve_subject_zip` resolves it**
+    — the listing's own stated ZIP where there is one, the point-in-polygon join
+    otherwise. The market-index half of the anchor is read at that ZIP, so a check that
+    resolved it by a different rule would verify a figure no report prints.
     """
     # The address is the first sentence's tail — parsed loosely on purpose, since this is
     # a verification script and a brittle parse here would fail for its own reasons.
     head = deal.listing.split(".")[0].replace("For sale:", "").strip()
     parts = [p.strip() for p in head.split(",")]
     if len(parts) < 3:
-        return None, "could not parse an address out of the listing"
+        return None, None, "could not parse an address out of the listing"
 
     street, city = parts[0], parts[1]
     state_zip = parts[2].split()
@@ -70,11 +102,66 @@ def _resolve_county(deal: DemoDeal) -> tuple[str | None, str]:
 
     result = geocoding.geocode(street, city, state, zip_code)
     if result is None:
-        return None, "address resolves to no coordinates"
+        return None, None, "address resolves to no coordinates"
     fips = county_crosswalk.lookup_county_fips(result.latitude, result.longitude)
     if fips is None:
-        return None, f"{result.source} gave coordinates, but no county resolved"
-    return fips, f"{result.source} -> county {fips}"
+        return None, None, f"{result.source} gave coordinates, but no county resolved"
+    zcta = zip_code or zcta_crosswalk.lookup_zcta(result.latitude, result.longitude)
+    return fips, zcta, f"{result.source} -> county {fips}"
+
+
+def _hud_fmr_anchor(fips: str, zcta: str | None, bedrooms: int) -> tuple[float, str]:
+    """HUD's Fair Market Rent for the resolved county — what #11 calibrated against.
+
+    Retained rather than migrated. Four listings are still declared on it, and U8.7's
+    decision to leave their figures as committed is recorded in `demo_deals.py`: nothing
+    computes from a stated rent, so a stale basis makes a listing less lifelike without
+    making the system wrong. A basis this script could no longer check would be the
+    version of that which *does* cost something.
+    """
+    fmr = hud_fmr.HudFmrClient().get_fmr_for_bedroom(fips, bedrooms)
+    return float(fmr["rent"]), f"FY{fmr['year']} {bedrooms}BR FMR"
+
+
+def _market_anchor(fips: str, zcta: str | None, bedrooms: int) -> tuple[float, str]:
+    """The figure the rent estimate is actually built on today (#19, U9.6).
+
+    Composed through `rent_model.anchor_for_row` — the same function the training frame
+    and `agents/valuation_rent` both call — rather than reimplemented here, for the reason
+    that function's own docstring gives: a model trained against one reference and applied
+    against another is wrong by the spread between them, and a *verifier* that computed a
+    third reference would hide exactly that. The tier travels with the figure because a
+    county-tier anchor is a materially weaker basis for a stated rent than a ZIP-tier one,
+    and the two are not distinguishable from the number alone.
+
+    **The bedroom step is exactly 1.0 for every deal in this set, and it is composed
+    anyway.** `config.RENT_ANCHOR_SHAPE_REFERENCE_BEDROOMS` is 2 and every demo listing is
+    two-bedroom, so the FMR half divides out today. Dropping it would look correct until
+    the first deal that is not two-bedroom and be silently wrong from then on.
+    """
+    client = hud_fmr.HudFmrClient()
+    fiscal_year = rent_model.fmr_fiscal_year(pd.Timestamp.now())
+    tables = rent_model.build_anchor_tables({(fips, fiscal_year)}, client)
+    month = zori.latest_month(tables.zori_panel) if tables.available else None
+    if month is None:
+        raise LookupError("no market rent index is loaded on this machine")
+    anchor, tier = rent_model.anchor_for_row(
+        bedrooms, fips, fiscal_year, month, zcta, tables
+    )
+    if anchor != anchor:  # NaN — neither the ZIP nor the county tier produced a figure
+        raise LookupError(
+            f"no market index figure for ZIP {zcta} or county {fips} at {month}"
+        )
+    return anchor, f"{month} market index x FY{fiscal_year} {bedrooms}BR step ({tier} tier)"
+
+
+# Every rent basis a deal may declare, and how to re-derive it. A table rather than a
+# branch so that adding a basis is one entry, and so an unknown basis is reported as
+# unknown rather than silently taking the first branch's path.
+_RENT_BASES = {
+    "hud_fmr": _hud_fmr_anchor,
+    "market_anchor": _market_anchor,
+}
 
 
 def check_price(deal: DemoDeal) -> list[str]:
@@ -132,18 +219,24 @@ def check_rents(deal: DemoDeal) -> list[str]:
         return ["  rents      none stated, no basis claimed — consistent"]
 
     source, _, bedrooms = deal.rent_basis.partition(":")
-    if source != "hud_fmr":
+    if source not in _RENT_BASES:
         return [f"  rents      UNKNOWN BASIS {deal.rent_basis!r}"]
 
-    fips, how = _resolve_county(deal)
+    fips, zcta, how = _resolve_geography(deal)
     if fips is None:
         return [f"  rents      FAIL — {how}"]
 
-    client = hud_fmr.HudFmrClient()
-    fmr = client.get_fmr_for_bedroom(fips, int(bedrooms))
-    anchor = float(fmr["rent"])
+    try:
+        anchor, against = _RENT_BASES[source](fips, zcta, int(bedrooms))
+    except (LookupError, hud_fmr.HudFmrApiError, KeyError, RuntimeError) as exc:
+        # Reported as a failure rather than raised, for the same reason the NO BASIS rows
+        # are printed rather than skipped: a basis that stopped being resolvable is a
+        # result this script exists to surface, and one deal failing should not stop the
+        # other seven from being checked.
+        return [f"  rents      FAIL — {source} basis unavailable: "
+                f"{type(exc).__name__}: {exc}"]
 
-    lines = [f"  rents      basis: {how}, FY{fmr['year']} {bedrooms}BR FMR ${anchor:,.0f}"]
+    lines = [f"  rents      basis: {how}, {against} ${anchor:,.0f}"]
     for rent in deal.unit_rents:
         drift = (rent - anchor) / anchor
         verdict = "ok" if abs(drift) <= RENT_TOLERANCE else "OUT OF TOLERANCE"

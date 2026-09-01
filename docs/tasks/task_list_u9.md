@@ -563,6 +563,166 @@ table U9.5 is already repairing. One proves the method and gives a visible befor
 the anchor change; four more are mechanical repeats if the schedule allows, and shedding
 four unbuilt deals costs nothing while shedding four half-built ones costs the batch.
 
+#### Measured Sept 2, before starting — what the stale rent basis actually costs, per deal
+
+**The whole unit turns on one number that had never been read per-deal.** OQ-21 says the
+new deal's rents must be declared against the index the system now uses "or it ships stale
+on day one", and the shadow exists to show that change on an existing deal. How large that
+change is was never measured. It is, at FY2026 against the market index at 2026-07:
+
+| ZIP | FMR 2BR (the basis on file) | market index | basis → index | stated rents | stated vs. index |
+| --- | --- | --- | --- | --- | --- |
+| 90026 Echo Park (`los-angeles`) | $2,903 | $2,691 | **−7.3%** | $2,900 | **+7.8%** |
+| 60640 Uptown (`overpriced`) | $1,781 | $2,026 | **+13.8%** | $1,775 | **−12.4%** |
+| 60647 Logan Square (`chicago`) | $1,781 | $2,371 | **+33.1%** | $1,775 | **−25.1%** |
+
+**Two things fall out, and the second contradicts what this repository has been saying.**
+
+- **The offset is not uniform and it is not even one-signed.** `demo_deals.py`'s docstring
+  explains the staleness with "HUD's 40th percentile runs about a third under the market",
+  which is true in Logan Square and **false in Echo Park**, where the county schedule runs
+  7% *above* the ZIP's market index. LA's FMR comes back `used_msa_fallback: True` — a
+  county-wide figure spanning Malibu to Compton — so it is not a sub-market number at all,
+  and it happens to land above Echo Park rather than below it. The docstring generalizes
+  from Chicago to the set; only Chicago supports it.
+- **`los-angeles` is the smallest of the three moves, and it is still the right shadow.**
+  The point of the shadow is not the size of the number but that it is the *only*
+  difference between two otherwise identical reports — and only on `los-angeles` is the
+  report clean enough for that to be visible. The line that moves is *"the stated rents sit
+  **1% above** that estimate"* → **~6% below**, a sign flip on an isolated line in a
+  1.00-confidence report. A Logan Square shadow moves +33% but lands it inside a report
+  that escalates and carries ten disclosures, where a reader cannot attribute anything. The
+  measurement is recorded here because it is a finding either way, not because it changes
+  the choice.
+
+**The bedroom half of the hybrid anchor is inert on every deal in this set.**
+`config.RENT_ANCHOR_SHAPE_REFERENCE_BEDROOMS = 2` and every demo listing is 2-bedroom, so
+the FMR step is exactly 1.0 and `anchor = ZORI(ZIP)` with nothing composed. The
+verification must still compose both halves anyway — a basis that silently drops the term
+it does not currently need would be wrong the first time a deal is not 2-bedroom, and
+would look correct until then.
+
+#### Subsections, each its own commit
+
+**U9.6a — the rent basis the system actually uses.** `demo_deals.py` gains a
+`market_anchor:<bedrooms>` basis kind beside `hud_fmr:<bedrooms>`, and
+`verify_demo_calibration.py` learns to re-derive it — through `rent_model.anchor_for_row`,
+the same function the pipeline anchors on, rather than a second implementation of the
+formula. No deal changes. It lands first because it defines what "calibrated" means for
+every deal after it, and because both deals below depend on it.
+
+**U9.6b — the sixth deal.** Chicago Uptown, 1,100 sq ft, at the golden fixtures' own
+address (**5100 N Kenmore Ave, 60640**) so the demo deal *is* the property U8.6b measured
+rather than a second one nearby. Price calibrated to `zip_sale_benchmark:60640` — $867,500
+over 148 recorded sales — with no declared premium, so the report reads *in line with*
+comparable sales in this ZIP and axis 2 returns *Proceed*. Rents at `market_anchor:2`
+(~$2,026). `demo_deals.py`, `main.py`'s docstring, `eval/cases._DEMO_BASELINES`.
+
+**U9.6c — the shadow.** `los-angeles-current`: `los-angeles` with its two stated rents
+re-based from $2,850 / $2,950 to the market index (~$2,650 / $2,730), `rent_basis`
+`market_anchor:2`, everything else byte-identical including the price basis — #19 was a
+rent decision and the asking price has no business moving with it. The original is
+untouched.
+
+**U9.6d — record the two rows and re-derive the table.** `--record` scoped to the two new
+cases only; then the full batch in replay. **The check is that the other 28 rows come back
+byte-identical** — nothing in this unit changes a prompt, so any movement is a defect to
+chase rather than a diff to accept. `results.md` goes 28 → 30 rows and its regression count
+6/7 → 8/9. `sensitivity.md` is untouched *if* the two rows are baselines (Q2 below).
+
+**U9.6e — `docs/demo.md`.** The two new deals get sections, and the document's existing
+figures get corrected. **It is materially stale and this unit makes it worse:** it
+describes `overpriced` as a Los Feliz listing in Los Angeles at 0.85 (it is an Uptown
+listing in Chicago at 1.00 since U9.4), `chicago` as reporting at 0.85 (it escalates),
+`los-angeles` as carrying 3 disclosures (4), and Staten Island as 4 info / 8 warn (6 info,
+5 warn, 1 critical). It also has no notion of axis 2, which is the thing U9.4 built. Scope
+call at Q3 below.
+
+#### Decisions taken inside this subsection rather than raised
+
+- **No `rent_premium_to_basis` field.** `demo_deals.py`'s docstring predicted that
+  calibrating stated rents to the market index would make the stated-versus-modelled
+  section an artifact of the calibration — the defect `price_premium_to_basis` exists to
+  prevent on the price side. It does not follow here, and the reason is arithmetic: the
+  estimate is `ratio × index`, so a listing calibrated to the index prints `1/ratio − 1`,
+  which is the model's own read on *this* unit against its ZIP's typical rent, and differs
+  by deal. Two of eight deals move to the new basis, so the section still varies across the
+  set either way. The field would ship unused; recorded here so the docstring's caution is
+  answered rather than ignored.
+- **The new deal is not given a declared price premium.** `overpriced` is the deal that
+  exercises a non-zero premium and it is 500 feet away in the same ZIP. Making this one
+  clean on both axes is what OQ-21 asked for, and the two together become a pair that
+  differs in the asking price and nothing else — same neighborhood, same profile, same
+  axis-1 outcome, *different recommendation*. That is the sharpest demonstration available
+  that axis 2 is computed rather than decorative.
+
+#### Blocking questions — answered before U9.6b starts
+
+**Q1 — has OQ-21's premise already been met?** OQ-21 was raised when `chicago` began
+escalating and `los-angeles` "became the only demo deal reaching 1.00 and reporting clean".
+That is no longer true: U9.4 re-sited `overpriced` to Uptown and it now reports at **1.00**
+with six info-severity disclosures. So the set already shows a clean run twice on axis 1.
+**What it does not have is a second deal clean on *both* axes** — `overpriced` is
+*Proceed with caution* by construction — and `los-angeles`'s own *Proceed* rests on a
+premium that is 0% because #11 derived its asking price from the same metro median the
+report benchmarks it against (the circularity at `critic.recommend`'s zero-premium branch,
+OQ-20's). The new deal is the first demo listing whose *Proceed* is measured against a
+local benchmark built from 148 real recorded sales. **Recommended: proceed, on that
+restated purpose rather than on OQ-21's original wording**, and note the restatement when
+OQ-21 closes.
+
+**Q2 — `BASELINE` or `PREDICTED`? ANSWERED Sept 2 by the architect: `PREDICTED`, and the
+question was posed on a misreading.** It was put as "both deals are sited on published
+measurements they are expected to reproduce, so declaring a verdict is closer to
+transcription than prediction" — which treats `BASELINE` as meaning *the outcome was
+knowable in advance*. It does not. `cases.py`'s rule is that a verdict is `PREDICTED` when
+it is **derived from the target flag's severity and the shipped escalation rule, and from
+nothing else**, and `BASELINE` is the narrower label for a case **whose own outcome was
+already published** — the U7.8 table. Neither new deal has one, so `PREDICTED` is not
+merely defensible, it is the only accurate label.
+
+**Three things settle it, and each was already in the repository:**
+
+- **The existing 21 were sited by measurement too.** `scripts/straddle_probe.py` found
+  `chicago-uptown-band-under`'s 1,100 sq ft by running the real retrieval and Valuation
+  agents over a grid. Those fixtures "were run while they were being designed", in
+  `cases.py`'s own words. Knowing what a case will do has never been what separates the
+  two labels.
+- **The prediction can fail, and its nearest neighbour did.** `chicago-uptown-band-over`
+  is the same address and the same fixture family, 200 sq ft away, with a verdict derived
+  the same mechanical way — and it is a **MISMATCH**. The escalation decision is
+  combinatorial (score threshold, *or* any critical, *or* an exhausted rework budget, with
+  the interaction objections gated on whether the comp cross-check ran and whether it
+  diverged), so a clean-looking deal is not a safe bet. **18/21 rather than 21/21 is the
+  evidence the instrument works**, and it is the reason to put honest predictions into it
+  rather than hold them out.
+- **The "free agreements inflate the score" worry was answered before it was raised.**
+  `scripts/confidence_sensitivity.py`'s docstring already states that *"the cases were
+  written knowing the shipped values, so agreement measures the fixtures"* — which is
+  precisely why that sweep asks a **robustness** question rather than an agreement one.
+  The contamination this question worried about is the contamination that script was built
+  around.
+
+**Precedent, and it argues for the addition rather than merely permitting it.**
+`la-ordinary-duplex` and `chicago-uptown-duplex` are `targets=()` controls predicting
+`reports`, and `cases.py` says they exist because "a batch of nothing but escalating cases
+can be scored 100% by a threshold of 1.0, so agreement would measure nothing." Two more
+`reports` controls make the agreement figure more two-sided, not less.
+
+**The discipline this puts on U9.6b and U9.6c.** Each note must derive its verdict
+mechanically — *no warn-severity disclosure is expected, so the score holds at 1.00 and the
+deal reports* — and must **not** say "because `chicago-uptown-band-under` measured 1.00".
+The second is transcription wearing a prediction's label, which is the exact thing
+`VerdictSource` exists to catch. Consequences: the scoring population goes **21 → 23**, and
+`sensitivity.md` re-derives (one replay batch to collect flag sets, then an in-memory
+sweep). Whether the **63-of-160 plateau moves is reported, not assumed** — two cases at
+1.00 with no warns should be non-discriminating at every threshold on the grid, and if the
+plateau moves anyway that is a finding about the sweep rather than a diff to accept.
+
+**Q3 — is `docs/demo.md` in this unit or its own?** It is four units stale and this unit
+adds two more deals to it. Folding it in keeps the demo guide true; splitting it out keeps
+U9.6 to three code commits with three days left and U9.7 unstarted.
+
 ### U9.7 ⬜ — The Streamlit surface (decision #3, §6 cut-list item 4)
 
 `src/app.py`, run as `.venv/bin/streamlit run app.py` from `src/`. Pure Python: the
