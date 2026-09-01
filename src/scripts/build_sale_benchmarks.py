@@ -132,13 +132,21 @@ def _median(prices: list[float]) -> float:
 # ---------------------------------------------------------------------------
 
 
-def new_york() -> dict[str, dict]:
-    """Per-ZIP medians for 2-4 unit residential sales in the five boroughs.
+def new_york_sales_by_zip() -> dict[str, list[float]]:
+    """Qualifying 2-4 unit residential sale prices in the five boroughs, grouped by ZIP.
 
     Aggregated client-side rather than with Socrata's `median()` so the sale count, the
     median and the price floor are all computed by the same code that does it for Cook —
     two markets whose numbers are compared in one report should not be produced by two
     different aggregations.
+
+    **Returns the individual prices rather than the median** (U9.4). `main()` reduces
+    them through `_summarize`, exactly as this function used to, and
+    `scripts/sale_premium_distribution.py` needs the prices themselves — how far a single
+    sale sits from its ZIP's median is a question a table of medians cannot answer. The
+    filters are the load-bearing part and they now have one home: a second script
+    restating this `$where` clause is two definitions of "a qualifying sale" that drift
+    apart without either one looking wrong.
     """
     categories = ", ".join(f"'{c}'" for c in config.SALE_BENCHMARK_NYC_CATEGORIES)
     where = (
@@ -162,7 +170,7 @@ def new_york() -> dict[str, dict]:
             by_zip[zip_code].append(float(row["sale_price"]))
 
     print(f"  New York: {rows:,} qualifying sales across {len(by_zip)} ZIPs")
-    return _summarize(by_zip, "new_york")
+    return dict(by_zip)
 
 
 # ---------------------------------------------------------------------------
@@ -170,8 +178,8 @@ def new_york() -> dict[str, dict]:
 # ---------------------------------------------------------------------------
 
 
-def chicago() -> dict[str, dict]:
-    """Per-ZIP medians for class-211 sales, joined to the parcel universe for the ZIP.
+def chicago_sales_by_zip() -> dict[str, list[float]]:
+    """Qualifying class-211 sale prices grouped by ZIP, joined to the parcel universe.
 
     The join is on an exact `pin` — the assessor's own primary key, present in both
     datasets — so it either matches or it does not. Unmatched sales are reported rather
@@ -231,7 +239,7 @@ def chicago() -> dict[str, dict]:
         f"universe, {matched:,} joined ({share:.1%}), {unmatched:,} unmatched, "
         f"{len(by_zip)} ZIPs"
     )
-    return _summarize(by_zip, "chicago")
+    return dict(by_zip)
 
 
 # ---------------------------------------------------------------------------
@@ -276,6 +284,15 @@ def _distribution(records: dict[str, dict]) -> str:
     return "  " + " · ".join(quantiles)
 
 
+# The one place a market key is bound to the fetcher that pulls it. Read by
+# `scripts/sale_premium_distribution.py` too, so a market added here reaches both the
+# committed table and the dispersion measurement without a second registration.
+_MARKET_FETCHERS = {
+    "new_york": new_york_sales_by_zip,
+    "chicago": chicago_sales_by_zip,
+}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -287,8 +304,8 @@ def main() -> None:
 
     print(f"Window: sales on or after {config.SALE_BENCHMARK_WINDOW_START}")
     records: dict[str, dict] = {}
-    for builder in (new_york, chicago):
-        built = builder()
+    for market_key, builder in _MARKET_FETCHERS.items():
+        built = _summarize(builder(), market_key)
         print(_distribution(built))
         overlap = set(built) & set(records)
         if overlap:

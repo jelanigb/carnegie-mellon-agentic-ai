@@ -54,6 +54,12 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 1, 2026 — U9.4: the recommendation
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 1, 2026 | U9.4 (maintenance) | **The two sale fetchers return per-sale prices, so one definition of "a qualifying sale" serves both scripts.** `scripts/build_sale_benchmarks.py` — `new_york`/`chicago` become `new_york_sales_by_zip`/`chicago_sales_by_zip` returning the grouped prices; `main()` reduces them through the unchanged `_summarize`, and a new `_MARKET_FETCHERS` binds each market key to its fetcher in one place. The dispersion measurement needs the prices themselves — how far a single sale sits from its ZIP's median is a question a table of medians cannot answer — and a second script restating the `$where` clauses would be two definitions that drift apart without either looking wrong. The committed table is untouched: `_summarize` over the same grouping is the same reduction | maintenance |
+
 ## Aug 31, 2026 — U9.3: the forecast's rent source, and the premise it rested on
 
 | Date added | Unit | Work done | Related checkpoint |
