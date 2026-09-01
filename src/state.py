@@ -406,6 +406,91 @@ class ConfidenceBreakdown(BaseModel):
         return self.deducted_market + self.deducted_deal
 
 
+class Recommendation(StrEnum):
+    """Axis 2 — whether the property is worth buying. **New at U9.4.**
+
+    **This is not the same question as `needs_human_review`, and conflating them was the
+    report's largest readability defect.** That field answers whether the *software* can
+    stand behind its own numbers; this one answers whether the *deal* is any good. On
+    `staten-island` the two are opposites — it escalates because no comparables were
+    found, while asking 17% below its ZIP median — so a reader who took the escalation
+    banner as a verdict on the property read the evidence backwards.
+
+    Rendered as two lines that never merge. See `docs/design/recommendation.md` for the
+    rule, the thresholds and the 44,358-sale measurement they were set from.
+
+    **Every member is reachable**, which is this enum's own admission rule (`FlagKind`
+    states it, and #21 retired a kind that stopped meeting it): `no-geography` reaches
+    `NO_RECOMMENDATION` with no benchmark of any tier, the re-sited `overpriced` deal
+    reaches `PROCEED_WITH_CAUTION`, `los-angeles` reaches `PROCEED`, and `DO_NOT_PROCEED`
+    needs a premium past the reject threshold alongside a rent claim the comps could not
+    corroborate.
+    """
+
+    PROCEED = "proceed"
+    PROCEED_WITH_CAUTION = "proceed_with_caution"
+    DO_NOT_PROCEED = "do_not_proceed"
+    # Not a verdict — the statement that the inputs a verdict needs were not there.
+    # Distinct from `PROCEED` for the reason Transparent Degradation exists at all: a
+    # system that cannot assess a deal and says "proceed" has told the reader something
+    # false, and one that stays silent has told them nothing.
+    NO_RECOMMENDATION = "no_recommendation"
+
+
+# Reader-facing text for each verdict. Here rather than in the Summarizer because the
+# lede prompt quotes the same words the report prints, and two spellings of one verdict
+# in one document is the defect §8's single-home rule exists to prevent.
+RECOMMENDATION_LABEL = {
+    Recommendation.PROCEED: "Proceed",
+    Recommendation.PROCEED_WITH_CAUTION: "Proceed with caution",
+    Recommendation.DO_NOT_PROCEED: "Do not proceed",
+    Recommendation.NO_RECOMMENDATION: "No recommendation",
+}
+
+
+class RecommendationDetail(BaseModel):
+    """The verdict, the reasons behind it, and what an independent reading made of it.
+
+    **The reasons travel with the verdict rather than being re-derived at render time.**
+    The Critic holds every input the rule reads; the Summarizer holds none of them in the
+    form the rule used. Recomputing there would be two implementations of one judgment
+    that can disagree — the mistake `_consistency_objections`' first check exists to
+    avoid, where two agents derived one fact independently.
+
+    `reasons` is reader-facing prose (§8): it is printed under the verdict line verbatim,
+    so it carries no flag names, thresholds or config constants.
+    """
+
+    verdict: Recommendation
+    # One short sentence per reason the rule fired, in the order the rule tested them.
+    # Empty only for `PROCEED`, which is the absence of every reason rather than a
+    # finding of its own.
+    reasons: list[str] = Field(default_factory=list)
+
+    # How far the asking price sits above (+) or below (-) the benchmark it was read
+    # against, and which tier that benchmark was. Carried so the report can state the
+    # premium and its tier without recomputing either, and so a percentile claim is never
+    # made against a tier it was not measured for.
+    price_premium: Optional[float] = None
+    benchmark_tier: Optional[str] = None
+
+    # Whether the comp cross-check corroborated the rent the deal rests on. `None` means
+    # no rent estimate existed to corroborate, which is not the same as a failed check.
+    rent_corroborated: Optional[bool] = None
+
+    # The cross-check (U9.4, OQ-22). The model reads the same state and reaches its own
+    # verdict; it can never move `verdict`, only annotate it. `None` when the call was
+    # not made or did not return — a missing second opinion is not a disagreement, and
+    # rendering it as one would manufacture a finding out of an outage.
+    model_verdict: Optional[Recommendation] = None
+    model_rationale: Optional[str] = None
+
+    @property
+    def cross_check_disagrees(self) -> bool:
+        """True only where a second opinion exists *and* differs."""
+        return self.model_verdict is not None and self.model_verdict != self.verdict
+
+
 class DealStatus(StrEnum):
     """Where a deal's run stands. Terminal values are `COMPLETE` and `FAILED`;
     `NEEDS_REVIEW` is a durable state a deal can still be resumed from (see
@@ -1002,6 +1087,10 @@ class DealState(BaseModel):
     # connects the flags above it to the number.
     confidence_detail: Optional[ConfidenceBreakdown] = None
     needs_human_review: bool = False
+    # Axis 2 (U9.4). Deliberately a sibling of `needs_human_review` rather than derived
+    # from it: the two answer different questions and the report renders them as two lines
+    # that never merge. `None` only before the Critic has run.
+    recommendation: Optional[RecommendationDetail] = None
     critic_rejected: bool = False
     rework_count: int = 0
 

@@ -44,15 +44,18 @@ Reason/Act/Observe/Decide:
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import NamedTuple, Optional
 
 import config
+from tools.llm_client import LlmClient, LlmError, SchemaValidationExhausted
 from state import (
     ConfidenceBreakdown,
     DealState,
     Flag,
     FlagKind,
     FlagScope,
+    Recommendation,
+    RecommendationDetail,
     Severity,
     scope_of,
 )
@@ -554,6 +557,309 @@ def _interaction_objections(state: DealState) -> list[Objection]:
     return objections
 
 
+def _price_premium(state: DealState) -> tuple[Optional[float], Optional[str]]:
+    """How far the asking price sits from the benchmark, and which tier that benchmark is.
+
+    Returns `(None, None)` when either half is missing. The tier travels with the number
+    because **the same premium means different things against the two references** — a
+    30% premium is the 80th percentile of sales in a ZIP and roughly the 68th against a
+    metro-wide median. Returning the premium alone would let a caller compare it to the
+    wrong threshold and never notice.
+    """
+    detail = state.valuation_detail
+    price = state.deal_terms.price
+    if detail is None or price is None:
+        return None, None
+    benchmark = detail.benchmark_median_sale_price
+    if not benchmark:
+        return None, None
+    return (price - benchmark) / benchmark, detail.benchmark_tier
+
+
+def _rent_is_corroborated(state: DealState) -> Optional[bool]:
+    """Did the comp cross-check confirm the rent this deal's income rests on?
+
+    Three outcomes, and the third is not a failure of the first two. `None` means there
+    was no rent estimate to corroborate — `valuation_rent` declined to produce one — and
+    a deal with no income figure at all is handled by the missing-input branch of the
+    rule rather than being scored as an uncorroborated claim.
+
+    `False` covers both ways the check can fail to confirm: it never ran (fewer than
+    `config.RENT_COMP_CROSSCHECK_MIN_COMPS` comps survived, so no median exists) or it
+    ran and the two figures diverged. **Those are deliberately one outcome here**, though
+    they are two elsewhere: the rule asks whether independent local evidence supports the
+    rent, and "no evidence" and "evidence that disagrees" are both *not support*. The
+    report distinguishes them in the disclosures, where the difference is actionable.
+    """
+    if state.rent_estimate is None:
+        return None
+    if not _cross_check_ran(state):
+        return False
+    return FlagKind.RENT_DIVERGES_FROM_COMPS not in _kinds(state)
+
+
+def _thresholds(tier: Optional[str]) -> tuple[float, float]:
+    """The caution and reject premiums for a benchmark tier.
+
+    Metro is the default for an unknown tier rather than ZIP, and the direction is the
+    safe one: the metro numbers are roughly twice as high, so an unrecognized tier makes
+    the rule harder to trip rather than easier. A verdict issued against the wrong
+    threshold should err toward saying less about the deal, not more.
+    """
+    if tier == "zip":
+        return (
+            config.RECOMMENDATION_ZIP_CAUTION_PREMIUM,
+            config.RECOMMENDATION_ZIP_REJECT_PREMIUM,
+        )
+    return (
+        config.RECOMMENDATION_METRO_CAUTION_PREMIUM,
+        config.RECOMMENDATION_METRO_REJECT_PREMIUM,
+    )
+
+
+def recommend(state: DealState) -> RecommendationDetail:
+    """Axis 2: whether the property is worth buying. **Pure, and that is the design.**
+
+    **This answers a different question from `needs_human_review` and must never read
+    it.** That field says whether the software can stand behind its own numbers; this one
+    says whether the deal is any good. `staten-island` is the worked example of why the
+    two must not be merged — it escalates on zero comparables while asking 17% below its
+    ZIP median, so a reader who took the escalation banner as a verdict on the property
+    read the evidence exactly backwards. Feeding confidence or the escalation decision in
+    here would re-merge the two lines the report now separates.
+
+    **Deterministic, and the reason is measured rather than stylistic.** OQ-17 found this
+    model scoring an identical prompt 0.05 on one call and 0.95 on the next, same
+    deployment, `temperature=0`. A recommendation behind that would make the same deal
+    *proceed* on Tuesday and *do not proceed* on Wednesday with nothing able to explain
+    why, and it would create a second axis `eval/runner.py` cannot score. The model's own
+    reading is attached by `cross_check()` below as an annotation that can never move the
+    verdict.
+
+    **The thresholds are percentiles of real transactions**, measured by
+    `scripts/sale_premium_distribution.py` over 44,358 sales — see
+    `docs/design/recommendation.md`. Before that measurement this repository held one
+    median per ZIP and no dispersion, so any threshold would have been read off nothing.
+
+    **Reject requires two independent failures**, and that is the design rather than
+    timidity about the vocabulary. `_benchmark_section` prints, in bold, that the
+    benchmark *"is not an estimate of this property's value"* — an unadjusted median of
+    other properties' sales, with no correction for size, unit count or condition. An
+    outright rejection resting on that one figure would contradict the caveat printed
+    beside it. Requiring the rent side to fail too puts the verdict on two instruments
+    that fail independently: a premium the income does not support is a fact about the
+    deal in a way a premium alone is not.
+
+    Reason/Act/Observe/Decide is `critic_agent`'s; this is the Observe/Decide step for
+    axis 2, kept separate from the confidence sum because they answer different questions
+    over the same state.
+    """
+    premium, tier = _price_premium(state)
+    corroborated = _rent_is_corroborated(state)
+
+    if premium is None:
+        # Not a verdict — the statement that a verdict's inputs were absent. Naming which
+        # one is missing is the difference between a reader going to find the price and a
+        # reader concluding this market cannot be assessed.
+        reason = (
+            "The listing did not state an asking price, so there is nothing to compare "
+            "against local sales."
+            if state.deal_terms.price is None
+            else "No record of comparable sale prices covers this property's market, so "
+                 "the asking price has nothing to be read against."
+        )
+        return RecommendationDetail(
+            verdict=Recommendation.NO_RECOMMENDATION,
+            reasons=[reason],
+            rent_corroborated=corroborated,
+        )
+
+    caution_at, reject_at = _thresholds(tier)
+    where = (
+        "recorded sales in this ZIP code"
+        if tier == "zip"
+        else "recorded sales across this metro area"
+    )
+    reasons: list[str] = []
+
+    over_caution = premium >= caution_at
+    over_reject = premium >= reject_at
+
+    # **The price finding is the only thing that can start a verdict.** An uncorroborated
+    # rent modifies one and never triggers one, and that asymmetry is load-bearing rather
+    # than conservative. Whether the comp cross-check could run is largely a fact about
+    # *data coverage in this market* — `state.scope_of` classifies the sparse-comp
+    # disclosure as market-scoped for exactly that reason — so letting it reach a verdict
+    # on its own would put an axis-1 observation on the axis-2 line and re-merge the two
+    # this design exists to separate.
+    #
+    # `staten-island` is the case that makes it concrete: zero comparables, so nothing
+    # corroborates its rent, while it asks **17% below its ZIP median**. Under a rule
+    # where "uncorroborated" alone reached caution, the report would have said *proceed
+    # with caution* about a deal whose only measured fact is that it is cheap — which is
+    # the reading the escalation banner was already producing, reintroduced one line
+    # lower. It reports **Proceed** on axis 2 and **escalated** on axis 1, and the
+    # distance between those two lines is the point.
+    if over_reject and corroborated is False:
+        verdict = Recommendation.DO_NOT_PROCEED
+    elif over_caution:
+        verdict = Recommendation.PROCEED_WITH_CAUTION
+    else:
+        verdict = Recommendation.PROCEED
+
+    if over_caution:
+        percentile = (
+            config.RECOMMENDATION_REJECT_PERCENTILE
+            if over_reject
+            else config.RECOMMENDATION_CAUTION_PERCENTILE
+        )
+        reasons.append(
+            f"The asking price is {premium:.0%} above the typical sale price for this "
+            f"area — higher than roughly {percentile:.0%} of {where}."
+        )
+    elif premium <= -caution_at:
+        # Stated, and it changes no verdict. A discount is not a reason for caution, but
+        # a reader whose deal is priced well below its market should see that said
+        # plainly rather than having to infer it from the absence of a warning.
+        reasons.append(
+            f"The asking price is {abs(premium):.0%} below the typical sale price for "
+            f"this area."
+        )
+
+    # The second instrument, stated only where it bore on the verdict — either because it
+    # carried the deal to a rejection, or because it is the reason a large premium stopped
+    # at caution. Printed under a *Proceed* it would read as a warning the verdict does
+    # not support, which is the confusion this whole section is repairing.
+    if over_caution:
+        reasons.append(
+            "The rent this deal's income depends on could not be confirmed against "
+            "nearby listings, so the figure behind the return rests on the model alone."
+            if corroborated is False
+            else "Nearby listings do corroborate the rent this deal's income depends on, "
+                 "so the premium is at least supported by the income it generates."
+        )
+
+    return RecommendationDetail(
+        verdict=verdict,
+        reasons=reasons,
+        price_premium=premium,
+        benchmark_tier=tier,
+        rent_corroborated=corroborated,
+    )
+
+
+_CROSS_CHECK_SYSTEM = (
+    "You review residential multi-family investment deals. You are given the evidence a "
+    "deterministic rule has already used to reach a verdict, and you reach your own "
+    "verdict from the same evidence, independently. You are not asked to agree with the "
+    "rule and you are not told what it decided. Judge only what the evidence supports; "
+    "say so plainly when it supports little."
+)
+
+
+def _cross_check_prompt(state: DealState, detail: RecommendationDetail) -> str:
+    """The same evidence the rule read, in the rule's own rounded figures.
+
+    **Rounded reader-facing numbers, not raw floats** — the same constraint the lede
+    carries. OQ-18 records a replay row missing its recordings for reasons never
+    established, and a full-precision float in a prompt is a cache key that changes when
+    an upstream computation moves in its last decimal place. Everything here is either a
+    rounded percentage or a short string.
+
+    Deliberately does **not** include the confidence score, the flag list, or whether the
+    deal escalated. Those are axis 1. A second opinion that reads them would be answering
+    the same question the first line already answers.
+    """
+    parts = [
+        "Evidence for this property:",
+        f"- Asking price: {state.deal_terms.price:,.0f}" if state.deal_terms.price
+        else "- Asking price: not stated in the listing",
+    ]
+    if detail.price_premium is not None:
+        where = "its ZIP code" if detail.benchmark_tier == "zip" else "the wider metro area"
+        parts.append(
+            f"- That price sits {detail.price_premium:+.0%} against the typical recorded "
+            f"sale in {where}."
+        )
+    else:
+        parts.append("- No record of comparable sale prices covers this market.")
+
+    if state.rent_estimate is not None:
+        parts.append(f"- Modelled rent: {state.rent_estimate:,.0f} per month per unit.")
+        parts.append(
+            "- Nearby listings corroborate that rent."
+            if detail.rent_corroborated
+            else "- Nearby listings do NOT corroborate that rent: the check either could "
+                 "not run or disagreed with the model."
+        )
+    else:
+        parts.append("- No rent estimate could be produced for this property.")
+
+    if state.deal_terms.unit_count:
+        parts.append(f"- Units: {state.deal_terms.unit_count}.")
+
+    parts.append("")
+    parts.append(
+        "Reach one verdict from the evidence above: proceed, proceed_with_caution, "
+        "do_not_proceed, or no_recommendation where the evidence cannot support any of "
+        "the three. Give one sentence of reasoning, in plain words an investor would "
+        "read."
+    )
+    return "\n".join(parts)
+
+
+def cross_check(state: DealState, detail: RecommendationDetail) -> RecommendationDetail:
+    """Ask a model for its own verdict on the same evidence. **It can never change one.**
+
+    **This is the system's second reasoning locus, and it exists because there was only
+    one** (OQ-22). The forecast's search is the only place a model exercises judgment —
+    #12's Critic half was retired on evidence at U7.7 — so a system described as agentic
+    rested its whole claim on one node. This is the cheapest place to add another, and it
+    lands where the reader is actually looking.
+
+    **The rule always decides.** The model's verdict is stored beside the rule's, and the
+    report shows the rule's; on a disagreement it adds a line saying an independent
+    review of the same evidence reached a different conclusion, and that the disagreement
+    is disclosed rather than resolved. That asymmetry is what makes this safe under
+    OQ-17, where this model scores an identical prompt 0.05 on one call and 0.95 on the
+    next: a design where the model *decided* would make the same deal proceed on Tuesday
+    and not on Wednesday, and `eval/runner.py` could score neither outcome.
+
+    **The disagreement is the product.** A deal where both readings agree is more
+    trustworthy than one where they split, and the reader learns which they are holding.
+
+    Degrades to no annotation at all, never to a flag. A missing second opinion is not a
+    disagreement, and rendering it as one would manufacture a finding out of an outage —
+    the report simply shows the rule's verdict alone, which is what it shows whenever the
+    two agree anyway.
+    """
+    if not config.RECOMMENDATION_CROSS_CHECK_ENABLED:
+        return detail
+
+    from pydantic import BaseModel
+
+    class _CrossCheck(BaseModel):
+        verdict: Recommendation
+        reasoning: str
+
+    try:
+        result, _ = LlmClient().call_with_schema(
+            _cross_check_prompt(state, detail),
+            _CrossCheck,
+            model=config.MODEL_CRITIC,
+            system=_CROSS_CHECK_SYSTEM,
+        )
+    except (LlmError, SchemaValidationExhausted, RuntimeError, OSError):
+        return detail
+
+    return detail.model_copy(
+        update={
+            "model_verdict": result.verdict,
+            "model_rationale": result.reasoning.strip() or None,
+        }
+    )
+
+
 def _review_guidance(breakdown: ConfidenceBreakdown) -> str:
     """Tell the reviewer, in the escalation sentence itself, what kind of thing this is.
 
@@ -595,6 +901,9 @@ def critic_agent(state: DealState) -> dict:
     objections = _consistency_objections(state)
     breakdown = confidence_breakdown(state)
     confidence = breakdown.score
+    # Axis 2, computed from the same state and deliberately not from anything below it.
+    # See `recommend()` for why the escalation decision is not an input.
+    recommendation = cross_check(state, recommend(state))
 
     # Each objection carries its own severity — an interaction that voids the rent
     # cross-check is not the same weight as one that merely degrades it, and flattening
@@ -679,6 +988,7 @@ def critic_agent(state: DealState) -> dict:
     return {
         "confidence_score": confidence,
         "confidence_detail": breakdown,
+        "recommendation": recommendation,
         "critic_rejected": rejected,
         "needs_human_review": low_confidence or has_critical or budget_exhausted,
         "flags": flags,

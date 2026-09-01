@@ -373,6 +373,57 @@ SALE_BENCHMARK_SOURCES: dict[str, dict] = {
 }
 
 
+# ---------------------------------------------------------------------------
+# The recommendation (U9.4) — axis 2, "is this a good deal?"
+# ---------------------------------------------------------------------------
+#
+# **Set at stated percentiles of real transactions, not at round numbers.** Measured by
+# `scripts/sale_premium_distribution.py` over 44,358 individual sales in 222 ZIPs — the
+# same sales behind `tools/data/zip_sale_benchmarks.json`, which publishes their medians
+# and no dispersion at all. Full write-up: `docs/design/recommendation.md`.
+#
+# Why a percentile rather than a judgment: the report can then say what the threshold
+# *means*. "Priced above roughly nine in ten recorded sales in this ZIP" is a claim a
+# reader can check; "priced more than 52% above the median" is a number they cannot place.
+#
+# ZIP tier, pooled, premium -> percentile of actual sales at or below it:
+#   +15% -> 68%   +20% -> 72%   +30% -> 80%   +40% -> 85%   +50% -> 89%   +75% -> 95%
+# The two markets measured separately agree closely (New York p90 +44%, Chicago p90 +66%),
+# and weighting every ZIP equally instead of pooling moves nothing below +30%.
+RECOMMENDATION_ZIP_CAUTION_PREMIUM = 0.30   # p80 of ZIP-tier sales
+RECOMMENDATION_ZIP_REJECT_PREMIUM = 0.52    # p90 of ZIP-tier sales
+
+# **The metro pair is extrapolated and the report says so.** A metro median describes
+# properties an hour apart with one number, so its spread is roughly twice as wide and the
+# two markets disagree at every percentile (p80: New York +52%, Chicago +67%; p90: +97%
+# against +117%). Chicago's — the wider — are taken, because thresholds set from the
+# narrower market would call ordinary Chicago sales unusual.
+#
+# **Los Angeles is absent from the measurement entirely**, since California publishes
+# assessed value under Proposition 13 rather than transaction price — which is also why it
+# has no local tier to begin with. So these two numbers rest on the assumption that LA's
+# metro dispersion resembles Cook County's. That is an assumption, it is labelled as one
+# here and disclosed in the report, and a California transaction-price source is what
+# would close it.
+RECOMMENDATION_METRO_CAUTION_PREMIUM = 0.67  # p80 of Chicago metro-tier sales
+RECOMMENDATION_METRO_REJECT_PREMIUM = 1.17   # p90 of Chicago metro-tier sales
+
+# The percentiles above, carried so the report can state them without a second table.
+# Changing a threshold without changing these would make the report describe the old one.
+RECOMMENDATION_CAUTION_PERCENTILE = 0.80
+RECOMMENDATION_REJECT_PERCENTILE = 0.90
+
+# The model-proposes / rule-decides cross-check (OQ-22). Off makes the Critic skip its
+# model call entirely; the rule's verdict is unaffected either way, which is the property
+# that makes the cross-check safe to disable in a hermetic test.
+RECOMMENDATION_CROSS_CHECK_ENABLED = True
+
+# The model-written lede above the report (U9.4). One switch for the tests, the eval
+# runner and the demo surface. Off renders no summary section at all — distinct from the
+# call failing, which renders a sentence saying so.
+SUMMARY_NARRATIVE_ENABLED = True
+
+
 # Kaggle: outlier bounds. The extract is 99.5% complete on core features, with only
 # 79 rows outside these bounds, so this trims noise rather than reshaping the data.
 KAGGLE_MIN_RENT = 300.0
