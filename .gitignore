@@ -7,7 +7,18 @@ ignore/
 # src/eval/data/, which config.EVAL_DATA_DIR documents as the *committed*
 # counterpart holding the LLM recordings an evaluation replays - a fresh clone
 # cannot reproduce the report's figures without them (found during U6).
-/data/
+#
+# The trained rent model is the one exception (U9.1): it is small (~140 KB),
+# has no license restriction (it's derived weights, not the Kaggle corpus
+# itself), and committing it means a fresh clone can run the pipeline without
+# a training pass. Everything else under data/ - the source CSVs, the Chroma
+# index, the checkpoint DB, the LLM cache - stays out. Git can't re-include a
+# file inside an ignored directory, so the exclusion has to be re-stated one
+# level at a time down to the file.
+/data/*
+!/data/processed/
+/data/processed/*
+!/data/processed/rent_model.joblib
 
 # Docs
 docs/private/

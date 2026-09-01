@@ -10,7 +10,7 @@ need.
 | [`task_list_u7.md`](task_list_u7.md) | U7 — Critic / Reviewer | ✅ complete (Aug 27, 2026) |
 | [`task_list_u8.md`](task_list_u8.md) | U8 — Evaluation harness | ✅ closed Aug 31, 2026 — U8.M's remainder carried into U9.M rather than left behind |
 | [`task_list_u11.md`](task_list_u11.md) | U11 — Rent model v2 | ✅ complete Aug 31, 2026 — U11.5 landed inside U8's close-out |
-| [`task_list_u9.md`](task_list_u9.md) | U9 — Summarizer polish + Streamlit demo surface | ⬜ planned Aug 31, 2026 — awaiting approval; two blocking questions open |
+| [`task_list_u9.md`](task_list_u9.md) | U9 — Summarizer polish + Streamlit demo surface | 🟨 in progress — U9.1, U9.2 done Aug 31, 2026 |
 | [`maintenance.md`](maintenance.md) | Not tied to a unit | standing |
 
 Units U1–U6 predate this workflow and have no task file; what they built is in

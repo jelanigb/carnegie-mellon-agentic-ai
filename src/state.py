@@ -307,6 +307,69 @@ def scope_of(kind: FlagKind) -> FlagScope:
     return FlagScope.MARKET if kind in _MARKET_SCOPED_KINDS else FlagScope.DEAL
 
 
+class ReviewDesk(StrEnum):
+    """Which desk a human-review escalation is waiting on (U9.2).
+
+    Not the same split as `FlagScope` above — that is about a disclosure's *subject*
+    (this property vs. this market); this is about who can act on it. A geocoder outage
+    and a sparse comp set both widen the same confidence score, but they call for
+    different people: nothing about the sparse-comps deal is in question — a reviewer can
+    read the comps and judge the deal — while the geocoder outage means the system could
+    not do its job at all, which is an IT problem regardless of what the deal looks like.
+    See `docs/design/personas.md` for the full routing rule and the two personas behind
+    the two members below.
+    """
+
+    # The system could not do its job: a service was unreachable, a model was
+    # unreachable, or a resource this run needed (a trained model file, a market's rent
+    # or price series) simply was not available. Nothing about the deal is in question.
+    IT = "it"
+    # The system worked and found something a person should judge: sparse comps, a
+    # widened search, a divergence between the estimate and its own cross-check. A
+    # reviewer with the deal's own evidence in front of them may be able to act on it.
+    # Named for the persona rather than shortened to AGENT, because "agent" already means
+    # a pipeline node everywhere else in this codebase (`AGENT = "critic"`, `agents/`).
+    REAL_ESTATE_AGENT = "real_estate_agent"
+
+
+# The infrastructure-desk kinds, enumerated for the same reason `_MARKET_SCOPED_KINDS`
+# is: there is no property of a `FlagKind` that predicts this, it is a judgment about
+# each disclosure's cause, and it belongs beside the vocabulary it classifies.
+# Everything absent defaults to REAL_ESTATE_AGENT — the actionable desk — for the same
+# reason DEAL is `scope_of`'s default: a kind added later and left unclassified should
+# read as something a reviewer might act on, not as a limitation only IT can weigh.
+#
+# Several of these kinds cover more than one underlying cause (see each site), and not
+# every cause is equally infrastructure-shaped — RENT_ESTIMATE_UNAVAILABLE can mean "no
+# trained model file is on this machine" (IT) or "the listing never resolved bedrooms,
+# bathrooms or floor area" (arguably REAL_ESTATE_AGENT, since UNRESOLVED_FIELD covers that
+# cause under its own kind). Classified at the kind level anyway, matching `scope_of`'s
+# own precedent, because a per-message classification would need to parse the flag text
+# rather than read its type — exactly the fragility §3's flag vocabulary exists to avoid.
+_INFRASTRUCTURE_KINDS: frozenset[FlagKind] = frozenset({
+    # The extraction model could not be reached at all.
+    FlagKind.EXTRACTION_UNAVAILABLE,
+    # The Census geocoder request itself failed, as opposed to the address having
+    # nothing to resolve to.
+    FlagKind.GEOCODER_SERVICE_UNAVAILABLE,
+    # No local rent reference could be resolved for this run — a lookup failure, or no
+    # market/federal rent series covers this geography at all.
+    FlagKind.RENT_ANCHOR_UNAVAILABLE,
+    # No rent figure was produced — most commonly because no trained model is present on
+    # this machine; see the classification note above for the one cause this misfiles.
+    FlagKind.RENT_ESTIMATE_UNAVAILABLE,
+    # No growth series was available on one or both sides — the subject's market has no
+    # Redfin coverage, no FMR history, or the scenario search itself found nothing to
+    # report.
+    FlagKind.FORECAST_UNAVAILABLE,
+})
+
+
+def desk_of(kind: FlagKind) -> ReviewDesk:
+    """Which desk a disclosure of this kind should route a review to."""
+    return ReviewDesk.IT if kind in _INFRASTRUCTURE_KINDS else ReviewDesk.REAL_ESTATE_AGENT
+
+
 class ConfidenceBreakdown(BaseModel):
     """What the confidence score was made of (U8.6d).
 

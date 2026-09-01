@@ -54,6 +54,19 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Aug 31, 2026 — U9.1/U9.2: the README, the committed model, and the escalation routing rule
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Aug 31, 2026 | U9.1 | **Root `README.md` written**, 28 bytes to a full project overview — the seven-agent pipeline, Transparent Degradation, where the evidence already lives (sample reports, eval results, the graph diagram), setup and run instructions, a documentation map, and a stated-limitations section naming the forecast rework in progress, Staten Island's live-tier reproducibility gap, OQ-17's non-determinism, the missing Streamlit surface, and the deliberately scoped test suite. Written for reviewing rather than running, per the architect's call: leads with evidence a reviewer can read without executing anything | 7.1 |
+| Aug 31, 2026 | U9.1 | **The trained rent model committed.** `.gitignore` — `/data/` was a blanket exclusion; re-stated one directory level at a time (`/data/*`, `!/data/processed/`, `/data/processed/*`, `!/data/processed/rent_model.joblib`) so the ~140 KB `rent_model.joblib` is tracked while the Chroma index, the checkpoint DB, the LLM cache and the source CSVs stay out. A fresh clone can now score a listing without a training pass first | 7.1 |
+| Aug 31, 2026 | U9.1 | **Two demo reports committed as sample outputs.** `docs/sample_reports/los-angeles.md`, `staten-island.md` — the exact reports the architect read Aug 31 that prompted this unit's rewrite, committed as-read rather than regenerated, known defects included (the LA forecast's implausible pairing, the Staten Island reviewer-note wording this same date's U9.2 row fixes in code). Linked from the README as the fastest way to see real output | 7.1 |
+| Aug 31, 2026 | U9.2 | **`docs/design/personas.md` written.** The four personas (IT/operations, the real-estate agent, the investor, a future calling agent), each with its journey, and the escalation routing rule — infrastructure flags to IT, deal-substance flags to the reviewing agent. Added to `implementation_plan.md`'s document map | 7.1 |
+| Aug 31, 2026 | U9.2 | **The escalation routing rule reaches code.** `state.py` — `ReviewDesk` (`IT`/`REAL_ESTATE_AGENT`, the latter named for the persona rather than shortened to `AGENT`, which already means a pipeline node everywhere else in this codebase) and `desk_of(kind)`, classifying `FlagKind` the same way `scope_of`/`FlagScope` already does (a judgment call at the vocabulary, `REAL_ESTATE_AGENT` the actionable default). `_INFRASTRUCTURE_KINDS` names five: `EXTRACTION_UNAVAILABLE`, `GEOCODER_SERVICE_UNAVAILABLE`, `RENT_ANCHOR_UNAVAILABLE`, `RENT_ESTIMATE_UNAVAILABLE`, `FORECAST_UNAVAILABLE`. `agents/human_review.py` — `_routing_desks` derives the desk(s) from the escalation-causing flags (excluding the two mechanism-only kinds that name no cause of their own, `LOW_CONFIDENCE_ESTIMATE` and `REWORK_LIMIT_REACHED`) and the `interrupt()` payload gains a plain-language `waiting_on` field. 76 tests pass; the golden eval tier re-run clean with no change to any verdict | 6.1, 7.1 |
+| Aug 31, 2026 | U9.2 | **The resume-note layout bug fixed.** `main.py` — the canned resume text said "the disclosures above", true in a terminal print order that does not hold once the same string is replayed into the report banner, where disclosures render below it (visible in the committed `staten-island.md` sample). Reworded to name the disclosures without assuming a position: "the disclosures in this report" | maintenance |
+
+---
+
 ## Aug 31, 2026 — U8.10: the close-out's code half
 
 | Date added | Unit | Work done | Related checkpoint |

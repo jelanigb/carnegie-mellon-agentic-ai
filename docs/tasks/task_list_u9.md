@@ -95,7 +95,7 @@ available in this unit.
 
 ## Subsections
 
-### U9.1 ⬜ — Root `README.md` and the committed model *(never sheds)*
+### U9.1 ✅ — Root `README.md` and the committed model *(never sheds)*
 
 0 bytes today, and 7.1 requires *"a README that explains the project, architecture, setup,
 and usage"* plus *"clear instructions for running or reviewing the project."*
@@ -115,7 +115,7 @@ pipeline without that step, rather than letting a reviewer discover it.
 **Must not reference** `docs/private/`, `ignore/`, `data/` or `CLAUDE.md` — all gitignored,
 and §8 forbids describing private paths in public files.
 
-### U9.2 ⬜ — Personas, journeys, and the escalation routing rule
+### U9.2 ✅ — Personas, journeys, and the escalation routing rule
 
 **Doc-first, then the one code change that follows from it.**
 `docs/design/personas.md`: the four personas above, each with its journey, and the
@@ -541,8 +541,8 @@ Review the changelog rows each commit already wrote; do not reconstruct them.
 
 | | Subsection | Status |
 | --- | --- | --- |
-| ⬜ | **U9.1** README + committed model | **First — graded directly, and short** |
-| ⬜ | **U9.2** personas, journeys, routing | Doc + one small code change |
+| ✅ | **U9.1** README + committed model | Done Aug 31, 2026 |
+| ✅ | **U9.2** personas, journeys, routing | Done Aug 31, 2026 — `docs/design/personas.md` + `state.ReviewDesk`/`desk_of` + the resume-note bug |
 | ⬜ | **U9.3** forecast: ZORI re-source, evaluator, two tables | **Largest; supersedes half of #16** |
 | ⬜ | **U9.4** report: axes, recommendation + cross-check, lede, template | Renders U9.3; adds the 2nd reasoning locus |
 | ⬜ | **U9.5** pin the live tier; Staten Island | One recording pass, behind U9.3+U9.4 |

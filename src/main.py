@@ -140,7 +140,7 @@ def run(listing_text: str, coords: tuple[float, float] | None, thread_id: str) -
                 Command(
                     resume=(
                         "[demo] Reviewed and released for reporting. A real reviewer "
-                        "would resolve the disclosures above before proceeding."
+                        "would resolve the disclosures in this report before proceeding."
                     )
                 ),
                 invoke_config,
