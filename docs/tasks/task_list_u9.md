@@ -287,7 +287,7 @@ cohort-shift screen retires with the switch rather than being kept — the alter
 offered and declined, on the reasoning that code whose only purpose was masking an FMR
 artifact should not outlive the artifact.
 
-### U9.4 ⬜ — The report: two axes, a recommendation and its cross-check, a lede, a template
+### U9.4 ✅ — The report: two axes, a recommendation and its cross-check, a lede, a template
 
 **The architect's first priority, and the thing the demo actually shows.** Four changes to
 one surface, landing together because they are one reviewable rework of the report's top.
@@ -393,11 +393,69 @@ rather than an oversight.
 in ~76 places; `conftest.py` needs the same treatment `offline_scenario_evaluator` gives
 the forecast, plus one test exercising the failure sentence.
 
+#### What landed, Sept 1 — six commits, and two findings the plan did not contain
+
+**The rule was built the wrong way round first, and `staten-island` caught it.** The first
+draft let an uncorroborated rent reach *caution* on its own, which put an axis-1 fact — can
+the comp cross-check run in this market — onto the axis-2 line, re-merging the two axes one
+line below where the unit had just separated them. The price finding is now the only thing
+that can *start* a verdict and the rent side only ever modifies one; reject still needs
+both. Regression test: `test_an_uncorroborated_rent_alone_does_not_reach_caution`.
+
+**The suite had silently started making live calls**, through the new Critic path, and
+nothing caught it but the wall clock — 48s before the `conftest.py` seam, 13s after. Worth
+carrying as a pattern: a new model call in a shared node reaches every test that renders a
+report, and no test fails when it does.
+
+**One residual, flagged rather than fixed.** The written summary needed two prompt passes
+and then a structural change — dropping the disclosure excerpts entirely — before it stopped
+mischaracterizing evidence, twice describing rental comparables as sales. Iteration stopped
+there on U9.3's precedent, since further tuning fits a single draw (OQ-17). **The figures it
+quotes are checked; its prose is not**, and the final report should say so rather than
+present the lede as verified output. U9.5's recording pass freezes one draw per row, which
+converts this from run-to-run exposure into a fixed artifact that can be read once and
+checked — the strongest mitigation available inside the freeze.
+
 ### U9.5 ⬜ — Pin the live tier, and settle Staten Island
 
 **The architect's second priority.** `staten-island` publishes 1 comp / 12 disclosures in
 `eval/results/results.md` and produces 0 comps / 9 disclosures today, reproducibly across
 two runs.
+
+#### Measured Sept 1, before starting — the tiers are not stale, they are broken
+
+**Both offline tiers error on every row.** A golden-tier run returns `CacheMiss` on all 15
+cases and a flag census of 0 of 30. The cause is U9.3, not U9.4: rewriting `_context_block`
+and `_DEPTH_INSTRUCTIONS` is a prompt change, and it invalidated every forecast recording on
+Aug 31; U9.4's two new model calls stack on top of that rather than causing it. **The
+committed `eval/results/results.md` was last written Aug 30 at U8.6e**, so the published
+evaluation describes a build two units old, and its `overpriced` row is the Los Angeles
+siting U9.4 replaced.
+
+That moves this subsection from *next in line* to *on the critical path*: the eval harness is
+one of the two suites §6 never cuts, the final report quotes its numbers, and right now a
+fresh clone reproduces none of them. `CacheMiss` subclasses `Exception` rather than
+`LlmError`, so it is not swallowed by the lede's or the cross-check's degradation handlers —
+the row fails loudly, which is why this was visible at all.
+
+**The development cache is empty — 0 files, where this section recorded 258.** The warm-cache
+condition that made a live row non-deterministic is therefore gone, and a live run today is
+an honest measurement rather than a mixture. That is the precondition the Staten Island
+diagnosis below asks for, already satisfied.
+
+#### Two decisions taken Sept 1 by the architect
+
+1. **Replay by default; `--live` opts in.** All rows replay from committed recordings, so
+   every published figure is reproducible from a fresh clone. A genuinely live run becomes an
+   explicit flag — which is the path U9.7's paste box and U9.9's live capture still use.
+   Chosen over keeping a tier that calls the model on every run, because the reproducibility
+   gap is the thing this subsection exists to retire.
+2. **`results.md` gains a recommendation column.** U9.4 added axis 2 and the harness cannot
+   currently see it; the rule was made deterministic precisely so a batch could score it.
+   Baselines carry their measured verdict. **Declared axis-2 verdicts for the 21 predicted
+   cases are *not* taken** — authoring 21 predictions after the rule exists is what
+   `VerdictSource.PREDICTED` exists to prevent, and the batch would score the rule against
+   itself.
 
 **The cause is structural and was found while explaining the tiers.** `_case_environment`
 overrides the response cache for `golden` and `replay` only; **`live` rows fall through to
@@ -423,9 +481,14 @@ dependency they may not have priced:** the lede adds a model call to a node ever
 reaches, so both offline tiers need re-recording anyway. Recording after the Summarizer
 rework makes that **one recording pass covering both** instead of two.
 
-**The check is U8.8's and U8.10f's:** re-run both offline tiers and compare the table
-byte-for-byte on confidence, disclosures, outcome and verdict. The recording diff should
-be **additions only**.
+**The check U8.8 and U8.10f used does not transfer to this pass, and substituting it would
+be false comfort.** Those passes asserted the table was byte-identical because their changes
+were verdict-inert by design. This one is not: U9.3 moved every band, U9.4 added a verdict
+and re-sited `overpriced`. **So the check is that every moved row has a named cause** — the
+table is re-derived, then read row by row against those two change sets, and any movement
+neither explains is a defect to chase rather than a diff to accept. The recording diff should
+still be **additions only**: superseded recordings are orphaned, not deleted, so what the old
+table was produced from stays in the repository.
 
 **Carry one prompt change into this pass, from U9.3.** `TODO(U9.5)` at
 `agents/scenario_forecast._DEPTH_INSTRUCTIONS`: depth 1 should be told that treating both
@@ -606,8 +669,8 @@ Review the changelog rows each commit already wrote; do not reconstruct them.
 | ✅ | **U9.1** README + committed model | Done Aug 31, 2026 |
 | ✅ | **U9.2** personas, journeys, routing | Done Aug 31, 2026 — `docs/design/personas.md` + `state.ReviewDesk`/`desk_of` + the resume-note bug |
 | ✅ | **U9.3** forecast: ZORI re-source, evaluator, two tables | Done Aug 31, 2026 — five commits; supersedes half of #16 |
-| ⬜ | **U9.4** report: axes, recommendation + cross-check, lede, template | Renders U9.3; adds the 2nd reasoning locus |
-| ⬜ | **U9.5** pin the live tier; Staten Island | One recording pass, behind U9.3+U9.4 |
+| ✅ | **U9.4** report: axes, recommendation + cross-check, lede, template | Done Sept 1, 2026 — six commits; `critic.recommend` + `cross_check`, the 2nd reasoning locus, `overpriced` re-sited to Uptown 60640 |
+| ⬜ | **U9.5** pin the live tier; Staten Island | **On the critical path** — both offline tiers error on every row since U9.3 |
 | ⬜ | **U9.6** sixth deal + one shadow | Recorded correctly the first time |
 | ⬜ | **U9.7** Streamlit surface | Pre-agreed fallback if it slips |
 | | *✂️ cut line* | |
@@ -620,6 +683,12 @@ Review the changelog rows each commit already wrote; do not reconstruct them.
 **Twelve change sets against five days; the honest read is that seven land** — and U9.3
 grew substantially on Aug 31, so that estimate is tighter than it was. The cut line is where
 it falls.
+
+**Where that estimate stands on Sept 1, with three build days left.** Four have landed
+(U9.1–U9.4). U9.5, U9.6 and U9.7 are the remaining three above the line, which is exactly the
+seven predicted. U9.9 sits below the line and never sheds, so the realistic shape is
+**U9.5 → U9.6 → U9.9 capture → U9.M → U9.11**, with U9.7 the one item genuinely at risk and
+its fallback already pre-agreed.
 
 **The ordering is the architect's, revised twice on Aug 31, and each revision fixed a
 dependency rather than a preference.**

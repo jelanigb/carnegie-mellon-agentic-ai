@@ -54,6 +54,12 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 1, 2026 — U9.5: pin the tier, settle Staten Island, re-record
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 1, 2026 | U9.5 | **Depth 1 is told that treating both series alike is not a reason, and what a real reason looks like instead.** `agents/scenario_forecast._DEPTH_INSTRUCTIONS[1]`. Since #21 both forks ask one question — does the 2020-2022 rate regime belong in the record — of two different series, so symmetry became available to whichever framing claimed it and cost nothing; Los Angeles took it, scoring `f-00` at **0.95** for *"uses the same 2020-2022 window for both rent and price"*. The clause names that argument as empty and redirects to what the exclusion **costs each series here** — how many observations each side loses, where in its history the gap falls, whether what remains still spans enough to band. **It names the asymmetry that was already working rather than only forbidding the one that was not**: a series beginning *inside* the excluded window loses the front of its history rather than a middle segment, which is `staten-island`'s real argument — Richmond's ZORI starts 2020-08, and its off-diagonal `f-01` won at 0.96 against the diagonal's 0.15. Carried from U9.3's `TODO(U9.5)` and landed at the head of this pass because a prompt change invalidates every forecast recording | 6.1 |
+
 ## Sept 1, 2026 — U9.4: the recommendation
 
 | Date added | Unit | Work done | Related checkpoint |

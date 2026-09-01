@@ -329,23 +329,25 @@ def _selection_prompt(candidates: list[tot.Candidate], context: str, menu: str) 
 # which are defensible by construction, so the task is to rank them relative to each
 # other. Depth 2 judges whether a specific pairing holds up, where a low score is a real
 # verdict.
-# TODO(U9.5): tell depth 1 that treating both series alike is not, by itself, a reason.
-# Since #21 both forks ask the same question — does the 2020-2022 rate regime belong in
-# the record — of two different series, which put a cheap generic argument within reach
-# that did not exist when the two axes described different events. The Los Angeles run
-# took it, scoring f-00 at 0.95 for "uses the same 2020-2022 window for both rent and
-# price". **The level is not degenerate and this is not urgent**: on `staten-island` the
-# off-diagonal f-01 won at 0.96 against the diagonal f-11's 0.15, on a real asymmetry —
-# Richmond's ZORI series begins 2020-08, *inside* the excluded window, so holding it out
-# amputates the front of the history and leaves 43 observations from 2023-01, where Los
-# Angeles keeps its 2019 block. Three of the four framings have been chosen across five
-# demo deals.
+# Depth 1's symmetry clause landed at U9.5, in the recording pass that re-records both
+# offline tiers — deferred to there from U9.3 because a prompt change invalidates every
+# forecast recording, so landing it here cost one re-recording instead of two.
 #
-# What it needs: one clause, the same shape as the "a weak relationship is not an argument
-# in either direction" clause in `_context_block` — symmetry of treatment is not evidence;
-# argue from what the exclusion costs each series. Deferred to U9.5 rather than landed
-# here because a prompt change invalidates every forecast recording, and U9.5 re-records
-# both offline tiers anyway: landing it there costs one recording pass instead of two.
+# What it fixes: since #21 both forks ask the same question — does the 2020-2022 rate
+# regime belong in the record — of two different series, which put a cheap generic
+# argument within reach that did not exist when the two axes described different events.
+# The Los Angeles run took it, scoring f-00 at 0.95 for "uses the same 2020-2022 window
+# for both rent and price".
+#
+# **The level was never degenerate, and the measurement is why this was a clause rather
+# than a redesign**: on `staten-island` the off-diagonal f-01 won at 0.96 against the
+# diagonal f-11's 0.15, on a real asymmetry — Richmond's ZORI series begins 2020-08,
+# *inside* the excluded window, so holding it out amputates the front of the history and
+# leaves 43 observations from 2023-01, where Los Angeles keeps its 2019 block and loses a
+# middle segment. Three of the four framings have been chosen across five demo deals.
+# That asymmetry is now named in the instruction as the shape of a real reason, so the
+# clause points at the argument that was already working rather than only forbidding the
+# one that was not.
 _DEPTH_INSTRUCTIONS = {
     1: (
         "These are alternative TREATMENTS of the same underlying data, and every one of "
@@ -353,7 +355,20 @@ _DEPTH_INSTRUCTIONS = {
         "they are legitimate. Your task is to RANK them relative to each other for this "
         "particular deal, not to judge whether each passes an absolute bar. Use the full "
         "0.0-1.0 range: the treatment you would choose should score near 1.0, and the "
-        "least suitable near 0.0. Do not score them all low."
+        "least suitable near 0.0. Do not score them all low.\n"
+        "One argument to disregard, because it has been made here and it is empty: that "
+        "a framing is preferable for applying the SAME treatment to both series. Both "
+        "forks now ask one question — does the 2020-2022 rate regime belong in the "
+        "record — of two different series, so symmetry is available to whichever framing "
+        "wants to claim it and costs nothing to claim. Consistency is not evidence about "
+        "this deal.\n"
+        "Argue instead from what the exclusion COSTS EACH SERIES HERE, which differs by "
+        "series and by market and is therefore a real reason: how many observations each "
+        "side loses, WHERE in its history the gap falls, and whether what remains still "
+        "spans enough of the record to band. A series that begins inside the excluded "
+        "window loses the front of its history rather than a middle segment, and that is "
+        "a materially different cost from the same exclusion applied to a series that "
+        "runs either side of it."
     ),
     2: (
         "These are specific band pairings under the chosen treatment, and the three that "
