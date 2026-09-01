@@ -416,7 +416,7 @@ present the lede as verified output. U9.5's recording pass freezes one draw per 
 converts this from run-to-run exposure into a fixed artifact that can be read once and
 checked — the strongest mitigation available inside the freeze.
 
-### U9.5 ⬜ — Pin the live tier, and settle Staten Island
+### U9.5 ✅ — Pin the live tier, and settle Staten Island
 
 **The architect's second priority.** `staten-island` publishes 1 comp / 12 disclosures in
 `eval/results/results.md` and produces 0 comps / 9 disclosures today, reproducibly across
@@ -707,7 +707,7 @@ Review the changelog rows each commit already wrote; do not reconstruct them.
 | ✅ | **U9.2** personas, journeys, routing | Done Aug 31, 2026 — `docs/design/personas.md` + `state.ReviewDesk`/`desk_of` + the resume-note bug |
 | ✅ | **U9.3** forecast: ZORI re-source, evaluator, two tables | Done Aug 31, 2026 — five commits; supersedes half of #16 |
 | ✅ | **U9.4** report: axes, recommendation + cross-check, lede, template | Done Sept 1, 2026 — six commits; `critic.recommend` + `cross_check`, the 2nd reasoning locus, `overpriced` re-sited to Uptown 60640 |
-| ⬜ | **U9.5** pin the live tier; Staten Island | **On the critical path** — both offline tiers error on every row since U9.3 |
+| ✅ | **U9.5** pin the live tier; Staten Island | Done Sept 1, 2026 — five commits; all 28 rows + both sample reports replay from a clone, 0 verdicts moved, `sensitivity.md` byte-identical |
 | ⬜ | **U9.6** sixth deal + one shadow | Recorded correctly the first time |
 | ⬜ | **U9.7** Streamlit surface | Pre-agreed fallback if it slips |
 | | *✂️ cut line* | |
@@ -721,11 +721,18 @@ Review the changelog rows each commit already wrote; do not reconstruct them.
 grew substantially on Aug 31, so that estimate is tighter than it was. The cut line is where
 it falls.
 
-**Where that estimate stands on Sept 1, with three build days left.** Four have landed
-(U9.1–U9.4). U9.5, U9.6 and U9.7 are the remaining three above the line, which is exactly the
-seven predicted. U9.9 sits below the line and never sheds, so the realistic shape is
-**U9.5 → U9.6 → U9.9 capture → U9.M → U9.11**, with U9.7 the one item genuinely at risk and
-its fallback already pre-agreed.
+**Where that estimate stands after U9.5, with three build days left.** Five have landed
+(U9.1–U9.5) — **the seven-of-twelve prediction is now five-of-twelve with U9.6 and U9.7 the
+only items above the line left**, so the estimate is holding. U9.9 sits below the line and
+never sheds, so the realistic shape is **U9.6 → U9.9 capture → U9.M → U9.11**, with U9.7 the
+one item genuinely at risk and its fallback already pre-agreed.
+
+**One thing U9.5 changes about U9.7's risk, and it is a reduction.** The surface's stated
+default — *"the demo deals run from committed recordings — instant, deterministic, no
+quota"* — is now true rather than planned, and was not before this subsection: the demo
+deals had no committed recordings at all, and the written summary's would have crashed the
+node rather than degraded. The app is now a form plus `st.markdown(report)` over a path
+proven to replay byte-identically.
 
 **The ordering is the architect's, revised twice on Aug 31, and each revision fixed a
 dependency rather than a preference.**
