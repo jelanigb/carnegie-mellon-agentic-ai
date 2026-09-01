@@ -860,6 +860,31 @@ ZORI_MAX_VINTAGE_SUBSTITUTION_MONTHS = 12
 # this node branches instead of committing to one framing.
 FORECAST_HORIZON_YEARS = 5
 
+# --- The shared band estimator (tools/growth_bands.py) ---------------------
+# These two were module constants in `tools/redfin_data.py` from U6, correctly: the
+# price series was the only series banded, so they described one series and belonged to
+# it. Decision #21 makes rent monthly as well and puts both sides through one estimator,
+# at which point a value read by two modules is a tunable with two homes - which is what
+# §8's "config.py is the only home for tunable parameters" rule exists to prevent. Moved
+# here on that rule rather than on preference.
+
+# Width of a "sustained stretch" when deriving optimistic/pessimistic bands, in periods.
+# One year. A single extreme month is sampling noise at these volumes; a band built on
+# it would be indefensible. Requiring twelve consecutive months of elevated (or
+# depressed) growth means the optimistic and pessimistic cases describe conditions the
+# market actually held, not its best and worst single prints.
+SUSTAINED_STRETCH_PERIODS = 12
+
+# The anomalous window §2 requires be flagged wherever it feeds an average. Near-zero
+# policy rates through this stretch pushed price growth well above trend; blending it
+# silently into a "base case" would describe an unusual few years as normal.
+#
+# ISO strings rather than timestamps so this module keeps its two-import surface -
+# `tools/growth_bands.py` parses them once. Applied to *both* series under #21, where
+# only the price side carried the exclusion before.
+ANOMALOUS_PERIOD_START = "2020-01-01"
+ANOMALOUS_PERIOD_END = "2022-12-31"
+
 # --- FMR rent-growth series (tools/fmr_history.py) -------------------------
 # HUD publishes FY2017 onward through the API this project already caches, giving nine
 # year-over-year observations. Note the asymmetry with the price series: Redfin supplies

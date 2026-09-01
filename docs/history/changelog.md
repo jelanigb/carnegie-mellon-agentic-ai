@@ -54,6 +54,12 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Aug 31, 2026 — U9.3: the forecast's rent source, and the premise it rested on
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Aug 31, 2026 | U9.3 | **The band estimator extracted to `tools/growth_bands.py`, so one function serves both series.** New module holds `bands_from_yoy`, `sustained_means` and `is_in_anomalous_period`, moved unchanged from `redfin_data`; `compute_growth_bands` keeps what is about *this* series — reading the year-over-year column, naming the metro when filtering leaves nothing, attaching the price floor's provenance — and delegates the arithmetic. The estimator returns `None` on an empty series rather than raising, because it does not know which series it was handed and the caller does. `SUSTAINED_STRETCH_PERIODS` and the 2020-2022 window move to `config.py` under §8's single-home rule, now that two modules read them; `redfin_data` re-exports both under their existing names. **Verified as a pure extraction**: all 4 metros x both treatments x 18 fields identical across the change, 76 tests passing. Prerequisite for #21, whose whole argument is that the two series must be banded comparably | maintenance |
+
 ## Aug 31, 2026 — U9.1/U9.2: the README, the committed model, and the escalation routing rule
 
 | Date added | Unit | Work done | Related checkpoint |

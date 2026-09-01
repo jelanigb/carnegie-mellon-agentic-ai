@@ -56,6 +56,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import config
+from tools import growth_bands
 
 REDFIN_CSV = (
     config.DATA_DIR
@@ -88,9 +89,10 @@ _USECOLS = [
 # server's tool descriptions) reads it under this name.
 TARGET_METROS: dict[str, str] = config.REDFIN_TARGET_METROS
 
-# --- Tunables. These move to config.py in U1; this module deliberately does not import
-# --- it, because config.py does not exist yet and a half-written import is worse than a
-# --- documented constant. Every one of them is named and justified.
+# --- Tunables. The header here used to say these "move to config.py in U1, because
+# --- config.py does not exist yet" — written before it did. Two have since moved on the
+# --- occasion that made them shared rather than on a scheduled sweep, and the rest are
+# --- named and justified below.
 
 # Smoothing width, in periods. §2 specifies a rolling 3-month series; the extract is
 # Monthly, so three periods is three months. Trailing (not centered) because a forecast
@@ -114,20 +116,16 @@ ROLLING_WINDOW_PERIODS = 3
 MIN_SALE_PRICE_USD = config.REDFIN_MIN_MEDIAN_SALE_PRICE
 
 # Periods per year in this extract, used for the year-over-year lag. Monthly data.
-PERIODS_PER_YEAR = 12
+PERIODS_PER_YEAR = growth_bands.PERIODS_PER_YEAR
 
-# Width of a "sustained stretch" when deriving optimistic/pessimistic bands, in periods.
-# One year. A single extreme month is sampling noise at these volumes; a band built on
-# it would be indefensible. Requiring twelve consecutive months of elevated (or
-# depressed) growth means the optimistic and pessimistic cases describe conditions the
-# market actually held, not its best and worst single prints.
-SUSTAINED_STRETCH_PERIODS = 12
-
-# The anomalous window §2 requires be flagged wherever it feeds an average. Near-zero
-# policy rates through this stretch pushed price growth well above trend; blending it
-# silently into a "base case" would describe an unusual few years as normal.
-ANOMALOUS_PERIOD_START = pd.Timestamp("2020-01-01")
-ANOMALOUS_PERIOD_END = pd.Timestamp("2022-12-31")
+# The band estimator's own tunables. They described one series when this module was the
+# only one banded; #21 puts the rent side through the same function, so they now live in
+# `config.py` and are re-exported here because every existing consumer — the forecast
+# agent, `scripts/growth_correlation.py`, `scripts/fmr_history_evidence.py` — reads them
+# under these names.
+SUSTAINED_STRETCH_PERIODS = config.SUSTAINED_STRETCH_PERIODS
+ANOMALOUS_PERIOD_START = growth_bands.ANOMALOUS_PERIOD_START
+ANOMALOUS_PERIOD_END = growth_bands.ANOMALOUS_PERIOD_END
 
 # What this series actually is, in the words the report should use. Mirrors
 # DealState.appreciation_source in §5.
@@ -319,34 +317,6 @@ def get_appreciation_series(
     )
 
 
-def _is_in_anomalous_period(index: pd.DatetimeIndex) -> pd.Series:
-    return pd.Series(
-        (index >= ANOMALOUS_PERIOD_START) & (index <= ANOMALOUS_PERIOD_END),
-        index=index,
-    )
-
-
-def _sustained_means(yoy: pd.Series, window_periods: int) -> pd.Series:
-    """Rolling mean of `yoy`, computed within contiguous monthly runs only.
-
-    A plain `.rolling()` would happily average across a hole in the index. That is
-    harmless on a complete series but wrong the moment 2020-2022 is excluded: the window
-    would splice 2019 onto 2023 and report the result as a twelve-month stretch the
-    market never had. Runs are segmented on month adjacency so a "sustained stretch"
-    always means genuinely consecutive months.
-    """
-    if yoy.empty:
-        return yoy
-    index = pd.DatetimeIndex(yoy.index)
-    month_ordinal = pd.Series(index.year * 12 + index.month, index=yoy.index)
-    run_id = month_ordinal.diff().ne(1).cumsum()
-    means = [
-        run.rolling(window=window_periods, min_periods=window_periods).mean()
-        for _, run in yoy.groupby(run_id)
-    ]
-    return pd.concat(means).dropna()
-
-
 def compute_growth_bands(
     series: AppreciationSeries,
     sustained_window_periods: int = SUSTAINED_STRETCH_PERIODS,
@@ -354,66 +324,45 @@ def compute_growth_bands(
 ) -> GrowthBands:
     """Derive optimistic / base / pessimistic year-over-year bands from a series.
 
-    The three bands follow §2's definitions directly: base is long-run average growth,
-    optimistic is the best sustained stretch actually observed, pessimistic the worst.
-    "Sustained" means the mean over `sustained_window_periods` consecutive year-over-year
-    observations, so no band rests on a single month's print.
+    The arithmetic moved to `tools/growth_bands.py` at U9.3 and is unchanged there; what
+    stays here is the part that is about *this* series — pulling the year-over-year column
+    off the frame, naming the metro when the filtering leaves nothing, and attaching the
+    price side's own provenance to the result. `growth_bands.bands_from_yoy` returns None
+    rather than raising for exactly that reason: it does not know which series it was
+    handed, and this function does.
 
-    `exclude_anomalous_period` re-computes with 2020-2022 removed. It exists because the
-    Scenario/Forecast agent's Tree-of-Thought branching benefits from being able to
-    compare the two rather than asserting one; either choice is defensible, and the
-    result records which was made so the report can say so.
+    See the estimator's docstring for what "sustained" means and why
+    `exclude_anomalous_period` is a fork the caller chooses rather than a setting.
     """
-    yoy = series.frame["yoy_pct"].dropna()
-    in_anomalous = _is_in_anomalous_period(pd.DatetimeIndex(yoy.index))
-    anomalous_share = float(in_anomalous.mean()) if len(yoy) else 0.0
-
-    if exclude_anomalous_period:
-        yoy = yoy[~in_anomalous.reindex(yoy.index).fillna(False)]
-
-    if yoy.empty:
+    bands = growth_bands.bands_from_yoy(
+        series.frame["yoy_pct"],
+        sustained_window_periods=sustained_window_periods,
+        exclude_anomalous_period=exclude_anomalous_period,
+    )
+    if bands is None:
         raise ValueError(
             f"No year-over-year observations for {series.metro} after filtering. "
             f"Series covers {series.first_period.date()} to {series.last_period.date()}."
         )
 
-    # Sustained stretches. If no contiguous run is long enough to fill one window, fall
-    # back to the full-series extremes rather than returning nothing - a short series
-    # still yields a usable band, and the narrower basis is visible via
-    # `n_yoy_observations`.
-    sustained = _sustained_means(yoy, sustained_window_periods)
-    if sustained.empty:
-        sustained = yoy
-
-    optimistic_end = sustained.idxmax()
-    pessimistic_end = sustained.idxmin()
-
-    # A stretch covers [end - (window - 1) months, end]; it touches the anomalous window
-    # if those intervals overlap at all.
-    optimistic_start = optimistic_end - pd.DateOffset(
-        months=sustained_window_periods - 1
-    )
-    optimistic_in_anomalous = bool(
-        optimistic_end >= ANOMALOUS_PERIOD_START
-        and optimistic_start <= ANOMALOUS_PERIOD_END
-    )
-
     return GrowthBands(
         metro=series.metro,
         source_description=series.source_description,
-        base_yoy_pct=float(yoy.mean()),
-        optimistic_yoy_pct=float(sustained.max()),
-        pessimistic_yoy_pct=float(sustained.min()),
-        median_yoy_pct=float(yoy.median()),
-        stdev_yoy_pct=float(yoy.std()),
-        n_yoy_observations=int(len(yoy)),
-        sustained_window_periods=sustained_window_periods,
-        optimistic_stretch_end=optimistic_end,
-        pessimistic_stretch_end=pessimistic_end,
-        includes_anomalous_period=(not exclude_anomalous_period) and anomalous_share > 0,
-        anomalous_period_share=anomalous_share,
-        anomalous_period_excluded=exclude_anomalous_period,
-        optimistic_stretch_in_anomalous_period=optimistic_in_anomalous,
+        base_yoy_pct=bands.base_yoy_pct,
+        optimistic_yoy_pct=bands.optimistic_yoy_pct,
+        pessimistic_yoy_pct=bands.pessimistic_yoy_pct,
+        median_yoy_pct=bands.median_yoy_pct,
+        stdev_yoy_pct=bands.stdev_yoy_pct,
+        n_yoy_observations=bands.n_yoy_observations,
+        sustained_window_periods=bands.sustained_window_periods,
+        optimistic_stretch_end=bands.optimistic_stretch_end,
+        pessimistic_stretch_end=bands.pessimistic_stretch_end,
+        includes_anomalous_period=bands.includes_anomalous_period,
+        anomalous_period_share=bands.anomalous_period_share,
+        anomalous_period_excluded=bands.anomalous_period_excluded,
+        optimistic_stretch_in_anomalous_period=(
+            bands.optimistic_stretch_in_anomalous_period
+        ),
         price_floor=series.price_floor,
         periods_dropped_below_floor=series.periods_dropped_below_floor,
         window_periods=series.window_periods,
