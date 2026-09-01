@@ -156,6 +156,34 @@ def zctas_for_points(
     return resolved
 
 
+def resolve_subject_zip(
+    zip_code: Optional[str],
+    latitude: Optional[float],
+    longitude: Optional[float],
+) -> Optional[str]:
+    """The subject's ZIP, preferring what the listing stated over a polygon join.
+
+    **The one rule for which ZIP a subject is read at**, and it lives here rather than in
+    any agent because more than one caller now needs it and none of them should own it.
+    Three lookups key on the answer — the rent anchor's market index
+    (`agents/valuation_rent`), the sale-price benchmark (same agent, different table), and
+    the calibration check that re-derives a demo listing's declared rent basis
+    (`scripts/verify_demo_calibration.py`). A report that anchored rent to one ZIP while
+    benchmarking price against another would describe two places in one paragraph, and a
+    *verifier* resolving it by a third rule would check a figure no report prints.
+
+    Takes primitives rather than a `DealTerms` for exactly that last caller: the script
+    parses an address out of listing prose and has no state object to pass. Extracted from
+    `valuation_rent._resolve_subject_zip` at U9.6 (originally extracted within that agent
+    at U8.8, when it had two callers instead of three).
+
+    The ZCTA fallback is a Census tabulation area rather than a postal ZIP; the two agree
+    for the great majority of residential ZIPs, and the difference is not worth a second
+    geography for a benchmark keyed at this grain.
+    """
+    return zip_code or lookup_zcta(latitude, longitude)
+
+
 def lookup_zcta(
     latitude: Optional[float], longitude: Optional[float]
 ) -> Optional[str]:

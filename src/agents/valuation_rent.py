@@ -177,16 +177,16 @@ def _resolve_market_label(terms: DealTerms) -> Optional[str]:
 
 
 def _resolve_subject_zip(terms: DealTerms) -> Optional[str]:
-    """The subject's ZIP, preferring what the listing stated over a polygon join.
+    """This agent's spelling of the shared rule — see `zcta_crosswalk.resolve_subject_zip`.
 
-    Extracted at U8.8 because two independent lookups now key on it — the rent anchor's
-    market index and the sale-price benchmark — and a report that anchored rent to one
-    ZIP while benchmarking price against another would be describing two places in one
-    paragraph. The ZCTA fallback is a Census tabulation area rather than a postal ZIP;
-    the two agree for the great majority of residential ZIPs and the difference is not
-    worth a second geography for a benchmark keyed at this grain.
+    Kept as a named function rather than inlined at its two call sites, because both read
+    better naming what they want than repeating the unpacking, and because the indirection
+    is where the rule's move is recorded. Moved out of this module at U9.6, when a third
+    caller appeared outside the graph entirely.
     """
-    return terms.zip_code or zcta_crosswalk.lookup_zcta(terms.latitude, terms.longitude)
+    return zcta_crosswalk.resolve_subject_zip(
+        terms.zip_code, terms.latitude, terms.longitude
+    )
 
 
 def _attach_benchmark(detail: ValuationDetail, terms: DealTerms) -> None:

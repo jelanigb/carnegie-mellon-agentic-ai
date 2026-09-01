@@ -83,10 +83,11 @@ def _resolve_geography(deal: DemoDeal) -> tuple[str | None, str | None, str]:
     fixture: a calibration that trusted a hand-entered county would keep passing after
     the geocoder started placing the address somewhere else.
 
-    **The ZCTA is resolved exactly as `valuation_rent._resolve_subject_zip` resolves it**
-    — the listing's own stated ZIP where there is one, the point-in-polygon join
+    **The ZIP comes from `zcta_crosswalk.resolve_subject_zip`, the same rule the pipeline
+    uses** — the listing's own stated ZIP where there is one, the point-in-polygon join
     otherwise. The market-index half of the anchor is read at that ZIP, so a check that
-    resolved it by a different rule would verify a figure no report prints.
+    resolved it by a rule of its own would verify a figure no report prints. This script
+    reproduced that rule for one commit; extracted at U9.6 so it cannot drift.
     """
     # The address is the first sentence's tail — parsed loosely on purpose, since this is
     # a verification script and a brittle parse here would fail for its own reasons.
@@ -106,7 +107,9 @@ def _resolve_geography(deal: DemoDeal) -> tuple[str | None, str | None, str]:
     fips = county_crosswalk.lookup_county_fips(result.latitude, result.longitude)
     if fips is None:
         return None, None, f"{result.source} gave coordinates, but no county resolved"
-    zcta = zip_code or zcta_crosswalk.lookup_zcta(result.latitude, result.longitude)
+    zcta = zcta_crosswalk.resolve_subject_zip(
+        zip_code, result.latitude, result.longitude
+    )
     return fips, zcta, f"{result.source} -> county {fips}"
 
 
