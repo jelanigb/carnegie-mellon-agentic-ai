@@ -292,11 +292,38 @@ artifact should not outlive the artifact.
 **The architect's first priority, and the thing the demo actually shows.** Four changes to
 one surface, landing together because they are one reviewable rework of the report's top.
 
+**Measured before building, Sept 1, 2026, and the measurement changed the unit.** Full
+investigation and the rule's design in
+[`../design/recommendation.md`](../design/recommendation.md); the evidence is reproducible
+with `scripts/sale_premium_distribution.py`. **The threshold at the center of this
+subsection had nothing under it** — the committed benchmark table holds one median per ZIP
+and no dispersion — so 44,358 real sales were re-pulled to ask what a premium is actually
+worth. ZIP tier: +15% is the 68th percentile of actual sales, +30% the 80th, +50% the 89th.
+A threshold is defensible there. **Metro tier is twice as wide and Los Angeles is not in
+the data at all** (Proposition 13 publishes assessed value, not price), so every metro
+figure is extrapolated from New York and Chicago.
+
+**That falsified the worked example this subsection was planned around**, and the
+correction is a subsection of its own. `overpriced` is a Los Angeles deal, 90027 has **no
+ZIP benchmark**, so its +55% is 55% over a *metro* median — the **78th percentile**, an
+ordinary sale. **Re-sited to a market with a local tier** (architect, Sept 1) rather than
+bending the threshold to fit the fixture; the three alternatives and why each was declined
+are in the design doc. It lands in U9.4 rather than U9.6 so that U9.5 records it once.
+
 **1. The recommendation is computed by the Critic, not the Summarizer.** The Critic
 already aggregates flags into confidence and decides routing; a recommendation is the same
 kind of judgment over the same state, and putting it there keeps the Summarizer's rule
 that it *reports* rather than computes. A new `DealState` field carries the verdict and
 the reasons behind it.
+
+**Four verdicts, and reject needs two independent failures.** *No recommendation* (no price
+or no benchmark) · *Do not proceed* (premium past the reject threshold **and** an
+uncorroborated rent claim) · *Proceed with caution* (either one alone) · *Proceed*.
+Thresholds are set at stated percentiles rather than round numbers — caution at p80, reject
+at p90 — so the report can say what a threshold means. Reject takes two instruments because
+the benchmark is explicitly not a valuation: the report says so in bold, and resting an
+outright rejection on that one figure would contradict the caveat beside it. The rule reads
+neither the confidence score nor the escalation decision, because those are axis 1.
 
 **Deterministic, and the reasoning is measured rather than stylistic.** OQ-17 found this
 model scoring an identical prompt 0.05 on one call and 0.95 on the next, same deployment,
@@ -316,8 +343,9 @@ a second, and it lands where the reader is actually looking.
 **How it works.** The model produces **its own independent verdict from the same state**,
 used only as a cross-check. On the `overpriced` deal:
 
-- **Rule:** asking price 55% above the ZIP benchmark → exceeds threshold → *"Proceed with
-  caution — priced materially above comparable sales."*
+- **Rule:** asking price 55% above the ZIP benchmark → past the caution threshold, rents
+  corroborated so the reject condition is not met → *"Proceed with caution — priced
+  materially above comparable sales."*
 - **Model, same state, independently:** may weigh it differently — the premium is declared,
   the rents are corroborated — and reach *"Do not proceed; the premium is not supported by
   the rent it generates."*
