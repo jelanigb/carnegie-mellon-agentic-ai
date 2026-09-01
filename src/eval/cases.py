@@ -353,6 +353,26 @@ _DEMO_PREDICTIONS: dict[str, tuple[Verdict, str]] = {
         "golden fixtures at this address skip, so it has two failure surfaces they do "
         "not.",
     ),
+    "los-angeles-current": (
+        Verdict.REPORTS,
+        "**The shadow of `los-angeles`: the same property with its stated rents declared "
+        "against the anchor the system actually uses (#19) instead of the one #11 "
+        "calibrated it to.** Everything else is byte-identical — address, description, "
+        "asking price, price basis.\n\n"
+        "**The prediction is a claim about this system's architecture, and the run can "
+        "falsify it.** No flag in this build reads a stated rent: `deal_terms.unit_rents` "
+        "is written by the Extractor and read only by `summarizer._stated_rent_section`, "
+        "and #20 holds the stated-versus-modelled comparison as a disclosure with "
+        "`RENT_CLAIM_DIVERGENCE_DISCLOSURE_THRESHOLD` left at `None`. So re-basing two "
+        "rent figures should change **no flag, no confidence contribution and no "
+        "verdict** — this deal should raise exactly what `los-angeles` raises and "
+        "**report**. If it does not, something reads a stated rent that this repository "
+        "believes reads nothing, which is a finding worth more than the row.\n\n"
+        "**What is expected to move is one line of prose, and that is the point.** The "
+        "original's stated rents sit ~1% *above* the modelled estimate; these sit ~6% "
+        "*below* it. Same property, same model, opposite sign — which is what the anchor "
+        "change did to a listing's own figures, shown rather than asserted.",
+    ),
 }
 
 

@@ -195,6 +195,49 @@ DEMO_DEALS: dict[str, DemoDeal] = {
         price_basis="redfin_metro_median:Los Angeles",
         rent_basis="hud_fmr:2",
     ),
+    # **The shadow deal (U9.6).** `los-angeles` with its two stated rents re-based on the
+    # anchor the system actually uses, and nothing else touched — same address, same
+    # description, same asking price, same price basis. #19 was a decision about rent, so
+    # letting the asking price move with it would confound the one thing this deal exists
+    # to isolate.
+    #
+    # **One shadow rather than the five originally proposed.** Five would need five
+    # calibrations, five sets of verification expectations and five new rows in a table
+    # this unit is already extending. One proves the method; four more are mechanical
+    # repeats, and shedding four unbuilt deals costs nothing where shedding four
+    # half-built ones would cost the batch.
+    #
+    # **Why Los Angeles, when it is the smallest of the three available moves.** Measured
+    # Sept 2, 2026: re-basing moves Echo Park's stated rents −7.2%, against +14% in Uptown
+    # and +34% in Logan Square. The size of the number is not what the shadow is for. On
+    # `los-angeles` the report is clean — no warns, confidence 1.00 — so the re-basing is
+    # the *only* difference between two otherwise identical reports, and it shows up as a
+    # sign flip on one line: the stated rents sit ~1% **above** the modelled estimate on
+    # the original and ~6% **below** it here. A Logan Square shadow would move three times
+    # as far and land it inside a report that escalates carrying ten disclosures, where a
+    # reader could attribute it to nothing in particular.
+    "los-angeles-current": DemoDeal(
+        key="los-angeles-current",
+        listing=(
+            "For sale: 1425 W Sunset Blvd, Los Angeles, CA 90026. Charming 2-unit "
+            "duplex in Echo Park, each unit 2 bed / 1 bath, approx 950 sq ft per unit. "
+            "Renovated kitchens, in-unit laundry, off-street parking. Current tenants "
+            "pay $2,650 and $2,730 per month. Asking $1,049,000."
+        ),
+        price=1_049_000,
+        unit_rents=(2_650, 2_730),
+        price_basis="redfin_metro_median:Los Angeles",
+        rent_basis="market_anchor:2",
+        notes=(
+            "The `los-angeles` listing with its stated rents declared against the market "
+            "anchor (#19) instead of HUD's schedule (#11). The original is deliberately "
+            "left untouched, so the pair shows what the anchor change means for a "
+            "listing's own figures rather than asserting it. **The direction is the "
+            "finding**: HUD's 40th-percentile schedule is usually described as running "
+            "under the market, and in this ZIP it runs 7.3% over — the county-wide "
+            "figure covers Malibu to Compton, and Echo Park sits below its average."
+        ),
+    ),
     "chicago": DemoDeal(
         key="chicago",
         listing=(

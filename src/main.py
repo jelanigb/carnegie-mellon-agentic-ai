@@ -7,6 +7,7 @@
     .venv/bin/python main.py --deal coord-conflict # supplied coords vs. the address
     .venv/bin/python main.py --deal overpriced     # asking price 55% over the benchmark
     .venv/bin/python main.py --deal chicago-uptown # clean on both axes; priced at its ZIP median
+    .venv/bin/python main.py --deal los-angeles-current  # los-angeles, rents re-based on the current anchor
     .venv/bin/python main.py --file listing.txt --coords 34.0522,-118.2437
     .venv/bin/python main.py --deal chicago --no-retrieval   # the U4 ablation
 
