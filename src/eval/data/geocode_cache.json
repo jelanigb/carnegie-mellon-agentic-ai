@@ -42,5 +42,17 @@
     "longitude": -74.23339264599,
     "matched_address": "7001 AMBOY RD, STATEN ISLAND, NY, 10307",
     "source": "census_geocoder"
+  },
+  "4700 N Racine Ave, Chicago, IL": {
+    "latitude": 41.967255849937,
+    "longitude": -87.659730062071,
+    "matched_address": "4700 N RACINE AVE, CHICAGO, IL, 60640",
+    "source": "census_geocoder"
+  },
+  "4700 N Racine Ave, Chicago, IL, 60640": {
+    "latitude": 41.967255849937,
+    "longitude": -87.659730062071,
+    "matched_address": "4700 N RACINE AVE, CHICAGO, IL, 60640",
+    "source": "census_geocoder"
   }
 }

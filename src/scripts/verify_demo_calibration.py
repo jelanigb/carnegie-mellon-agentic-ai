@@ -38,7 +38,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from demo_deals import DEMO_DEALS, PRICE_TOLERANCE, RENT_TOLERANCE, DemoDeal
-from tools import county_crosswalk, geocoding, hud_fmr, redfin_data
+from tools import county_crosswalk, geocoding, hud_fmr, redfin_data, sale_benchmarks
 
 
 def _redfin_median(metro: str) -> float | None:
@@ -81,13 +81,33 @@ def check_price(deal: DemoDeal) -> list[str]:
     if deal.price_basis is None:
         return [f"  price      ${deal.price:>12,.0f}   NO BASIS — {deal.notes or 'stated as unanchored'}"]
 
-    source, _, metro = deal.price_basis.partition(":")
-    if source != "redfin_metro_median":
+    source, _, target = deal.price_basis.partition(":")
+    if source == "redfin_metro_median":
+        median = _redfin_median(target)
+        if median is None:
+            return [f"  price      FAIL — Redfin extract has no metro {target!r}"]
+        against = f"Redfin {target} median"
+    elif source == "zip_sale_benchmark":
+        # **The tier a deal is calibrated to should be the tier its report reads**
+        # (U9.4). `valuation_rent` prefers the ZIP benchmark and falls back to the metro
+        # median, so a deal sited in a market with a local tier and calibrated to the
+        # metro figure is verified against a number its own report never prints. Read
+        # from the committed table rather than the network for the same reason
+        # `tools/sale_benchmarks.py` does: a calibration check that depends on a
+        # municipal portal being up reports differently depending on the weather.
+        benchmark = sale_benchmarks.lookup(target)
+        if benchmark is None:
+            return [
+                f"  price      FAIL — no ZIP benchmark for {target!r} "
+                f"({sale_benchmarks.unavailable_reason(target, None)})"
+            ]
+        median = benchmark.median_sale_price
+        against = (
+            f"ZIP {target} median (n={benchmark.n_sales:,}, "
+            f"{benchmark.market_label})"
+        )
+    else:
         return [f"  price      UNKNOWN BASIS {deal.price_basis!r}"]
-
-    median = _redfin_median(metro)
-    if median is None:
-        return [f"  price      FAIL — Redfin extract has no metro {metro!r}"]
 
     drift = (deal.price - median) / median
     # A deal may declare a deliberate premium over its basis. The check is then whether
@@ -96,12 +116,12 @@ def check_price(deal: DemoDeal) -> list[str]:
     # failure of it.
     expected = deal.price_premium_to_basis or 0.0
     verdict = "ok" if abs(drift - expected) <= PRICE_TOLERANCE else "OUT OF TOLERANCE"
-    against = (
+    declared = (
         f"   (declared {expected:+.0%} premium)" if deal.price_premium_to_basis else ""
     )
     return [
-        f"  price      ${deal.price:>12,.0f}   vs Redfin {metro} median "
-        f"${median:,.0f}   {drift:+.1%}{against}   {verdict}"
+        f"  price      ${deal.price:>12,.0f}   vs {against} "
+        f"${median:,.0f}   {drift:+.1%}{declared}   {verdict}"
     ]
 
 

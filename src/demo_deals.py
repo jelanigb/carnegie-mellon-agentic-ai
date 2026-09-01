@@ -102,10 +102,16 @@ class DemoDeal:
     unit_rents: tuple[float, ...] = ()
 
     # How to re-derive each figure. `redfin_metro_median` names a metro in
-    # `tools/redfin_data.py`; `hud_fmr` names the bedroom count to look up against the
-    # county the listing's own address resolves to. `None` means the figure has no
-    # market basis, which is a statement rather than an omission — see the module
+    # `tools/redfin_data.py`; `zip_sale_benchmark` names a ZIP in
+    # `tools/data/zip_sale_benchmarks.json`; `hud_fmr` names the bedroom count to look up
+    # against the county the listing's own address resolves to. `None` means the figure
+    # has no market basis, which is a statement rather than an omission — see the module
     # docstring on Staten Island.
+    #
+    # **A deal should be calibrated to the benchmark its own report reads** (U9.4). The
+    # Valuation agent prefers the ZIP tier and falls back to the metro median, so a deal
+    # in a market with a local tier that is calibrated to the metro figure is being
+    # checked against a number its report never prints.
     price_basis: Optional[str] = None
     rent_basis: Optional[str] = None
 
@@ -228,26 +234,50 @@ DEMO_DEALS: dict[str, DemoDeal] = {
     "overpriced": DemoDeal(
         key="overpriced",
         listing=(
-            "For sale: 1801 N Vermont Ave, Los Angeles, CA 90027. Los Feliz 2-unit "
-            "property, each unit 2 bed / 1 bath, approx 950 sq ft per unit. Strong "
-            "rental history, excellent walkability, tremendous upside for the right "
-            "buyer. Current tenants pay $2,800 and $2,900 per month. Asking $1,625,000."
+            "For sale: 4700 N Racine Ave, Chicago, IL 60640. Uptown 2-flat, 2 bed / "
+            "1 bath per unit, approx 950 sq ft each. Strong rental history, excellent "
+            "walkability, tremendous upside for the right buyer. Current tenants pay "
+            "$1,750 and $1,800 per month. Asking $1,345,000."
         ),
-        price=1_625_000,
-        unit_rents=(2_800, 2_900),
-        price_basis="redfin_metro_median:Los Angeles",
-        # ~55% above the metro median, deliberately. Everything else about this listing
-        # is ordinary — same market, same unit mix, same FMR-anchored rents as the Los
-        # Angeles deal — so the asking price is the only thing that moved, and the
-        # report's price-versus-benchmark disclosure is the only place it shows up.
+        price=1_345_000,
+        unit_rents=(1_750, 1_800),
+        # **Re-sited from Los Feliz to Logan Square on Sept 1, 2026, and the reason is a
+        # measurement rather than a preference (U9.4).** This deal was
+        # `1801 N Vermont Ave, Los Angeles` at 55% above the Redfin *metro* median. Los
+        # Angeles has no ZIP-level sale benchmark at all — California publishes assessed
+        # value under Proposition 13, see `scripts/build_sale_benchmarks.py` — so the
+        # only reference available there is metro-wide, and
+        # `scripts/sale_premium_distribution.py` measured what a premium against one of
+        # those is worth: **55% over a metro median is the 78th percentile of actual
+        # sales.** An ordinary transaction. The deal documented as deliberately
+        # mispriced was, on the evidence, priced unremarkably, and U9.4's recommendation
+        # rule returned *Proceed* on it.
+        #
+        # Uptown has a local tier built from 148 recorded sales, where the same 55% is
+        # around the 90th percentile — a premium the data can actually call unusual. The
+        # basis moves with the deal: the report reads this listing against the ZIP
+        # benchmark, so that is what the price is calibrated to.
+        #
+        # **Uptown rather than Logan Square, and the reason is what each market does to
+        # axis 1.** Both have a local tier. Logan Square was tried first and its comp set
+        # relaxes the size band, which raises a critical objection and escalates the deal
+        # — so the report would have shown a cautionary recommendation beside an
+        # escalation, and a reader could not tell which of the two the asking price
+        # caused. Uptown returns eight matching comps and reports cleanly, as
+        # `chicago-uptown-duplex` does on the same profile, so **the price is the only
+        # thing that fires anywhere in the report.**
+        price_basis="zip_sale_benchmark:60640",
         price_premium_to_basis=0.55,
         rent_basis="hud_fmr:2",
+        # Now anchored in Cook County like the `chicago` deal — same county, same unit
+        # mix, same stated rents, same FY2026 2BR schedule. The asking price is the only
+        # engineered figure, which is what makes the report legible: one thing moved.
         notes=(
-            "Deliberately mispriced. Exists because every other demo listing is "
-            "calibrated to the same benchmark the report reads its asking price "
-            "against, so the disclosure reads 0% on all of them and cannot be seen to "
-            "work. Read as a fixture for that check, not as a claim that Los Feliz "
-            "trades at this price."
+            "Deliberately mispriced, and priced against the benchmark the report "
+            "actually reads for it. Exists because every other demo listing is "
+            "calibrated to its own benchmark, so the price-versus-benchmark disclosure "
+            "reads near 0% on all of them and cannot be seen to work. Read as a fixture "
+            "for that check, not as a claim that Uptown trades at this price."
         ),
     ),
     "coord-conflict": DemoDeal(
