@@ -126,6 +126,7 @@ def beam_search(
     prune_threshold: float | dict[int, float] = config.TOT_PRUNE_THRESHOLD,
     tie_epsilon: float = config.TOT_TIE_EPSILON,
     conservatism_key: Optional[Callable[[Candidate], float]] = None,
+    reserved: Optional[Callable[[Candidate], bool]] = None,
 ) -> SearchResult:
     """Run the beam, recording every candidate's fate.
 
@@ -156,6 +157,21 @@ def beam_search(
     is asymmetric, and a coin flip between two hypotheses is a decision the system should
     not make silently. The caller still gets `top_two_score_gap` so it can disclose that
     the tie happened.
+
+    `reserved` names a candidate the level must keep if it has one, whatever the ranking
+    says. U6 uses it for the neutral pairing, and the defect it answers is specific: base
+    rent with base price scored 0.70 on a Los Angeles run, cleared the 0.40 threshold, and
+    came **fourth** against a beam of three - so the row labelled "Base" was base rent
+    paired with pessimistic price, and the case the system actually expects appeared
+    nowhere. A reader asking "what do you think will happen?" had no row to look at.
+
+    **It rescues from the rank, never from the threshold.** A reserved candidate that
+    scored below the bar is a candidate the evaluator judged unfounded, and forcing it
+    into the report would be overriding the evaluation rather than completing it. What
+    this corrects is a beam that is a pure top-*k* deciding a question about coverage.
+    The candidate it displaces is the lowest-ranked survivor, and it enters the ledger
+    saying it was displaced rather than that it was outscored, because that is what
+    happened.
     """
     result = SearchResult()
     parents: list[Candidate] = []
@@ -232,23 +248,41 @@ def beam_search(
         width = width_for(depth)
         ranked = _rank(above, tie_epsilon, conservatism_key)
         survivors, cut = ranked[:width], ranked[width:]
+
         if survivors and cut:
             # Read off `ranked` rather than off the raw scores, because `ranked` is the
             # order the cut was actually taken in — including the conservatism tie-break,
             # which is the thing this margin exists to expose.
+            #
+            # **Measured before any reservation, deliberately.** This margin is how close
+            # the *evaluator's own* cut was, and the flag built on it says a near-zero
+            # value means the tie-break rather than the evidence chose. A displacement is
+            # a stated policy overriding a rank the evaluator was clear about, which is a
+            # different fact and would make that sentence false — it is disclosed on the
+            # displaced candidate's own ledger row instead.
             result.cut_boundary_gap_by_depth[depth] = (survivors[-1].score or 0.0) - (
                 cut[0].score or 0.0
             )
+
+        displaced: Optional[Candidate] = None
+        if reserved is not None and survivors and cut:
+            if not any(reserved(c) for c in survivors):
+                keeper = next((c for c in cut if reserved(c)), None)
+                if keeper is not None:
+                    displaced = survivors[-1]
+                    survivors = survivors[:-1] + [keeper]
+                    cut = [displaced] + [c for c in cut if c is not keeper]
         for candidate in cut:
-            result.ledger.append(
-                replace(
-                    candidate,
-                    prune_reason=(
-                        f"Scored {candidate.score:.2f}, outside the top {width} at "
-                        f"this level."
-                    ),
-                )
+            reason = (
+                f"Scored {candidate.score:.2f}, outside the top {width} at this level."
             )
+            if candidate is displaced:
+                reason = (
+                    f"Scored {candidate.score:.2f}, inside the top {width} at this "
+                    f"level, but displaced so that the neutral case is always among "
+                    f"those reported."
+                )
+            result.ledger.append(replace(candidate, prune_reason=reason))
         result.ledger.extend(survivors)
 
         if len(ranked) >= 2:

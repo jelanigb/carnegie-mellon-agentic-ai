@@ -489,6 +489,35 @@ def _make_scorer(context: str, detail: ForecastDetail) -> tot.Scorer:
     return score
 
 
+def _is_neutral_pairing(candidate: tot.Candidate) -> bool:
+    """The base-rent / base-price pairing, which the report must always be able to show.
+
+    **The question a reader asks first is "what do you actually expect?", and until #21
+    the report frequently had no row that answered it.** Base/base is not privileged
+    because it is more likely - the labels come from projected outcome, so it may well
+    render as the optimistic row - but because it is the only pairing that asserts nothing
+    beyond the two central estimates, and a three-row outlook that cannot include it is
+    describing a range with no middle.
+
+    The evaluator's instructions were corrected in the same unit to stop marking the
+    neutral case down for *being* neutral, and on a live Los Angeles run that alone lifted
+    it from 0.70 to 0.94. **Both changes are kept, because they answer different
+    failures**: the instruction fixes the evaluator's reading of its task, and this fixes
+    a beam that is a pure top-*k* being asked a question about coverage. A prompt that
+    scores well today is not a guarantee, and OQ-17 measures how far this model's scores
+    move between identical calls.
+
+    A one-sided deal has no neutral *pairing* - `_pairings` gives the absent side a single
+    `None` slot - so this reads both bands rather than assuming two exist.
+    """
+    payload = candidate.payload
+    return (
+        candidate.depth == 2
+        and payload.get("rent_band") == "base"
+        and payload.get("price_band") == "base"
+    )
+
+
 def _conservatism(candidate: tot.Candidate) -> float:
     """Tie-break key: lower is more conservative, so it sorts first.
 
@@ -774,6 +803,7 @@ def scenario_forecast_agent(state: DealState) -> dict:
             2: config.TOT_PRUNE_THRESHOLD,
         },
         conservatism_key=_conservatism,
+        reserved=_is_neutral_pairing,
     )
 
     detail.framings_considered = sum(1 for c in result.ledger if c.depth == 1)
