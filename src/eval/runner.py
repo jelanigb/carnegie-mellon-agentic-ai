@@ -5,8 +5,11 @@ Runs every case in `eval/cases.py` through the **real compiled graph** — the s
 `eval/results/`:
 
 1. **The results table**, a row per case: comps, confidence, disclosures by severity,
-   outcome, whether the flag the case targets actually fired, and whether the outcome
-   matched the verdict declared before the run.
+   outcome, the recommendation, whether the flag the case targets actually fired, and
+   whether the outcome matched the verdict declared before the run. **Outcome and
+   recommendation are the two axes** (U9.4) and the table keeps them apart: the first says
+   whether the system can stand behind its numbers, the second whether the property is
+   worth buying, and a row can escalate while recommending that a buyer proceed.
 2. **The coverage census**, `set(FlagKind)` minus the union of every case's raised kinds.
    This is the comparison `state.FlagKind`'s docstring names as the reason it is an enum
    rather than a set of string constants, and it is what upgrades the report's claim from
@@ -20,10 +23,17 @@ uncovered gap would misstate the harness's own reach in the pessimistic directio
 as omitting it would in the optimistic one.
 
 Run:
-    .venv/bin/python -m eval.runner                 # every case
-    .venv/bin/python -m eval.runner --tier golden   # replays recordings; no live calls
+    .venv/bin/python -m eval.runner                 # every case; replays, no live calls
+    .venv/bin/python -m eval.runner --tier golden
     .venv/bin/python -m eval.runner --case chicago
-    .venv/bin/python -m eval.runner --tier golden --record   # re-record, deliberately
+    .venv/bin/python -m eval.runner --record        # re-record, deliberately
+    .venv/bin/python -m eval.runner --case los-angeles --live   # what a fresh run does
+
+**Every tier replays by default as of U9.5**, demo deals included. Reaching a model is now
+something someone typed — `--record` to freeze a run into the committed store, `--live` to
+see what an unfrozen one does without writing it. Before that the demo rows fell through
+to a gitignored development cache, so the seven figures the report quoted from them could
+not be re-derived from a clone; `_case_environment` carries what that cost.
 """
 
 from __future__ import annotations
@@ -42,7 +52,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import config
 from eval.cases import EvalCase, Fault, Tier, Verdict, VerdictSource, all_cases
 from graph import build_graph
-from state import DealState, DealTerms, FlagKind, Severity
+from state import (
+    RECOMMENDATION_LABEL,
+    DealState,
+    DealTerms,
+    FlagKind,
+    RecommendationDetail,
+    Severity,
+)
 from tools import geocoding, zori
 
 # The month `Fault.STALE_RENT_INDEX` pins the market index to. Chosen to sit well past
@@ -83,10 +100,34 @@ class CaseResult:
     needs_human_review: bool = False
     rework_count: int = 0
     error: Optional[str] = None
+    recommendation: Optional[RecommendationDetail] = None
 
     @property
     def observed(self) -> Verdict:
         return Verdict.ESCALATES if self.needs_human_review else Verdict.REPORTS
+
+    @property
+    def recommendation_cell(self) -> str:
+        """Axis 2 for the table — the verdict, and whether a second reading split from it.
+
+        **Reported, never scored, and that is a deliberate limit on this column** (U9.5).
+        A case's declared `verdict` is axis 1; nothing in `cases.py` declares an expected
+        recommendation, so this column records what the rule produced rather than checking
+        it against anything. Authoring 21 expected verdicts *after* the rule exists would
+        score the rule against a reading of itself, which is the error `VerdictSource`
+        exists one column over to prevent. What the column does buy is a regression
+        surface: axis 2 is a pure function, so any movement here between two batches on
+        the same recordings is a real change in the rule and nothing else.
+
+        The disagreement marker earns its place for the same reason the `†`/`‡` markers
+        do — it is the only visible evidence that the second reasoning locus (OQ-22) ran
+        at all, and a batch where nothing ever disagrees would say the cross-check is
+        inert.
+        """
+        if self.recommendation is None:
+            return "—"
+        label = RECOMMENDATION_LABEL[self.recommendation.verdict]
+        return f"{label} ⚖" if self.recommendation.cross_check_disagrees else label
 
     @property
     def has_critical(self) -> bool:
@@ -147,7 +188,7 @@ class CaseResult:
 
 
 @contextlib.contextmanager
-def _case_environment(case: EvalCase, record: bool) -> Iterator[None]:
+def _case_environment(case: EvalCase, record: bool, live: bool = False) -> Iterator[None]:
     """Every module-level override a case needs, applied and unwound as one unit.
 
     Three separate things live here, and they are together because they share one
@@ -161,9 +202,30 @@ def _case_environment(case: EvalCase, record: bool) -> Iterator[None]:
     rather than the command-line switch it is in `main.py`, so the ungrounded run is a row
     in the same table as every grounded one.
 
-    **2. The response cache (U8.2).** Tiers `golden` and `replay` point at the *committed*
-    recordings in `config.EVAL_RECORDINGS_DIR` and replay them; `live` is left on whatever
-    the environment says, which is what makes it live.
+    **2. The response cache (U8.2; every tier since U9.5).** All three tiers point at the
+    *committed* recordings in `config.EVAL_RECORDINGS_DIR` and replay them. Passing
+    `live=True` is the only way to reach a model, and it is a typed flag rather than a
+    property of the tier.
+
+    **This used to be true of `golden` and `replay` only, and the exception was a
+    reproducibility hole rather than a feature.** `live` rows fell through to whatever the
+    environment said — in practice `LLM_CACHE_MODE=read_write` against the *gitignored*
+    development cache — so a demo row was served from a developer's working store when it
+    happened to be warm and called the model when it was not. Two things followed, and
+    both were found at U9.5 rather than designed:
+
+    - **The seven demo rows could not be reproduced from a fresh clone**, by construction,
+      against this harness's own standard that a figure a clone cannot re-derive is an
+      assertion rather than evidence (`eval/README.md`). They are unscored baselines, so
+      it was defensible; it was nowhere stated, which is the part that was not.
+    - **The published `staten-island` row said 1 comp where the build produces 0** — a
+      stale extraction in that development cache, surviving in the results table as a
+      number nothing could re-derive.
+
+    Pinning every tier retires the class rather than the instance. What is lost is that no
+    row now exercises a live call by default, so the batch stops being an incidental check
+    that the model is reachable; `--live` restores that deliberately, and
+    `tools/diagnostics.verify_models_live()` was always the thing actually testing it.
 
     This wiring is what makes the tier property in `eval/README.md` true rather than
     aspirational, and it was **not** true before U8.2 — a fact worth recording, because the
@@ -202,7 +264,7 @@ def _case_environment(case: EvalCase, record: bool) -> Iterator[None]:
     previous_llm_complete = LlmClient.complete
 
     config.RETRIEVAL_ENABLED = case.retrieval_enabled
-    if case.tier is not Tier.LIVE:
+    if not live:
         config.LLM_CACHE_DIR = config.EVAL_RECORDINGS_DIR
         config.LLM_CACHE_MODE = CacheMode.READ_WRITE if record else CacheMode.REPLAY
 
@@ -277,7 +339,7 @@ def _case_environment(case: EvalCase, record: bool) -> Iterator[None]:
         LlmClient.complete = previous_llm_complete
 
 
-def run_case(case: EvalCase, record: bool = False) -> CaseResult:
+def run_case(case: EvalCase, record: bool = False, live: bool = False) -> CaseResult:
     """One case, end to end, through the real compiled graph.
 
     `build_graph()` defaults to an in-memory checkpointer, so nothing persists between
@@ -288,6 +350,12 @@ def run_case(case: EvalCase, record: bool = False) -> CaseResult:
     accumulated to that point plus an `__interrupt__` key rather than a finished report.
     That is what this harness wants: the Critic has already run, and no resume is issued
     because nothing here needs a rendered report.
+
+    **The recommendation survives that pause, which is why the table can carry it.** The
+    Critic computes both axes before it decides routing, so an escalated row still has a
+    verdict on the property — and `staten-island` is exactly the row where the two differ.
+    Reading axis 2 only from rows that completed would have shown it only where it was
+    least interesting.
     """
     terms = case.terms.model_copy(deep=True) if case.terms else DealTerms()
     if case.supplied_coords is not None:
@@ -299,7 +367,7 @@ def run_case(case: EvalCase, record: bool = False) -> CaseResult:
     )
 
     try:
-        with _case_environment(case, record):
+        with _case_environment(case, record, live):
             result = build_graph().invoke(
                 state,
                 {"configurable": {"thread_id": f"eval-{case.key}-{uuid4().hex[:8]}"}},
@@ -317,6 +385,7 @@ def run_case(case: EvalCase, record: bool = False) -> CaseResult:
         flags=result.get("flags", []),
         needs_human_review=bool(result.get("needs_human_review")),
         rework_count=int(result.get("rework_count") or 0),
+        recommendation=result.get("recommendation"),
     )
 
 
@@ -331,8 +400,8 @@ def census(results: list[CaseResult]) -> tuple[set[FlagKind], set[FlagKind], set
 def _results_table(results: list[CaseResult]) -> str:
     lines = [
         "| case | tier | comps | reworks | confidence | disclosures | outcome | "
-        "target fired | verdict |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "recommendation | target fired | verdict |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for r in results:
         # The provenance column the plan asks for, carrying the injection where there is
@@ -341,7 +410,7 @@ def _results_table(results: list[CaseResult]) -> str:
         tier = f"{r.case.tier}" + (f" + {r.case.injects}" if r.case.injects else "")
         if r.error:
             lines.append(f"| `{r.case.key}` | {tier} | — | — | — | — | "
-                         f"**ERROR** | — | {r.error} |")
+                         f"**ERROR** | — | — | {r.error} |")
             continue
         counts = r.severity_counts()
         disclosures = f"{len(r.flags)} (" + ", ".join(
@@ -363,8 +432,8 @@ def _results_table(results: list[CaseResult]) -> str:
         outcome = f"{r.observed}" + marker
         lines.append(
             f"| `{r.case.key}` | {tier} | {r.comps} | {r.rework_count} | "
-            f"{r.confidence:.2f} | {disclosures} | {outcome} | {target} | "
-            f"{mark}{suffix} |"
+            f"{r.confidence:.2f} | {disclosures} | {outcome} | "
+            f"{r.recommendation_cell} | {target} | {mark}{suffix} |"
         )
 
     if any(r.escalated_above_threshold and r.has_critical for r in results):
@@ -383,6 +452,28 @@ def _results_table(results: list[CaseResult]) -> str:
             f"alone ({config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD:.2f} threshold) would "
             f"have let the deal report. Direct evidence that the rework-budget rule "
             f"does something the score alone would not (U8.5/OQ-16).",
+        ]
+    if any(r.recommendation is not None for r in results):
+        lines += [
+            "",
+            "**`outcome` and `recommendation` are different questions and are meant to "
+            "be read apart.** `outcome` is axis 1 — whether the system can stand behind "
+            "its own numbers. `recommendation` is axis 2 — whether the property is worth "
+            "buying. A row can escalate and still recommend proceeding, and "
+            "`staten-island` is that row: zero comparables, and an asking price well "
+            "under its ZIP median. Only axis 1 is scored in the `verdict` column; axis 2 "
+            "is reported, because no case declares an expected recommendation and "
+            "writing 21 of them after the rule exists would score the rule against "
+            "itself.",
+        ]
+    if any(r.recommendation is not None and r.recommendation.cross_check_disagrees
+           for r in results):
+        lines += [
+            "",
+            "⚖ An independent model reading of the same evidence reached a *different* "
+            "verdict, which the report discloses rather than resolves (U9.4, OQ-22). The "
+            "rule always decides; the cross-check can only annotate. The marker is the "
+            "only place a batch shows that second reasoning locus ran at all.",
         ]
     return "\n".join(lines)
 
@@ -445,7 +536,8 @@ def _report(results: list[CaseResult]) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tier", choices=[t.value for t in Tier],
-                        help="Run only this tier. `golden` makes no model calls.")
+                        help="Run only this tier. No tier makes model calls without "
+                             "--live or --record.")
     parser.add_argument("--case", action="append", dest="keys",
                         help="Run only this case key. Repeatable.")
     parser.add_argument("--out", type=Path, default=RESULTS_DIR / "results.md")
@@ -453,10 +545,25 @@ def main() -> None:
     # store, so it changes evidence a report quotes, and that should be something someone
     # typed rather than something that happened because a prompt drifted.
     parser.add_argument("--record", action="store_true",
-                        help="Record model responses for golden/replay cases into the "
-                             "committed store instead of replaying them. Makes live "
-                             "calls; commit the result deliberately.")
+                        help="Record model responses into the committed store instead "
+                             "of replaying them. Makes live calls; commit the result "
+                             "deliberately.")
+    # Every tier replays by default since U9.5, so reaching a model is now something
+    # someone typed. Kept separate from --record because the two want opposite things:
+    # --record makes live calls in order to *freeze* them, this one makes them in order
+    # to see what an unfrozen run does. Asking for both is a contradiction rather than a
+    # combination, so it is rejected rather than silently resolved in some order.
+    parser.add_argument("--live", action="store_true",
+                        help="Call the model instead of replaying recordings, without "
+                             "writing them. Use to check what a fresh run does; the "
+                             "published table is the replayed one.")
     args = parser.parse_args()
+    if args.live and args.record:
+        raise SystemExit(
+            "--live and --record are contradictory: --record exists to freeze a live "
+            "run into the committed store, --live exists to run without touching it. "
+            "Pick one."
+        )
 
     cases = all_cases()
     if args.tier:
@@ -468,8 +575,9 @@ def main() -> None:
 
     results = []
     for index, case in enumerate(cases, start=1):
-        print(f"[{index}/{len(cases)}] {case.key} ({case.tier})...", flush=True)
-        results.append(run_case(case, record=args.record))
+        mode = " live" if args.live else " recording" if args.record else ""
+        print(f"[{index}/{len(cases)}] {case.key} ({case.tier}){mode}...", flush=True)
+        results.append(run_case(case, record=args.record, live=args.live))
 
     report = _report(results)
     args.out.parent.mkdir(parents=True, exist_ok=True)

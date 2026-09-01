@@ -10,6 +10,7 @@ the cases to be written.
 ```bash
 .venv/bin/python -m eval.runner                 # every case
 .venv/bin/python -m eval.runner --tier golden   # replays recordings; no live calls
+.venv/bin/python -m eval.runner --case los-angeles --live   # what a fresh run does
 .venv/bin/python -m eval.runner --case chicago
 .venv/bin/python -m eval.runner --tier golden --record   # re-record, deliberately
 ```
@@ -41,7 +42,7 @@ separate store under `data/processed/llm_cache/` (gitignored), so iterating on a
 does not churn the committed recordings — review attention is this project's scarcest
 resource and should not be spent on files nobody needs to read.
 
-## Two tiers of case, because most flags do not come from the model
+## Three tiers of case, because most flags do not come from the model
 
 Of the flag kinds in `state.FlagKind`, the substantial majority — sparse comps, radius
 relaxation, the FMR bedroom cap, anomalous-period inclusion, rework exhaustion — are
@@ -56,11 +57,26 @@ them slower, non-reproducible, and no more truthful.
    that genuinely originate in the Extractor need it to actually run, so those cases
    replay recorded responses via `LLM_CACHE_MODE=replay`.
 
-A run of tier 1 or 2 makes **no live model calls**, which is why the harness is
-quota-independent and fast. That is also a limitation, and per §8 the results table must
-say so rather than implying every row exercised the full system end to end — at least
-one live end-to-end run belongs alongside it, so "works against a real model" is
-demonstrated rather than assumed.
+3. **Demo deals (`live` tier).** The six deals in `demo_deals.py` plus the U4 ablation,
+   run as unscored baselines — they carry a *measured* verdict rather than a predicted
+   one, so they check for regression rather than tuning anything.
+
+**No tier makes a live model call as of U9.5, demo deals included.** Reaching a model is
+now something someone typed: `--record` freezes a run into the committed store, `--live`
+runs without writing one. This is a change from U8, where the third tier was the only one
+whose name meant what it said — and that was a reproducibility hole rather than a design.
+`live` rows fell through to `LLM_CACHE_MODE=read_write` against the *gitignored*
+development cache, so a demo row was served from a developer's working store when warm and
+called the model when not. **Its cost was concrete**: the published `staten-island` row
+said 1 comp where the build produces 0, a stale extraction surviving in the results table
+as a number nothing could re-derive. `runner._case_environment` carries the full account.
+
+So every one of the 28 rows now re-derives from a fresh clone, which is what this
+directory's own standard has always asked for. That is also a limitation, and per §8 the
+results table must say so rather than implying every row exercised the full system end to
+end — at least one live end-to-end run belongs alongside it, so "works against a real
+model" is demonstrated rather than assumed. `--live` is how that run is taken, and U9.9
+captures it.
 
 **"No model calls" is scoped to the LLM specifically, not to network access generally —
 worth stating because tier 2 does not otherwise look offline.** Any replay case whose
@@ -102,11 +118,18 @@ case, ~30 seconds, quota-dependent, and not reproducible from a fresh clone.
 read it**.
 
 What makes the claim true now is `runner._case_environment`, which points
-`config.LLM_CACHE_DIR` at the committed store and sets `replay` for both offline tiers, the
+`config.LLM_CACHE_DIR` at the committed store and sets `replay` for **every** tier, the
 same module-level override the runner already used for the retrieval ablation. A missing
 recording is then a `CacheMiss` rather than a live call. The correction is recorded here
 because the failure mode is instructive: the property was asserted in prose, nothing
 enforced it, and it stayed asserted through a unit that depended on it.
+
+**And it happened twice.** U8.2 fixed it for the two offline tiers and left the third
+outside the override; U9.5 found that exception still standing a unit later, having
+silently published a `staten-island` comp count no clone could reproduce. The lesson is
+not "assert less" but that a claim about reproducibility should be enforced where it is
+made, for every case it is made about — a partial fix reads exactly like a complete one
+from the prose.
 
 ## Declared faults
 
