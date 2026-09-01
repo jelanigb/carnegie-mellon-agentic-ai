@@ -78,12 +78,66 @@ class SeriesBands:
     sustained_window_periods: int
     optimistic_stretch_end: Optional[pd.Timestamp]
     pessimistic_stretch_end: Optional[pd.Timestamp]
+    first_observation: Optional[pd.Timestamp]
+    last_observation: Optional[pd.Timestamp]
+
+    # How many distinct sustained stretches the outer bands were chosen from. Zero means
+    # no contiguous run was long enough to fill even one window, and the bands fell back
+    # to single-month extremes.
+    #
+    # **Two separate things go wrong as this number falls, and only the first is
+    # obvious.** At zero the estimator quietly changes definition — "the worst sustained
+    # stretch" becomes "the worst single month", which is Defect 3, the asymmetry this
+    # module exists to close, reappearing inside the module that closed it. Above zero
+    # but low, the definition holds and the *range* stops meaning anything: min and max
+    # over three overlapping views of the same year are nearly the same number. Measured
+    # across ZORI's 1,211 counties, median band width runs 0.13pp at 1-3 stretches,
+    # 1.85pp at 4-11, and 6.15pp at 24-43 — so a thin series does not produce a visibly
+    # unreliable forecast, it produces a **confident-looking** one.
+    #
+    # Returned rather than acted on, like every other field here. `tools/rent_growth.py`
+    # is where it becomes a threshold.
+    n_sustained_stretches: int
 
     # Flag-worthy provenance, returned rather than acted on.
     includes_anomalous_period: bool
     anomalous_period_share: float          # share of YoY observations inside 2020-2022
     anomalous_period_excluded: bool        # True if the caller asked for them removed
     optimistic_stretch_in_anomalous_period: bool
+
+
+def window_levels(levels: pd.Series) -> pd.Series:
+    """Trim a monthly level series to the shared forecast window, sorted and dated.
+
+    **On levels, never on the differences, and that distinction decides published
+    numbers.** A year-over-year observation dated 2018-06 is a comparison against
+    2017-06; filtering the differences to "2018 onward" therefore admits a year of
+    history that only one series has. Measured on Chicago, the two readings give
+    pessimistic rent bands of +3.03%/yr and +1.58%/yr, and the lower one rests on a
+    twelve-month stretch ending 2018-12 that the price series does not cover at all —
+    which is the mismatched-span defect the window exists to remove, not an instance of
+    it being removed. See `config.FORECAST_SERIES_WINDOW_START`.
+
+    Accepts ZORI's string-keyed month index as readily as a DatetimeIndex, because the
+    two series arrive differently shaped and normalising here is cheaper than at each
+    call site.
+    """
+    series = levels.dropna()
+    series.index = pd.to_datetime(series.index)
+    series = series.sort_index()
+    return series[series.index >= pd.Timestamp(config.FORECAST_SERIES_WINDOW_START)]
+
+
+def yoy_from_levels(levels: pd.Series) -> pd.Series:
+    """Percent change against twelve months earlier, over the shared window.
+
+    The rent side's whole path from a published index to a band, in one line, because
+    ZORI arrives already smoothed by Zillow. The price side does not use this: Redfin's
+    extract needs a price floor, a complete monthly calendar and a rolling median first,
+    and `redfin_data.get_appreciation_series` owns those steps.
+    """
+    windowed = window_levels(levels)
+    return (windowed.pct_change(periods=PERIODS_PER_YEAR) * 100.0).dropna()
 
 
 def is_in_anomalous_period(index: pd.DatetimeIndex) -> pd.Series:
@@ -150,6 +204,7 @@ def bands_from_yoy(
     # still yields a usable band, and the narrower basis is visible via
     # `n_yoy_observations`.
     sustained = sustained_means(yoy, sustained_window_periods)
+    n_sustained_stretches = int(len(sustained))
     if sustained.empty:
         sustained = yoy
 
@@ -176,6 +231,9 @@ def bands_from_yoy(
         sustained_window_periods=sustained_window_periods,
         optimistic_stretch_end=optimistic_end,
         pessimistic_stretch_end=pessimistic_end,
+        first_observation=pd.Timestamp(yoy.index.min()),
+        last_observation=pd.Timestamp(yoy.index.max()),
+        n_sustained_stretches=n_sustained_stretches,
         includes_anomalous_period=(not exclude_anomalous_period) and anomalous_share > 0,
         anomalous_period_share=anomalous_share,
         anomalous_period_excluded=exclude_anomalous_period,

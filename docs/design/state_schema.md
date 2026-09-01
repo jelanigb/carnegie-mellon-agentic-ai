@@ -266,11 +266,14 @@ did. `enums.py` existed solely to hold that type and went with it.
 **Three new `FlagKind` members.** `FORECAST_UNAVAILABLE` covers a missing side — critical
 when both fail, warn when one does, because the two halves fail for unrelated reasons and
 a blanket absence would tell a reader nothing about which. `RENT_GROWTH_COHORT_SHIFT_SCREENED`
-is the rent-side counterpart to `ANOMALOUS_PERIOD_INCLUDED`, and is deliberately separate
-because **the two series' anomalous windows do not overlap**: Redfin's is calendar
-2020–2022, FMR's is FY2023–2024, since an administrative series lags the market it
-measures. One kind covering both would imply the same years were treated the same way on
-both sides. `FORECAST_BRANCHES_NEAR_TIED` fires when the evaluator could not separate the
+was the rent-side counterpart to `ANOMALOUS_PERIOD_INCLUDED`, deliberately separate because
+**the two series' anomalous windows did not overlap**: Redfin's is calendar 2020–2022,
+FMR's was FY2023–2024, since an administrative series lags the market it measures.
+**Decision #21 (U9.3) removed that asymmetry at its source** — the rent bands now come
+from a monthly market index and are asked the same 2020–2022 question the price bands are
+— so the member was repurposed as **`RENT_GROWTH_SOURCE`**, which names the series and the
+geography behind the rent bands. The reasoning for repurposing rather than deleting is in
+`state.py` beside the member. `FORECAST_BRANCHES_NEAR_TIED` fires when the evaluator could not separate the
 top two hypotheses, or when the surviving scenarios do not span distinct outcomes.
 
 ### Fields added in U5 (Aug 22, 2026), continued

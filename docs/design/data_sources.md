@@ -36,11 +36,11 @@ one is derived from the code and is the one to trust.
 | Source | Vintage | Finest geography it carries | Geography this system actually uses | What it feeds |
 | --- | --- | --- | --- | --- |
 | **Kaggle rent corpus** | Dec 7 2018 – Dec 26 2019, static | Street address (**8% of rows**), else city | Latitude/longitude per row (city-area placeholder for 92%) | Rent-model training · comp index |
-| **HUD FMR API** | Live, by federal fiscal year, **FY2017–2026 history** | **ZIP** (SAFMR counties only) | **County** | Anchor's **bedroom step** only (U11.3) · demo calibration · **rent-growth series (U6)** |
+| **HUD FMR API** | Live, by federal fiscal year, **FY2017–2026 history** | **ZIP** (SAFMR counties only) | **County** | Anchor's **bedroom step** only (U11.3) · demo calibration · **rent-growth series — fallback only since #21 (U9.3)** |
 | **Redfin sale medians** | Jan 2018 – Jun 2026, monthly | Metro (this extract); ZIP extract exists unused | Metro | Market benchmark **where no local records exist** · **price** appreciation (U6) · demo calibration |
 | **NYC DOF sales** | 2023-01 – present, per transaction | Parcel (`bbl`, lat/lon) | **ZIP** | Market benchmark, New York (U8.8) |
 | **Cook County Assessor** | 2023-01 – present, per transaction | Parcel (`pin`) | **ZIP**, via the parcel universe | Market benchmark, Chicago (U8.8) |
-| **Zillow ZORI** | 2015-01 – present, monthly | **ZIP** (8,543 nationally) | **ZIP**, county median where a ZIP's series does not reach | Anchor's **rent level** — training denominator, inference anchor, comp cross-check (U11.3) · the independent rent check (#16, U8.0) |
+| **Zillow ZORI** | 2015-01 – present, monthly | **ZIP** (8,543 nationally) | **ZIP**, county median where a ZIP's series does not reach | Anchor's **rent level** — training denominator, inference anchor, comp cross-check (U11.3) · the independent rent check (#16, U8.0) · **the forecast's rent-growth series, at county (#21, U9.3)** |
 | **Census Geocoder** | Live | Parcel / street address | Parcel, with city-centroid fallback | Subject-property coordinates |
 | **Census county boundaries** | TIGER/Line 2023 | County polygon | County | Coordinate → county FIPS |
 | **Census ZCTA boundaries** | Cartographic 2020 | ZCTA polygon (~33,800) | ZCTA | Coordinate → ZIP, for ZIP-level FMR |
@@ -180,11 +180,17 @@ train on a ratio that ages slowly, multiply by a current dated reference. What c
 which reference, and role 3 is what keeps the cross-check a fair comparison rather than a
 2019-vs-2026 vintage error.
 
-**Role 5 is the one that did not move, and confusing it with role 2 is the easy mistake.**
-The forecast's rent-growth bands still come from HUD FMR history (#16) — that is a series
-of the same administrative figure over ten years, which is a legitimate rent-growth
-signal, and it is a different question from what today's rent *level* is. The report says
-"market rent" for the anchor and "Fair Market Rent history" for the bands, deliberately.
+**Role 5 did not move at U11.3 and moved at U9.3, which is the whole story of this
+project's recurring defect in miniature.** Through U8 the forecast's rent-growth bands
+still came from HUD FMR history (#16), on the argument that a series of the same
+administrative figure over ten years is a legitimate rent-growth signal and a different
+question from what today's rent *level* is. That argument was sound and it stopped
+applying the moment role 2 changed reference: #16's own reasoning is *project forward the
+anchor the estimate was built on*, and since #19 that anchor is ZORI. **Decision #21
+(U9.3) re-sourced role 5 to ZORI's county median**, with FMR history kept as the fallback
+where no ZORI county reaches back far enough to band. A premise corrected in one place and
+left standing in another — see `design/evaluator.md` for the four defects that followed
+from the eleven units it stood.
 
 What follows below is the FMR-anchored design as it stood, kept because the measurements
 in it are the evidence the change was made on.

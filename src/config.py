@@ -847,17 +847,22 @@ ZORI_MAX_VINTAGE_SUBSTITUTION_MONTHS = 12
 # --------------------------------------------------------------------------
 # Scenario / Forecast agent (U6 - agents/scenario_forecast.py)
 # --------------------------------------------------------------------------
-# Two quantities, two sources, and they are NOT interchangeable (decision #16): Redfin
-# drives price appreciation, HUD FMR history drives rent growth. Measured across the
-# inference trio, the two are negatively correlated (pooled r = -0.309), so a rent
-# forecast taken off the price series would point the wrong way.
+# Two quantities, two sources, still not interchangeable — but the reason changed at
+# decision #21. Redfin drives price appreciation; **Zillow ZORI drives rent growth**,
+# with HUD FMR history as the fallback where ZORI has no county. #16 kept them apart on
+# a measured negative correlation (pooled r = -0.309); `scripts/growth_correlation.py`
+# re-derived that number and found it to be a property of the *rent series* rather than
+# of the market — -0.317 on FMR, -0.197 once HUD's two national step-up years are
+# removed, and **+0.222 on market rent** — with r-squared never above 0.10 in any pass.
+# They stay separate because they measure different things, which was always the better
+# half of the argument.
 
 # How far the scenarios project. Five years is the standard multi-family hold period,
-# and it is long enough that the choice of growth band is visible rather than academic:
-# on Chicago's rent series the two defensible base cases (4.34%/yr with the FY2023-24
-# cohort shift included, 1.80%/yr with it screened out) compound to 23.7% against 9.3%
-# over this horizon - $2,474 against $2,186 on a $2,000 rent. That gap is the reason
-# this node branches instead of committing to one framing.
+# and it is long enough that the choice of framing is visible rather than academic: on
+# Los Angeles the two defensible price treatments diverge by more than four percentage
+# points a year at the optimistic band, which compounds to a materially different exit
+# over this horizon. That gap is the reason this node branches instead of committing to
+# one framing.
 FORECAST_HORIZON_YEARS = 5
 
 # --- The shared band estimator (tools/growth_bands.py) ---------------------
@@ -885,12 +890,98 @@ SUSTAINED_STRETCH_PERIODS = 12
 ANOMALOUS_PERIOD_START = "2020-01-01"
 ANOMALOUS_PERIOD_END = "2022-12-31"
 
-# --- FMR rent-growth series (tools/fmr_history.py) -------------------------
-# HUD publishes FY2017 onward through the API this project already caches, giving nine
-# year-over-year observations. Note the asymmetry with the price series: Redfin supplies
-# 88 *monthly* YoY observations, so the two series cannot use the same band construction
-# and do not (see FMR_BAND_* below).
+# The first month either series may contribute a *level* to, and therefore the start of
+# the span both are banded over. Applied before differencing, not after, which is the
+# whole point: a year-over-year observation dated 2018-06 is a comparison against
+# 2017-06, so windowing the differences would silently admit a year of history one
+# series has and the other does not.
+#
+# **Measured, and it is the price series' own start.** Redfin's extract begins
+# 2018-01-01 for every configured metro, so applying this to the price side is a no-op
+# today and is written anyway: it makes the shared span a property of the code rather
+# than a coincidence of the file on disk. ZORI reaches back to 2015-01 and is the side
+# this actually trims.
+#
+# The cost of not doing it was measured on ZORI before the window existed: New York's
+# pessimistic rent band was -22.6%/yr, a real Bronx figure from a twelve-month stretch
+# ending 2017-05 — three years before the price series has anything to say. A window one
+# year later still leaves the class: Chicago's pessimistic band moves 1.45pp depending on
+# whether a stretch ending 2018-12 is admitted, and nothing on the price side covers it.
+FORECAST_SERIES_WINDOW_START = "2018-01-01"
+
+# --- ZORI rent-growth series (tools/rent_growth.py) — decision #21 ---------
+# The forecast's rent bands come from Zillow's Observed Rent Index at the subject's
+# county, not from HUD's Fair Market Rent schedule. #16 chose FMR on an architectural
+# argument — "the rent estimate is `ratio x FMR`, so projecting the anchor forward
+# forecasts rent by the same mechanism that produced the estimate" — and that argument
+# now selects ZORI, because since #19 the estimate is `ratio x ZORI(ZIP) x FMR-bedroom
+# -step`. Following #16's own reasoning to where the system moved, rather than
+# overturning it. The four defects this closes are in `docs/design/evaluator.md`.
+
+# The county tier, not the ZIP tier, and the reason is coverage rather than preference:
+#   - ZIP 10307 has no ZORI series at all, and it is the `staten-island` demo deal's own
+#     ZIP. That deal has no Redfin metro, so rent is the only side it gets — a ZIP-first
+#     design would turn a one-sided forecast into no forecast.
+#   - 65-95% of the ZIPs inside this project's own market counties start after 2018-01
+#     (median start 2021-2024), so a ZIP-first design falls back to county for most
+#     subjects anyway and varies the *history length* by ZIP.
+#   - Where both exist the answer barely moves: LA 90026 gives +0.68/+2.37/+3.86 against
+#     the county's +1.25/+2.51/+4.76.
+# The consequence is disclosed rather than hidden: the estimate is anchored at the ZIP
+# and its growth is measured at the county, and RENT_GROWTH_SOURCE says so.
+ZORI_GROWTH_RESOLUTION = "county"
+
+# How many distinct twelve-month stretches the outer rent bands must be chosen from
+# before ZORI is used at all. Below it the county falls through to the FMR schedule.
+#
+# **Measured, and the first rule tried was not enough.** The obvious threshold is the
+# estimator's own requirement — at least one contiguous twelve-month run, or "the worst
+# sustained stretch" silently becomes "the worst single month". That is a genuine cliff
+# (62% of ZORI's 1,211 counties clear it, 38% do not, and a count-based test agrees to
+# within four counties) and it is necessary. It is not sufficient: Adams County IL clears
+# it on 14 months of history and publishes a five-year projection banded
+# +9.18/+9.86/+10.51.
+#
+# The failure is not that a thin series looks unreliable. It is that it looks
+# **confident**: min and max over three overlapping views of the same year are nearly the
+# same number. Median band width across the covered counties, by how many distinct
+# stretches the extremes were chosen from —
+#
+#     1-3 stretches    13 counties    0.13pp     <- reads as near-certainty
+#     4-11 stretches   84 counties    1.85pp
+#     12-23 stretches 117 counties    4.46pp
+#     24-43 stretches 531 counties    6.15pp
+#
+# So the requirement is a full year's worth of *distinct* stretches, which is the same
+# twelve the window itself is built from rather than a second number to defend. It needs
+# ~23 contiguous months and drops 97 of the 745 counties that pass the weaker rule.
+# **Not a cliff** — the underlying distribution is smooth through this region, unlike the
+# one-run test — so this is a judgment, recorded as one.
+ZORI_GROWTH_MIN_SUSTAINED_STRETCHES = SUSTAINED_STRETCH_PERIODS
+
+# The reader-facing name of the series. Mirrors redfin_data.SERIES_DESCRIPTION.
+ZORI_GROWTH_SERIES_DESCRIPTION = (
+    "Zillow Observed Rent Index, county-level monthly median across all unit types"
+)
+
+# --- FMR rent-growth series (tools/fmr_history.py) — the fallback ----------
+# Kept, not retired: measured across ZORI's county table, only 1,211 counties are
+# covered at all and 62% of those can form a sustained stretch, so outside indexed
+# markets the FMR schedule is the common path rather than an edge case. It reaches any
+# county through the HUD API this project already caches.
+#
+# HUD publishes FY2017 onward, giving nine year-over-year observations. **The estimator
+# asymmetry survives here and only here**: nine annual points cannot carry a twelve-month
+# sustained window, so the fallback keeps single-fiscal-year extremes (FMR_BAND_* below)
+# while the primary path uses the shared monthly estimator. That is the asymmetry #21
+# closes on the path every demo deal takes, and discloses on the path none of them do.
 FMR_HISTORY_FIRST_YEAR = 2017
+
+# The fiscal years the fallback holds out when the forecast's depth-1 search asks for the
+# 2020-2022 window excluded. The same question the price side is asked, put to an annual
+# series: FMR fiscal years are named for the year they begin, so these are the schedule's
+# own labels for the window ANOMALOUS_PERIOD_START/END bound on a monthly series.
+FMR_ANOMALOUS_FISCAL_YEARS = (2020, 2021, 2022)
 
 # Below this many usable YoY observations, no rent-growth band is produced at all. A
 # "range" over three points describes the sample, not the market. Follows the precedent
@@ -904,6 +995,17 @@ FMR_HISTORY_MIN_YOY_OBSERVATIONS = 5
 FMR_COHORT_PANEL_PATH = SRC_DIR / "tools" / "data" / "fmr_cohort_panel.json"
 
 # --- Cohort-shift screen ---------------------------------------------------
+# **No longer a forecast branch, and still load-bearing (decision #21).** The screen was
+# built to hold HUD's national step-ups out of the rent bands; the rent bands no longer
+# come from HUD on any path a demo deal takes, so the depth-1 rent fork is now the same
+# 2020-2022 question the price side is asked and this screen does not enter it.
+#
+# It is kept because it is the *evidence that retired itself*. Removing FY2023-24 — the
+# two years this screen identifies — is what collapsed the rent/price correlation from
+# -0.317 to -0.197 in pass 2 of `scripts/growth_correlation.py`, and that pass is a third
+# of the argument for #21. Deleting the machinery would delete the reproduction of the
+# finding that justified deleting it.
+#
 # A fiscal year where *every* area in the panel moved together, well above the long-run
 # baseline. FY2023 (+5.10pp) and FY2024 (+7.48pp) are the two in the current panel.
 #

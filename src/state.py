@@ -203,13 +203,23 @@ class FlagKind(StrEnum):
     # metro; a subject with no resolvable county has the reverse — so the message names
     # which side is missing rather than reporting a blanket absence.
     FORECAST_UNAVAILABLE = "forecast_unavailable"
-    # Fiscal years in which every area in the FMR cohort panel moved together were held
-    # out of the rent bands. The rent-side counterpart to ANOMALOUS_PERIOD_INCLUDED,
-    # and deliberately a separate kind: the two series' anomalous windows do not
-    # overlap. Redfin's is calendar 2020-2022; FMR's is FY2023-2024, because an
-    # administrative series lags the market it measures. One kind covering both would
-    # let a report imply the same years were treated the same way on both sides.
-    RENT_GROWTH_COHORT_SHIFT_SCREENED = "rent_growth_cohort_shift_screened"
+    # Which series the rent bands were measured on, and at what geography. The rent-side
+    # counterpart to APPRECIATION_SOURCE, and INFO like it: this describes how the system
+    # works rather than a degradation of the run.
+    #
+    # **This member was `RENT_GROWTH_COHORT_SHIFT_SCREENED` until decision #21**, and the
+    # change of subject is the point rather than the rename. That flag disclosed which
+    # fiscal years HUD's cohort screen had held out of the rent bands — a fact with no
+    # referent once the bands stopped coming from HUD. The alternative was to delete it,
+    # under the rule this enum already wrote down twice (see COORDINATES_FROM_CITY_CENTROID
+    # and the runner's `UNREACHABLE_BY_ANY_CASE`): a kind nothing can raise corrupts U8's
+    # coverage census and should leave rather than be excused. It is repurposed instead
+    # because #21 created a disclosure the system genuinely owes and did not have — the
+    # rent estimate is anchored at the subject's ZIP while its growth is measured at the
+    # subject's county, and on 38% of covered counties the series is short enough that the
+    # published schedule serves instead, under a different band construction. A reader
+    # cannot discount any of that unless the report says it.
+    RENT_GROWTH_SOURCE = "rent_growth_source"
     # The top two branches scored within `config.TOT_TIE_EPSILON` of each other while
     # implying materially different outcomes, so the winner was near-arbitrary. Raised
     # rather than resolved silently: an evaluator that cannot separate two hypotheses
@@ -844,30 +854,37 @@ class ForecastDetail(BaseModel):
     projection_base_source: Optional[str] = None
     projection_base_rent: Optional[float] = None
 
-    # --- Rent side (HUD FMR history) -------------------------------------------
+    # --- Rent side (Zillow ZORI county median; HUD FMR schedule as fallback) ----
+    # Reworked at decision #21, which re-sourced this side. The FMR-shaped fields that
+    # stood here - the cohort panel's baseline, its area count, the fiscal years it found
+    # moving together, this area's deviation from them - described a screen the forecast
+    # no longer runs, and are gone rather than carried empty.
+    rent_growth_source: Optional[str] = None
+    rent_growth_source_description: Optional[str] = None
     rent_growth_area_name: Optional[str] = None
     rent_growth_resolution: Optional[str] = None
-    rent_growth_bedrooms: Optional[int] = None
     rent_growth_n_observations: Optional[int] = None
-    rent_growth_first_year: Optional[int] = None
-    rent_growth_last_year: Optional[int] = None
+    # Reader-facing span labels. Strings, not years: the primary series is monthly
+    # ("2019-01") and the fallback annual ("FY2018"), and rendering that difference away
+    # would claim the two describe the same kind of period.
+    rent_growth_first_observation: Optional[str] = None
+    rent_growth_last_observation: Optional[str] = None
     rent_growth_pessimistic_pct: Optional[float] = None
     rent_growth_base_pct: Optional[float] = None
     rent_growth_optimistic_pct: Optional[float] = None
+    # How many ZIPs the county median aggregates. Travels with the median for the reason
+    # `CompAnchoring.comps_used` does: a median over one ZIP is a county median in name
+    # only, and nothing else distinguishes it from a median over thirty.
+    rent_growth_zips_in_county: Optional[int] = None
+    # Whether the rent bands held out 2020-2022, which under #21 is the same fork the
+    # price side answers rather than a second, differently-shaped one.
+    rent_anomalous_period_excluded: Optional[bool] = None
+    rent_anomalous_period_share: Optional[float] = None
+    # Fallback path only: the published schedule's bands name a fiscal year, because its
+    # construction is annual and cannot carry a twelve-month sustained window.
+    rent_growth_bedrooms: Optional[int] = None
     rent_growth_pessimistic_year: Optional[int] = None
     rent_growth_optimistic_year: Optional[int] = None
-    # Disclosed beside the bands, never as the bands - it distinguishes an isolated
-    # spike from a cluster. See config.FMR_IQR_*_PERCENTILE.
-    rent_growth_iqr_lower_pct: Optional[float] = None
-    rent_growth_iqr_upper_pct: Optional[float] = None
-    # Fiscal years in which every area in the cohort panel moved together. Named rather
-    # than counted, because "FY2023 and FY2024 were screened" is checkable and "two
-    # years were screened" is not.
-    cohort_shift_years_detected: list[int] = Field(default_factory=list)
-    cohort_shift_years_excluded: list[int] = Field(default_factory=list)
-    cohort_baseline_pct: Optional[float] = None
-    cohort_n_areas: Optional[int] = None
-    local_deviation_years: list[int] = Field(default_factory=list)
     rent_growth_unavailable_reason: Optional[str] = None
 
     # --- Price side (Redfin metro multi-family) --------------------------------

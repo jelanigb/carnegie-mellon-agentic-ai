@@ -832,42 +832,56 @@ def _forecast_basis_block(detail: ForecastDetail) -> list[str]:
 
     if detail.rent_growth_base_pct is not None:
         span = (
-            f"FY{detail.rent_growth_first_year}–{detail.rent_growth_last_year}"
-            if detail.rent_growth_first_year
+            f"{detail.rent_growth_first_observation} to "
+            f"{detail.rent_growth_last_observation}"
+            if detail.rent_growth_first_observation
             else "the published history"
         )
-        lines.append(
-            f"**Rent** — HUD Fair Market Rent history for "
-            f"{detail.rent_growth_area_name or 'the subject county'}, "
-            f"{detail.rent_growth_bedrooms}-bedroom, at "
-            f"{detail.rent_growth_resolution} resolution over {span} "
-            f"({detail.rent_growth_n_observations} year-over-year observations). "
-            f"The bands are the worst and best fiscal years observed "
-            f"(FY{detail.rent_growth_pessimistic_year} and "
-            f"FY{detail.rent_growth_optimistic_year}); the base case is their compound "
-            f"average."
+        where = detail.rent_growth_area_name or "the subject county"
+        breadth = (
+            f", a median across the {detail.rent_growth_zips_in_county} postal codes "
+            f"within it"
+            if detail.rent_growth_zips_in_county
+            else ""
         )
-        if detail.rent_growth_iqr_lower_pct is not None:
+        if detail.rent_growth_pessimistic_year is None:
+            # The market index: monthly, so the outer bands are sustained stretches.
             lines.append(
-                f"  Interquartile range of those annual changes: "
-                f"{detail.rent_growth_iqr_lower_pct:.2f}% to "
-                f"{detail.rent_growth_iqr_upper_pct:.2f}% — shown so an extreme band "
-                f"that rests on an isolated year is visible as one."
+                f"**Rent** — {detail.rent_growth_source_description} for {where}"
+                f"{breadth}, covering {span} "
+                f"({detail.rent_growth_n_observations} year-over-year observations). The "
+                f"outer bands are the worst and best twelve-month stretches the index "
+                f"actually held, not its worst and best single months; the base case is "
+                f"the average across every month kept."
             )
-        if detail.cohort_shift_years_excluded:
-            years = ", ".join(f"FY{y}" for y in detail.cohort_shift_years_excluded)
             lines.append(
-                f"  {years} were held out: every one of the {detail.cohort_n_areas} HUD "
-                f"areas in this project's panel moved together in those years, against a "
-                f"{detail.cohort_baseline_pct:.2f}% baseline. Whether that was a HUD "
-                f"methodology change or a delayed market signal is not determinable from "
-                f"this series, so it is disclosed rather than attributed."
+                f"  This is measured across the county, while the rent estimate above is "
+                f"anchored to this property's own postal code. A single postal code's "
+                f"rent index generally does not reach back far enough to measure a "
+                f"five-year trend, so the trend is read at the wider geography and the "
+                f"estimate is not."
             )
-        if detail.local_deviation_years:
-            years = ", ".join(f"FY{y}" for y in detail.local_deviation_years)
+        else:
+            # The published schedule: annual, so the bands name a year.
             lines.append(
-                f"  {years} saw this area depart sharply from the national cohort — a "
-                f"local move, kept in the bands because that is market signal."
+                f"**Rent** — {detail.rent_growth_source_description} for {where}, "
+                f"{detail.rent_growth_bedrooms}-bedroom, covering {span} "
+                f"({detail.rent_growth_n_observations} year-over-year observations). No "
+                f"market rent index reaches this county with enough history to measure a "
+                f"trend, so this published schedule serves instead. Its bands are the "
+                f"worst and best single years on record "
+                f"({detail.rent_growth_pessimistic_year} and "
+                f"{detail.rent_growth_optimistic_year}), and the base case compounds "
+                f"every year kept — a single year is a blunter extreme than the "
+                f"twelve-month stretches the sale-price bands use, so this range reads "
+                f"wider for that reason alone."
+            )
+        if detail.rent_anomalous_period_excluded is not None:
+            lines.append(
+                f"  2020–2022 "
+                f"{'excluded' if detail.rent_anomalous_period_excluded else 'included'} "
+                f"— the same treatment question asked of the sale-price series below, so "
+                f"the two describe the same span of history."
             )
         lines.append("")
     elif detail.rent_growth_unavailable_reason:

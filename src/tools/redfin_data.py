@@ -290,6 +290,17 @@ def get_appreciation_series(
         kept.set_index("period")[["median_sale_price", "homes_sold"]]
         .sort_index()
     )
+    # The shared forecast window, applied to the levels before anything is differenced.
+    # **A no-op on this extract and written anyway (U9.3):** every configured metro's
+    # series begins 2018-01-01, which is exactly where the window starts, so this trims
+    # nothing today. It is here because #21 puts a second series through the same band
+    # estimator and the two must be banded over the same span — and "they happen to start
+    # on the same month" is a fact about the file on disk, not a guarantee the code makes.
+    # If a future extract reaches further back, the price bands stay comparable to the
+    # rent bands instead of silently widening past them.
+    series = series[
+        series.index >= pd.Timestamp(config.FORECAST_SERIES_WINDOW_START)
+    ]
     # Complete monthly calendar: a gap must read as a gap, not as a shorter lag.
     calendar = pd.date_range(series.index.min(), series.index.max(), freq="MS")
     series = series.reindex(calendar)

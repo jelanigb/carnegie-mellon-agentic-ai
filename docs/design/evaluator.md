@@ -235,17 +235,31 @@ Measured with both series windowed to 2018+, one estimator, 2020–22 excluded o
 
 | | | pess | base | opti | width |
 | --- | --- | --- | --- | --- | --- |
-| **Los Angeles** | ZORI rent | +1.25 | **+2.65** | +4.83 | **3.6pp** |
+| **Los Angeles** | ZORI rent | +1.25 | **+2.51** | +4.76 | **3.5pp** |
 | | price | −0.80 | **+2.10** | +4.50 | 5.3pp |
-| **Chicago** | ZORI rent | +1.58 | +4.13 | +6.66 | 5.1pp |
+| **Chicago** | ZORI rent | +3.03 | +4.68 | +6.66 | 3.6pp |
 | | price | −1.56 | +6.76 | +10.51 | 12.1pp |
-| **Cleveland** | ZORI rent | −0.11 | +5.43 | +11.27 | 11.4pp |
+| **Cleveland** | ZORI rent | −0.11 | +5.67 | +11.27 | 11.4pp |
 | | price | −4.66 | +7.26 | +15.72 | 20.4pp |
-| **New York** | ZORI rent | +3.12 | +7.12 | +12.31 | 9.2pp |
+| **New York (Bronx)** | ZORI rent | +3.12 | +7.04 | +12.31 | 9.2pp |
 | | price | +1.65 | +3.73 | +5.90 | 4.3pp |
+| **Staten Island (Richmond)** | ZORI rent | +3.93 | +7.00 | +10.45 | 6.5pp |
+| | price | *no Redfin metro* | | | |
+
+> **These are the corrected figures, and the correction is itself a finding.** The table
+> #21 was adopted on was measured by windowing the *year-over-year observations* to 2018+;
+> re-derived at build time, windowing the *level series* — which is what "match Redfin's
+> span" actually asks for, since a 2018-06 difference reaches back to 2017-06 — moves
+> Chicago's pessimistic band 1.45pp, from +1.58 to +3.03. The lower figure rested on a
+> twelve-month stretch ending **2018-12**, which the price series does not cover: the same
+> mismatched-span defect the window was introduced to remove. Nothing in #21's argument
+> moves — LA is rent ~+2.5 against price +2.10 either way, and the FMR band is four times
+> wider either way. **Staten Island is added because the published rows never contained
+> it**: the "New York" row is Bronx (36005), taken from the HUD entityid prefix, while the
+> `staten-island` demo deal resolves to Richmond (36085).
 
 LA's FMR bands today are **−0.68 / +7.26 / +14.49, width 15.2pp** — four times wider, base
-case three times higher. Rent +2.65% against price +2.10% is a coherent picture; rent
+case three times higher. Rent +2.51% against price +2.10% is a coherent picture; rent
 +7.26% against price −0.80% is the one nobody believed.
 
 **Two windowing decisions, both found by measurement and both explicit rather than

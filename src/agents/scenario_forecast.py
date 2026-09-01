@@ -3,11 +3,18 @@
 **Two quantities, two sources, and mixing them was the original design.** §1 specified
 Tree-of-Thought branching over rent-growth and appreciation paths *"informed by
 metro-level housing trend data"* — that is, taking rent growth off Redfin's sale-price
-series. Measured before this agent was built, rent growth and price growth are
-**negatively** correlated across the inference trio (pooled r = −0.309), so that design
-would have pointed the rent forecast the wrong way. Decision #16 split them: Redfin for
-price, which is what it measures; HUD FMR's published history for rent, through
-`tools/fmr_history.py`.
+series. Decision #16 split them, on a measured negative correlation between the two.
+
+**Decision #21 kept the split and replaced the reason, along with the rent series.** The
+correlation was re-derived at U9.3 (`scripts/growth_correlation.py`) and is a property of
+the *rent series* rather than of the market: pooled r = −0.317 measured against the HUD
+schedule, −0.197 once HUD's two national step-up years come out, and **+0.222 against
+market rent**, with r² never above 0.10 in any pass. Since #19 this system's published
+rent estimate is anchored to market rent, so #16's own argument — project forward the
+same anchor the estimate was built on — now selects Zillow's ZORI index. Redfin for price,
+ZORI for rent through `tools/rent_growth.py`, and the HUD schedule kept there as the
+fallback where ZORI has no county deep enough to band. The four defects this closes are
+worked through in `docs/design/evaluator.md`.
 
 **What this agent projects from, and why it isn't a value estimate.** Decision #15
 leaves `DealState.value_estimate` null — Redfin's extract is pre-aggregated to one
@@ -20,20 +27,22 @@ property rather than an estimate of it. The claim the report makes is therefore
 value estimate to be meaningful, and does not pretend to be one.
 
 **The search is over an enumerated space, so no figure here is invented.** Four
-framings — two rent treatments (screen the cohort shift or not) × two price treatments
-(exclude 2020–2022 or not) × one appreciation series — then nine band pairings under
-each. `tools/tot.py` explains why enumeration rather than sampling, and what follows
+framings — two rent treatments × two price treatments, and since #21 both are the same
+question (exclude the 2020–2022 window, or keep it) asked of two series — then nine band
+pairings under each. `tools/tot.py` explains why enumeration rather than sampling, and what follows
 from it: nothing sampled, a data-determined branching factor, and a pipeline that stays
 deterministic end to end.
 
-**The pairing is where the reasoning actually happens.** Three rent bands and three
-price bands give nine combinations, and the obvious three — optimistic with optimistic,
-and so on down the diagonal — are the ones this project's own measurement argues
-against, because rent and price growth move *opposite* each other here. A linear chain
-emits the diagonal without noticing. Asking which pairing deserves to be called
-"optimistic" for a particular deal, given that relationship and whatever flags the
-upstream agents raised, is a judgement over measured inputs, and it is the judgement
-this search exists to make.
+**The pairing level is where the reasoning was designed to happen, and #21 hollowed out
+its criterion — stated here rather than in a commit message, because a reader comparing
+this docstring to the code should not have to discover it.** Three rent bands and three
+price bands give nine combinations. The level existed to avoid the naive diagonal, on the
+grounds that rent and price growth move opposite each other; that measurement did not
+survive re-derivation, so there is now **no directional prior at all** and the nine
+candidates are scored on flags, band widths and sample sizes. That is honest and it is
+thin. The redesign — stop asking which pairing is most likely, which needs a joint
+distribution this data cannot supply, and ask which projections *this deal's evidence*
+supports showing — is adopted and deferred on schedule as OQ-22.
 
 **Two search levels, then deterministic reconciliation** — stated plainly because
 `config.TOT_MAX_DEPTH` is 3 and it would be easy to imply three levels of search. Depth
@@ -84,7 +93,7 @@ from state import (
     Severity,
     flag,
 )
-from tools import fmr_history, redfin_data, tot
+from tools import growth_bands, redfin_data, rent_growth, tot
 from tools.llm_client import LlmClient, LlmError, SchemaValidationExhausted
 
 AGENT = "scenario_forecast"
@@ -160,46 +169,49 @@ def _pull_evidence(requests: list[dict], detail: ForecastDetail) -> str:
 
 
 def _framings(
-    rent_bands: dict[bool, fmr_history.RentGrowthBands],
+    rent_bands: dict[bool, rent_growth.RentGrowthBands],
     price_bands: dict[bool, redfin_data.GrowthBands],
 ) -> list[tot.Candidate]:
     """Every treatment combination the evidence supports. Two by two, or fewer.
 
     A side with only one usable treatment contributes one option rather than two, which
     is why this enumerates from what was actually computed instead of from a constant.
+
+    **The two axes ask the same question of both series since decision #21**, where they
+    used to ask different ones — screen HUD's national step-ups out of rent, or exclude
+    the 2020-2022 rate window from price. That was two questions in one fork, and a
+    reader had to hold both to read a framing id. Now `f-01` means "keep 2020-2022 in the
+    rent bands, hold it out of the price bands", and the diagonal framings are the ones
+    that treat the same window the same way on both sides.
     """
     candidates: list[tot.Candidate] = []
-    for screen_rent, rent in sorted(rent_bands.items()):
+    for exclude_rent, rent in sorted(rent_bands.items()):
         for exclude_price, price in sorted(price_bands.items()):
             candidates.append(
                 tot.Candidate(
-                    id=f"f-{int(screen_rent)}{int(exclude_price)}",
+                    id=f"f-{int(exclude_rent)}{int(exclude_price)}",
                     depth=1,
                     payload={
-                        "screen_rent": screen_rent,
+                        "exclude_rent": exclude_rent,
                         "exclude_price": exclude_price,
                         "rent": rent,
                         "price": price,
                     },
                     summary="; ".join(
-                        [_rent_note(rent, screen_rent), _price_note(price, exclude_price)]
+                        [_rent_note(rent, exclude_rent), _price_note(price, exclude_price)]
                     ),
                 )
             )
     return candidates
 
 
-def _rent_note(rent: Optional[fmr_history.RentGrowthBands], screened: bool) -> str:
+def _rent_note(rent: Optional[rent_growth.RentGrowthBands], excluded: bool) -> str:
     """One clause describing the rent treatment, safe when the side is unavailable."""
     if rent is None or not rent.available:
-        return "rent: no usable FMR history"
-    treatment = (
-        f"FY{'/'.join(str(y) for y in rent.cohort_shift_years_excluded)} screened out"
-        if screened and rent.cohort_shift_years_excluded
-        else "every published fiscal year kept"
-    )
+        return "rent: no usable rent-growth series"
+    window = "2020-2022 excluded" if excluded else "2020-2022 included"
     return (
-        f"rent: {treatment}, base {rent.base_yoy_pct:.2f}%/yr over "
+        f"rent: {window}, base {rent.base_yoy_pct:.2f}%/yr over "
         f"n={rent.n_yoy_observations}"
     )
 
@@ -474,43 +486,42 @@ def _conservatism(candidate: tot.Candidate) -> float:
 def _build_bands(
     state: DealState, detail: ForecastDetail
 ) -> tuple[
-    dict[bool, fmr_history.RentGrowthBands], dict[bool, redfin_data.GrowthBands]
+    dict[bool, rent_growth.RentGrowthBands], dict[bool, redfin_data.GrowthBands]
 ]:
     """Compute both treatments of both series, recording why either side is missing."""
     terms = state.deal_terms
-    rent_bands: dict[bool, fmr_history.RentGrowthBands] = {}
+    rent_bands: dict[bool, rent_growth.RentGrowthBands] = {}
     price_bands: dict[bool, redfin_data.GrowthBands] = {}
 
     # --- rent side ---------------------------------------------------------
     if terms.county_fips is None:
         detail.rent_growth_unavailable_reason = (
-            "The subject resolved to no county, so there is no HUD Fair Market Rent "
-            "history to difference. Rent growth in this system is the change in the "
-            "same anchor the rent estimate was multiplied by; without a county there is "
-            "no anchor and no series."
-        )
-    elif terms.bedrooms is None:
-        detail.rent_growth_unavailable_reason = (
-            "The listing did not resolve a bedroom count, and FMR growth is measured on "
-            "the bedroom field the estimate was anchored to. Measured across the panel, "
-            "the five bedroom fields move by a median 2.16 percentage points within one "
-            "area-year, which is too much to substitute a default for."
+            "The subject resolved to no county, so there is no local rent index to "
+            "difference. Rent growth in this system is the change in the same reference "
+            "the rent estimate was multiplied by; without a county there is no reference "
+            "and no series."
         )
     else:
-        panel = fmr_history.load_cohort_panel()
-        series = fmr_history.get_rent_growth_series(
-            terms.county_fips, int(terms.bedrooms)
-        )
-        for screen in (False, True):
-            bands = fmr_history.compute_rent_growth_bands(
-                series, panel, exclude_cohort_shift_years=screen
+        # Both treatments of the *same* fork the price side answers - see `_framings`.
+        # A bedroom count is consulted only if this falls through to the published
+        # schedule, so a listing that never resolved one still gets a rent projection
+        # where it previously got none; `tools/rent_growth.py` handles that ordering.
+        for exclude in (False, True):
+            bands = rent_growth.get_rent_growth_bands(
+                terms.county_fips,
+                int(terms.bedrooms) if terms.bedrooms is not None else None,
+                exclude_anomalous_period=exclude,
             )
             if bands.available:
-                rent_bands[screen] = bands
+                rent_bands[exclude] = bands
+                # Recorded here rather than waiting for `_record_band_provenance`, which
+                # runs after the search: the evaluator's context block names the series
+                # it is scoring, and it is built before the first candidate exists. Both
+                # treatments read the same series, so either one answers.
+                detail.rent_growth_source = bands.source
+                detail.rent_growth_source_description = bands.source_description
             elif detail.rent_growth_unavailable_reason is None:
                 detail.rent_growth_unavailable_reason = bands.unavailable_reason
-        if panel is None and rent_bands:
-            detail.rent_growth_unavailable_reason = None
 
     # --- price side --------------------------------------------------------
     metro = (state.valuation_detail.benchmark_metro if state.valuation_detail else None)
@@ -540,29 +551,27 @@ def _build_bands(
 
 def _record_band_provenance(
     detail: ForecastDetail,
-    rent: Optional[fmr_history.RentGrowthBands],
+    rent: Optional[rent_growth.RentGrowthBands],
     price: Optional[redfin_data.GrowthBands],
 ) -> None:
     """Copy the chosen framing's provenance onto the detail object for the report."""
     if rent is not None:
+        detail.rent_growth_source = rent.source
+        detail.rent_growth_source_description = rent.source_description
         detail.rent_growth_area_name = rent.area_name
         detail.rent_growth_resolution = rent.resolution
-        detail.rent_growth_bedrooms = rent.bedrooms
         detail.rent_growth_n_observations = rent.n_yoy_observations
-        detail.rent_growth_first_year = rent.first_year
-        detail.rent_growth_last_year = rent.last_year
+        detail.rent_growth_first_observation = rent.first_observation
+        detail.rent_growth_last_observation = rent.last_observation
         detail.rent_growth_pessimistic_pct = rent.pessimistic_yoy_pct
         detail.rent_growth_base_pct = rent.base_yoy_pct
         detail.rent_growth_optimistic_pct = rent.optimistic_yoy_pct
+        detail.rent_growth_zips_in_county = rent.zips_in_county
+        detail.rent_anomalous_period_excluded = rent.anomalous_period_excluded
+        detail.rent_anomalous_period_share = rent.anomalous_period_share
+        detail.rent_growth_bedrooms = rent.bedrooms
         detail.rent_growth_pessimistic_year = rent.pessimistic_year
         detail.rent_growth_optimistic_year = rent.optimistic_year
-        detail.rent_growth_iqr_lower_pct = rent.iqr_lower_yoy_pct
-        detail.rent_growth_iqr_upper_pct = rent.iqr_upper_yoy_pct
-        detail.cohort_shift_years_detected = list(rent.cohort_shift_years_detected)
-        detail.cohort_shift_years_excluded = list(rent.cohort_shift_years_excluded)
-        detail.cohort_baseline_pct = rent.cohort_baseline_pct
-        detail.cohort_n_areas = rent.cohort_n_areas
-        detail.local_deviation_years = list(rent.local_deviation_years)
     if price is not None:
         detail.price_growth_metro = price.metro
         detail.price_growth_n_observations = price.n_yoy_observations
@@ -811,9 +820,10 @@ def _context_block(state: DealState, detail: ForecastDetail, horizon: int) -> st
         f"metros, rent growth and sale-price growth are NEGATIVELY correlated "
         f"(pooled r = -0.309). A pairing that puts rent and price at the same extreme "
         f"describes a market behaving in a way this data says is uncommon; that does not "
-        f"make it wrong, but it needs a reason. Rent bands come from HUD Fair Market Rent "
-        f"history (administrative, annual); price bands from Redfin metro multi-family "
-        f"sales (market, monthly)."
+        f"make it wrong, but it needs a reason. Rent bands come from "
+        f"{detail.rent_growth_source_description or 'a local rent index'} and price bands "
+        f"from Redfin metro multi-family sales; both are monthly market series, banded "
+        f"over the same span by the same estimator."
     )
 
 
@@ -893,20 +903,44 @@ def _disclosure_flags(
                 )
             )
 
-    if rent is not None and rent.cohort_shift_years_excluded:
-        years = ", ".join(f"FY{y}" for y in rent.cohort_shift_years_excluded)
+    if rent is not None and rent.available:
+        where = (
+            f" at {rent.area_name}" if rent.area_name else ""
+        )
+        span = (
+            f" over {rent.n_yoy_observations} year-over-year observations from "
+            f"{rent.first_observation} to {rent.last_observation}"
+            if rent.first_observation and rent.last_observation
+            else ""
+        )
+        if rent.source == rent_growth.SOURCE_ZORI:
+            breadth = (
+                f", a median across the {rent.zips_in_county} postal codes it covers"
+                if rent.zips_in_county
+                else ""
+            )
+            basis = (
+                f"Rent growth is projected from {rent.source_description}{where}"
+                f"{breadth}{span}. Note the difference in geography from the rent "
+                f"estimate itself, which is anchored at this property's own postal code: "
+                f"a single postal code's rent index either does not reach back far enough "
+                f"to measure a five-year trend or does not exist at all, so the trend is "
+                f"measured across the surrounding county and the estimate is not."
+            )
+        else:
+            basis = (
+                f"No market rent index reaches this county with enough history to measure "
+                f"a trend, so rent growth is projected from {rent.source_description}"
+                f"{where}{span}. This is a published schedule rather than observed market "
+                f"rents, and it is revised once a year — so its best and worst cases are "
+                f"single years rather than the twelve-month stretches the sale-price bands "
+                f"below use, and its range will read wider for that reason alone."
+            )
         flags.append(
             flag(
                 AGENT,
-                FlagKind.RENT_GROWTH_COHORT_SHIFT_SCREENED,
-                f"{years} were held out of the rent bands: every one of the "
-                f"{rent.cohort_n_areas} HUD Fair Market Rent areas in this project's "
-                f"panel moved together in those years, against a "
-                f"{rent.cohort_baseline_pct:.2f}% baseline. Whether that was HUD changing "
-                f"its methodology or the 2021-22 market surge reaching an administrative "
-                f"series two years late is not determinable from FMR alone, so it is "
-                f"screened and disclosed rather than attributed. Note these are not the "
-                f"same years as the price series' 2020-2022 window.",
+                FlagKind.RENT_GROWTH_SOURCE,
+                basis,
                 Severity.INFO,
                 planner_invocations,
             )

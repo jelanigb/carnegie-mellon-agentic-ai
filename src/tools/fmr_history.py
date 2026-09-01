@@ -396,15 +396,25 @@ def compute_rent_growth_bands(
     series: RentGrowthSeries,
     panel: Optional[CohortPanel] = None,
     exclude_cohort_shift_years: bool = False,
+    exclude_years: tuple[int, ...] = (),
 ) -> RentGrowthBands:
     """Derive optimistic / base / pessimistic annual rent growth from an FMR series.
 
-    `exclude_cohort_shift_years` is the fork, not a setting. Either treatment is
-    defensible - FY2023-24 were real increases a landlord could charge against, and they
-    were also a national step-change unlikely to repeat annually - so the Scenario
-    agent's Tree-of-Thought branches over both and the result records which produced it.
-    This mirrors `redfin_data.compute_growth_bands(exclude_anomalous_period=...)` on the
-    price side, deliberately: two series, two windows, one shape of decision.
+    **Two exclusions, and they are not alternatives — they answer different questions.**
+
+    `exclude_years` holds out fiscal years the caller names. `tools/rent_growth.py` passes
+    `config.FMR_ANOMALOUS_FISCAL_YEARS` through it, so the fallback path is asked the same
+    2020-2022 question the price side is asked, which is what decision #21 made the
+    depth-1 rent fork.
+
+    `exclude_cohort_shift_years` holds out the years *this panel* found every area moving
+    together in. It was the Scenario agent's fork through U8 and is no longer: the forecast
+    stopped reading the FMR schedule on any path a demo deal takes, so a screen for HUD's
+    administrative step-ups has nothing to screen there. It stays because
+    `scripts/growth_correlation.py` and `scripts/fmr_history_evidence.py` need it — removing
+    FY2023-24 is what collapsed the rent/price correlation from -0.317 to -0.197, and that
+    is a third of the evidence for #21. The machinery that retired itself is the machinery
+    that reproduces the retirement.
     """
     yoy = series.yoy_by_year
     detected: tuple[int, ...] = ()
@@ -425,7 +435,8 @@ def compute_rent_growth_bands(
         )
 
     excluded = detected if (exclude_cohort_shift_years and panel is not None) else ()
-    kept = {year: value for year, value in yoy.items() if year not in excluded}
+    held_out = set(excluded) | set(exclude_years)
+    kept = {year: value for year, value in yoy.items() if year not in held_out}
 
     common = dict(
         entityid=series.entityid,
