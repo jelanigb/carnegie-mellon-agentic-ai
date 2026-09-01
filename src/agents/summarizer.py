@@ -762,11 +762,14 @@ def _scenario_section(state: DealState) -> list[str]:
         )
         lines.append("")
         lines.append(
-            "Scenarios are named for their **combined** outcome across both quantities. "
-            "Because rent growth and price growth are negatively correlated in this "
-            "project's data, a single column need not fall in label order — the "
-            "pessimistic case can carry the higher projected price and still be the worse "
-            "outcome overall. Each row states which band it drew from on each side."
+            "Scenarios are named for their **combined** outcome across both quantities, "
+            "so a single column need not fall in label order — the pessimistic case can "
+            "carry the higher projected price and still be the worse outcome overall. "
+            "Each row states which band it drew from on each side. Rent and price are "
+            "paired here rather than forecast independently, and this project has "
+            "measured how the two move together: weakly, and not in a consistent "
+            "direction. Read each row as one internally consistent story about this "
+            "market, not as evidence that rent and price tend to move that way."
         )
         lines.append("")
 

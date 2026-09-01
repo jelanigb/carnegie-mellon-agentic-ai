@@ -339,9 +339,29 @@ _DEPTH_INSTRUCTIONS = {
         "least suitable near 0.0. Do not score them all low."
     ),
     2: (
-        "These are specific band pairings under the chosen treatment. Here a low score is "
-        "a real verdict: a pairing that the evidence does not support should score below "
-        "0.4 and will be discarded."
+        "These are specific band pairings under the chosen treatment, and the three that "
+        "survive become the pessimistic, base and optimistic rows of a five-year "
+        "outlook. **You are choosing which projections are worth showing a reader, not "
+        "ranking which is most likely to happen.** Those are different questions and "
+        "getting them confused empties the table: an extreme band is by construction "
+        "less probable than the middle one, so scoring on probability marks down every "
+        "hypothesis that is not neutral and leaves the report with a single row and no "
+        "range at all. The reader needs the range - that is what the three labels are "
+        "for.\n"
+        "So score each pairing on whether both of its bands are WELL FOUNDED: how many "
+        "observations sit behind them, whether the outer ones rest on a sustained stretch "
+        "the market actually held rather than an isolated print, and whether anything "
+        "flagged upstream undermines the estimate being compounded. A band drawn from a "
+        "real, disclosed extreme of the history is well founded even though it is "
+        "unlikely.\n"
+        "Two specific errors to avoid, both of which have been made here before. First, "
+        "base rent paired with base price is the DEFAULT the other eight depart from, not "
+        "a hypothesis that has to justify itself - it needs no evidence of extremity, "
+        "since being unextreme is what it is for. Second, a low score is still a real "
+        "verdict and a pairing below 0.4 is discarded, so reserve it for a pairing whose "
+        "bands are genuinely poorly founded - too few observations, or an extreme that "
+        "rests on data this deal's own flags call into question - and not for a pairing "
+        "that is merely a strong claim."
     ),
 }
 
@@ -364,10 +384,15 @@ def _heuristic_scores(
 ) -> list[tuple[float, str]]:
     """Deterministic fallback when the model is unreachable.
 
-    Scores on the one relationship this project has actually measured: rent and price
-    growth are negatively correlated here (r = −0.309), so a pairing that puts both
-    sides at the same extreme describes a market behaving in a way it usually has not.
-    Mid-band pairings score highest, matched extremes lowest.
+    **Scored on band width rather than on direction since #21.** This function used to
+    reward pairings that put rent and price at opposite extremes, on a measured negative
+    correlation; that correlation did not survive re-derivation (see `_context_block`),
+    so the rule it implemented has no evidence behind it and rewarding its opposite would
+    have none either. What is left is the one thing a scorer with no model can defend:
+    prefer the pairing that claims least. The neutral pairing scores highest, a single
+    extreme costs less than two, and both-extremes scores lowest — an ordering that
+    follows from how much of the band range a hypothesis is asserting, not from any claim
+    about how the two series move together.
 
     This is a degradation, not a design — but it keeps a forecast available when the
     model is not, and it is reported through the rationale text rather than presented as
@@ -388,14 +413,16 @@ def _heuristic_scores(
         # term measuring only the side that exists, rather than crashing on a None key.
         rent_rank = rank.get(candidate.payload.get("rent_band"), 0)
         price_rank = rank.get(candidate.payload.get("price_band"), 0)
-        # Distance from the diagonal, which the measured correlation favours.
-        divergence = abs(rent_rank - price_rank)
-        score = 0.50 + 0.15 * divergence - 0.05 * abs(rent_rank + price_rank)
+        # How far from the neutral pairing this hypothesis reaches, counting each side.
+        # A side with no series contributes rank 0 and therefore no distance, which
+        # leaves a one-sided deal scored on the side it actually has.
+        reach = abs(rent_rank) + abs(price_rank)
+        score = 0.70 - 0.15 * reach
         scored.append(
             (
                 round(min(max(score, 0.0), 1.0), 2),
-                f"{candidate.summary} — scored without model evaluation, on the "
-                f"measured negative correlation between rent and price growth alone.",
+                f"{candidate.summary} — scored without model evaluation, on how far the "
+                f"pairing departs from the neutral case alone.",
             )
         )
     return scored
@@ -816,11 +843,32 @@ def _context_block(state: DealState, detail: ForecastDetail, horizon: int) -> st
         f"Forecast horizon: {horizon} years.\n"
         f"Flags already raised upstream: {raised}.\n\n"
         f"{_availability_note(detail)}\n\n"
-        f"Measured context you must respect: across this project's three inference "
-        f"metros, rent growth and sale-price growth are NEGATIVELY correlated "
-        f"(pooled r = -0.309). A pairing that puts rent and price at the same extreme "
-        f"describes a market behaving in a way this data says is uncommon; that does not "
-        f"make it wrong, but it needs a reason. Rent bands come from "
+        f"Measured context you must respect: this project has measured the "
+        f"relationship between rent growth and sale-price growth and found it WEAK and "
+        f"UNSTABLE. Pooled across its markets it is r = -0.317 against the federal rent "
+        f"schedule, -0.197 once two nationwide administrative increases are removed, and "
+        f"+0.222 against market rent - which is the series the bands below are built "
+        f"from. It changes sign by market: positive in Cleveland and Los Angeles, "
+        f"negative in Chicago, on the same measurement. r-squared never exceeds 0.10 in "
+        f"any of those passes.\n"
+        f"THEREFORE: no directional rule about pairings is supported. Do NOT prefer "
+        f"pairings that put rent and price at opposite extremes, and do NOT prefer the "
+        f"diagonal either. An earlier version of these instructions asserted a negative "
+        f"relationship as fact; it was wrong, and a pairing must now earn its score from "
+        f"this deal's own evidence - the flags raised upstream, how wide each band is, "
+        f"how many observations sit behind it, and how much of the estimate being "
+        f"compounded is corroborated. In particular, a weak relationship is not an "
+        f"argument against pairings whose two sides move in opposite directions; it is "
+        f"equally an argument against pairings whose sides move together. It removes the "
+        f"question from consideration rather than answering it.\n"
+        f"About the 2020-2022 window, which is what the treatment choice above turns on: "
+        f"near-zero policy rates through that stretch pulled sale-price growth well above "
+        f"trend, and this project requires the window be disclosed wherever it feeds an "
+        f"average. Including it treats those conditions as something that could recur; "
+        f"excluding it treats them as a one-off, at the cost of sample size. Both are "
+        f"defensible readings of the same history and the choice is yours to argue - but "
+        f"argue it about the history, not about whether the two series were treated "
+        f"alike. Rent bands come from "
         f"{detail.rent_growth_source_description or 'a local rent index'} and price bands "
         f"from Redfin metro multi-family sales; both are monthly market series, banded "
         f"over the same span by the same estimator."
@@ -832,8 +880,9 @@ def _availability_note(detail: ForecastDetail) -> str:
 
     **Added after a Staten Island run returned no forecast at all.** Redfin's extract
     does not reach that metro, so every candidate carried a rent band and no price band;
-    the evaluator, told only that rent and price growth are negatively correlated, scored
-    each of them below the prune threshold and the beam emptied. The deal had a perfectly
+    the evaluator, told only that rent and price growth are negatively correlated — a
+    claim #21 has since retired — scored each of them below the prune threshold and the
+    beam emptied. The deal had a perfectly
     good rent forecast and the report said nothing — which is the degradation failure
     this project exists to prevent, produced by a prompt that described a two-sided
     problem to a one-sided deal.
@@ -850,7 +899,7 @@ def _availability_note(detail: ForecastDetail) -> str:
         return (
             "IMPORTANT: this deal has NO price-appreciation series — "
             f"{detail.price_growth_unavailable_reason} Candidates therefore carry a rent "
-            "band only, and the rent/price correlation below cannot apply. Judge each on "
+            "band only. Judge each on "
             "whether that rent treatment is defensible for this deal. Do not penalise a "
             "candidate for the missing price side; it is a gap in the data, not a "
             "weakness of the hypothesis."
@@ -960,9 +1009,11 @@ def _disclosure_flags(
     #   shares — so nothing a reader sees hinges on which pairing nominally led. Charging
     #   0.15 of confidence for a distinction that does not survive to the report was
     #   pricing the hypothesis space's symmetry as deal doubt: mirror pairings
-    #   (rent-up/price-down against rent-down/price-up) are genuinely equally defensible
-    #   under this project's measured negative correlation, and the evaluator scoring
-    #   them identically is the scoring working, not a degradation.
+    #   (rent-up/price-down against rent-down/price-up) are genuinely equally defensible,
+    #   and the evaluator scoring them identically is the scoring working, not a
+    #   degradation. **That argument was made under the negative correlation #21 retired
+    #   and survives its retirement intact** — indeed more cleanly, since with no
+    #   directional prior at all there is nothing left that could have separated the two.
     #
     # - A *cut-boundary* tie at depth 2 is INFO, and it is the one U8.6c added because
     #   nothing measured it. The pairing tie above compares #1 against #2, which the
@@ -1019,9 +1070,9 @@ def _disclosure_flags(
                 f"scenario table below, and each scenario's label comes from its "
                 f"projected outcome, so no reported figure depends on which of the two "
                 f"nominally ranked first. A tie here is common and often correct: two "
-                f"pairings that mirror each other are equally consistent with the "
-                f"opposite-direction relationship between rent and price growth this "
-                f"project measured. The scores also come from a single model call whose "
+                f"pairings that mirror each other make equally strong claims about a "
+                f"relationship between rent and price growth that this project has "
+                f"measured and found weak. The scores also come from a single model call whose "
                 f"repeat runs measurably vary, so a gap this small can be a property of "
                 f"this one sample.",
                 Severity.INFO,
