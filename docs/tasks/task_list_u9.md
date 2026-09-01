@@ -547,7 +547,7 @@ argument being available, not a level that stopped working.
 forecast recording. Landing it in this pass costs one re-recording instead of two, which is
 the same dependency that put U9.5 behind U9.3 and U9.4 in the first place.
 
-### U9.6 ⬜ — The demo deals: one new, one shadow
+### U9.6 ✅ — The demo deals: one new, one shadow
 
 **OQ-21's sixth deal.** Chicago Uptown at **1,100 sq ft** — U8.6b already found and
 measured it: 8 comparables, 2 outside the size band, **no warn-severity disclosure**,
@@ -719,6 +719,47 @@ sweep). Whether the **63-of-160 plateau moves is reported, not assumed** — two
 1.00 with no warns should be non-discriminating at every threshold on the grid, and if the
 plateau moves anyway that is a finding about the sweep rather than a diff to accept.
 
+#### What landed, Sept 1 — six commits, both predictions held, and two defects found
+
+**`chicago-uptown`** reports at 1.00 / 5 info / *Proceed*; **`los-angeles-current`** at
+1.00 / 4 info / *Proceed*, raising exactly what `los-angeles` raises. The other **28 rows
+are byte-identical**, so the whole diff is two additions and agreement moving 18/21 →
+20/23. `sensitivity.md`'s grid and its 63-of-160 plateau are unchanged.
+
+**The shadow's result is one line, which is what it was built for.** Same property, same
+$2,861 estimate — the model never sees a stated rent, so its output cannot move — and the
+comparison beneath it flips from **1% above** to **6% below**.
+
+**Two defects found while building, neither in the plan:**
+
+1. **The sensitivity sweep's live-tier exclusion was silent and had just become
+   load-bearing.** `scoring_cases()` already drops `BASELINE`, so filtering live rows
+   removed nothing while every live case carried one. U9.6's two deals declare
+   `PREDICTED`, making that filter the only thing keeping them out — and the artifact's
+   header still claimed to cover "21 cases with a verdict declared before the run" when 23
+   now exist. The behavior is right and was the original intent; it was undocumented, and
+   `results.md` and `sensitivity.md` had silently started counting different populations.
+2. **`docs/demo.md` carried a claim that was wrong rather than stale.** It said the U4
+   ablation was the only run landing at exactly 0.60 and escalating on the critical rule
+   instead of the score. `coord-conflict` does too, and `chicago` escalates at 0.70.
+
+**And one correction to this unit's own record:** every changelog row and docstring it
+added was first dated **Sept 2** when the work was done **Sept 1**. Fixed in its own
+commit, because date traceability is the whole reason the changelog exists.
+
+**One item deliberately left for U9.11.** OQ-21 closes there, not here, and its close must
+record that **the entry's premise was met before the deal was built** — U9.4's re-siting
+of `overpriced` gave the set a second clean axis-1 run, so the deal ships on the restated
+purpose (the first *Proceed* measured against a benchmark it was not derived from) rather
+than on OQ-21's original wording.
+
+**One stale claim found and deliberately not fixed.** `eval/cases.py`'s
+`chicago-five-bedroom` note says "the county-level anchoring warning that three of the six
+demo deals share". The count is now wrong and the claim probably is too — U11.3 made that
+warn rare, and `golden_fixtures.py` records it co-occurring on **0 of 21 cases**. Fixing it
+needs a measurement rather than a word change, so it belongs to U9.M rather than to a
+silent edit here.
+
 **Q3 — is `docs/demo.md` in this unit or its own?** It is four units stale and this unit
 adds two more deals to it. Folding it in keeps the demo guide true; splitting it out keeps
 U9.6 to three code commits with three days left and U9.7 unstarted.
@@ -868,7 +909,7 @@ Review the changelog rows each commit already wrote; do not reconstruct them.
 | ✅ | **U9.3** forecast: ZORI re-source, evaluator, two tables | Done Aug 31, 2026 — five commits; supersedes half of #16 |
 | ✅ | **U9.4** report: axes, recommendation + cross-check, lede, template | Done Sept 1, 2026 — six commits; `critic.recommend` + `cross_check`, the 2nd reasoning locus, `overpriced` re-sited to Uptown 60640 |
 | ✅ | **U9.5** pin the live tier; Staten Island | Done Sept 1, 2026 — five commits; all 28 rows + both sample reports replay from a clone, 0 verdicts moved, `sensitivity.md` byte-identical |
-| ⬜ | **U9.6** sixth deal + one shadow | Recorded correctly the first time |
+| ✅ | **U9.6** sixth deal + one shadow | Done Sept 1, 2026 — six commits; `chicago-uptown` + `los-angeles-current`, both `PREDICTED` and both held; 30 rows, 28 byte-identical |
 | ⬜ | **U9.7** Streamlit surface | Pre-agreed fallback if it slips |
 | | *✂️ cut line* | |
 | ⬜ | **U9.8** gross rent multiplier | First below the line if U9.1–U9.7 land early |
@@ -881,11 +922,11 @@ Review the changelog rows each commit already wrote; do not reconstruct them.
 grew substantially on Aug 31, so that estimate is tighter than it was. The cut line is where
 it falls.
 
-**Where that estimate stands after U9.5, with three build days left.** Five have landed
-(U9.1–U9.5) — **the seven-of-twelve prediction is now five-of-twelve with U9.6 and U9.7 the
-only items above the line left**, so the estimate is holding. U9.9 sits below the line and
-never sheds, so the realistic shape is **U9.6 → U9.9 capture → U9.M → U9.11**, with U9.7 the
-one item genuinely at risk and its fallback already pre-agreed.
+**Where that estimate stands after U9.6, with three build days left.** Six have landed
+(U9.1–U9.6) — **U9.7 is now the only item above the cut line remaining**, so the
+seven-of-twelve prediction is on track to be met exactly. U9.9 sits below the line and
+never sheds, so the realistic shape is now **U9.7 → U9.9 capture → U9.M → U9.11**, with U9.7
+the one item genuinely at risk and its fallback already pre-agreed.
 
 **One thing U9.5 changes about U9.7's risk, and it is a reduction.** The surface's stated
 default — *"the demo deals run from committed recordings — instant, deterministic, no
