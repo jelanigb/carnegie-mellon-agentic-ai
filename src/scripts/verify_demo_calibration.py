@@ -24,7 +24,7 @@ Each deal now names the basis for its figures and this script re-derives them:
     stale on day one (OQ-21).
 
   **The two are not a fixed offset apart, and a reader should not assume one.** Measured
-  Sept 2, 2026 at FY2026 against the index at 2026-07: the schedule runs **7.3% above**
+  Sept 1, 2026 at FY2026 against the index at 2026-07: the schedule runs **7.3% above**
   the market index in ZIP 90026, **13.8% below** it in 60640 and **33.1% below** it in
   60647. `demo_deals.py`'s docstring explains the gap as HUD's 40th percentile running
   under the market, which holds in Chicago and is backwards in Echo Park — where the

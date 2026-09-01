@@ -53,7 +53,7 @@ what any deal added after #19 declares. The four deals below stay on `hud_fmr:2`
 the U8.7 decision immediately following, not an oversight — so the set now carries both
 bases deliberately, and `los-angeles-current` exists to show the same property under each.
 
-**One thing the per-deal measurement corrected in the paragraph above (Sept 2, 2026).**
+**One thing the per-deal measurement corrected in the paragraph above (Sept 1, 2026).**
 "HUD's 40th percentile runs about a third under the market" describes Logan Square and
 nothing else. Measured at FY2026 against the index at 2026-07, the schedule runs **33.1%
 under** the market index in 60647, **13.8% under** in 60640, and **7.3% over** it in
@@ -208,7 +208,7 @@ DEMO_DEALS: dict[str, DemoDeal] = {
     # half-built ones would cost the batch.
     #
     # **Why Los Angeles, when it is the smallest of the three available moves.** Measured
-    # Sept 2, 2026: re-basing moves Echo Park's stated rents −7.2%, against +14% in Uptown
+    # Sept 1, 2026: re-basing moves Echo Park's stated rents −7.2%, against +14% in Uptown
     # and +34% in Logan Square. The size of the number is not what the shadow is for. On
     # `los-angeles` the report is clean — no warns, confidence 1.00 — so the re-basing is
     # the *only* difference between two otherwise identical reports, and it shows up as a

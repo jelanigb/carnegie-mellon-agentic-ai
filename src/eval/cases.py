@@ -303,7 +303,7 @@ _DEMO_BASELINES: dict[str, tuple[Verdict, str]] = {
 
 
 # **Demo deals added after the U7.8 table, and therefore `PREDICTED` rather than
-# `BASELINE`** (U9.6, architect's call Sept 2, 2026).
+# `BASELINE`** (U9.6, architect's call Sept 1, 2026).
 #
 # The distinction the two labels draw is **not** "was the outcome knowable in advance" —
 # it is where the verdict came from. `BASELINE` is for a case **whose own outcome was

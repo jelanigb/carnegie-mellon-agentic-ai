@@ -563,7 +563,7 @@ table U9.5 is already repairing. One proves the method and gives a visible befor
 the anchor change; four more are mechanical repeats if the schedule allows, and shedding
 four unbuilt deals costs nothing while shedding four half-built ones costs the batch.
 
-#### Measured Sept 2, before starting — what the stale rent basis actually costs, per deal
+#### Measured Sept 1, before starting — what the stale rent basis actually costs, per deal
 
 **The whole unit turns on one number that had never been read per-deal.** OQ-21 says the
 new deal's rents must be declared against the index the system now uses "or it ships stale
@@ -671,7 +671,7 @@ local benchmark built from 148 real recorded sales. **Recommended: proceed, on t
 restated purpose rather than on OQ-21's original wording**, and note the restatement when
 OQ-21 closes.
 
-**Q2 — `BASELINE` or `PREDICTED`? ANSWERED Sept 2 by the architect: `PREDICTED`, and the
+**Q2 — `BASELINE` or `PREDICTED`? ANSWERED Sept 1 by the architect: `PREDICTED`, and the
 question was posed on a misreading.** It was put as "both deals are sited on published
 measurements they are expected to reproduce, so declaring a verdict is closer to
 transcription than prediction" — which treats `BASELINE` as meaning *the outcome was
