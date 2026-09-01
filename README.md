@@ -49,7 +49,15 @@ rather than degrading its own confidence claim — see `agents/human_review.py` 
 - **`docs/sample_reports/`** — two full reports the pipeline produced, committed as-is:
   `los-angeles.md` (a clean run) and `staten-island.md` (an escalated one, sparse
   comps). Read these before running anything — they're the fastest way to see what the
-  system actually outputs, disclosures included.
+  system actually outputs, disclosures included. **`staten-island.md` is the one to read
+  if you only read one**: it is escalated to human review *and* recommends proceeding,
+  because the two are different questions — whether the system can stand behind its own
+  numbers, and whether the property is worth buying. It also carries a disagreement
+  between the rule that decides and an independent model reading of the same evidence,
+  disclosed rather than resolved.
+- **Every figure in this repository re-derives from a fresh clone.** All 28 evaluation
+  rows and both sample reports replay from committed model recordings, so nothing quoted
+  here rests on a call you cannot reproduce. Reaching a live model takes an explicit flag.
 - **`src/eval/results/results.md` and `sensitivity.md`** — the evaluation harness's
   output: a batch of 28 real and engineered cases run through the compiled graph, a
   flag-coverage census, and a sweep over the confidence-scoring weights. This is what a
@@ -119,17 +127,24 @@ the short version:
 This is a seven-week capstone build, not a production system, and several gaps are
 disclosed deliberately rather than hidden:
 
-- **The forecast's rent/price pairing search is being reworked.** The two sample reports
-  above were read closely partway through the build and surfaced a real defect: the rent
-  growth series and the price series were built by different methods over different
-  windows, which the reports themselves show as an implausible pairing in places. The
-  fix — re-sourcing rent growth to match the same market index the rent estimate is
-  anchored to — is in progress; see `docs/implementation_plan.md` and
-  `docs/design/evaluator.md` for the measurement behind it.
-- **A sparse-market deal (e.g. `staten-island`) is not yet reproducible from a fresh
-  clone.** Its live evaluation currently reads from a development cache rather than a
-  committed recording, so a re-run can return a different comp count than the committed
-  sample report shows. Recording it like every other evaluation tier is in progress.
+- **The forecast's pairing search rests on a weaker relationship than it was designed
+  for.** Reading the sample reports partway through the build surfaced a real defect —
+  rent growth and price growth were built by different methods over different windows,
+  which showed up as implausible pairings. That has been fixed: rent growth is now taken
+  from the same market index the rent estimate is anchored to, and both series are banded
+  by one estimator over one span. What the fix exposed is the deeper limitation: the
+  measured rent/price correlation explains under a tenth of the variance and changes sign
+  by market, so the step that pairs a rent band with a price band has no directional rule
+  behind it. It is disclosed as thin rather than presented as settled reasoning; see
+  `docs/design/evaluator.md` for the measurement.
+- **The report's written summary is model-generated, and its prose is not verified.** The
+  figures it quotes are taken from the computed result and are checked; the sentences
+  around them are not. It is additive by construction — it renders the recommendation the
+  rule reached and cannot change it, and every disclosure it summarizes is printed in full
+  directly beneath it — so a reader is never dependent on it. During development it twice
+  described rental comparables as recorded sales before the prompt was restructured to
+  stop handing it evidence it did not need, and prompt-fitting was stopped there
+  deliberately rather than tuned against a single sample.
 - **Live model calls are not perfectly deterministic, even at `temperature=0`.**
   OpenRouter can route "the same model" to different backend deployments per request,
   and scores can swing meaningfully between otherwise-identical calls. This mainly

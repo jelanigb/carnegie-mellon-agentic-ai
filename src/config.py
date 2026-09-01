@@ -1205,7 +1205,18 @@ LLM_CACHE_MODE = os.environ.get("LLM_CACHE_MODE", "read_write")
 # `src/eval/data/` is the committed counterpart: the recordings an evaluation replays
 # have to travel with the repo, or a fresh clone cannot reproduce the results the report
 # quotes. U8 points at it explicitly; nothing writes there by accident.
-LLM_CACHE_DIR = DATA_DIR / "processed" / "llm_cache"
+#
+# **Env-overridable as of U9.5, for the same reason `LLM_CACHE_MODE` above is.** The eval
+# runner selects the store by assigning this constant, which serves the batch and nothing
+# else — but `main.py` renders a *report*, and the batch does not: an escalating case
+# pauses at `human_review` and the runner never resumes it, so no run of the harness ever
+# reaches the Summarizer on those rows. The demo deals therefore need recording through
+# `main.py`'s full path, resume and written summary included, and that needs a way to
+# point at the committed store without editing this file. `LLM_CACHE_MODE=replay
+# LLM_CACHE_DIR=src/eval/data/llm_recordings .venv/bin/python main.py --deal <key>` is a
+# reproducible demo run, which is what U9.7's replay-by-default surface rests on.
+LLM_CACHE_DIR = Path(os.environ["LLM_CACHE_DIR"]) if os.environ.get("LLM_CACHE_DIR") \
+    else DATA_DIR / "processed" / "llm_cache"
 EVAL_DATA_DIR = SRC_DIR / "eval" / "data"
 EVAL_RESULTS_DIR = SRC_DIR / "eval" / "results"
 EVAL_RECORDINGS_DIR = EVAL_DATA_DIR / "llm_recordings"

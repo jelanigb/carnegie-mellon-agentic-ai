@@ -1,23 +1,57 @@
 # Deal Evaluation — 1425 W Sunset Blvd, Los Angeles, CA 90026
 
-**Confidence:** 1.00 (escalation threshold 0.60) · **Disclosures:** 3 · **Comparables:** 8
+> **Recommendation — Proceed.** The asking price is in line with the typical sale price for this area, which is within the ordinary range for recorded sales across this metro area.
+>
+> ✅ **System check — reported.** The figures below cleared the system's own checks without needing a human to release them.
 
-## Disclosures
+## Summary
 
-3 disclosure(s) were raised during this evaluation. Each is listed in full below, grouped by whether it describes this property or the data available for its market, and ordered most severe first within each.
+The property at 1425 W Sunset Blvd in Los Angeles is a two‑unit residential building with an asking price of $1,049,000 and an estimated rent of $2,861 per unit per month. The report recommends proceeding with the investment because the price falls within the typical range for comparable sales in the area. The system’s automated checks were cleared without any human review. Four informational disclosures were raised.
 
-### About this property (3)
+**Confidence:** 1.00 (escalation threshold 0.60) · **Disclosures:** 4 · **Comparables:** 8
+
+## Disclosures — 4 (4 informational)
+
+4 disclosure(s) were raised during this evaluation. Each is listed in full below, grouped by whether it describes this property or the data available for its market, and ordered most severe first within each. Entries that describe a mechanism rather than a weakness are collapsed; anything that qualifies a number below is open.
+
+### About this property (4)
 
 *Specific to this listing or this run — some of these may be resolvable.*
 
-**Disclosure (3)** — a mechanism used, disclosed for transparency; not a weakness
+**Disclosure (4)** — a mechanism used, disclosed for transparency; not a weakness
 
-- **`rent_anchored_to_market_index`** — Estimated rent of $2,861/mo is a modelled ratio of 1.06 applied to a reference rent of $2,691 for ZIP 90026, read from Zillow's published rent index for 2026-07-31 and stepped to 2 bedrooms using the federal rent schedule's own ratio between unit sizes. It is not an observed rent for this building. The ratio comes from a model trained on 2018-19 listings normalized against the same index at their own listing months, so what it carries forward is how this property compares to its neighbors rather than what anything cost in 2019.
-  *raised by:* `valuation_rent`
-- **`appreciation_source`** — Price appreciation is projected from Redfin metro-level Multi-Family (2-4 units) median sale price for the Los Angeles metro, over 52 year-over-year observations. This project has one appreciation series: the ZIP-level tier was closed on sample size (median 2 sales per ZIP-period) and no all-residential extract exists here, so there is no fallback below this one.
-  *raised by:* `scenario_forecast`
-- **`forecast_branches_near_tied`** — The two best-scoring scenario pairings were separated by 0.050, inside the 0.05 tie threshold — the evaluator found both equally defensible. Both appear in the scenario table below, and each scenario's label comes from its projected outcome, so no reported figure depends on which of the two nominally ranked first. A tie here is common and often correct: two pairings that mirror each other are equally consistent with the opposite-direction relationship between rent and price growth this project measured. The scores also come from a single model call whose repeat runs measurably vary, so a gap this small can be a property of this one sample.
-  *raised by:* `scenario_forecast`
+<details>
+<summary><b><code>rent_anchored_to_market_index</code></b> — Estimated rent of $2,861/mo is a modelled ratio of 1.06 applied to a reference rent of $2,691 for ZIP 90026, read from Zillow's published rent index for 2026-07-31 and stepped to 2 bedrooms using the federal rent schedule's own ratio between unit sizes</summary>
+
+Estimated rent of $2,861/mo is a modelled ratio of 1.06 applied to a reference rent of $2,691 for ZIP 90026, read from Zillow's published rent index for 2026-07-31 and stepped to 2 bedrooms using the federal rent schedule's own ratio between unit sizes. It is not an observed rent for this building. The ratio comes from a model trained on 2018-19 listings normalized against the same index at their own listing months, so what it carries forward is how this property compares to its neighbors rather than what anything cost in 2019.
+
+*raised by:* `valuation_rent`
+</details>
+
+<details>
+<summary><b><code>appreciation_source</code></b> — Price appreciation is projected from Redfin metro-level Multi-Family (2-4 units) median sale price for the Los Angeles metro, over 52 year-over-year observations</summary>
+
+Price appreciation is projected from Redfin metro-level Multi-Family (2-4 units) median sale price for the Los Angeles metro, over 52 year-over-year observations. This project has one appreciation series: the ZIP-level tier was closed on sample size (median 2 sales per ZIP-period) and no all-residential extract exists here, so there is no fallback below this one.
+
+*raised by:* `scenario_forecast`
+</details>
+
+<details>
+<summary><b><code>rent_growth_source</code></b> — Rent growth is projected from Zillow Observed Rent Index, county-level monthly median across all unit types at Los Angeles County, CA, a median across the 254 postal codes it covers over 55 year-over-year observations from 2019-01 to 2026-07</summary>
+
+Rent growth is projected from Zillow Observed Rent Index, county-level monthly median across all unit types at Los Angeles County, CA, a median across the 254 postal codes it covers over 55 year-over-year observations from 2019-01 to 2026-07. Note the difference in geography from the rent estimate itself, which is anchored at this property's own postal code: a single postal code's rent index either does not reach back far enough to measure a five-year trend or does not exist at all, so the trend is measured across the surrounding county and the estimate is not.
+
+*raised by:* `scenario_forecast`
+</details>
+
+<details>
+<summary><b><code>forecast_branches_near_tied</code></b> — The last scenario pairing to make the table and the best one left out of it were separated by 0.050, inside the 0.05 threshold this system treats as no meaningful difference</summary>
+
+The last scenario pairing to make the table and the best one left out of it were separated by 0.050, inside the 0.05 threshold this system treats as no meaningful difference. This line matters in a way a tie between two reported scenarios does not: it decides which pairings are shown at all, so the set of scenarios below could as defensibly have been a different set. The pairing that missed it is listed in the search ledger with its own score and the reason it was dropped. As with every score here, it comes from a single model call whose repeat runs measurably vary.
+
+*raised by:* `scenario_forecast`
+</details>
+
 
 ## Findings
 
@@ -55,42 +89,65 @@ This system estimates **$2,861/mo** for a 2-bedroom unit, or **$5,722/mo** acros
 
 ### Scenarios — 5-year outlook
 
+#### What each series has done
+
+Measured ranges, one per quantity, each labelled for its own band rather than for a combined outcome. Given a stretch of history these figures are arithmetic and do not move between runs — but *which* stretch of history is a judgment, and this run made it one way (2020–2022 held out of both); the reasoning behind it is shown under **Step 1** below.
+
+| | Weakest sustained stretch | Long-run average | Strongest sustained stretch | Measured over |
+| --- | --- | --- | --- | --- |
+| **Monthly rent** | +1.25%/yr | +2.51%/yr | +4.76%/yr | 55 year-over-year observations |
+| **Sale price** | -0.80%/yr | +2.10%/yr | +4.50%/yr | 52 year-over-year observations |
+
 Projected from modelled rent $2,861/mo and the **asking price** $1,049,000. The price side compounds the asking price rather than an estimated value — this system does not produce one, and says so above.
 
-Scenarios are named for their **combined** outcome across both quantities. Because rent growth and price growth are negatively correlated in this project's data, a single column need not fall in label order — the pessimistic case can carry the higher projected price and still be the worse outcome overall. Each row states which band it drew from on each side.
+Scenarios are named for their **combined** outcome across both quantities, so a single column need not fall in label order — the pessimistic case can carry the higher projected price and still be the worse outcome overall. Each row states which band it drew from on each side. Rent and price are paired here rather than forecast independently, and this project has measured how the two move together: weakly, and not in a consistent direction. Read each row as one internally consistent story about this market, not as evidence that rent and price tend to move that way.
 
 | Scenario | Rent growth | Price growth | Rent in yr 5 | Price in yr 5 |
 | --- | --- | --- | --- | --- |
-| **Pessimistic** | -0.68%/yr (pessimistic) | +4.50%/yr (optimistic) | $2,765 | $1,307,246 |
-| **Base** | +7.26%/yr (base) | -0.80%/yr (pessimistic) | $4,062 | $1,007,894 |
-| **Optimistic** | +14.49%/yr (optimistic) | -0.80%/yr (pessimistic) | $5,628 | $1,007,894 |
+| **Pessimistic** | +2.51%/yr (base) | -0.80%/yr (pessimistic) | $3,239 | $1,007,894 |
+| **Base** | +1.25%/yr (pessimistic) | +2.10%/yr (base) | $3,045 | $1,164,118 |
+| **Optimistic** | +2.51%/yr (base) | +2.10%/yr (base) | $3,239 | $1,164,118 |
 
-- **Pessimistic** *(scored 0.85)* — A pessimistic rent outlook combined with an optimistic price growth assumption aligns with the historically negative correlation between rent and price trends.
-- **Base** *(scored 0.80)* — Base rent growth paired with a pessimistic price projection reflects the opposite‑direction movement typical of the market.
-- **Optimistic** *(scored 0.85)* — Optimistic rent growth alongside a pessimistic price outlook mirrors the expected opposite dynamics in the market.
+- **Pessimistic** *(scored 0.85)* — Base rent growth is paired with a pessimistic price projection that rests on low‑end historical data with adequate observations.
+- **Base** *(scored 0.85)* — The pessimistic rent estimate is paired with a central price trend that is well supported by 52 monthly observations.
+- **Optimistic** *(scored 0.96)* — Both rent and price use central historical growth rates that are directly observed and therefore most robustly founded.
 
 Each score is how well the forecast search judged that hypothesis to be supported by the evidence it was given, from 0 to 1 — shown because a scenario the system itself rated weakly should be read as one. Two cautions: the scenario names above come from each row's projected outcome and not from these scores, so a higher-scoring row is not a more likely one; and the scores come from a single model call whose repeat runs measurably vary, so small differences between them are not reliable.
 
 #### How these bands were built
 
-**Rent** — HUD Fair Market Rent history for Los Angeles-Long Beach-Glendale, CA HUD Metro FMR Area, 2-bedroom, at county resolution over FY2018–2026 (9 year-over-year observations). The bands are the worst and best fiscal years observed (FY2022 and FY2024); the base case is their compound average.
-  Interquartile range of those annual changes: 5.21% to 9.21% — shown so an extreme band that rests on an isolated year is visible as one.
+**Rent** — Zillow Observed Rent Index, county-level monthly median across all unit types for Los Angeles County, CA, a median across the 254 postal codes within it, covering 2019-01 to 2026-07 (55 year-over-year observations). The outer bands are the worst and best twelve-month stretches the index actually held, not its worst and best single months; the base case is the average across every month kept.
+  This is measured across the county, while the rent estimate above is anchored to this property's own postal code. A single postal code's rent index generally does not reach back far enough to measure a five-year trend, so the trend is read at the wider geography and the estimate is not.
+  2020–2022 excluded — the same treatment question asked of the sale-price series below, so the two describe the same span of history.
 
 **Price** — Redfin metro-level Multi-Family (2–4 unit) median sale price for Los Angeles, 52 year-over-year observations, 2020–2022 excluded.
 
-#### What the forecast search considered
+#### How the forecast search reasoned
 
-13 hypotheses were evaluated and 9 discarded. Pruning is recorded rather than silent: an evaluator that quietly drops a correct-but-unusual branch looks identical to one working properly.
+13 hypotheses were evaluated and 9 discarded, across two questions asked in order. Pruning is recorded rather than silent: an evaluator that quietly drops a correct-but-unusual branch looks identical to one working properly.
 
-- `f-11` (0.80) — Pairs a moderate rent growth with low price growth, consistent with the negative correlation, but relies on a smaller rent sample, making it less robust than f-01. **Discarded:** Scored 0.80, outside the top 1 at this level.
-- `f-00` (0.30) — Pairs a high rent growth rate with a similarly high price appreciation rate, which conflicts with the observed negative correlation between rent and price growth in Los Angeles, making it the least defensible. **Discarded:** Scored 0.30, outside the top 1 at this level.
-- `f-10` (0.20) — Uses a reduced rent sample and pairs a moderate‑high rent growth with high price growth, again contradicting the negative correlation, placing it near the bottom of defensibility. **Discarded:** Scored 0.20, outside the top 1 at this level.
-- `f-01-pesspess` (0.25) — Both rent and price growth are projected to decline, a combination that is statistically rare given their negative correlation in Los Angeles. **Discarded:** Scored 0.25, below the 0.40 threshold this project requires before a hypothesis is carried forward.
-- `f-01-optiopti` (0.20) — Both rent and price are projected to rise sharply, a simultaneous extreme that is uncommon given their negative correlation. **Discarded:** Scored 0.20, below the 0.40 threshold this project requires before a hypothesis is carried forward.
-- `f-01-basebase` (0.70) — Both rent and price are forecast at their average historical rates, representing a neutral scenario with limited evidence of extremity. **Discarded:** Scored 0.70, outside the top 3 at this level.
-- `f-01-baseopti` (0.65) — Base rent growth combined with an optimistic price increase is moderately consistent with the inverse relationship observed. **Discarded:** Scored 0.65, outside the top 3 at this level.
-- `f-01-pessbase` (0.55) — Pessimistic rent growth is paired with a moderate price appreciation rate, which is plausible but not strongly supported by the observed inverse relationship. **Discarded:** Scored 0.55, outside the top 3 at this level.
-- `f-01-optibase` (0.60) — Optimistic rent growth paired with a base price appreciation rate is plausible but less directly supported by the correlation pattern. **Discarded:** Scored 0.60, outside the top 3 at this level.
+**Step 1 — which reading of the history should every band be built from?**  
+*4 considered, 1 kept.*
+
+- **`f-11` (0.95) — Excludes the 2020‑2022 anomalous period from both series, preserving the most representative sample size and aligning with the documented exclusion of that period. ← carried forward**
+- `f-01` (0.70) — Rent retains the anomalous period while price excludes it, creating an asymmetric treatment that may overstate rent growth relative to price. **Discarded:** Scored 0.70, outside the top 1 at this level.
+- `f-10` (0.55) — Price retains the anomalous period while rent excludes it, leading to an asymmetric treatment that likely overstates price growth and is less consistent with the evidence of anomalous period exclusion. **Discarded:** Scored 0.55, outside the top 1 at this level.
+- `f-00` (0.30) — Includes the 2020‑2022 anomalous period for both rent and price, which inflates growth estimates and does not reflect the typical market conditions the model aims to capture. **Discarded:** Scored 0.30, outside the top 1 at this level.
+
+**Step 2 — which combinations of those bands are worth showing?**  
+*9 considered, 3 kept.*
+
+- **`f-11-basebase` (0.96) — Both rent and price use central historical growth rates that are directly observed and therefore most robustly founded. ← carried forward**
+- **`f-11-basepess` (0.85) — Base rent growth is paired with a pessimistic price projection that rests on low‑end historical data with adequate observations. ← carried forward**
+- **`f-11-pessbase` (0.85) — The pessimistic rent estimate is paired with a central price trend that is well supported by 52 monthly observations. ← carried forward**
+- `f-11-optibase` (0.80) — Optimistic rent growth is paired with a central price trend that is well documented across many monthly data points. **Discarded:** Scored 0.80, outside the top 3 at this level.
+- `f-11-baseopti` (0.80) — Base rent growth is combined with an optimistic price projection that is observed but not sustained over a long period. **Discarded:** Scored 0.80, outside the top 3 at this level.
+- `f-11-pesspess` (0.78) — Pessimistic rent and price growth are both derived from low‑end historical extremes with solid observation counts, making this pair reliably low‑end. **Discarded:** Scored 0.78, outside the top 3 at this level.
+- `f-11-optiopti` (0.75) — Both rent and price use optimistic growth rates that reflect high‑end historical values but are not consistently sustained. **Discarded:** Scored 0.75, outside the top 3 at this level.
+- `f-11-optipess` (0.70) — An optimistic rent growth estimate is paired with a pessimistic price outlook, both of which are extreme but each has sufficient observation backing. **Discarded:** Scored 0.70, outside the top 3 at this level.
+- `f-11-pessopti` (0.70) — Pessimistic rent growth is combined with an optimistic price outlook that, while based on observed high values, lacks a sustained stretch. **Discarded:** Scored 0.70, outside the top 3 at this level.
+
+*The scores and the wording above come from one model call, and repeat calls on identical input have been measured moving materially. Read this as a sample of the reasoning rather than a stable ranking — small differences between scores are not reliable. The bands themselves are arithmetic and do not move.*
 
 ## Comparable Rentals
 
@@ -113,4 +170,4 @@ Each score is how well the forecast search judged that hypothesis to be supporte
 
 ---
 
-*Generated by the multi-family deal evaluator · run started 2026-08-31 11:00 · planner invocations 1 · rework passes 0*
+*Generated by the multi-family deal evaluator · run started 2026-09-01 12:52 · planner invocations 1 · rework passes 0*
