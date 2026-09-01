@@ -134,7 +134,7 @@ string is replayed into the report banner**, where disclosures render below. The
 right; the string is wrong. It also stops being a placeholder once a real reviewer persona
 exists.
 
-### U9.3 ⬜ — The forecast: re-source rent growth, and repair the search
+### U9.3 ✅ — The forecast: re-source rent growth, and repair the search
 
 **The largest change in this unit, and it supersedes half of decision #16.** Full
 investigation, all four defects and the re-measurement, in
@@ -557,7 +557,7 @@ Review the changelog rows each commit already wrote; do not reconstruct them.
 | --- | --- | --- |
 | ✅ | **U9.1** README + committed model | Done Aug 31, 2026 |
 | ✅ | **U9.2** personas, journeys, routing | Done Aug 31, 2026 — `docs/design/personas.md` + `state.ReviewDesk`/`desk_of` + the resume-note bug |
-| ⬜ | **U9.3** forecast: ZORI re-source, evaluator, two tables | **Largest; supersedes half of #16** |
+| ✅ | **U9.3** forecast: ZORI re-source, evaluator, two tables | Done Aug 31, 2026 — five commits; supersedes half of #16 |
 | ⬜ | **U9.4** report: axes, recommendation + cross-check, lede, template | Renders U9.3; adds the 2nd reasoning locus |
 | ⬜ | **U9.5** pin the live tier; Staten Island | One recording pass, behind U9.3+U9.4 |
 | ⬜ | **U9.6** sixth deal + one shadow | Recorded correctly the first time |

@@ -719,13 +719,17 @@ def _money_or_dash(value: Optional[float]) -> str:
 
 
 def _scenario_section(state: DealState) -> list[str]:
-    """The forecast, its basis, and what the search discarded on the way.
+    """The forecast, its basis, and how the search reasoned its way to it.
 
-    Three blocks rather than one table, and the split is the disclosure. The scenarios
-    say what the forecast is; the basis says which treatment of which series produced
-    it, including the fiscal years held out and the interquartile range the bands sit
-    inside; the ledger says what else was considered. A reader who only reads the first
-    block gets a forecast; one who reads all three can tell whether to believe it.
+    Four blocks rather than one table, and the split is the disclosure. **The measured
+    ranges lead**, one per quantity, because that is the part whose labels are true
+    without qualification — the combined scenarios below them are pairings, and a row
+    labelled "Optimistic" can carry the pessimistic price band. Then the scenarios
+    themselves; then the basis, which says which treatment of which series produced the
+    numbers; then the search, rendered as the two questions it actually asked with the
+    winner of each shown. A reader who stops after the first block has a defensible
+    forecast; one who reads all four can tell whether to believe it and can see what the
+    system rejected on the way.
     """
     detail = state.forecast_detail
     if not state.scenarios:
@@ -746,6 +750,7 @@ def _scenario_section(state: DealState) -> list[str]:
 
     horizon = detail.horizon_years if detail else config.FORECAST_HORIZON_YEARS
     lines = [f"### Scenarios — {horizon}-year outlook", ""]
+    lines.extend(_band_tables(detail))
 
     base_rent = detail.projection_base_rent if detail else None
     base_price = detail.projection_base_price if detail else None
@@ -907,6 +912,93 @@ def _forecast_basis_block(detail: ForecastDetail) -> list[str]:
     return lines
 
 
+def _band_tables(detail: Optional[ForecastDetail]) -> list[str]:
+    """The two measured ranges, each on its own terms, before anything is combined.
+
+    **This leads the forecast because it is the part that is true without qualification,
+    and the combined table below it is not.** A scenario row is a *pairing*: its label
+    comes from the two sides' projected outcome together, so a row labelled "Optimistic"
+    can and does carry the pessimistic price band. The report has always explained that
+    honestly in a paragraph, and explaining a confusing thing clearly does not stop it
+    being confusing.
+
+    Split into one table per series, every label describes the band directly under it.
+    Nothing is lost from the reasoning — all nine pairings and the full search ledger are
+    still below — and the reader who wants one number per quantity gets it without having
+    to decompose a combined outcome first.
+    """
+    if detail is None:
+        return []
+    rows: list[tuple[str, Optional[float], Optional[float], Optional[float], str]] = []
+    if detail.rent_growth_base_pct is not None:
+        rows.append((
+            "Monthly rent",
+            detail.rent_growth_pessimistic_pct,
+            detail.rent_growth_base_pct,
+            detail.rent_growth_optimistic_pct,
+            f"{detail.rent_growth_n_observations} year-over-year observations",
+        ))
+    if detail.price_growth_base_pct is not None:
+        note = f"{detail.price_growth_n_observations} year-over-year observations"
+        if detail.optimistic_stretch_in_anomalous_period:
+            # The one caveat that cannot wait for the disclosure list: an optimistic band
+            # resting on the 2020-2022 rate window is a real observed stretch and a bad
+            # thing to compound five years forward without saying so beside the number.
+            note += "; strongest stretch falls in 2020–2022"
+        rows.append((
+            "Sale price",
+            detail.price_growth_pessimistic_pct,
+            detail.price_growth_base_pct,
+            detail.price_growth_optimistic_pct,
+            note,
+        ))
+    if not rows:
+        return []
+
+    # Read from *both* fields, never from the price side alone. The two are separate
+    # forks and the search is free to answer them differently — the Staten Island run
+    # does, keeping 2020-2022 in the rent bands and holding it out of the price bands —
+    # so a sentence generalising one to both contradicts the basis block below it.
+    rent_out = detail.rent_anomalous_period_excluded
+    price_out = detail.anomalous_period_excluded
+    if rent_out is None and price_out is None:
+        window = None
+    elif rent_out == price_out:
+        window = (
+            "2020–2022 held out of both"
+            if rent_out
+            else "2020–2022 kept in both"
+        )
+    else:
+        held, kept = (
+            ("rent", "sale price") if rent_out else ("sale price", "rent")
+        )
+        window = f"2020–2022 held out of {held} and kept in {kept}"
+    lines = [
+        "#### What each series has done",
+        "",
+        "Measured ranges, one per quantity, each labelled for its own band rather than "
+        "for a combined outcome. Given a stretch of history these figures are arithmetic "
+        "and do not move between runs — but *which* stretch of history is a judgment, "
+        + (f"and this run made it one way ({window}); " if window else "")
+        + "the reasoning behind it is shown under **Step 1** below.",
+        "",
+        "| | Weakest sustained stretch | Long-run average | Strongest sustained stretch | Measured over |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for label, low, mid, high, note in rows:
+        lines.append(
+            f"| **{label}** | {_pct_or_dash(low)} | {_pct_or_dash(mid)} | "
+            f"{_pct_or_dash(high)} | {note} |"
+        )
+    lines.append("")
+    return lines
+
+
+def _pct_or_dash(value: Optional[float]) -> str:
+    return "—" if value is None else f"{value:+.2f}%/yr"
+
+
 def _branch_ledger_block(state: DealState) -> list[str]:
     """What the search considered and discarded.
 
@@ -928,16 +1020,50 @@ def _branch_ledger_block(state: DealState) -> list[str]:
 
     pruned = [e for e in entries if e.prune_reason]
     lines = [
-        "#### What the forecast search considered",
+        "#### How the forecast search reasoned",
         "",
-        f"{len(entries)} hypotheses were evaluated and {len(pruned)} discarded. "
-        f"Pruning is recorded rather than silent: an evaluator that quietly drops a "
-        f"correct-but-unusual branch looks identical to one working properly.",
+        f"{len(entries)} hypotheses were evaluated and {len(pruned)} discarded, across "
+        f"two questions asked in order. Pruning is recorded rather than silent: an "
+        f"evaluator that quietly drops a correct-but-unusual branch looks identical to "
+        f"one working properly.",
         "",
     ]
-    for entry in pruned:
-        score = f"{entry.score:.2f}" if entry.score is not None else "not scored"
-        lines.append(f"- `{entry.id}` ({score}) — {entry.summary} **Discarded:** {entry.prune_reason}")
+
+    # Rendered as two steps rather than one list of thirteen, and the winner is shown.
+    # The previous rendering flattened both levels together and printed only *discarded*
+    # branches, so a reader saw three losers and never learned what beat them — the one
+    # place in this system where a model exercises judgment, and it was the one place the
+    # report showed no verdict.
+    for depth, heading in (
+        (1, "Step 1 — which reading of the history should every band be built from?"),
+        (2, "Step 2 — which combinations of those bands are worth showing?"),
+    ):
+        at_depth = [e for e in entries if e.depth == depth]
+        if not at_depth:
+            continue
+        kept = [e for e in at_depth if not e.prune_reason]
+        lines.append(
+            f"**{heading}**  \n*{len(at_depth)} considered, {len(kept)} kept.*"
+        )
+        lines.append("")
+        # Best score first, so the chosen reading leads rather than being hunted for.
+        for entry in sorted(at_depth, key=lambda e: -(e.score or 0.0)):
+            score = f"{entry.score:.2f}" if entry.score is not None else "not scored"
+            if entry.prune_reason:
+                lines.append(
+                    f"- `{entry.id}` ({score}) — {entry.summary} "
+                    f"**Discarded:** {entry.prune_reason}"
+                )
+            else:
+                lines.append(f"- **`{entry.id}` ({score}) — {entry.summary} ← carried forward**")
+        lines.append("")
+
+    lines.append(
+        "*The scores and the wording above come from one model call, and repeat calls on "
+        "identical input have been measured moving materially. Read this as a sample of "
+        "the reasoning rather than a stable ranking — small differences between scores "
+        "are not reliable. The bands themselves are arithmetic and do not move.*"
+    )
     lines.append("")
     return lines
 
