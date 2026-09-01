@@ -329,6 +329,23 @@ def _selection_prompt(candidates: list[tot.Candidate], context: str, menu: str) 
 # which are defensible by construction, so the task is to rank them relative to each
 # other. Depth 2 judges whether a specific pairing holds up, where a low score is a real
 # verdict.
+# TODO(U9.5): tell depth 1 that treating both series alike is not, by itself, a reason.
+# Since #21 both forks ask the same question — does the 2020-2022 rate regime belong in
+# the record — of two different series, which put a cheap generic argument within reach
+# that did not exist when the two axes described different events. The Los Angeles run
+# took it, scoring f-00 at 0.95 for "uses the same 2020-2022 window for both rent and
+# price". **The level is not degenerate and this is not urgent**: on `staten-island` the
+# off-diagonal f-01 won at 0.96 against the diagonal f-11's 0.15, on a real asymmetry —
+# Richmond's ZORI series begins 2020-08, *inside* the excluded window, so holding it out
+# amputates the front of the history and leaves 43 observations from 2023-01, where Los
+# Angeles keeps its 2019 block. Three of the four framings have been chosen across five
+# demo deals.
+#
+# What it needs: one clause, the same shape as the "a weak relationship is not an argument
+# in either direction" clause in `_context_block` — symmetry of treatment is not evidence;
+# argue from what the exclusion costs each series. Deferred to U9.5 rather than landed
+# here because a prompt change invalidates every forecast recording, and U9.5 re-records
+# both offline tiers anyway: landing it there costs one recording pass instead of two.
 _DEPTH_INSTRUCTIONS = {
     1: (
         "These are alternative TREATMENTS of the same underlying data, and every one of "

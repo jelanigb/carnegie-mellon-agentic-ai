@@ -399,6 +399,26 @@ rework makes that **one recording pass covering both** instead of two.
 byte-for-byte on confidence, disclosures, outcome and verdict. The recording diff should
 be **additions only**.
 
+**Carry one prompt change into this pass, from U9.3.** `TODO(U9.5)` at
+`agents/scenario_forecast._DEPTH_INSTRUCTIONS`: depth 1 should be told that treating both
+series alike is not, by itself, a reason to prefer a framing. Since #21 both forks ask the
+same question — does the 2020–2022 rate regime belong in the record — of two different
+series, and that put a cheap generic argument within reach that did not exist when the two
+axes described different events. Los Angeles took it, scoring `f-00` at 0.95 for *"uses
+the same 2020-2022 window for both rent and price"*.
+
+**Not a defect, and the measurement says so.** On `staten-island` the off-diagonal `f-01`
+won at **0.96** against the diagonal `f-11`'s **0.15**, arguing from a real asymmetry:
+Richmond's ZORI series begins 2020-08, *inside* the excluded window, so holding it out
+amputates the front of its history and leaves 43 observations from 2023-01 — where Los
+Angeles keeps its 2019 block and loses a middle segment. Three of the four framings have
+been chosen across five demo deals, so the level still decides something. This is one weak
+argument being available, not a level that stopped working.
+
+**It rides here because it is a prompt change**, and a prompt change invalidates every
+forecast recording. Landing it in this pass costs one re-recording instead of two, which is
+the same dependency that put U9.5 behind U9.3 and U9.4 in the first place.
+
 ### U9.6 ⬜ — The demo deals: one new, one shadow
 
 **OQ-21's sixth deal.** Chicago Uptown at **1,100 sq ft** — U8.6b already found and
