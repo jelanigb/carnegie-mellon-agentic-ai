@@ -443,6 +443,43 @@ condition that made a live row non-deterministic is therefore gone, and a live r
 an honest measurement rather than a mixture. That is the precondition the Staten Island
 diagnosis below asks for, already satisfied.
 
+#### Staten Island: settled, and it was never a defect
+
+**Measured against the corpus directly, no model calls.** 0 listings within 4 miles of
+7001 Amboy Rd; **7 within 8 miles, none of them 2-bedroom**, against a 2-bedroom subject.
+At the widest radius the relaxation ladder reaches, with the square-footage band already
+dropped, there are **zero eligible candidates** — so no extraction of this listing can
+produce a comp. Zero is structural. The published `1` was the stale development-cache
+extraction the tier pin retires, and the deal's own declaration was right all along.
+
+**A second-order finding for U9.M, recorded because it is concrete evidence for an item
+that was previously an argument.** The ladder spends all four iterations on the size band
+and two radius widenings and **never reaches the bedroom count** — which is the binding
+filter on this deal. So the ladder as ordered could not rescue this deal even in principle.
+That does not change U9's scope (reordering moves comp sets across all 28 rows), but it
+turns the docstring correction into a documented instance rather than a general caution.
+
+#### A dependency U9.7 has on this pass, found here and not in the plan
+
+**The eval batch cannot record what the demo surface will replay.** An escalating case
+pauses at `human_review` and `run_case` never resumes it, so **no run of the harness ever
+reaches the Summarizer on those rows** — and therefore never records the written summary's
+prompt. Three demo deals escalate (`staten-island`, `no-geography`, `coord-conflict`), plus
+`chicago`.
+
+**That matters because a miss is fatal rather than graceful.** `CacheMiss` subclasses
+`Exception`, not `LlmError`, and `LlmClient.complete` lets it through, so it passes
+straight by `_lede_section`'s `except (LlmError, RuntimeError, OSError)` and takes the
+Summarizer node down. U9.7's replay-by-default surface would crash on exactly the deals
+whose degraded paths make the best demo.
+
+**Fixed by recording, not by widening the catch** — and the choice is deliberate. Catching
+`CacheMiss` in the Summarizer would make a drifted prompt render a report with its summary
+quietly missing, which is the failure the replay design exists to make loud. Instead the
+demo deals are recorded through `main.py`'s full path, resume and summary included, so the
+miss never occurs. That needs `config.LLM_CACHE_DIR` to be env-overridable the way
+`LLM_CACHE_MODE` already is; it now is.
+
 #### Two decisions taken Sept 1 by the architect
 
 1. **Replay by default; `--live` opts in.** All rows replay from committed recordings, so
