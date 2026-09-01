@@ -26,8 +26,8 @@ agreement and prove nothing. Hence `VerdictSource` below.
 Two kinds of verdict, which must not be pooled
 ------------------------------------------------
 The six demo deals and the U4 ablation join this batch (U8.1) so the demo evidence is a row
-set in the evaluation rather than a separate pass. But their outcomes are already *measured*
-and published — `history/decision_log.md` carries the U7.8 table. Declaring those as
+set in the evaluation rather than a separate pass. But those six outcomes are already
+*measured* and published — `history/decision_log.md` carries the U7.8 table. Declaring those as
 "intended verdicts" would hand U8.6 seven free agreements that were transcribed from the
 answer key, quietly inflating any threshold's score.
 
@@ -263,8 +263,12 @@ class EvalCase:
 # --------------------------------------------------------------------------
 #
 # §6 folded U10 into U8 so the demo evidence and the evaluation evidence come from one
-# code path and cannot disagree. This is where that happens: the same six listings
+# code path and cannot disagree. This is where that happens: the same listings
 # `main.py --deal` runs, plus the ablation, entering the batch as rows.
+#
+# **Two tables below, not one.** The six deals that predate U8 carry `BASELINE` verdicts
+# transcribed from the U7.8 table; deals added afterwards carry `PREDICTED` ones derived
+# from the escalation rule. `_DEMO_PREDICTIONS`' header carries the reasoning.
 #
 # **Their verdicts are BASELINE, not PREDICTED**, and every one is transcribed from the
 # U7.8 re-measurement in `history/decision_log.md` rather than guessed. That makes them
@@ -298,19 +302,81 @@ _DEMO_BASELINES: dict[str, tuple[Verdict, str]] = {
 }
 
 
+# **Demo deals added after the U7.8 table, and therefore `PREDICTED` rather than
+# `BASELINE`** (U9.6, architect's call Sept 2, 2026).
+#
+# The distinction the two labels draw is **not** "was the outcome knowable in advance" —
+# it is where the verdict came from. `BASELINE` is for a case **whose own outcome was
+# already published**, which is what makes agreeing with it worthless as evidence. A deal
+# that has never been run has no such outcome, so its verdict is a claim, and the claim
+# has to be derived the way every engineered case's is: from the disclosures the design
+# expects and the shipped escalation rule, **and from nothing else**.
+#
+# It was nearly labelled `BASELINE` on the reasoning that these deals are sited on
+# published measurements they are expected to reproduce, so declaring a verdict is closer
+# to transcription than prediction. That reasoning does not survive contact with the
+# existing batch: `scripts/straddle_probe.py` sited `chicago-uptown-band-under`'s 1,100
+# sq ft by running the real retrieval and Valuation agents over a grid, and this file
+# already says the engineered fixtures "were run while they were being designed". Knowing
+# roughly what a case will do has never been what separates the two labels.
+#
+# **And the prediction is genuinely falsifiable.** `chicago-uptown-band-over` is the same
+# address 200 sq ft larger, its verdict derived the same mechanical way, and it is a
+# MISMATCH. Escalation is combinatorial — the score threshold, *or* any critical, *or* an
+# exhausted rework budget, with the interaction objections gated on whether the comp
+# cross-check ran and whether it diverged — so a clean-looking deal is not a safe bet.
+# **18/21 rather than 21/21 is the evidence this instrument works**, and it is the reason
+# to put honest predictions into it rather than hold them out.
+_DEMO_PREDICTIONS: dict[str, tuple[Verdict, str]] = {
+    "chicago-uptown": (
+        Verdict.REPORTS,
+        "OQ-21's sixth deal, and **the first demo listing whose axis-2 verdict is read "
+        "against a benchmark it was not derived from.** #11 set every other asking price "
+        "from a Redfin metro median, and Los Angeles has no ZIP tier at all, so "
+        "`los-angeles` is compared against the very figure it was calibrated from and "
+        "reads 0% by construction (OQ-20). This one is calibrated to ZIP 60640's own "
+        "median, from 148 recorded county-assessor sales.\n\n"
+        "**Verdict derived from the expected disclosures' severity and the shipped "
+        "escalation rule, and from nothing else.** An Uptown two-flat at 1,100 sq ft is "
+        "an ordinary property in a market this corpus covers densely: the comp search is "
+        "not expected to relax, so no warn-severity disclosure is expected, so the score "
+        "is not expected to move off 1.00 and no critical should fire. Predicted to "
+        "**report**. That derivation is checkable against `config.FLAG_SEVERITY_PENALTY` "
+        "and does not consult what the deal actually did.\n\n"
+        "**Not predicted to repeat `overpriced`, and the difference is what the deal is "
+        "for.** That listing is the same ZIP, same benchmark and same unit mix, priced "
+        "55% above the benchmark, and returns *Proceed with caution*. This one should "
+        "return *Proceed* — the same axis-1 outcome with the opposite axis-2 verdict, "
+        "turning on the one input the recommendation rule reads.\n\n"
+        "**If it escalates, that is a finding to report rather than a verdict to "
+        "re-declare.** This deal runs the Extractor and the live geocoder, which the "
+        "golden fixtures at this address skip, so it has two failure surfaces they do "
+        "not.",
+    ),
+}
+
+
 def demo_cases() -> list[EvalCase]:
-    """The six demo deals plus the U4 ablation, as LIVE cases."""
+    """The demo deals plus the U4 ablation, as LIVE cases.
+
+    Two tables rather than one, because the verdicts have different provenance and
+    `scoring_cases()` treats them differently — see each table's header.
+    """
     cases = [
         EvalCase(
             key=key,
             tier=Tier.LIVE,
             verdict=verdict,
-            verdict_source=VerdictSource.BASELINE,
+            verdict_source=source,
             note=note,
             listing=DEMO_DEALS[key].listing,
             supplied_coords=DEMO_DEALS[key].supplied_coords,
         )
-        for key, (verdict, note) in _DEMO_BASELINES.items()
+        for source, table in (
+            (VerdictSource.BASELINE, _DEMO_BASELINES),
+            (VerdictSource.PREDICTED, _DEMO_PREDICTIONS),
+        )
+        for key, (verdict, note) in table.items()
     ]
     cases.append(
         EvalCase(

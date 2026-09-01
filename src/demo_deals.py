@@ -308,6 +308,55 @@ DEMO_DEALS: dict[str, DemoDeal] = {
             "for that check, not as a claim that Uptown trades at this price."
         ),
     ),
+    "chicago-uptown": DemoDeal(
+        key="chicago-uptown",
+        listing=(
+            "For sale: 5100 N Kenmore Ave, Chicago, IL 60640. Uptown two-flat one block "
+            "from the Red Line, 2 bed / 1 bath per unit, approx 1,100 sq ft each. "
+            "Updated kitchens and baths, tuckpointed 2024, tandem parking pad. Current "
+            "tenants pay $2,000 and $2,050 per month. Asking $869,000."
+        ),
+        price=869_000,
+        unit_rents=(2_000, 2_050),
+        # **Added U9.6 for OQ-21, on a purpose restated after measurement.** That entry
+        # was raised when `chicago` began escalating and `los-angeles` "became the only
+        # demo deal reaching 1.00 and reporting clean". U9.4 re-sited `overpriced` to
+        # Uptown and it now reports at 1.00 too, so the set already shows a clean run
+        # twice on axis 1 and OQ-21's original wording is satisfied without this deal.
+        #
+        # What the set still lacks is a deal clean on **both** axes whose *Proceed* means
+        # something. `los-angeles` returns *Proceed* on a premium that is 0% because #11
+        # derived its asking price from the same metro median the report benchmarks it
+        # against, and Los Angeles has no ZIP tier at all — so that verdict is read
+        # against the very figure it was calibrated from (OQ-20). This deal is calibrated
+        # to **ZIP 60640's own median, built from 148 recorded county-assessor sales**,
+        # which is a benchmark #11 did not supply.
+        price_basis="zip_sale_benchmark:60640",
+        # **Rents declared against the anchor the system actually uses, and the first deal
+        # here to do so.** OQ-21: a new deal copying `hud_fmr:2` ships stale on day one,
+        # since #19 retired that anchor. The four older listings stay on it deliberately
+        # (U8.7) — see the module docstring — so the set now carries both bases on purpose.
+        rent_basis="market_anchor:2",
+        # **Sited at the golden fixtures' own address rather than a second Uptown one.**
+        # `chicago-uptown-duplex`, `-band-under`, `-band-over` and `-oversized` are all
+        # 5100 N Kenmore, so this listing and those fixtures describe **one property at
+        # several specifications** rather than nearby buildings that merely resemble each
+        # other. 1,100 sq ft is `band-under`'s specification, whose 1,300 sq ft sibling
+        # escalates — so the deal inherits a documented statement of how narrow the clean
+        # margin is without having to make that statement itself.
+        notes=(
+            "The demo set's second run clean on both axes, and the first whose "
+            "recommendation is read against a neighborhood benchmark rather than the "
+            "metro figure its own asking price was derived from. **The nearest thing "
+            "this set has to a controlled pair is this deal and `overpriced`** — same "
+            "ZIP, same benchmark, same unit mix, both expected to report cleanly — "
+            "differing in where the asking price sits against that benchmark, which is "
+            "the one input the recommendation rule reads. They differ in floor area too "
+            "(1,100 against 950 sq ft), so it is a near-pair rather than a true "
+            "one-variable control; the eval batch's `chicago-uptown-*` fixtures are "
+            "where floor area is isolated properly."
+        ),
+    ),
     "coord-conflict": DemoDeal(
         key="coord-conflict",
         listing=(
