@@ -724,7 +724,24 @@ def recommend(state: DealState) -> RecommendationDetail:
             f"The asking price is {premium:.0%} above the typical sale price for this "
             f"area — higher than roughly {percentile:.0%} of {where}."
         )
-    elif premium >= 0:
+    # **Branch on the figure as rendered, not as computed.** A premium of 0.4% is
+    # honestly "above" the benchmark and dishonestly rendered as `0% above`, which reads
+    # to an investor as a placeholder or a bug rather than as a small number. Rounding
+    # first ties the sentence to what the reader actually sees, so the two cannot
+    # disagree — and it needs no threshold constant, because the precision of the format
+    # string *is* the threshold.
+    #
+    # This fires on `los-angeles` and it is not a coincidence: under #11 the demo asking
+    # prices were derived *from* the metro median, and Los Angeles has no ZIP tier
+    # (California assessors publish assessed value, not sale price), so the deal is
+    # compared against the very figure it was calibrated from. The wording is fixed here;
+    # the circularity underneath it is OQ-20's and is out of U9's scope.
+    elif round(premium * 100) == 0:
+        reasons.append(
+            f"The asking price is in line with the typical sale price for this area, "
+            f"which is within the ordinary range for {where}."
+        )
+    elif premium > 0:
         reasons.append(
             f"The asking price is {premium:.0%} above the typical sale price for this "
             f"area, which is within the ordinary range for {where}."
