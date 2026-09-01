@@ -1,25 +1,34 @@
 # Demo Deals
 
-**What this document is:** a plain-language guide to the six synthetic listings the demo
+**What this document is:** a plain-language guide to the eight synthetic listings the demo
 runs on, and *why each one exists* — what it is built to show a reader, and what in the
 system's output actually demonstrates it. Written so a reader doesn't have to reverse
 that purpose out of `src/demo_deals.py` or `src/eval/cases.py` themselves.
 
-**Scope, for now.** This covers the six `main.py --deal` listings plus the one ablation
+**Scope.** This covers the eight `main.py --deal` listings plus the one ablation
 run (`--no-retrieval`) that rides along with them. It does not walk through the 21
 engineered fixtures in `src/eval/cases.py` (`la-ordinary-duplex`, `chicago-five-bedroom`,
 and so on) — those exist to trip one specific flag apiece for the U8 evaluation harness,
 are already documented case-by-case in that file's docstrings, and are a separate kind of
 evidence from the demo (see "How the demo deals relate to the eval harness" below).
-Started Aug 29, 2026, alongside U8; **will be filled out further in U9** once the
-Streamlit surface and the final report/video are actually built.
+Started Aug 29, 2026, alongside U8.
+
+**Brought back into line with the build on Sept 1, 2026 (U9.6), and the drift is worth
+naming rather than quietly fixing.** Between U9.3 and U9.5 this document went four units
+stale while continuing to read as current: it described `overpriced` as a Los Feliz
+listing in Los Angeles (U9.4 re-sited it to Uptown, Chicago), reported `chicago` as
+reporting normally (it escalates), and gave confidence scores and disclosure counts for
+five of the six deals that no run produces. **None of that was visible from this file** —
+every figure in it was true when written. Every number below is now transcribed from
+`src/eval/results/results.md`, the committed table the harness regenerates, so the two
+cannot drift apart silently again.
 
 ---
 
 ## Overview
 
 The system evaluates small multi-family (2–4 unit) residential listings as investment
-candidates. The demo deals (`src/demo_deals.py`) are six synthetic listings, each run
+candidates. The demo deals (`src/demo_deals.py`) are eight synthetic listings, each run
 independently with `.venv/bin/python main.py --deal <key>` from `src/`. They are not
 random examples — each one is built to land on a different point of the system's
 operating range, from "everything works cleanly" to "the system can't do part of its job
@@ -30,19 +39,26 @@ Degradation**: when an agent has to proceed on incomplete or relaxed information
 raises a named flag rather than silently absorbing the gap, and those flags propagate
 downstream to the final report. A demo that only ever showed the clean path would prove
 the pipeline runs; it would not prove degradation is disclosed rather than hidden. The
-six deals together are what makes that second claim demonstrable.
+deals together are what makes that second claim demonstrable.
 
 **Every figure that can be anchored to something real, is.** The street address (and
 therefore the geocode, county, and Fair Market Rent that county attracts) is real. Asking
-prices are anchored to Redfin's median sale price for 2–4 unit properties in that metro;
-stated rents are anchored to HUD's Fair Market Rent for the resolved county. What's
+prices are anchored to a recorded-sale benchmark — the subject's own ZIP where
+county-assessor records reach it, the Redfin metro median otherwise. Stated rents are
+anchored to one of two references, and **which one a listing declares is a statement
+about its vintage** (U9.6): the four oldest deals name HUD's Fair Market Rent for the
+resolved county, which is what decision #11 calibrated them against; the two newest name
+the market rent index at the subject's own ZIP, which is what the system actually prices
+against today (#19). The older four were deliberately left on the retired reference — see
+`demo_deals.py` for why — and `los-angeles-current` exists to show the same property
+under each. What's
 invented is that the property is for sale at all, its condition, amenities, and the
 specific numbers within a stated tolerance. `src/scripts/verify_demo_calibration.py`
 re-derives each figure from live sources and reports drift, so the committed values stay
 checkable rather than just asserted. Full reasoning in `demo_deals.py`'s module
 docstring.
 
-**Where the six deals sit in the build.** They were originally U10 (a separate
+**Where the demo deals sit in the build.** They were originally U10 (a separate
 end-to-end pass), folded into U8's eval harness on Aug 26, 2026 so the demo evidence and
 the evaluation evidence come from one code path and can't disagree with each other — see
 `eval/cases.py`'s `demo_cases()`. In that harness they're recorded as `BASELINE`
@@ -57,7 +73,7 @@ below for why that distinction matters.
 
 Every deal ends one of two ways: the Summarizer produces a normal report, or the Critic
 routes the deal to `human_review` and pauses there. What decides which is worth knowing
-before reading the six deals below, because it's the mechanism each one is chosen to
+before reading the deals below, because it's the mechanism each one is chosen to
 exercise.
 
 The Critic aggregates every flag raised anywhere in the pipeline into a single confidence
@@ -77,7 +93,7 @@ objection that survives the rework budget does the same. `chicago --no-retrieval
 is the case that isolates the critical-flag rule from the score-based one; the eval
 harness's `chicago-geocoder-outage` row isolates the rework-budget one. Mechanism in
 `agents/critic.py`; both constants are marked provisional in `config.py` because U8's
-eval batch is what tunes them against real evidence rather than against the six deals,
+eval batch is what tunes them against real evidence rather than against the demo deals,
 which were calibrated to run clean and can't stress-test a threshold themselves.
 
 **One consequence of the arithmetic is worth seeing before reading the deals below.**
@@ -99,12 +115,40 @@ than declared optimal.
 
 ---
 
+## Two questions, deliberately kept apart
+
+**Added U9.4, and this document predated it.** Every deal below now produces *two*
+verdicts, and the whole point is that they answer different questions and can disagree:
+
+- **Axis 1 — can the system stand behind its own numbers?** `reports` or `escalates to
+  human review`. This is a statement about the *software*, and it is what the confidence
+  score above decides.
+- **Axis 2 — is this property worth buying?** *Proceed*, *Proceed with caution*, *Do not
+  proceed*, or *No recommendation*. Computed by the Critic from the asking price against
+  its benchmark and whether nearby listings corroborate the rent — and it **never reads
+  the confidence score or the escalation decision**, because those are axis 1.
+
+**`staten-island` is why they are separated.** It escalates on zero comparables while
+asking 17% below its own neighborhood's median, so a reader who took the escalation
+banner as a verdict on the *property* read the evidence exactly backwards. It reports
+**Proceed** on axis 2 and **escalates** on axis 1, and the distance between those two
+lines is the point.
+
+The axis-2 verdict is **deterministic** — a pure function, so the same deal cannot be
+"proceed" on Tuesday and "do not proceed" on Wednesday (OQ-17 measured this model scoring
+an identical prompt 0.05 and then 0.95). A model does produce its own independent verdict
+from the same evidence, but it can only ever *annotate*: where the two disagree the report
+says so and discloses the disagreement rather than resolving it. Rows carrying that
+disagreement are marked ⚖ in the results table.
+
+---
+
 ## The demo deals
 
 ### Los Angeles — the clean baseline, and it only became clean on Aug 30, 2026
 
-`main.py --deal los-angeles` · confidence **1.00** · 3 disclosures (3 info) ·
-**reports normally**
+`main.py --deal los-angeles` · confidence **1.00** · 4 disclosures (4 info) ·
+**reports** · axis 2: **Proceed**
 
 An Echo Park duplex, dense market, full 8-comp set. This is the "everything worked"
 case, and it is now literally that: three info-severity disclosures, no warnings, a
@@ -125,19 +169,24 @@ run. U11.3 re-based the anchor on Zillow's ZIP-level market rent index, which *d
 cover 90026. The warning stopped firing because the condition stopped being true, not
 because the disclosure was softened.
 
-The three surviving disclosures are mechanism, not weakness, and cost the score nothing:
-how the rent figure was anchored (a modelled ratio times this ZIP's own market rent),
-which series the price appreciation comes from, and which fiscal years were screened out
-of the rent bands. A fourth used to sit here — a *drift correction*, scaling this deal's
+The four surviving disclosures are mechanism, not weakness, and cost the score nothing:
+how the rent figure was anchored (`rent_anchored_to_market_index` — a modelled ratio of
+1.06 times this ZIP's own market rent), which series the price appreciation comes from
+(`appreciation_source`), which series the *rent* growth comes from
+(`rent_growth_source`), and a near-tie between two forecast scenario pairings
+(`forecast_branches_near_tied`, info-severity since U8.6c). **The third is new as of
+U9.3** and replaced a disclosure this paragraph used to name — "which fiscal years were
+screened out of the rent bands" — which retired with the cohort screen when rent growth
+was re-sourced from the federal schedule to the market index (#21). A fourth used to sit here — a *drift correction*, scaling this deal's
 estimate down by 0.74 because the federal schedule for this ZIP had risen 62% since the
 training vintage against 21% for observed market rents. That correction is gone too, and
 for the better reason: the anchor now reads a market index at both ends, so the drift
 divides out where it arises instead of being subtracted afterwards.
 
-### Chicago — the deal that used to escalate, and why it stopped
+### Chicago — the deal that escalated, stopped, and escalates again
 
-`main.py --deal chicago` · confidence **0.85** · 6 disclosures (5 info, 1 warn) ·
-**reports normally**
+`main.py --deal chicago` · confidence **0.70** · 10 disclosures (6 info, 3 warn, 1
+critical) · **escalates to human review** · axis 2: **Proceed**
 
 A Logan Square two-flat with a full 8-comp set. **Through U8.5 this deal escalated at
 0.55**, and it was the demo set's one example of "escalates on accumulated warnings
@@ -167,10 +216,26 @@ already the one county with ZIP-level Fair Market Rents. Grain cannot explain a 
 improvement where the grain was already fine. The market index is simply a better
 reference series than the administrative schedule.
 
+**And it moved a third time, back to escalating, on Aug 30, 2026 (U8.6e) — recorded here
+because the paragraphs above read as a settled story and are not one.** It now runs at
+**0.70 with ten disclosures, one of them critical, and routes to human review.** The
+score is not what escalates it: 0.70 clears the 0.60 threshold comfortably, and the deal
+escalates on the independent critical-flag rule. What changed is that the Critic's first
+interaction check was ungated. This Logan Square listing carries
+`comps_outside_match_criteria` on an ordinary run — three of eight comparables fall
+outside the size band searched — and that now draws a **critical objection**: the comp
+set was widened on an attribute the rent model prices on, so the comparable-implied
+median describes a different kind of unit than the one being priced, and the rent figure
+has no usable independent check on this deal.
+
+**Nothing about that was reverted, and it is the system working.** But it cost the demo
+set its middle case — one clean run against five escalations — which is what OQ-21 was
+raised to fix and what `chicago-uptown` below now supplies.
+
 ### Staten Island / New York — the real-data degradation case
 
-`main.py --deal staten-island` · confidence **0.00** · 12 disclosures (4 info, 8 warn) ·
-**escalates to human review**
+`main.py --deal staten-island` · confidence **0.00** · 12 disclosures (6 info, 5 warn, 1
+critical) · **escalates to human review** · axis 2: **Proceed** ⚖
 
 This is the one deal grounded in a real, *measured* market gap rather than a
 constructed one, and it's worth walking through why New York needed a case like this at
@@ -316,7 +381,7 @@ the complaint went away** — and one of the three reasons turned out not to be.
 ### No Geography — nowhere to anchor to
 
 `main.py --deal no-geography` · confidence **0.00** · 5 disclosures (1 warn, 4
-critical) · **escalates to human review**
+critical) · **escalates to human review** · axis 2: **No recommendation**
 
 A listing at a fictional address (Tallow Bend, WY) that resolves through neither the
 Census geocoder nor the corpus's city-centroid fallback. With no coordinates, there's no
@@ -329,33 +394,52 @@ checked against.
 
 ### Overpriced — exercising the price-benchmark disclosure
 
-`main.py --deal overpriced` · confidence **0.85** · 4 disclosures (3 info, 1 warn) ·
-**reports normally**
+`main.py --deal overpriced` · confidence **1.00** · 6 disclosures (6 info) ·
+**reports** · axis 2: **Proceed with caution** ⚖
 
-Identical in almost every respect to the Los Angeles deal — same market, same unit mix,
-same FMR-anchored rents — except the asking price is set 55% above the Redfin metro
-median on purpose (`price_premium_to_basis=0.55` in `demo_deals.py`). This exists to
-solve a specific problem: every *other* demo listing was calibrated exactly to its
-benchmark, so the report's "asking price vs. market benchmark" disclosure read 0% on all
-of them — a real check the demo set otherwise had no listing that could exercise. This
-deal isn't a claim that this Los Feliz property actually trades at this price; it's a
-fixture built to make that one disclosure show something.
+An Uptown two-flat in Chicago, asking **$1,345,000 — 55% above ZIP 60640's median
+recorded sale price** of $867,500, on purpose (`price_premium_to_basis=0.55` in
+`demo_deals.py`). It exists to solve a specific problem: every *other* demo listing is
+calibrated to its own benchmark, so the report's asking-price-versus-benchmark disclosure
+reads near 0% on all of them, and a real check had no listing that could exercise it.
+This is not a claim that Uptown trades at this price.
 
-**Half of that reasoning expired on Aug 30, 2026 (U8.8), and the way it expired is the
-finding.** The benchmark is now the subject's own ZIP wherever county-assessor records
-reach it, and #11 calibrated these asking prices against the *metro* median — so the two
-demo deals in covered ZIPs stopped reading 0% on their own: `chicago` asks $499,000
-against Logan Square's $720,000 (**31% below**) and `staten-island` $875,000 against
-Tottenville's $1,054,490 (**17% below**). Neither listing changed; the benchmark got
-local and the calibration became visible. This deal is still the only one engineered to
-read *above* its benchmark, and it still reads 55% above because Los Angeles has no local
-tier — California publishes assessed value rather than sale price — so it is measured
-against the metro median exactly as it was designed to be.
+**It is the demo set's clearest demonstration that the two axes are independent.** Axis 1
+is spotless — 1.00 confidence, eight matching comparables, not a single warning — while
+axis 2 says *proceed with caution*. Nothing is wrong with the analysis; something is
+wrong with the price, and the report says exactly that rather than blurring the two into
+one verdict.
+
+**This deal was in Los Angeles until Sept 1, 2026, and the reason it moved is a
+measurement that falsified it.** It was a Los Feliz listing at 55% above the Redfin
+*metro* median. Los Angeles has no ZIP-level sale benchmark at all — California publishes
+assessed value under Proposition 13 rather than sale price — so the only reference
+available there is metro-wide, and `scripts/sale_premium_distribution.py` measured what a
+premium against one of those is actually worth across 44,358 real sales: **55% over a
+metro median is the 78th percentile. An ordinary transaction.** The deal documented as
+deliberately mispriced was, on the evidence, priced unremarkably, and the recommendation
+rule returned *Proceed* on it.
+
+Uptown has a local tier built from 148 recorded county-assessor sales, where the same 55%
+sits around the **90th percentile** — a premium the data can call unusual. **Uptown
+rather than Logan Square, and the reason is what each market does to axis 1:** Logan
+Square was tried first, and its comp set relaxes the size band, which raises the critical
+objection described above and escalates the deal — so the report would have shown a
+cautionary recommendation beside an escalation and a reader could not tell which the
+asking price caused. Uptown returns eight matching comps and reports cleanly, so **the
+price is the only thing that fires anywhere in the report.**
+
+**A second thing this deal used to demonstrate has moved to `chicago-uptown` below.** The
+older text here said the benchmark going ZIP-level (U8.8) made other deals' calibrations
+visible — `chicago` reading 31% below Logan Square's median, `staten-island` 17% below
+Tottenville's. That is still true and still worth seeing. What it does not do is give the
+set a deal whose *clean* recommendation means anything, which is the gap the next deal
+fills.
 
 ### Coordinate Conflict — supplied coordinates disagree with the address
 
-`main.py --deal coord-conflict` · confidence **0.60** · 5 disclosures (3 info, 1 warn,
-1 critical) · **escalates to human review**
+`main.py --deal coord-conflict` · confidence **0.60** · 6 disclosures (4 info, 1 warn,
+1 critical) · **escalates to human review** · axis 2: **Proceed**
 
 The same Echo Park listing as the Los Angeles deal, but with coordinates supplied
 directly that actually describe a property in Santa Monica, ~14 miles away. This
@@ -364,10 +448,81 @@ a subject's stated address and its supplied coordinates disagree about where the
 property actually is — something neither the Extractor nor the geocoder would notice on
 its own, since each only sees one half of the conflict.
 
+### Chicago Uptown — the second clean run, and the first meaningful *Proceed*
+
+`main.py --deal chicago-uptown` · confidence **1.00** · 5 disclosures (5 info) ·
+**reports** · axis 2: **Proceed**
+
+**Added Sept 1, 2026 (U9.6) to close OQ-21**, and the purpose was restated once the
+premise was measured. OQ-21 was raised when `chicago` began escalating and `los-angeles`
+became the only deal reaching 1.00 and reporting clean — a set carried entirely by
+degrees of escalation understates a system whose whole argument is that it reports
+cleanly when it can. By the time this deal was built, U9.4's re-siting of `overpriced` to
+Uptown had already given the set a second clean axis-1 run, so that original wording was
+satisfied without it.
+
+**What the set still lacked is a deal whose *Proceed* means something**, and this is the
+one thing it supplies. Under decision #11 no demo figure is invented — every asking price
+is derived from a published market source — and until now that source was the Redfin
+*metro* median. Los Angeles has no ZIP-level tier, so `los-angeles` is compared against
+the very figure its price was calibrated from and reads 0% by construction. Its *Proceed*
+is circular. This listing is calibrated to **ZIP 60640's own median, built from 148
+recorded county-assessor sales** — a benchmark #11 did not supply — so its *Proceed* is
+measured against a local figure rather than against itself. The circularity on the other
+deals is real, is tracked as OQ-20, and is out of this unit's scope.
+
+**Read it next to `overpriced`.** Same ZIP, same benchmark, same unit mix, both reporting
+at 1.00 with nothing but info-severity disclosures — and opposite axis-2 verdicts,
+turning on the one input the recommendation rule reads. They are not a true one-variable
+control (this deal is 1,100 sq ft against `overpriced`'s 950), and the eval batch's
+`chicago-uptown-*` fixtures are where floor area is isolated properly.
+
+It is sited at **5100 N Kenmore Ave**, which is the same address as four golden eval
+fixtures, so the demo listing and those fixtures describe one property at several
+specifications rather than nearby buildings that resemble each other. 1,100 sq ft is the
+specification whose 1,300 sq ft sibling escalates — so the deal inherits a documented
+statement of how narrow the clean margin is without having to make it itself.
+
+### Los Angeles (current anchor) — the same property, re-based
+
+`main.py --deal los-angeles-current` · confidence **1.00** · 4 disclosures (4 info) ·
+**reports** · axis 2: **Proceed**
+
+**A shadow of `los-angeles`, added Sept 1, 2026 (U9.6).** Byte-identical to it — same
+address, same description, same asking price — except that its two stated rents are
+declared against the market rent index the system actually prices with (#19) instead of
+HUD's Fair Market Rent schedule that decision #11 calibrated the original against. The
+original is deliberately left untouched, so the pair *shows* what the anchor change means
+for a listing's own figures rather than asserting it.
+
+**The entire visible difference is one line, and that is the design.** Both reports
+estimate the same **$2,861/mo** — the model never sees a stated rent, so its output
+cannot move. What moves is the comparison beneath it:
+
+| | stated rents | vs. the estimate |
+| --- | --- | --- |
+| `los-angeles` (HUD schedule, #11) | $2,850 / $2,950 | **1% above** |
+| `los-angeles-current` (market index, #19) | $2,650 / $2,730 | **6% below** |
+
+**The direction is the finding.** HUD's schedule is a 40th-percentile rent and is usually
+described — including elsewhere in this project — as running *under* the market. In ZIP
+90026 it runs **7.3% over**, because HUD publishes no Small Area figure for Los Angeles
+County and the lookup falls back to a county-wide number covering Malibu to Compton. The
+staleness is real in every market; its *direction* is not uniform, and this repository's
+own docstring had generalized Chicago's direction to the whole set until this deal was
+measured.
+
+**Why Los Angeles rather than a market where the gap is larger.** Re-basing moves Echo
+Park's rents −7.2%, against +14% in Uptown and +34% in Logan Square. The size of the
+number is not the point: on `los-angeles` the report is clean, so the re-basing is the
+*only* difference between two otherwise identical reports. A Logan Square shadow would
+move three times as far and land it inside a report that escalates carrying ten
+disclosures, where a reader could attribute it to nothing in particular.
+
 ### The ablation: isolating the critical-flag escalation rule
 
-`main.py --deal chicago --no-retrieval` · confidence **0.60** (exactly) · 5 disclosures
-(3 info, 1 warn, 1 critical) · **escalates to human review**
+`main.py --deal chicago --no-retrieval` · confidence **0.60** (exactly) · 6 disclosures
+(4 info, 1 warn, 1 critical) · **escalates to human review** · axis 2: **Proceed** ⚖
 
 Not a seventh listing — the Chicago deal run with retrieval switched off, which is the
 U4 ablation demonstrating what the system does without its comps step at all. It's
@@ -375,9 +530,22 @@ included here because it's the one live run that isolates the *critical-flag* es
 rule from the *score* rule described above: `retrieval_disabled` costs 0.40, landing the
 score at exactly 0.60 — not below the 0.60 threshold, so the score alone would **not**
 escalate this deal. It escalates anyway, because `retrieval_disabled` is critical
-severity and that rule fires independent of the score. None of the other six deals
-happens to land on that exact boundary, which is why this run earns a place in the demo
-set even though it isn't a distinct listing.
+severity and that rule fires independent of the score.
+
+**This paragraph used to end by claiming no other deal lands on that boundary, and that
+is no longer true — corrected Sept 1, 2026 (U9.6).** `coord-conflict` also scores exactly
+**0.60** and also escalates on the critical rule rather than on the score, and `chicago`
+escalates at **0.70**, well clear of the threshold. Three of the nine live runs now
+separate the two escalation grounds where this one used to be alone, and the eval batch
+adds five more (the rows marked † in `eval/results/results.md`). The sensitivity sweep
+makes the same point from the other side: the critical weight is behaviorally **inert
+across its entire range, including zero**, because every deal carrying a critical
+escalates on the independent rule whatever the weight says.
+
+So this run no longer earns its place by being the only case at the boundary. It earns it
+by being the only one where the critical is `retrieval_disabled` — the whole comps step
+switched off, which no listing can produce and which is what makes it the U4 ablation
+rather than a seventh property.
 
 ---
 
@@ -387,36 +555,67 @@ The demo deals answer "does the system behave sensibly on a handful of represent
 real-world-anchored cases." The U8 eval harness (`src/eval/cases.py`,
 `src/eval/README.md`) answers a different question — "does every specific degradation
 path in the system actually fire, on a listing built to trip exactly that path and
-nothing else" — with roughly 15 engineered fixtures, each targeting one named flag.
+nothing else" — with 21 engineered fixtures, each targeting one named flag.
 
-The two are kept structurally separate inside the harness: the demo deals carry a
-`BASELINE` verdict (a previously measured outcome, so re-running them is a regression
-check — did the number move), while the engineered cases carry a `PREDICTED` verdict (a
-claim made about the case before it was run, which is what U8.6's confidence-threshold
-tuning is actually allowed to score against). Scoring a threshold against the demo deals
-would be circular, since they were calibrated to run clean rather than to probe the
-threshold. Full reasoning in `eval/cases.py`'s module docstring.
+The two are kept structurally separate inside the harness by a case's **verdict
+source**, not by its tier. `BASELINE` means a previously measured and published outcome,
+which makes re-running the case a regression check — did the number move. `PREDICTED`
+means a claim made about the case before it was ever run, and it is the only kind U8.6's
+confidence-threshold tuning is allowed to score against, because agreeing with an answer
+transcribed from the answer key proves nothing.
+
+**The six original demo deals are `BASELINE`** — their outcomes were published in the
+U7.8 table before the harness existed. **The two added at U9.6 are `PREDICTED`**, and the
+distinction is about provenance rather than about how confidently the outcome could be
+guessed: a deal that has never been run has no published outcome to transcribe, so its
+verdict is a claim, derived from the disclosures the design expects and the shipped
+escalation rule and from nothing else. Both claims held on the first recorded run.
+
+**The sensitivity sweep still excludes all eight**, and that is deliberate rather than an
+oversight: demo deals are calibrated to run clean, and a threshold swept over deals that
+were never near it measures nothing. So `results.md` reports agreement over 23 predicted
+cases while `sensitivity.md` sweeps 21. Full reasoning in `eval/cases.py`'s module
+docstring and at the filter in `scripts/confidence_sensitivity.py`.
 
 ---
 
-## Looking ahead: the rest of the demo (U9, not yet built)
+## The rest of the demo surface
 
-The pieces above exist and are evidenced. These are the remaining demo-surface pieces
-U9 is scoped to build, noted here as a placeholder so this document grows into a
-complete demo guide rather than needing a second one later.
+**Updated Sept 1, 2026 (U9.6).** Most of what this section listed as unbuilt has landed;
+what remains is named honestly rather than left as an aspiration.
 
-- **Streamlit app.** The intended interactive demo surface — a listing goes in, the
-  report (with every disclosure) comes out. Decision #3 in the plan's register. It's
-  kept in scope deliberately (§6's cut list, position 4) *because* a fallback exists if
-  the schedule forces it: a terminal recording plus LangSmith traces of the same six
-  deals, which is already what U8's harness produces as a byproduct.
+**Built since this section was written:**
+
+- **The report itself was reworked** (U9.4) — the two axes above, a recommendation and
+  its independent cross-check, a short model-written summary above the report, and
+  progressive detail so the headline figures come before the boilerplate disclosures.
+- **Every deal replays from committed recordings** (U9.5). All 30 rows in the eval batch,
+  the demo deals included, are reproducible from a fresh clone with no model calls and no
+  quota. Before that the demo rows fell through to a developer's working cache, so the
+  figures the write-up quoted could not be re-derived by anyone else.
+- **Two deals added** (U9.6), documented above.
+
+**Still to build:**
+
+- **Streamlit app.** The intended interactive demo surface — a listing goes in, the report
+  with every disclosure comes out. Decision #3 in the plan's register, and §6's cut-list
+  item 4. It is kept in scope deliberately *because* a fallback exists if the schedule
+  forces it: a terminal recording plus LangSmith traces of the same deals, which the
+  harness already produces as a byproduct. **Its risk went down at U9.5**, not up — its
+  stated default of replaying the demo deals instantly and deterministically is now true
+  rather than planned.
 - **Final report and video.** Due Sept 7, 2026, after the Sept 4 code freeze. Expected to
-  draw its evidence largely from U8's harness output — the demo deals' reports, the
-  eval batch's results table, and the graph diagram generated from the compiled graph —
-  rather than being written separately from scratch.
-- **LangSmith traces.** Each demo deal run with tracing enabled
-  (`LANGSMITH_TRACING=true`) produces a trace of the full seven-agent pipeline, useful
-  for showing the actual agent-to-agent flow rather than just its final output.
+  draw its evidence largely from the harness output — the demo deals' reports, the eval
+  batch's results table, and the graph diagram generated from the compiled graph — rather
+  than being written separately from scratch.
+- **LangSmith traces.** Each demo deal run with tracing enabled (`LANGSMITH_TRACING=true`)
+  produces a trace of the full seven-agent pipeline, showing the actual agent-to-agent
+  flow rather than only its final output. Free-tier traces expire after 14 days, so they
+  are captured close to the write-up rather than long before (OQ-13).
 
-This section will be expanded with real detail — screenshots, app structure, what the
-video walks through — once U9 starts.
+**One limitation worth stating here rather than only in the report.** The short written
+summary at the top of each report is model-generated. The figures it quotes are computed
+and checked; **its prose is not verified**, and it needed two prompt passes plus a
+structural change before it stopped mischaracterizing evidence. The recording pass freezes
+one draw per deal, so what ships is a fixed artifact that can be read once and checked —
+which is the strongest mitigation available inside the freeze, not a guarantee.
