@@ -40,7 +40,9 @@ from collections import Counter
 from typing import Optional
 
 import config
+from tools.llm_client import LlmClient, LlmError
 from state import (
+    RECOMMENDATION_LABEL,
     Comp,
     ConfidenceBreakdown,
     DealState,
@@ -48,6 +50,7 @@ from state import (
     Flag,
     FlagScope,
     ForecastDetail,
+    Recommendation,
     Severity,
     count_area_positioned,
     scope_of,
@@ -55,7 +58,35 @@ from state import (
 
 AGENT = "summarizer"
 
+# What the verdict line says when the rule reached a verdict with nothing to list under
+# it. Only `PROCEED` reaches this in practice — it is the absence of every finding rather
+# than a finding of its own — but the others carry a line so a missing reason can never
+# render as an empty sentence.
+_DEFAULT_VERDICT_LINE = {
+    Recommendation.PROCEED: (
+        "Nothing in the asking price or the rent evidence argues against this deal."
+    ),
+    Recommendation.PROCEED_WITH_CAUTION: (
+        "Something about the pricing or the rent evidence warrants a closer look."
+    ),
+    Recommendation.DO_NOT_PROCEED: (
+        "The asking price is not supported by the rent evidence available for it."
+    ),
+    Recommendation.NO_RECOMMENDATION: (
+        "There was not enough evidence to judge whether this is a good deal."
+    ),
+}
+
 _SEVERITY_ORDER = (Severity.CRITICAL, Severity.WARN, Severity.INFO)
+
+# Counted nouns for the heading's severity mix. Separate from `_SEVERITY_LABEL` below,
+# which names the *group heading* a reader sees above a block — "Disclosure (5)" reads
+# correctly as a heading and wrongly as a count ("5 disclosure").
+_SEVERITY_MIX_NOUN = {
+    Severity.CRITICAL: "critical",
+    Severity.WARN: "warning",
+    Severity.INFO: "informational",
+}
 
 _SEVERITY_LABEL = {
     Severity.CRITICAL: "Critical",
@@ -127,6 +158,234 @@ def _confidence_arithmetic(breakdown: Optional[ConfidenceBreakdown]) -> list[str
     ]
 
 
+def _verdict_lines(state: DealState) -> list[str]:
+    """The two axes, as two lines that never merge. **The largest readability change in U9.**
+
+    The report has always stated axis 1 — whether the system can stand behind its own
+    numbers — and readers have always taken it for axis 2, whether the property is worth
+    buying. `staten-island` is where that misreading is most costly: it escalates because
+    no comparables were found, while asking **17% below its ZIP median**, so a reader who
+    saw "🚩 Escalated to human review" and concluded the deal was bad had it exactly
+    backwards.
+
+    Rendered as one quote block with two labelled lines rather than as two separate
+    banners, because adjacency is what teaches the distinction — a reader sees the same
+    deal answered two ways in two sentences and learns that the questions differ. Kept
+    above everything else, including the model-written summary beneath it, so the
+    reproducible statement is the first thing on the page and the prose supports it rather
+    than the other way round.
+
+    Reader-facing throughout (§8): no flag names, no thresholds, no field names.
+    """
+    lines: list[str] = []
+    rec = state.recommendation
+    escalated = state.status == DealStatus.NEEDS_REVIEW or state.needs_human_review
+
+    if rec is not None:
+        headline = rec.reasons[0] if rec.reasons else _DEFAULT_VERDICT_LINE[rec.verdict]
+        lines.append(f"> **Recommendation — {RECOMMENDATION_LABEL[rec.verdict]}.** {headline}")
+        lines.append(">")
+
+    if escalated:
+        # Deliberately does not name the confidence threshold as the cause. A critical
+        # disclosure escalates on its own, above the threshold — see agents/critic.py —
+        # so a banner that always blamed the score would misreport that case.
+        lines.append(
+            "> 🚩 **System check — escalated to human review.** This deal did not clear "
+            "the system's automated checks on its own; the disclosures below say why. "
+            "**This is a statement about the evaluation, not about the property.**"
+        )
+    else:
+        lines.append(
+            "> ✅ **System check — reported.** The figures below cleared the system's "
+            "own checks without needing a human to release them."
+        )
+
+    if state.human_review_note:
+        lines.append(">")
+        lines.append(f"> **Reviewer note:** {state.human_review_note}")
+    lines.append("")
+
+    # The cross-check, and only where a second opinion exists *and* differs. Printed
+    # outside the quote block so it reads as a footnote to the verdict rather than as a
+    # third axis. **Disclosed rather than resolved** — the rule decides, always, and
+    # saying which reading the reader is holding is the product here.
+    if rec is not None and rec.cross_check_disagrees:
+        rationale = f" Its reasoning: {rec.model_rationale}" if rec.model_rationale else ""
+        lines.append(
+            f"*An independent review of the same evidence reached a different "
+            f"conclusion — **{RECOMMENDATION_LABEL[rec.model_verdict]}**.{rationale} The "
+            f"recommendation above follows this system's stated rule, which is the one "
+            f"that decides; the disagreement is disclosed here rather than resolved. A "
+            f"deal the two readings agree on is a more comfortable one to hold than a "
+            f"deal they split over.*"
+        )
+        lines.append("")
+
+    return lines
+
+
+_LEDE_SYSTEM = (
+    "You write the opening paragraph of an investment report on a residential "
+    "multi-family property. You are given the conclusions the report has already "
+    "reached. Restate them for a reader who has not yet scrolled — you do not reach "
+    "conclusions of your own, add figures that are not given to you, or soften or "
+    "strengthen anything you are handed. Three or four sentences, plain words, no "
+    "headings, no bullet points, no markdown.\n\n"
+    # Added after a live run described 'limited comparable sales' on a deal with eight
+    # comparables and no such disclosure. It had generalised from a retrieval note rather
+    # than inventing a figure, which the rule above did not cover — a summary that
+    # characterises the evidence is reaching a conclusion, which is the one thing this
+    # role does not do.
+    "Describe only what is listed below. Do not characterise the evidence as limited, "
+    "thin, strong or weak unless a line below says so in those terms, and do not name a "
+    "disclosure that is not listed.\n\n"
+    # Second correction from the same live run. This report carries two different
+    # comparable sets — rental listings, which produce the rent estimate, and recorded
+    # sales, which produce the price benchmark — and the summary described the first as
+    # the second. That is not a style problem: an investor reading "seven comparable
+    # sales" would believe the price figure rested on seven transactions when it rests on
+    # 148.
+    "This report uses two different kinds of comparable. Comparable rentals are rental "
+    "listings and produce the rent estimate; recorded sales produce the price benchmark. "
+    "Never call one the other."
+)
+
+
+def _lede_prompt(state: DealState) -> str:
+    """The report's own conclusions, in the rounded figures the report prints.
+
+    **Rounded reader-facing numbers only, never a raw float.** OQ-18 records a replay row
+    that missed its recordings for reasons never established, and a full-precision float
+    in a prompt is a cache key that moves whenever an upstream computation shifts in its
+    last decimal place. Everything here is a rounded percentage, a whole dollar figure or
+    a short string, so this adds no second instance of that fragility.
+
+    Everything quoted is already printed somewhere below, which is what makes the
+    constraint in `_LEDE_SYSTEM` checkable: the summary is additive, and a reader who
+    skips it loses nothing.
+    """
+    terms = state.deal_terms
+    rec = state.recommendation
+    escalated = state.status == DealStatus.NEEDS_REVIEW or state.needs_human_review
+
+    parts = [f"Property: {terms.full_address or 'address not resolved'}."]
+    if terms.price:
+        parts.append(f"Asking price: {_money(terms.price)}.")
+    if terms.unit_count:
+        parts.append(f"Units: {terms.unit_count}.")
+    if state.rent_estimate is not None:
+        parts.append(f"Estimated rent: {_money(state.rent_estimate)} per month per unit.")
+
+    if rec is not None:
+        parts.append(f"The recommendation is: {RECOMMENDATION_LABEL[rec.verdict]}.")
+        for reason in rec.reasons:
+            parts.append(f"Reason given: {reason}")
+        if rec.cross_check_disagrees:
+            parts.append(
+                "An independent review of the same evidence reached a different "
+                f"conclusion, {RECOMMENDATION_LABEL[rec.model_verdict]}, and the report "
+                "discloses that disagreement without resolving it."
+            )
+
+    parts.append(
+        "The evaluation was escalated to a human reviewer because it did not clear the "
+        "system's automated checks."
+        if escalated
+        else "The evaluation cleared the system's automated checks without human review."
+    )
+
+    counts = Counter(f.severity for f in state.flags)
+    if state.flags:
+        parts.append(
+            f"{len(state.flags)} disclosures were raised: "
+            f"{counts[Severity.CRITICAL]} critical, {counts[Severity.WARN]} warning, "
+            f"{counts[Severity.INFO]} informational."
+        )
+        # **No disclosure text is quoted, and removing it closed a whole failure class.**
+        # Two live runs mis-relayed excerpts in ways the instructions did not stop:
+        # "limited comparable data" on a run whose comp set was full and whose
+        # disclosures were all mechanism notes, and "zero comparable sales within two
+        # miles" for a *rental* comp count — a report that carries both rental
+        # comparables and recorded sales cannot afford that word swapped, since it moves
+        # the price benchmark from 148 transactions to none.
+        #
+        # The excerpts were never in this section's brief: it says what the property is,
+        # what the report recommends and why, and whether a human reviewed it. Counts
+        # carry the shape of the disclosures, and every one of them is rendered in full
+        # immediately below the summary — so nothing is hidden by leaving the prose to
+        # what it was asked for. Prompt wording was tried twice first; this is the fix
+        # that does not depend on a draw (OQ-17).
+
+    parts.append(f"Comparable rentals found: {len(state.comps)}.")
+    parts.append("")
+    parts.append(
+        "Write the opening paragraph. Say what the property is, what the report "
+        "recommends and why, and whether a human reviewer was involved. Do not invent "
+        "any figure that is not above, and do not describe the individual disclosures — "
+        "they are listed in full directly beneath what you write."
+    )
+    return "\n".join(parts)
+
+
+def _lede_section(state: DealState) -> list[str]:
+    """A short written summary above the report. **Additive, and it decides nothing.**
+
+    **It renders the verdict the rule computed; it does not reach one.** The recommendation
+    is a pure function in `agents/critic.recommend` for the reason OQ-17 measured — this
+    model scores an identical prompt 0.05 on one call and 0.95 on the next — and a summary
+    that could restate the verdict differently would put that variance back into the one
+    line a reader takes away. The prompt is handed the conclusion and asked to relay it.
+
+    Sits *below* the verdict lines rather than above them, so the reproducible statement
+    is the first thing on the page and the prose supports it.
+
+    **On failure it renders a sentence, not a flag.** A 31st `FlagKind` would break U8's
+    30-of-30 coverage census unless some declared fault could reach it, and more
+    fundamentally every other flag in this system *propagates* — it is raised in one node
+    and consumed downstream. A flag raised in the terminal node has no consumer but the
+    report already printing it, so the flag mechanism would be doing nothing the sentence
+    does not already do.
+    """
+    if not config.SUMMARY_NARRATIVE_ENABLED:
+        return []
+
+    try:
+        text = LlmClient().complete(
+            _lede_prompt(state),
+            model=config.MODEL_SUMMARIZER,
+            system=_LEDE_SYSTEM,
+        )
+    except (LlmError, RuntimeError, OSError):
+        text = None
+
+    if not text or not text.strip():
+        return [
+            "## Summary",
+            "",
+            "*A written summary could not be generated for this run; the disclosures "
+            "and figures below are unaffected.*",
+            "",
+        ]
+    return ["## Summary", "", text.strip(), ""]
+
+
+def _verdict_reasons_block(state: DealState) -> list[str]:
+    """The rest of the reasoning behind the verdict, under the model's summary.
+
+    The first reason is already on the verdict line; this carries any others. Silent when
+    there is nothing left to say, which is the ordinary case for `Proceed` — that verdict
+    is the absence of findings rather than a finding of its own, and inventing a sentence
+    to fill the space would tell a reader something the rule did not conclude.
+    """
+    rec = state.recommendation
+    if rec is None or len(rec.reasons) < 2:
+        return []
+    return ["**Also behind this recommendation:**", ""] + [
+        f"- {reason}" for reason in rec.reasons[1:]
+    ] + [""]
+
+
 def _flag_section(flags: list[Flag]) -> list[str]:
     """Every flag, grouped by what it is *about*, then by severity within that.
 
@@ -149,11 +408,19 @@ def _flag_section(flags: list[Flag]) -> list[str]:
             "",
         ]
 
-    lines = ["## Disclosures", ""]
+    counts = Counter(f.severity for f in flags)
+    mix = ", ".join(
+        f"{counts[sev]} {_SEVERITY_MIX_NOUN[sev]}"
+        for sev in _SEVERITY_ORDER
+        if counts[sev]
+    )
+    lines = [f"## Disclosures — {len(flags)} ({mix})", ""]
     lines.append(
         f"{len(flags)} disclosure(s) were raised during this evaluation. Each is "
         "listed in full below, grouped by whether it describes this property or the "
-        "data available for its market, and ordered most severe first within each."
+        "data available for its market, and ordered most severe first within each. "
+        "Entries that describe a mechanism rather than a weakness are collapsed; "
+        "anything that qualifies a number below is open."
     )
     lines.append("")
 
@@ -175,11 +442,57 @@ def _flag_section(flags: list[Flag]) -> list[str]:
             )
             lines.append("")
             for f in matching:
-                lines.append(f"- **`{f.kind}`** — {f.detail}  ")
-                lines.append(f"  *raised by:* `{f.source_agent}`")
+                lines.extend(_disclosure_entry(f, severity))
             lines.append("")
 
     return lines
+
+
+def _first_sentence(text: str) -> str:
+    """The disclosure's opening clause, for the collapsed line a reader scans."""
+    head = text.split(". ")[0].rstrip(".").strip()
+    return head if head else text.strip()
+
+
+def _disclosure_entry(flag: Flag, severity: Severity) -> list[str]:
+    """One disclosure, collapsed or open according to whether a reader may skip it.
+
+    **Progressive detail, and the split is by severity rather than by length** (U9.4). The
+    architect's finding was that a reader seeing many of these reports meets the same
+    boilerplate every time and the substance is buried in it — on the Los Angeles deal all
+    three disclosures are info-severity mechanism notes, and they are identical on every
+    run in that market.
+
+    Info-severity entries collapse to their opening clause; **critical and warn stay
+    open**. That keeps both of the module docstring's load-bearing rules intact rather
+    than trading one away: nothing moves below the numbers it qualifies (rule 1), and
+    nothing is reduced to a count (rule 2) — the full text is present in every case, and
+    what changes is only whether a reader has to scroll past text that says the same thing
+    on every report in this market.
+
+    `<details>` renders as a disclosure widget wherever this report is actually read by
+    its audience — on GitHub, where the committed sample reports live, and in the
+    Streamlit surface, which passes it to `st.markdown`. A terminal shows the tags, and
+    that is the developer's surface rather than the investor's.
+    """
+    if severity is not Severity.INFO:
+        return [
+            f"- **`{flag.kind}`** — {flag.detail}  ",
+            f"  *raised by:* `{flag.source_agent}`",
+        ]
+    head = _first_sentence(flag.detail)
+    # A disclosure whose whole text is one sentence would otherwise print itself twice —
+    # once as the collapsed line and again as the body underneath it.
+    body = [f"{flag.detail}", ""] if flag.detail.rstrip(". ") != head else []
+    return [
+        "<details>",
+        f"<summary><b><code>{flag.kind}</code></b> — {head}</summary>",
+        "",
+        *body,
+        f"*raised by:* `{flag.source_agent}`",
+        "</details>",
+        "",
+    ]
 
 
 def _comps_section(comps: list[Comp], radius_miles: float, iterations: int) -> list[str]:
@@ -1077,18 +1390,12 @@ def summarizer_agent(state: DealState) -> dict:
 
     lines.extend(_build_status_section(state.stub_nodes))
 
-    if state.status == DealStatus.NEEDS_REVIEW or state.needs_human_review:
-        # Deliberately does not name the confidence threshold as the cause. A critical
-        # disclosure escalates on its own, above the threshold — see agents/critic.py —
-        # so a banner that always blamed the score would misreport that case.
-        lines.append(
-            "> 🚩 **Escalated to human review.** This deal did not clear the system's "
-            "automated checks on its own. See the disclosures below for why."
-        )
-        if state.human_review_note:
-            lines.append(">")
-            lines.append(f"> **Reviewer note:** {state.human_review_note}")
-        lines.append("")
+    # **The two axes open the report** (U9.4). Above the status strip and above the
+    # model's summary, so the first thing a reader meets is the reproducible verdict
+    # rather than a number they cannot place or prose that varies between runs.
+    lines.extend(_verdict_lines(state))
+    lines.extend(_verdict_reasons_block(state))
+    lines.extend(_lede_section(state))
 
     confidence = (
         f"{state.confidence_score:.2f}" if state.confidence_score is not None else "—"

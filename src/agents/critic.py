@@ -707,6 +707,13 @@ def recommend(state: DealState) -> RecommendationDetail:
     else:
         verdict = Recommendation.PROCEED
 
+    # **The price position is stated on every verdict, including `PROCEED`.** It was
+    # first written to speak only when a threshold was crossed, which left the clean
+    # verdict carrying a generic line — and on `staten-island` that line claimed nothing
+    # in "the asking price or the rent evidence" argued against the deal, on a property
+    # with **zero comparables**. True of what the rule tested and false as English. A
+    # verdict that names the number it turned on cannot drift from its own evidence that
+    # way, and a reader gets the fact rather than a reassurance.
     if over_caution:
         percentile = (
             config.RECOMMENDATION_REJECT_PERCENTILE
@@ -717,10 +724,12 @@ def recommend(state: DealState) -> RecommendationDetail:
             f"The asking price is {premium:.0%} above the typical sale price for this "
             f"area — higher than roughly {percentile:.0%} of {where}."
         )
-    elif premium <= -caution_at:
-        # Stated, and it changes no verdict. A discount is not a reason for caution, but
-        # a reader whose deal is priced well below its market should see that said
-        # plainly rather than having to infer it from the absence of a warning.
+    elif premium >= 0:
+        reasons.append(
+            f"The asking price is {premium:.0%} above the typical sale price for this "
+            f"area, which is within the ordinary range for {where}."
+        )
+    else:
         reasons.append(
             f"The asking price is {abs(premium):.0%} below the typical sale price for "
             f"this area."
