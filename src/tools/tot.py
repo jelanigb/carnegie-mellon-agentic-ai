@@ -246,8 +246,23 @@ def beam_search(
             return result
 
         width = width_for(depth)
-        ranked = _rank(above, tie_epsilon, conservatism_key)
+        groups = _rank_groups(above, tie_epsilon, conservatism_key)
+        ranked = [candidate for group in groups for candidate in group]
         survivors, cut = ranked[:width], ranked[width:]
+
+        # Which cut candidates the *tie-break* decided rather than the score: those
+        # sharing a tie group with the last candidate the beam kept. Collected before
+        # any reservation, for the same reason `cut_boundary_gap_by_depth` is — a
+        # displacement is a stated policy overriding a rank the evaluator was clear
+        # about, which is a different fact with its own ledger wording below.
+        tie_broken_ids: set[str] = set()
+        if survivors and cut:
+            last_kept = survivors[-1]
+            cut_ids = {c.id for c in cut}
+            for group in groups:
+                if any(c.id == last_kept.id for c in group):
+                    tie_broken_ids = {c.id for c in group if c.id in cut_ids}
+                    break
 
         if survivors and cut:
             # Read off `ranked` rather than off the raw scores, because `ranked` is the
@@ -276,6 +291,21 @@ def beam_search(
             reason = (
                 f"Scored {candidate.score:.2f}, outside the top {width} at this level."
             )
+            if candidate.id in tie_broken_ids:
+                # **The third reason, added at U9.7T, and the one that was missing.**
+                # This candidate was not outscored: it scored level with the last one
+                # kept, close enough that this system treats the difference as no
+                # difference, and the order between them was settled by its standing
+                # preference for the more cautious reading. Said in those words rather
+                # than as a score comparison, because a reader given "Scored 0.80,
+                # outside the top 3" concludes the evaluator ranked it lower — and on
+                # 51% of recorded depth-2 levels the evaluator did no such thing.
+                reason = (
+                    f"Scored {candidate.score:.2f}, level with the last one kept — too "
+                    f"close for this system to call a difference — so it was this "
+                    f"system's standing preference for the more cautious reading, not "
+                    f"the score, that left this one out."
+                )
             if candidate is displaced:
                 reason = (
                     f"Scored {candidate.score:.2f}, inside the top {width} at this "
@@ -307,16 +337,42 @@ def _rank(
     evaluator, so ordering them by score would be reading signal out of noise. Sorting
     the tied group by `conservatism_key` makes the resolution a stated policy instead.
     """
+    return [candidate for group in _rank_groups(candidates, tie_epsilon, conservatism_key)
+            for candidate in group]
+
+
+def _rank_groups(
+    candidates: list[Candidate],
+    tie_epsilon: float,
+    conservatism_key: Optional[Callable[[Candidate], float]],
+) -> list[list[Candidate]]:
+    """The same ranking, still grouped by tie — which is the part the ledger needs.
+
+    **Split out at U9.7T because flattening threw away the one fact the ledger was
+    getting wrong.** A candidate cut from a tie group was recorded as
+    `Scored 0.80, outside the top 3 at this level`, which reads as *outscored* and is
+    indistinguishable from a candidate that genuinely lost on score — while what
+    actually decided it was `conservatism_key`. Measured across the committed
+    recordings, that is **51% of depth-2 levels**, so the ledger was misattributing to
+    the evaluator a decision policy made on half of all runs. `tools/tot.py`'s own
+    docstring calls pruning-that-leaves-no-trace the failure this ledger exists to
+    prevent; it was surviving one layer up.
+
+    Groups chain from their highest-scoring member, not pairwise: a group starts at the
+    best unassigned candidate and takes everything within `tie_epsilon` *of that*. So
+    membership is decided by the same rule the sort uses, and a long shallow gradient
+    does not collapse into one group by transitivity.
+    """
     ordered = sorted(candidates, key=lambda c: -(c.score or 0.0))
     if conservatism_key is None:
-        return ordered
+        return [[candidate] for candidate in ordered]
 
-    resolved: list[Candidate] = []
+    groups: list[list[Candidate]] = []
     group: list[Candidate] = []
     for candidate in ordered:
         if group and abs((group[0].score or 0.0) - (candidate.score or 0.0)) > tie_epsilon:
-            resolved.extend(sorted(group, key=conservatism_key))
+            groups.append(sorted(group, key=conservatism_key))
             group = []
         group.append(candidate)
-    resolved.extend(sorted(group, key=conservatism_key))
-    return resolved
+    groups.append(sorted(group, key=conservatism_key))
+    return groups

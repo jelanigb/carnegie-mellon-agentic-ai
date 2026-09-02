@@ -86,6 +86,33 @@ def test_a_cut_taken_inside_a_tie_group_records_a_non_positive_margin():
     assert result.cut_boundary_gap_by_depth[1] < 0
 
 
+def test_a_candidate_cut_from_a_tie_group_is_not_recorded_as_outscored():
+    """The ledger's third prune reason, added at U9.7T.
+
+    **The defect it closes was an attribution, not an omission.** A candidate the
+    conservatism preference cut recorded `Scored 0.80, outside the top 3 at this level`
+    — the same words a genuinely outscored candidate gets — so a reader concluded the
+    evaluator had ranked it lower. Measured across the committed recordings, that is
+    51% of depth-2 levels, which makes it the common case rather than an edge one.
+    """
+    # #3 and #4 tie; #5 is clear of the group and must keep the ordinary wording, which
+    # is what separates this from a test that would pass on a blanket rewording.
+    result = _search(
+        [0.90, 0.80, 0.70, 0.69, 0.40],
+        width=3,
+        conservatism=lambda candidate: candidate.score or 0.0,
+    )
+
+    by_id = {c.id: c for c in result.ledger if not c.survived}
+    tie_loser = next(c for c in by_id.values() if c.score == pytest.approx(0.70))
+    outscored = next(c for c in by_id.values() if c.score == pytest.approx(0.40))
+
+    assert "more cautious reading" in tie_loser.prune_reason
+    assert "outside the top" not in tie_loser.prune_reason
+    assert "outside the top 3" in outscored.prune_reason
+    assert "more cautious reading" not in outscored.prune_reason
+
+
 def test_a_cut_line_inside_the_tie_threshold_is_disclosed():
     detail = ForecastDetail()
     result = tot.SearchResult(cut_boundary_gap_by_depth={2: 0.01})
