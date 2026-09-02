@@ -259,6 +259,7 @@ carnegie_mellon_agentic_repo/
     │   ├── county_crosswalk.py    # ✅ lat/lon → county_fips via point-in-polygon join (rewritten Aug 15, 2026)
     │   ├── geocoding.py           # ✅ address → lat/lon: Census primary, corpus centroid fallback
     │   ├── redfin_data.py         # ✅ load + query, rolling-3 + growth bands computed here
+    │   ├── faults.py              # ✅ the three declared faults + their injector (U9.7a)
     │   └── tracing.py             # ✅ LangSmith project wiring; env-driven, never required
     ├── demo_deals.py              # ✅ the synthetic listings + provenance for every figure
     ├── scripts/
@@ -286,7 +287,7 @@ carnegie_mellon_agentic_repo/
     │   ├── conftest.py            # ✅ puts src/ on the import path
     │   └── test_flag_propagation.py  # ✅ the one test that must never fail — 24 hermetic cases
     ├── mcp_server.py              # ✅ MCP read-only reference server (FMR + appreciation)
-    ├── app.py                     # Streamlit demo UI (local only)
+    ├── app.py                     # ✅ Streamlit demo surface; replay by default (U9.7)
     └── main.py                    # ✅ entrypoint: run full pipeline on one listing
 ```
 

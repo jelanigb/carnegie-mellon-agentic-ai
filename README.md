@@ -55,11 +55,11 @@ rather than degrading its own confidence claim — see `agents/human_review.py` 
   numbers, and whether the property is worth buying. It also carries a disagreement
   between the rule that decides and an independent model reading of the same evidence,
   disclosed rather than resolved.
-- **Every figure in this repository re-derives from a fresh clone.** All 28 evaluation
+- **Every figure in this repository re-derives from a fresh clone.** All 30 evaluation
   rows and both sample reports replay from committed model recordings, so nothing quoted
   here rests on a call you cannot reproduce. Reaching a live model takes an explicit flag.
 - **`src/eval/results/results.md` and `sensitivity.md`** — the evaluation harness's
-  output: a batch of 28 real and engineered cases run through the compiled graph, a
+  output: a batch of 30 real and engineered cases run through the compiled graph, a
   flag-coverage census, and a sweep over the confidence-scoring weights. This is what a
   correctness or calibration claim in this project is actually measured against, and the
   inputs it runs on (`src/eval/data/`, `src/eval/cases.py`) are committed alongside it.
@@ -88,13 +88,41 @@ export LANGSMITH_API_KEY=...
 .venv/bin/python main.py --deal los-angeles         # dense market, clean run
 .venv/bin/python main.py --deal staten-island       # thin market, escalates to review
 .venv/bin/python main.py --deal chicago             # moderate: retrieval relaxes once
-.venv/bin/python main.py --deal no-geography         # an address nothing can resolve
+.venv/bin/python main.py --deal no-geography        # an address nothing can resolve
 .venv/bin/python main.py --deal coord-conflict      # supplied coords vs. the address
 .venv/bin/python main.py --deal overpriced          # asking price well above benchmark
+.venv/bin/python main.py --deal chicago-uptown      # priced at its ZIP median; clean on both axes
+.venv/bin/python main.py --deal los-angeles-current # los-angeles, rents on the current index
+
+# Two switches that reach paths no listing can produce:
+.venv/bin/python main.py --deal chicago --no-retrieval        # without the comp corpus
+.venv/bin/python main.py --deal los-angeles --fault geocoder-outage
 
 .venv/bin/python -m pytest tests/ -q                # the two load-bearing suites
 .venv/bin/python -m eval.runner --tier golden       # the eval batch, no live calls
 ```
+
+### The demo surface
+
+```bash
+.venv/bin/streamlit run app.py                      # from src/
+```
+
+A local Streamlit app over the same pipeline: pick a listing, watch it run, read the
+report. Three things it does that the command line does not.
+
+- **It replays by default and says so.** Every demo listing, the retrieval ablation and
+  all three simulated failures are served from committed recordings — instant, identical
+  every time, no model call. A pasted listing has no recording, so it runs live; the app
+  states that before it runs and asks you to confirm.
+- **It pauses for review, genuinely.** A deal the system will not sign off on stops at
+  the human-review step, names which desk it is waiting on and why, and waits for a
+  person to write a note and release it. The note travels into the report verbatim. The
+  command line auto-resumes with a canned note so one command yields one report; this is
+  the honest version.
+- **It can simulate failures that cannot be produced on demand** — an unreachable model,
+  an address-lookup outage, a stale market index. Each names itself in the report it
+  produces, so a demonstration cannot be mistaken for a real incident.
 
 **A fresh clone cannot run this beyond the two commands above using recorded data**
 The trained rent model (`data/processed/rent_model.joblib`, ~140 KB) is committed, so

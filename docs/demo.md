@@ -586,6 +586,9 @@ what remains is named honestly rather than left as an aspiration.
 
 **Built since this section was written:**
 
+- **The Streamlit surface** (U9.7) — described in its own section below. It was the last
+  item on §6's cut list still standing, and it shipped.
+
 - **The report itself was reworked** (U9.4) — the two axes above, a recommendation and
   its independent cross-check, a short model-written summary above the report, and
   progressive detail so the headline figures come before the boilerplate disclosures.
@@ -595,15 +598,48 @@ what remains is named honestly rather than left as an aspiration.
   figures the write-up quoted could not be re-derived by anyone else.
 - **Two deals added** (U9.6), documented above.
 
+### The Streamlit surface — built Sept 1, 2026 (U9.7)
+
+```bash
+cd src && .venv/bin/streamlit run app.py
+```
+
+Decision #3 and §6's cut-list item 4, **spent rather than shed.** A listing goes in, the
+report with every disclosure comes out. Three things it does that `main.py` does not.
+
+**1. It replays by default, and it says which mode it is in before it runs.** Every demo
+listing, the retrieval ablation and all three simulated failures are served from committed
+recordings — instant, identical every time, no model call and no quota. A pasted listing
+has no recording by construction, so it runs live; the surface states that up front and
+disables the Run button behind an explicit confirmation.
+
+That default answers OQ-17 directly. This model has been measured returning different
+Tree-of-Thought scores for an identical prompt at `temperature=0`, at roughly 1 in 15–20
+live attempts, on the `los-angeles` deal specifically. **A demo that replays cannot drift
+mid-presentation**, and the alternative is discovering that in front of an audience.
+
+**2. It pauses for review, genuinely.** A deal the system will not sign off on stops at
+the human-review step. The surface names which desk it is waiting on — IT or the reviewing
+agent, per the routing rule in [`design/personas.md`](design/personas.md) — lists the
+disclosures that caused the escalation, and waits for a person to write a note and release
+it. The note travels into the report verbatim.
+
+`main.py` auto-resumes with a canned note so that one command yields one report. This is
+the honest version, and it is the clearest human-oversight evidence in the project.
+
+**3. It can simulate failures that cannot be produced on demand** — an unreachable model,
+an address-lookup outage, a stale market index. Each names itself in the report it
+produces (*"[simulated failure, declared by 'los-angeles' — not a real outage]"*), so a
+demonstration cannot be mistaken for a real incident.
+
+**What it deliberately does not do: lay out the evidence itself.** The report is rendered
+exactly as the Summarizer emitted it, split at its own headings so sections can collapse.
+The only place the surface reads state rather than text is the four-figure status strip,
+and every figure there is one the report also prints. Two renderings of the same evidence
+drift the first time either is edited, and the report is the artifact under review.
+
 **Still to build:**
 
-- **Streamlit app.** The intended interactive demo surface — a listing goes in, the report
-  with every disclosure comes out. Decision #3 in the plan's register, and §6's cut-list
-  item 4. It is kept in scope deliberately *because* a fallback exists if the schedule
-  forces it: a terminal recording plus LangSmith traces of the same deals, which the
-  harness already produces as a byproduct. **Its risk went down at U9.5**, not up — its
-  stated default of replaying the demo deals instantly and deterministically is now true
-  rather than planned.
 - **Final report and video.** Due Sept 7, 2026, after the Sept 4 code freeze. Expected to
   draw its evidence largely from the harness output — the demo deals' reports, the eval
   batch's results table, and the graph diagram generated from the compiled graph — rather

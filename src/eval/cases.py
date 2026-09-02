@@ -60,6 +60,13 @@ from demo_deals import DEMO_DEALS
 from eval.data import golden_fixtures
 from state import DealTerms, FlagKind
 
+# `Fault` moved to `tools/faults.py` at U9.7a, with its mechanism, so the demo surface
+# and `main.py` can declare the same three failures without importing the eval package —
+# nothing in `tools/` may import from `eval/`. Re-exported here because every case
+# definition below names it, and because `cases.Fault` is what the rest of the harness,
+# its docstrings and `eval/README.md` have always called it.
+from tools.faults import Fault  # noqa: F401  (re-exported for the case definitions)
+
 
 class Verdict(StrEnum):
     """What the system should do with a case. Declared, not observed."""
@@ -82,75 +89,6 @@ class Tier(StrEnum):
     GOLDEN = "golden"
     REPLAY = "replay"
     LIVE = "live"
-
-
-class Fault(StrEnum):
-    """An external failure a case asks the harness to simulate. **Declared, never hidden.**
-
-    Added U8.2, for one kind the batch could not otherwise reach at all.
-    `FlagKind.REWORK_LIMIT_REACHED` needs an objection the Critic marks `retryable`, and
-    exactly one objection is ever marked so: the I3 branch in
-    `agents/critic._interaction_objections`, gated on `GEOCODER_SERVICE_UNAVAILABLE`. That
-    flag is raised only when the Census *request itself fails*
-    (`tools/geocoding.geocode`) — not when it runs and finds no match, which is the
-    distinction U7.1b built precisely so the rework cycle could be spent on an outage and
-    not on an address that will never resolve.
-
-    Neither tier can produce that. A golden fixture supplies coordinates, so U8.1b's
-    geography path takes the county-only branch and never calls the geocoder; a replay case
-    calls it and it succeeds, because `LLM_CACHE_MODE=replay` covers *model* calls and the
-    Census lookup is an ordinary HTTP request. So the outage can be injected or it can go
-    unexercised, and leaving the system's only bounded-retry path untested through the unit
-    that tunes `MAX_REWORKS` is the worse of the two.
-
-    **A field on the case rather than a fixture that quietly patches something**, and that
-    is the whole design. The injection appears in the case definition, in the results
-    table, and in the report, so a reader can see that the row exercised a *simulated*
-    outage rather than a real one. A harness that patches a module inside a fixture would
-    produce the identical row and let it read as a naturally-occurring failure — which is
-    the same class of overstatement `verdict_source` exists to prevent one row over.
-
-    The patch enters through the same door a real outage does: `geocode_census` raises
-    `GeocodingError`, `geocode()` catches it and sets `primary_unavailable`. Nothing forces
-    the flag directly, so the case still tests the branch that chooses between
-    `GEOCODER_SERVICE_UNAVAILABLE` and `COORDINATES_FROM_CITY_CENTROID` rather than
-    asserting the outcome of it.
-
-    **`LLM_UNAVAILABLE`, added U8.3, for the same class of reason.**
-    `FlagKind.EXTRACTION_UNAVAILABLE` is raised when `agents.extractor._extract_terms`
-    never receives a response at all — `tools.llm_client.LlmClient.complete` raises
-    `LlmError` before there is anything to validate, let alone record. A recording is a
-    replay of a *response*; there is no response here to replay, so the two mechanisms
-    that cover every other extraction flag (a real listing, a recorded call) both come up
-    empty for this one, which is exactly `Fault`'s admission criterion.
-
-    Patched one layer above the raw transport call, same as `GEOCODER_OUTAGE`:
-    `LlmClient.complete` is the primary call (`geocode_census`'s analogue), so the
-    Extractor's own `except LlmError` branch still does the deciding. The patch is
-    class-level rather than per-instance because `_extract_terms` builds a fresh
-    `LlmClient()` per call and there is no instance to reach beforehand.
-
-    Left unrestricted rather than expired after one call: `agents.scenario_forecast` also
-    builds an `LlmClient` and would hit the same patched method later in the same run.
-    That is not a leak to guard against — it is the honest consequence of the model
-    actually being down. `scenario_forecast` already catches `LlmError` and raises its own
-    `FORECAST_UNAVAILABLE`, so the row shows a real, gracefully-degraded multi-flag outage
-    rather than a run that dies partway through.
-    """
-
-    GEOCODER_OUTAGE = "geocoder_outage"
-    LLM_UNAVAILABLE = "llm_unavailable"
-    # **`STALE_RENT_INDEX`, added U11.3, for the same reason as the two above: no listing
-    # can reach this path.** `RENT_ANCHOR_INDEX_STALE` fires when the market-rent index
-    # the estimate is anchored to has not been observed for
-    # `config.RENT_ANCHOR_MAX_STALENESS_MONTHS`, which is a property of the *data file* on
-    # the machine, not of any property. Today's panel is one month old, so no fixture and
-    # no recording can raise it — and a kind nothing can raise corrupts the coverage
-    # census, which is the rule `state.FlagKind` already set when it retired
-    # `LLM_RENT_FALLBACK_USED`. Patched at `zori.latest_month`, one layer above the file,
-    # so the pipeline's own staleness arithmetic does the deciding rather than a directly
-    # forced flag.
-    STALE_RENT_INDEX = "stale_rent_index"
 
 
 # Faults whose seam lives inside the Extractor, and which a golden fixture therefore

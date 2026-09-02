@@ -10,6 +10,7 @@
     .venv/bin/python main.py --deal los-angeles-current  # los-angeles, rents re-based on the current anchor
     .venv/bin/python main.py --file listing.txt --coords 34.0522,-118.2437
     .venv/bin/python main.py --deal chicago --no-retrieval   # the U4 ablation
+    .venv/bin/python main.py --fault llm-unavailable         # a declared, simulated outage
 
 The three market deals are the same density cases `scripts/retrieval_evidence.py`
 measures, reused here so end-to-end behaviour can be compared against the retrieval
@@ -63,6 +64,7 @@ import config
 from demo_deals import DEMO_DEALS
 from graph import build_graph, state_serde
 from state import DealState, DealTerms
+from tools.faults import Fault, injected
 from tools.llm_client import LlmError, verify_models_live
 from tools.tracing import configure_tracing
 
@@ -118,8 +120,20 @@ def _check_models() -> None:
     print(f"Model check OK — {', '.join(sorted(verified))}")
 
 
-def run(listing_text: str, coords: tuple[float, float] | None, thread_id: str) -> str:
-    """Run one deal end to end and return the rendered report."""
+def run(
+    listing_text: str,
+    coords: tuple[float, float] | None,
+    thread_id: str,
+    fault: Fault | None = None,
+    declared_by: str = "this run",
+) -> str:
+    """Run one deal end to end and return the rendered report.
+
+    `fault` declares a simulated external failure for the duration of the run — see
+    `tools/faults.py`. It is a parameter rather than an environment variable for the same
+    reason the eval harness makes it a field on the case: a simulated outage that is not
+    visible in the invocation reads as a real one in the report it produces.
+    """
     configure_tracing()
     _check_models()
 
@@ -134,19 +148,24 @@ def run(listing_text: str, coords: tuple[float, float] | None, thread_id: str) -
         # from `graph.state_serde()` — see its docstring.
         checkpointer = SqliteSaver(connection, serde=state_serde())
         graph = build_graph(checkpointer=checkpointer)
-        result = graph.invoke(_initial_state(listing_text, coords), invoke_config)
+        # The fault spans the resume as well as the first invoke: a model that is down
+        # is still down when the reviewer releases the deal, and the Summarizer's own
+        # call has to see it. Unwinding between the two would produce a report whose
+        # written summary succeeded during an outage that supposedly never lifted.
+        with injected(fault, declared_by=declared_by):
+            result = graph.invoke(_initial_state(listing_text, coords), invoke_config)
 
-        if "__interrupt__" in result:
-            _print_interrupt(result["__interrupt__"][0].value)
-            result = graph.invoke(
-                Command(
-                    resume=(
-                        "[demo] Reviewed and released for reporting. A real reviewer "
-                        "would resolve the disclosures in this report before proceeding."
-                    )
-                ),
-                invoke_config,
-            )
+            if "__interrupt__" in result:
+                _print_interrupt(result["__interrupt__"][0].value)
+                result = graph.invoke(
+                    Command(
+                        resume=(
+                            "[demo] Reviewed and released for reporting. A real reviewer "
+                            "would resolve the disclosures in this report before proceeding."
+                        )
+                    ),
+                    invoke_config,
+                )
 
     return result["report_markdown"]
 
@@ -174,6 +193,15 @@ def main() -> None:
         help="the U4 ablation: run with RETRIEVAL_ENABLED off, ungrounded",
     )
     parser.add_argument(
+        "--fault",
+        choices=sorted(f.value.replace("_", "-") for f in Fault),
+        help=(
+            "declare a simulated external failure for this run (tools/faults.py). Each "
+            "covers a path no real listing can reach, and each names itself in the "
+            "report it produces so a demonstration cannot be mistaken for an incident."
+        ),
+    )
+    parser.add_argument(
         "--thread-id",
         help=(
             "checkpointer thread id. Defaults to a fresh random id per run, because "
@@ -197,11 +225,15 @@ def main() -> None:
         listing_text, coords = deal.listing, deal.supplied_coords
         label = args.deal
 
+    fault = Fault(args.fault.replace("-", "_")) if args.fault else None
     thread_id = args.thread_id or f"{label}-{uuid4().hex[:8]}"
 
     print(f"Running deal '{label}' (retrieval "
-          f"{'ON' if config.RETRIEVAL_ENABLED else 'OFF'}, thread '{thread_id}')")
-    report = run(listing_text, coords, thread_id=thread_id)
+          f"{'ON' if config.RETRIEVAL_ENABLED else 'OFF'}"
+          f"{f', fault {fault.value}' if fault else ''}, thread '{thread_id}')")
+    report = run(
+        listing_text, coords, thread_id=thread_id, fault=fault, declared_by=label
+    )
     print("\n" + report)
 
 

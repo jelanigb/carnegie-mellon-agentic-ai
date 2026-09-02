@@ -60,14 +60,8 @@ from state import (
     RecommendationDetail,
     Severity,
 )
-from tools import geocoding, zori
-
-# The month `Fault.STALE_RENT_INDEX` pins the market index to. Chosen to sit well past
-# `config.RENT_ANCHOR_MAX_STALENESS_MONTHS` so refreshing the committed panel cannot
-# quietly stop the case from firing.
-_STALE_INDEX_MONTH = "2023-01-31"
+from tools.faults import injected
 from tools.llm_cache import CacheMode
-from tools.llm_client import LlmClient, LlmError
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 
@@ -244,99 +238,38 @@ def _case_environment(case: EvalCase, record: bool, live: bool = False) -> Itera
     recording raises `CacheMiss`, which is the honest failure — it means a prompt drifted
     since the batch was recorded, and re-recording is a decision rather than a fallback.
 
-    **3. Declared fault injection (U8.2, extended U8.3, extended U8.5/OQ-16).** See
-    `cases.Fault` for why this exists and why it is a named, declared field rather than a
-    fixture that quietly patches something. `GEOCODER_OUTAGE` patches
-    `geocoding.geocode_census`; `LLM_UNAVAILABLE` patches `LlmClient.complete` at the
-    class, since `_extract_terms` builds a fresh instance per call and there is no
-    instance to reach beforehand. A case declaring `geocoder_fallback_override` also
-    patches `geocoding.city_centroid`, so the outage's fallback lands at a chosen point
-    instead of the real corpus-wide city average — OQ-16's answer, since the real average
-    never both diverges from the rent estimate and stays clear of a third warn or a
-    critical (U8.2's grid search). All patches are unwound in the same `finally` as
-    everything else here.
+    **3. Declared fault injection (U8.2, extended U8.3, extended U8.5/OQ-16) — the
+    mechanism moved out at U9.7a and this is now a delegation.** `tools/faults.py` owns
+    the three patches and the reasoning behind each; `Fault` moved there with them. What
+    stays here is the *call*, because the harness is only one of three callers now: the
+    demo surface and `main.py --fault` declare the same failures against a `DemoDeal`, and
+    a fault that behaved differently in the demo than in the evaluation would invalidate
+    both at once.
+
+    The nesting is deliberate. Faults unwind inside this function's `finally`, so the
+    cache and retrieval overrides are restored last — outermost set, outermost cleared —
+    and an exception anywhere inside leaves nothing patched either way.
     """
     previous_retrieval = config.RETRIEVAL_ENABLED
     previous_cache_dir = config.LLM_CACHE_DIR
     previous_cache_mode = config.LLM_CACHE_MODE
-    previous_geocode_census = geocoding.geocode_census
-    previous_city_centroid = geocoding.city_centroid
-    previous_llm_complete = LlmClient.complete
 
     config.RETRIEVAL_ENABLED = case.retrieval_enabled
     if not live:
         config.LLM_CACHE_DIR = config.EVAL_RECORDINGS_DIR
         config.LLM_CACHE_MODE = CacheMode.READ_WRITE if record else CacheMode.REPLAY
 
-    if case.injects is Fault.GEOCODER_OUTAGE:
-        def _unreachable(*args, **kwargs):
-            raise geocoding.GeocodingError(
-                f"[eval fault injection, case {case.key!r}] simulated Census Geocoder "
-                f"outage. Declared by the case, not a real network failure."
-            )
-
-        # Patched at `tools.geocoding`, which is where `geocode()` looks the name up, so
-        # the failure enters through the same door a real outage would: `geocode()`
-        # catches `GeocodingError`, sets `primary_unavailable`, and the Extractor raises
-        # `GEOCODER_SERVICE_UNAVAILABLE` rather than `COORDINATES_FROM_CITY_CENTROID`.
-        # Patching the flag in directly would have skipped the distinction the case exists
-        # to exercise.
-        geocoding.geocode_census = _unreachable
-
-        if case.geocoder_fallback_override is not None:
-            lat, lon = case.geocoder_fallback_override
-
-            def _forced_centroid(city, state, primary_unavailable=False):
-                return geocoding.GeocodeResult(
-                    latitude=lat,
-                    longitude=lon,
-                    matched_address=(
-                        f"[eval fault injection, case {case.key!r}] forced centroid "
-                        f"fallback at ({lat:.5f}, {lon:.5f})"
-                    ),
-                    source=geocoding.GeocodeSource.CITY_CENTROID,
-                    primary_unavailable=primary_unavailable,
-                )
-
-            # Same shape as the real function — a `GeocodeResult` with
-            # `source=CITY_CENTROID` — so the Extractor's own branch on `.source` and
-            # `.primary_unavailable` still makes the outage-vs-unresolvable decision.
-            # Only *where* the fallback lands is forced; the mechanism that decides
-            # whether it is worth retrying is untouched.
-            geocoding.city_centroid = _forced_centroid
-
-    if case.injects is Fault.STALE_RENT_INDEX:
-        # Far enough back that the staleness threshold is crossed by a wide margin, so
-        # the case does not silently stop firing when the committed panel is refreshed.
-        previous_latest_month = zori.latest_month
-        zori.latest_month = lambda panel: _STALE_INDEX_MONTH
-
-    if case.injects is Fault.LLM_UNAVAILABLE:
-        def _unreachable_complete(*args, **kwargs):
-            raise LlmError(
-                f"[eval fault injection, case {case.key!r}] simulated model outage. "
-                f"Declared by the case, not a real network failure."
-            )
-
-        # Patched at the class, not an instance: `_extract_terms` (and
-        # `scenario_forecast._make_scorer`) each build their own `LlmClient()`, so there
-        # is no shared instance to patch. `self.complete(...)` resolves through the class
-        # either way, so every instance created for the rest of this case sees the fault
-        # — including scenario_forecast's later calls, which is the honest behaviour of a
-        # model that is actually down (see `Fault.LLM_UNAVAILABLE`'s docstring).
-        LlmClient.complete = _unreachable_complete
-
     try:
-        yield
+        with injected(
+            case.injects,
+            declared_by=case.key,
+            geocoder_fallback_override=case.geocoder_fallback_override,
+        ):
+            yield
     finally:
         config.RETRIEVAL_ENABLED = previous_retrieval
         config.LLM_CACHE_DIR = previous_cache_dir
         config.LLM_CACHE_MODE = previous_cache_mode
-        geocoding.geocode_census = previous_geocode_census
-        if case.injects is Fault.STALE_RENT_INDEX:
-            zori.latest_month = previous_latest_month
-        geocoding.city_centroid = previous_city_centroid
-        LlmClient.complete = previous_llm_complete
 
 
 def run_case(case: EvalCase, record: bool = False, live: bool = False) -> CaseResult:

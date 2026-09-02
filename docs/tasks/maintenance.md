@@ -161,3 +161,25 @@ Reproduce the importances by loading `config.RENT_MODEL_PATH` and reading
 reasoning locus in this system, and this finding is why: *which* criterion to relax for a
 given deal is a real judgment with alternatives and a measurable outcome, and the fixed
 ladder answering it today rests on a premise that measurement contradicts.
+
+### M7 — `architecture.md`'s repository tree has drifted from the build
+
+**Found Sept 1, 2026 while adding `tools/faults.py` and `app.py` to it (U9.7e).** Those
+two entries are now correct; several others are not, and they were not touched because
+fixing them properly is an audit rather than an edit:
+
+- `agents/critic.py` is marked ◐ *"consistency checks U7"* — U7 shipped them and U7.7
+  retired #12's Critic half on evidence.
+- `agents/summarizer.py` says *"polish in U9"*; U9.4 rewrote its top half entirely.
+- `eval/` is marked ◐ *"harness itself is U8"* and lists `expected.yaml` and
+  `run_eval.py`, **neither of which exists** — the harness landed as `cases.py` and
+  `runner.py`.
+- `tests/` lists one suite at *"24 hermetic cases"*; there are five files and 97 tests.
+- `tools/` omits every module added since U6 — `zori.py`, `sale_benchmarks.py`,
+  `fmr_history.py`, `growth_bands.py`, `rent_growth.py`, `tot.py`, `zcta_crosswalk.py`.
+
+**Why it matters more than an ordinary stale doc:** this tree is one of the first things
+a reviewer of a public repository reads, and a file listed in it that does not exist
+(`run_eval.py`) is worse than an omission — it sends the reader looking for something
+that was never built. **Closes when** the tree is re-derived against `find src -name
+'*.py'` rather than edited entry by entry, which is the only way it stops drifting again.
