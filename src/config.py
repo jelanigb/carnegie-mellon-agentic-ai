@@ -1259,6 +1259,18 @@ RETRIEVAL_ENABLED = True
 LANGSMITH_PROJECT = "deal-evaluator"
 LANGSMITH_ENABLED = os.environ.get("LANGSMITH_TRACING", "").lower() == "true"
 
+# Third-party library logging — off by default, and "off" here means *restoring* the
+# root logger rather than silencing anything. Nothing in this project logs; the ~190
+# lines that print before every report arrive because decision #13's MCP reference
+# server reconfigures logging for the whole process when it is constructed. See
+# `tools/logging_setup.py` for the measurement and why the fix is shaped that way.
+#
+# `LIBRARY_LOGS=true` gets the chatter back for debugging a retrieval or an HTTP
+# failure. The env var is read once at import; the attribute is read each time the
+# context manager runs, so a caller can also flip it in-process the way `main.py`
+# flips `RETRIEVAL_ENABLED` for the ablation.
+LIBRARY_LOGS_ENABLED = os.environ.get("LIBRARY_LOGS", "").lower() == "true"
+
 
 # --------------------------------------------------------------------------
 # Tree-of-Thought reasoning (§7 decisions #12, #14 — U6)

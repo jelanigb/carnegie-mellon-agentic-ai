@@ -59,18 +59,29 @@ from mcp.types import ToolAnnotations
 import config
 from tools import redfin_data
 from tools.hud_fmr import HudFmrApiError, HudFmrClient
+from tools.logging_setup import library_logging_unchanged
 
-server = MCPServer(
-    name=config.MCP_SERVER_NAME,
-    instructions=(
-        "Read-only reference data for US residential rent and multi-family sale-price "
-        "analysis. Use get_fmr for HUD Fair Market Rent (a rent level a county's market "
-        "supports), and get_growth_bands / get_appreciation_history for observed "
-        "multi-family sale-price appreciation. Coverage is limited: appreciation data "
-        "exists only for the metros returned by list_available_metros, while FMR covers "
-        "any US county given its FIPS code."
-    ),
-)
+# **Constructing the server reconfigures logging for the whole process.**
+# `MCPServer.__init__` calls the SDK's own `configure_logging()`, which runs
+# `logging.basicConfig(level="INFO", handlers=[RichHandler(...)])` — so importing this
+# module for its tool registry, which `agents/scenario_forecast.py` does on every run,
+# would otherwise decide how every other library in the process reports. Roughly 190
+# lines of `httpx` and `sentence-transformers` chatter print before the report as a
+# result. Wrapped rather than worked around downstream, because the change is made here
+# and an entrypoint undoing it later would be repairing a cause it cannot see.
+# `LIBRARY_LOGS=true` keeps it — see `tools/logging_setup.py`.
+with library_logging_unchanged():
+    server = MCPServer(
+        name=config.MCP_SERVER_NAME,
+        instructions=(
+            "Read-only reference data for US residential rent and multi-family sale-price "
+            "analysis. Use get_fmr for HUD Fair Market Rent (a rent level a county's market "
+            "supports), and get_growth_bands / get_appreciation_history for observed "
+            "multi-family sale-price appreciation. Coverage is limited: appreciation data "
+            "exists only for the metros returned by list_available_metros, while FMR covers "
+            "any US county given its FIPS code."
+        ),
+    )
 
 _READ_ONLY = ToolAnnotations(readOnlyHint=True)
 

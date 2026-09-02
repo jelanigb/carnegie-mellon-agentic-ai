@@ -290,10 +290,20 @@ by omission.
 ### OQ-10 · `TODO(security)` · no unit — the on-disk token fallback
 Keys fall back to plaintext files in a gitignored directory when the env var is unset.
 **The question is whether to drop the fallback and require the env var.** Affects
-`tools/hud_fmr.py:24`, `tools/llm_client.py:41`, `tools/tracing.py:41` (added Sept 1, 2026
-when a LangSmith key first existed — the same trade, taken the same way), and
-`tools/diagnostics.py:36` (which deliberately prints the account identifier). Raise before
-any public demo.
+`tools/hud_fmr.py:24`, `tools/llm_client.py:41` and `tools/tracing.py:41` (added Sept 1,
+2026 when a LangSmith key first existed — the same trade, taken the same way). Raise
+before any public demo.
+
+**The `diagnostics.py` half is closed and was a different question, Sept 2, 2026 at
+U9.M.** This entry used to carry it alongside the three fallbacks; it is not the same
+trade. The fallbacks ask whether a key may sit on disk in a gitignored directory — a
+question with a real answer either way. `diagnostics.py:36` asked whether the account
+identifier should be *printed to a terminal that is about to be recorded*, which has no
+defensible yes. **Redacted rather than gated behind a quiet-during-recording switch**,
+because a switch has to be remembered once, before a capture nobody can edit afterwards,
+and on a run where something has already gone wrong. `tests/test_diagnostics_redaction.py`
+guards it in both directions — the identifier out, the status and remedy hint in. What
+remains under this entry is only the fallback question, and U9.10 closes that.
 
 ### OQ-17 · `TODO(reliability)` · no unit — live model calls are not perfectly deterministic, even at temperature 0
 Found Aug 29, 2026 while building U8.5's OQ-16 case. `scenario_forecast`'s ToT scorer gave

@@ -54,6 +54,15 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 2, 2026 — U9.M: the two things that would have contaminated a recording
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 2, 2026 | U9.M | **A run prints 4 lines before the report instead of ~190, and the cause was not the library everyone blamed.** The chatter was attributed to HuggingFace and `sentence-transformers`; measured, those libraries are innocent — Python's root logger starts at WARNING with no handler, so their INFO records go nowhere. **Decision #13's MCP reference server turns them on.** `MCPServer.__init__` calls the SDK's own `configure_logging()`, which runs `logging.basicConfig(level="INFO", handlers=[RichHandler(...)])` process-wide, and `agents/scenario_forecast` imports `mcp_server` on every run to build its evidence menu. New `tools/logging_setup.library_logging_unchanged()` restores the root logger around that one construction; `LIBRARY_LOGS=true` keeps the chatter for debugging. **Restoring rather than silencing named loggers is the decision** — a list of noisy logger names goes stale silently, which is the failure `graph.state_serde()`'s allowlist has now hit twice, while the root logger's prior state is a fact the process can read. Fixed at the cause, so `main.py`, `app.py`, the eval harness and all 28 scripts get it without an import-order rule to remember. Verified inert: the LA sample report replays byte-identically and all 30 eval rows are unchanged | 7.1, maintenance |
+| Sept 2, 2026 | U9.M | **The account identifier no longer reaches the terminal, closing `diagnostics.py`'s `TODO(security)`.** The full-detail channel exists to print an exception unabridged; the calling account's `user_id` is the one field exempted, in both the JSON-field and bare-token forms, because Week 7's deliverable is a terminal capture and a raw 429 during it would put the id on screen. **Redaction over the env-gated verbosity switch the TODO offered as the alternative**: a switch has to be remembered once, ahead of a capture that cannot be edited afterwards, on a run where something has already gone wrong. Status code, provider message, remedy hint and traceback are untouched. `tests/test_diagnostics_redaction.py` guards both directions, since an over-broad pattern eats the detail the channel exists for and fails just as silently. §8's TODO inventory re-reconciled against the grep in the same pass — **the count is unchanged at six and the composition is not**, `diagnostics.py` closing as `tracing.py` arrived | 7.1, maintenance |
+
+---
+
 ## Sept 1, 2026 — U9.7: the Streamlit surface
 
 | Date added | Unit | Work done | Related checkpoint |

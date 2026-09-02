@@ -141,13 +141,18 @@ in a focused session or across a fragmented week.
   | ~~`TODO(U2)`~~ | `hud_fmr.py` | ✅ **cleared Aug 10, 2026** — writes are atomic; the residual concurrency limit is documented on `_DiskCache` as accepted |
   | ~~`TODO(U8)`~~ | — | ✅ **all cleared Aug 31, 2026 at U8.M — nine sites at U8's start, zero now.** Each was replaced by what U8 measured rather than deleted. #6's threshold and weights are **held** on an 80-point sweep (`eval/results/sensitivity.md`) rather than tuned; pass-scoped flags shipped at U8.5; the demo-set county skew **dissolved** when #19's anchor resolved at ZIP tier everywhere; the critical-flag rule is isolated by five golden rows instead of one ablation invocation; the stated-rent threshold closed as **#20** (hold at `None`, do not delete); the rent-comp divergence confirmation and leave-one-metro-out closed at U8.2 and §6 1a. **One thing this row used to claim is corrected rather than carried:** "promoting checks A and B" was one item and is two. Check A closed on its own measurement as #20; **check B was never separately measured or decided** and is now tracked as [OQ-20](../open_questions.md#data--sources) with what closing it would take |
   | `TODO(cut-list)` | `valuation_rent.py` | **One site, down from three (Aug 30, 2026).** Only the descoped LLM rent fallback remains (§6 item 3, taken Aug 21). Model form was **spent** rather than deferred — U11.1 measured three candidates under cross-validation and gradient boosting was adopted; feature engineering, hyperparameter tuning and LOMO were **cut** to §6 item 1a the same day |
-  | `TODO(security)` | `hud_fmr.py`, `llm_client.py` | Whether to drop on-disk credential fallbacks in favour of env-var-only |
-  | `TODO(security)` | `diagnostics.py` | Full error text to stdout deliberately includes the account identifier the report strips. Correct for a terminal, wrong for a recording — and Week 7's deliverable is a terminal capture. Redact that one field, or gate verbosity behind an env var defaulting quiet before recording |
+  | `TODO(security)` | `hud_fmr.py`, `llm_client.py`, `tracing.py` | Whether to drop on-disk credential fallbacks in favour of env-var-only. **Three sites since Sept 1, 2026** — `tracing.py` inherited the same trade when a LangSmith key first existed (OQ-10) |
+  | ~~`TODO(security)`~~ | `diagnostics.py` | ✅ **closed Sept 2, 2026 at U9.M.** The account identifier is redacted from every line this channel prints, in both the JSON-field and bare-token forms, with the status, provider message and remedy hint left intact. **Redaction was taken over the env-gated verbosity switch this row offered as the alternative**, because a switch has to be remembered once before a capture that cannot be edited afterwards, and the run that exposes the identifier is by definition one where something has already gone wrong. Guarded by `tests/test_diagnostics_redaction.py`, including two near-miss cases — an over-broad pattern eats the detail this channel exists for, and fails just as silently |
   | `TODO(geography)` | `county_crosswalk.py`, `config.py` | New England town-based FMR verified for Boston only, not the other five states |
 
   **Six live sites remain**, all genuinely deferred and none owned by a unit that has
   closed: `security` ×3, `geography` ×2, `cut-list` ×1. Reconciled against
-  `grep -rn "TODO(" src/` on Aug 31, 2026.
+  `grep -rn "TODO(" src/` on Sept 2, 2026.
+
+  **The count is unchanged since Aug 31 and the composition is not**, which is the case
+  this reconciliation exists to catch: `diagnostics.py` closed at U9.M and `tracing.py`
+  arrived Sept 1 with the third instance of the credential fallback. A table read for its
+  total would have shown nothing happening while both ends moved.
 
   **This table is reviewed at unit close, and was found stale at U8 planning (Aug 28,
   2026).** It carried two `TODO(U7)` rows as open after U7 shipped, and listed none of the

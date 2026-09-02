@@ -33,17 +33,28 @@ matches how the rest of this project reports (`print`, not `logging`). The cost 
 captures diagnostics into the report file. Switching to stderr is the one-line change
 below if that becomes the annoying half of the trade — the call sites do not change.
 
-TODO(security): the full text intentionally includes the account identifier that
-`_transport_failure` strips. That is correct for a terminal and wrong for anything
-recorded: the Week 7 deliverable includes a terminal capture, and a raw 429 printed
-during it would put the account id on screen. Options are a redaction of that one field,
-or an env-gated verbosity switch defaulting to quiet during recording. Not resolved here
-because the request was explicitly for the full message, and narrowing it silently would
-be the same class of error as publishing it.
+**The account identifier is the one thing this channel does not print** — resolved
+Sept 2, 2026 (U9.M), closing the `security`-scoped deferral that stood here. The full
+text used to include the `user_id` that `_transport_failure` strips, which is right for
+a terminal someone is watching and wrong for one being recorded: the Week 7 deliverable
+includes a terminal capture, and a raw 429 arriving during it would put the account id
+on screen. (Stated without the deferral marker on purpose, so `grep -rn "TODO(" src/`
+stops counting a closed item — the inventory in §8 is only worth what that grep is.)
+
+**Redaction was taken over the alternative — an env-gated verbosity switch defaulting to
+quiet during recording — because the alternative's failure mode is unrecoverable.** A
+switch has to be *remembered*, once, before a capture that cannot be edited afterwards;
+and the run that exposes the identifier is by definition a run where something already
+went wrong, which is the worst moment to be relying on having set a variable. Redaction
+holds whether or not anyone was thinking about it. It also costs nothing a person
+debugging actually wants: the status, the provider, the remedy hint and the traceback all
+survive untouched, and the identifier is the one field that tells a reader nothing about
+the failure. See `_redact` below for what is matched and why both forms are.
 """
 
 from __future__ import annotations
 
+import re
 import sys
 import traceback
 from typing import TextIO
@@ -52,6 +63,34 @@ from typing import TextIO
 _STREAM: TextIO = sys.stdout
 
 _PREFIX = "[diagnostic]"
+
+_REDACTED = "[account id redacted]"
+
+# Two patterns for one identifier, because the envelope around it is the provider's to
+# change and the identifier itself is not. The first matches it as a JSON field, which is
+# how OpenRouter renders an error body today; the second matches the bare token anywhere,
+# which covers a body formatted some other way, a message that quotes the id inline, and
+# a traceback rendering an exception's repr.
+#
+# **Deliberately narrow.** These match an account identifier and nothing else — not
+# addresses, not model ids, not the provider's remedy hint — because a redaction that
+# over-matches destroys the detail this module exists to preserve, and it does so
+# silently. The length floor keeps `user_id`-adjacent prose from being caught.
+_ACCOUNT_ID_PATTERNS = (
+    re.compile(r'("user_id"\s*:\s*")[^"]*(")'),
+    re.compile(r"\buser_[A-Za-z0-9]{8,}\b"),
+)
+
+
+def _redact(text: str) -> str:
+    """Remove the calling account's identifier from anything about to be printed.
+
+    Applied to every line this module emits rather than only to exception text, because
+    the raw model response reaches it too — `agents/extractor.py` passes `exc.last_raw`
+    as a note detail, and what a model echoes back is not this project's to predict.
+    """
+    text = _ACCOUNT_ID_PATTERNS[0].sub(rf"\g<1>{_REDACTED}\g<2>", text)
+    return _ACCOUNT_ID_PATTERNS[1].sub(_REDACTED, text)
 
 
 def log_exception(
@@ -71,12 +110,12 @@ def log_exception(
     a known network call needs no stack; a bare `except Exception` catching something
     unclassified does.
     """
-    print(f"{_PREFIX} {context}", file=_STREAM)
-    print(f"{_PREFIX}   {type(exc).__name__}: {exc}", file=_STREAM)
+    print(f"{_PREFIX} {_redact(context)}", file=_STREAM)
+    print(f"{_PREFIX}   {_redact(f'{type(exc).__name__}: {exc}')}", file=_STREAM)
     if include_traceback:
         for line in traceback.format_exception(type(exc), exc, exc.__traceback__):
             for subline in line.rstrip().splitlines():
-                print(f"{_PREFIX}   {subline}", file=_STREAM)
+                print(f"{_PREFIX}   {_redact(subline)}", file=_STREAM)
     _STREAM.flush()
 
 
@@ -87,6 +126,6 @@ def log_note(context: str, detail: str) -> None:
     retry being spent, say, which is a normal outcome of a loop working correctly and
     still worth being able to see.
     """
-    print(f"{_PREFIX} {context}", file=_STREAM)
-    print(f"{_PREFIX}   {detail}", file=_STREAM)
+    print(f"{_PREFIX} {_redact(context)}", file=_STREAM)
+    print(f"{_PREFIX}   {_redact(detail)}", file=_STREAM)
     _STREAM.flush()
