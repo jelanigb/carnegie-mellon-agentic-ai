@@ -185,6 +185,7 @@ building them — including the ones that changed the design — are in
 | **U6** ✅ | Scenario/Forecast: beam search over an **enumerated** hypothesis space — 4 framings, then 9 band pairings — with an LLM evaluator pulling evidence through the MCP tool registry in-process. Rent growth and price appreciation forecast **separately** (#16), projected 5 years from the **asking price** (#15) | **4.1** | [Forecasting](history/decision_log.md#forecasting--reasoning) |
 | **U7** ✅ | Critic: three cross-agent **interaction** checks (a combination changing what a measurement means — the four checks §1 named did not survive contact with the built system), comp-attribute drift owned by Retrieval, confidence scoring evidenced on the real pipeline, a rework cycle that fires on its own and is bounded by its counter rather than by score decay, human-review escalation via `interrupt()` | **6.1** | [Orchestration](history/decision_log.md#orchestration--control-flow) |
 | **U8** ✅ | Eval harness, stated as what it produced rather than as what it was sized as. **28 rows across three tiers** — 21 with a verdict *declared before the first run*, 7 live demo baselines — with **30 of 30 flag kinds raised, none uncovered and none unreachable**, and verdict agreement 18/21 with every mismatch triaged. Plus: a published parameter sweep closing #6, six straddle fixtures measuring brittleness at the per-flag lines, per-metro rent-error disclosure, pass-scoped flags, and a sub-metro price benchmark that arrived from the cut list. **Absorbed U10** — the demo deals are rows in the same batch, so the end-to-end evidence is a harness output rather than a separate pass | **6.1** + report + video | [Orchestration](history/decision_log.md#orchestration--control-flow), [Eval & demo](history/decision_log.md#evaluation--demo) |
+| **U11** ✅ | Rent model, re-opened on measurement rather than on plan. Model form cross-validated and moved to **gradient boosting** (#18); the rent anchor re-based on a **ZORI/FMR hybrid** — ZORI for the level at the subject's own ZIP, HUD for the bedroom step (#19), which spent §6 cut-list item 6 and retired U8.4b's drift correction structurally. Per metro: New York $981 → $855, Chicago $454 → $343, overall flat — the headline hides the result, which is why per-metro reporting is now standard | — | [Rent & valuation](history/decision_log.md#rent--valuation) |
 | **U9** ⬜ | Summarizer polish + Streamlit demo app | report + video | — |
 | — | **Code frozen Sept 4, 2026.** Final report + 8–10 min video, due Sept 7 | **7.1** | — |
 
@@ -200,7 +201,13 @@ capability before writing about it improves both halves of the submission.
 capturing traces, screenshots and diagrams; U8 is already a batch runner over engineered
 listings. Running the demo deals through the same harness produces the same artifacts from
 one code path instead of two, and it removes the failure mode where the demo evidence and
-the evaluation evidence are generated differently and disagree. Taken to buy schedule under
+the evaluation evidence are generated differently and disagree.
+
+**U8.9 — the subsection that would have built the absorbed capture scope — was dropped
+Aug 30, 2026 and reassigned whole to U9.7/U9.9**, so the traces, screenshots and diagram
+listed below were still outstanding when U8 closed. Noted here because this table is read
+every session and the U8 row otherwise reads as if the absorption fully landed
+(maintenance item M4). [`tasks/task_list_u9.md`](tasks/task_list_u9.md) §U9.9. Taken to buy schedule under
 the Sept 4 freeze, but it is the better structure regardless: **the demo becomes a row set
 in the evaluation, not a separate performance.** The absorbed scope, so it is not lost when
 U8 is planned: per-metro runs across all three metros, LangSmith traces captured, demo

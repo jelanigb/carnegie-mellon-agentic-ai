@@ -25,10 +25,38 @@ Reason/Act/Observe/Decide:
   On reaching the iteration cap, exit with a sparse-comps flag and whatever was found
   rather than returning a silently weak result presented as a strong one.
 
-Relaxation is ordered by how much accuracy each concession costs: the square-footage
-band goes first (weakest signal), then the search radius widens, then bedroom-count
-tolerance loosens (strongest signal, conceded last). A single prompt has no way to
-inspect the result of its own retrieval and adjust; this loop is why that matters.
+Relaxation concedes the square-footage band first, then widens the search radius, then
+loosens bedroom-count tolerance.
+
+**That order is inherited from U4, and the rationale it was written with does not
+survive measurement — corrected Sept 2, 2026 (maintenance item M6).** It read "ordered by
+how much accuracy each concession costs", calling square footage the weakest signal and
+bedroom count the strongest. The shipped rent model measures the opposite:
+`square_feet` 0.502, `bedrooms` 0.300, `bathrooms` 0.198 — floor area is the strongest
+feature at 1.7x bedrooms, and it is the first thing this ladder gives up. **The cause is
+sequencing, not a bad judgment**: the ladder was written in U4 and the rent model did not
+exist until U5, so "weakest signal" was an assumption made before there was anything to
+ask, and nothing revisited it when the answer arrived.
+
+**Two cautions against over-reading that, which are why the order is not simply
+reversed.** Feature importance in the rent *model* is not the same quantity as comp
+*comparability* — comps feed a cross-check, not the model — and importances are
+unreliable under correlated features, which floor area and bedroom count certainly are.
+There is also a second argument pointing the same way that has **not** been checked: a
+bedroom mismatch has a correction available through #19's FMR bedroom step, while a
+square-footage mismatch has none, which would mean the ladder concedes the uncorrectable
+attribute first. Reproduce the importances by loading `config.RENT_MODEL_PATH` and
+reading `bundle["model"].feature_importances_` against `config.RENT_MODEL_FEATURES`.
+
+**Not reordered here, deliberately.** Changing the ladder changes which comps every deal
+retrieves, which moves comp counts, the drift flag, confidence and verdicts across all 30
+eval rows — a re-derivation of the published table, against a finding that is real but
+whose fix is not established. What is corrected is the *claim*, so the next reader is not
+misled by a rationale the evidence contradicts. U4's ablation harness is the instrument
+that would settle it.
+
+A single prompt has no way to inspect the result of its own retrieval and adjust; this
+loop is why that matters.
 """
 
 from __future__ import annotations
@@ -154,7 +182,8 @@ def comps_retrieval_agent(state: DealState) -> dict:
         if iteration == config.MAX_RETRIEVAL_ITERATIONS:
             break
 
-        # Relax exactly one criterion per pass, weakest signal conceded first.
+        # Relax exactly one criterion per pass, in the order the module docstring
+        # states — and see it for why that order's original rationale was retired.
         if sqft_tolerance is not None:
             sqft_tolerance = None
             flags.append(

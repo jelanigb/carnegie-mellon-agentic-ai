@@ -4,11 +4,21 @@ Why this module exists
 ----------------------
 The Scenario/Forecast agent needs a rent-growth rate, and §1 originally specified taking
 one from Redfin's sale-price series. Measured against this project's own data before U6
-was built, rent growth and price growth are **negatively** correlated across the
+was built, rent growth and price growth appeared **negatively** correlated across the
 inference trio (pooled r = -0.309), so that series would have pointed the forecast the
 wrong way. Rent growth needs a rent-native source, and HUD's published FMR history is
-the one this project already has: FY2017 onward through the client in `hud_fmr.py`,
+the one this project already had: FY2017 onward through the client in `hud_fmr.py`,
 already cached, no new dependency.
+
+**Both halves of that have since moved, and this module is now the fallback rather than
+the source — decision #21, U9.3.** The correlation was re-derived
+(`scripts/growth_correlation.py`) and is a property of the *rent series* rather than of
+the market: -0.317 on the HUD schedule, -0.197 with HUD's two national step-up years
+removed, and **+0.222 on market rent**, r² never above 0.10. And #19 moved this system's
+rent anchor to Zillow's ZORI index, so the architectural argument below — project forward
+the same anchor the estimate was built on — now selects ZORI. `tools/rent_growth.py` is
+the source; this module still earns its place as the county-level fallback where ZORI has
+no series deep enough to band.
 
 It is also the only candidate that is *architecturally* consistent. The rent estimate is
 `ratio x FMR` (§2), so projecting the FMR anchor forward while holding the structural

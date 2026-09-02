@@ -874,16 +874,24 @@ class ValuationDetail(BaseModel):
 class Scenario(BaseModel):
     """One reported forecast path: a rent band paired with a price band, projected out.
 
-    **The pairing is the reasoning, not a formatting choice.** Three rent bands and
-    three price bands give nine combinations, and the obvious three — optimistic with
-    optimistic, base with base, pessimistic with pessimistic — are the ones this
-    project's own data argues against. Rent growth and price growth are *negatively*
-    correlated across the inference trio (pooled r = -0.309, §2), so the diagonal
-    pairings describe a market behaving in a way it has usually not. Which pairing
-    deserves to be called "optimistic" for a given deal is a judgement over measured
-    inputs, and it is the judgement the Scenario agent's search exists to make.
+    **The pairing is the reasoning, not a formatting choice** — and the reason it gives
+    for existing changed at decision #21. This docstring used to argue that the diagonal
+    pairings (optimistic with optimistic, and so on) describe a market behaving in a way
+    it usually has not, because rent and price growth are *negatively* correlated across
+    the inference trio at pooled r = -0.309. **That measurement did not survive
+    re-derivation.** `scripts/growth_correlation.py` gives -0.317 against the HUD
+    schedule, -0.197 once HUD's two national step-up years are removed, and **+0.222
+    against market rent** — the series this system has anchored to since #19 — with r²
+    never above 0.10 in any pass. The sign is a property of the rent series, not of the
+    market.
 
-    Every rate here is an observed figure from `tools/fmr_history.py` or
+    So the level has **no directional prior at all**: it does not prefer the diagonal and
+    does not prefer its opposite, and the nine candidates are scored on this deal's own
+    evidence — the flags raised upstream, how wide each band is, and how many
+    observations sit behind it. That is honest and it is thin, and OQ-22 carries the
+    redesign.
+
+    Every rate here is an observed figure from `tools/rent_growth.py` or
     `tools/redfin_data.py` - never a model's invention. The search selects among
     measured values; it does not produce new ones.
     """

@@ -190,9 +190,12 @@ def offline_scenario_evaluator(monkeypatch):
     teaches a reader to stop trusting a must-never-fail suite.
 
     Forcing the constructor to raise routes the agent down its documented fallback: a
-    deterministic scorer over the measured negative correlation between rent and price
-    growth. That path is worth exercising on its own account, since it is what a real run
-    degrades to when the model is unreachable. The evaluator's live behaviour belongs to
+    deterministic scorer that prefers whichever pairing claims least, scoring a candidate
+    by how far it departs from the neutral case. **Not a scorer over the rent/price
+    correlation, which is what this docstring said until U9.7T** — decision #21 retired
+    that correlation as a basis for preferring any pairing, and rewrote the fallback to
+    the one thing a scorer with no model can defend. That path is worth exercising on its
+    own account, since it is what a real run degrades to when the model is unreachable. The evaluator's live behaviour belongs to
     `scripts/forecast_evidence.py`, which runs it against real services.
     """
 

@@ -9,7 +9,7 @@
     .venv/bin/python main.py --deal chicago-uptown # clean on both axes; priced at its ZIP median
     .venv/bin/python main.py --deal los-angeles-current  # los-angeles, rents re-based on the current anchor
     .venv/bin/python main.py --file listing.txt --coords 34.0522,-118.2437
-    .venv/bin/python main.py --deal chicago --no-retrieval   # the U4 ablation
+    .venv/bin/python main.py --deal chicago --no-retrieval   # without the comp corpus (U4 ablation)
     .venv/bin/python main.py --fault llm-unavailable         # a declared, simulated outage
 
 The three market deals are the same density cases `scripts/retrieval_evidence.py`
@@ -190,7 +190,11 @@ def main() -> None:
     parser.add_argument(
         "--no-retrieval",
         action="store_true",
-        help="the U4 ablation: run with RETRIEVAL_ENABLED off, ungrounded",
+        help=(
+            "run without the comparable-rentals corpus, so the deal is evaluated "
+            "ungrounded. The before/after on one listing is this project's evidence "
+            "that retrieval changes the output rather than decorating it."
+        ),
     )
     parser.add_argument(
         "--fault",

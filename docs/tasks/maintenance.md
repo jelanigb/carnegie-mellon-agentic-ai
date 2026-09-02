@@ -17,7 +17,7 @@ Comment-only; no logic. Sites: `graph.py`, `config.py`, `state.py`, `critic.py`,
 raised. Carried here rather than in `open_questions.md` because it's comment-only
 maintenance, not a design question.
 
-### M2 — Audit the remaining agents' flag messages for internal vocabulary
+### M2 ✅ — Audit the remaining agents' flag messages for internal vocabulary *(done Sept 2, 2026)*
 
 The Aug 24 rule (§8, "Reader-facing text carries no internal vocabulary") was applied to
 the Critic's objections and one Summarizer line. A scan of every non-docstring string in
@@ -34,6 +34,22 @@ AST walk that found them — string constants that are not docstrings, matched a
 **Reconfirmed by documentation audit, Aug 31, 2026** — `main.py:10` still reads
 `# the U4 ablation` in the CLI help text, unchanged since Aug 26. Still the only live
 site the scan named as worth a pass.
+
+**Closed Sept 2, 2026 at U9.M.** `--help` now says *"run without the comparable-rentals
+corpus, so the deal is evaluated ungrounded"* and states what the before/after is evidence
+of, which is the thing a demo audience actually needs from that line. The module docstring
+keeps the `U4 ablation` gloss in a parenthetical — its audience has the repository open,
+and §8 says that is precisely where a citation belongs.
+
+**Four sites the original scan did not cover, found and fixed in the same pass**, because
+they are the same defect in the other direction — a docstring asserting something
+measurement has retired. `state.Scenario`, `tools/fmr_history.py`,
+`scripts/forecast_evidence.py` and `tests/test_flag_propagation.py` all still stated the
+rent/price correlation as `pooled r = -0.309` and used it to justify the pairing search,
+after decision #21 re-derived it as a property of the *rent series* (+0.222 on market
+rent, r² never above 0.10). `config.py` had been corrected at U9.3 and was the model for
+the other four. Docstrings are the one place §8 asks for precise citation, which is
+exactly why a stale one there is worse than a stale sentence in prose.
 
 ### M3 ✅ — Rename `_resolve_geography`'s `supplied` parameter *(done Aug 28, 2026)*
 
@@ -72,7 +88,7 @@ message rendering correctly across the re-wrapped f-string) and the fallback bra
 unresolvable address → `GEOCODING_UNAVAILABLE`, caller coordinates used as given). 60 tests
 pass.
 
-### M4 — §6's U8 row doesn't disclose that U8.9 was dropped
+### M4 ✅ — §6's U8 row doesn't disclose that U8.9 was dropped *(done Sept 2, 2026)*
 
 **Found by documentation audit, Aug 31, 2026.** `implementation_plan.md` §6's U8 row says
 U8 "Absorbed U10" and lists per-metro live runs, LangSmith traces, demo screenshots and
@@ -86,7 +102,7 @@ learn that traces, screenshots and the diagram are still outstanding.
 Fix: add one clause to the U8 row's Findings text naming the drop and pointing at U9.7.
 Prose-only; no logic.
 
-### M5 — §6's unit table has no row for U11
+### M5 ✅ — §6's unit table has no row for U11 *(done Sept 2, 2026)*
 
 **Found by documentation audit, Aug 31, 2026, prompted by the architect asking whether
 U11 counts as closed.** It does — `tasks/README.md` marks it "✅ complete Aug 31, 2026",
@@ -100,7 +116,7 @@ supposed to be the at-a-glance record of what shipped.
 Fix: add a U11 row between U8 and U9, stated as what it produced (model form, the hybrid
 anchor, the two decisions) the same way the other closed rows are. Prose-only; no logic.
 
-### M6 — The comp relaxation ladder's stated rationale is contradicted by the rent model
+### M6 ✅ — The comp relaxation ladder's stated rationale is contradicted by the rent model *(docstring corrected Sept 2, 2026; the reorder stays open)*
 
 **Found Aug 31, 2026, during U9's reasoning-layer review.** The architect asked whether the
 ladder's ordering was still sound given #19 moved the anchor to a rent index without a
@@ -162,7 +178,7 @@ reasoning locus in this system, and this finding is why: *which* criterion to re
 given deal is a real judgment with alternatives and a measurable outcome, and the fixed
 ladder answering it today rests on a premise that measurement contradicts.
 
-### M7 — `architecture.md`'s repository tree has drifted from the build
+### M7 ✅ — `architecture.md`'s repository tree has drifted from the build *(re-derived Sept 2, 2026)*
 
 **Found Sept 1, 2026 while adding `tools/faults.py` and `app.py` to it (U9.7e).** Those
 two entries are now correct; several others are not, and they were not touched because
@@ -183,3 +199,30 @@ a reviewer of a public repository reads, and a file listed in it that does not e
 (`run_eval.py`) is worse than an omission — it sends the reader looking for something
 that was never built. **Closes when** the tree is re-derived against `find src -name
 '*.py'` rather than edited entry by entry, which is the only way it stops drifting again.
+
+---
+
+## Closed Sept 2, 2026 at U9.M — what each fix actually was
+
+**M4** — `implementation_plan.md` §6's U8 row now names U8.9's drop and points at U9.9, so
+a reader of the file that is loaded every session learns that the absorbed capture scope
+was still outstanding when U8 closed.
+
+**M5** — §6's unit table gains a U11 row between U8 and U9, stated as what it produced
+(#18's model form, #19's hybrid anchor, the per-metro result) the way every other closed
+row is. U11 had existed only in its own task file and in the decisions it produced.
+
+**M6** — the docstring half only, which is what the entry recommended. The ladder still
+concedes floor area first; what changed is that `agents/comps_retrieval.py` now says the
+order is inherited from U4, that the shipped rent model measures `square_feet` at 0.502
+against `bedrooms` at 0.300, and that the *cause is sequencing* — the ladder predates the
+model by a unit. **Both cautions against over-reading that are carried too**, since
+feature importance in the rent model is not comp comparability and importances are
+unreliable under correlated features. Reordering still moves comp sets across all 30 eval
+rows and stays out of scope.
+
+**M7** — the tree was **re-derived against `find src -name '*.py'`**, not edited, which is
+what the entry said was the only fix that stops it drifting again. The `✅`/`◐` status
+markers went with it: they encoded a moment in the build and were never updated as it
+passed, and `changelog.md` answers "when did this land" properly. `scripts/` is a count
+rather than an enumeration, because it turns over faster than this document is read.

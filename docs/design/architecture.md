@@ -220,76 +220,94 @@ single live call is reproducible.
 
 ```
 carnegie_mellon_agentic_repo/
-├── data/                          # gitignored — Kaggle CSV, Redfin CSVs, cached HUD FMR responses
+├── data/                          # gitignored — Kaggle CSV, Redfin/Zillow CSVs, cached HUD responses
 │   ├── raw/
-│   └── processed/
+│   └── processed/                 # trained rent model, Chroma index, checkpointer, dev LLM cache
 ├── docs/
-│   ├── implementation_plan.md     # this file — the reasoning record
-│   ├── changelog.md               # ✅ the chronological record: what code landed when (§8)
-│   └── diagrams/                  # ✅ generated from the compiled graph, not drawn
+│   ├── implementation_plan.md     # plan of record: §6 sequence, §7 decisions register
+│   ├── open_questions.md          # every unresolved question, by system area
+│   ├── demo.md                    # the demo guide: what each deal shows
+│   ├── design/                    # what the system IS — architecture, state, data, evaluator, personas
+│   ├── history/                   # how it got that way — changelog, decision_log
+│   ├── sample_reports/            # two committed reports, replayed byte-identically from a clone
+│   └── diagrams/                  # generated from the compiled graph, not drawn
 └── src/                           # project root for all application code
-    ├── README.md
     ├── requirements.txt
     ├── .venv/                     # gitignored — dedicated virtualenv
-    ├── config.py                  # ✅ X/Y/Z loop parameters, model names, thresholds
-    ├── state.py                   # ✅ DealState / Flag / DealTerms / Comp — Pydantic (§5)
-    ├── graph.py                   # ✅ StateGraph assembly: nodes, edges, routing, compile()
-    ├── nodes.py                   # ✅ node-name string constants (avoids silent typo bugs)
+    ├── config.py                  # the only home for tunable parameters (§8)
+    ├── state.py                   # DealState / Flag / DealTerms / Comp / Scenario — Pydantic (§5)
+    ├── graph.py                   # StateGraph assembly: nodes, edges, routing, compile(), serde
+    ├── nodes.py                   # node-name string constants (avoids silent typo bugs)
+    ├── demo_deals.py              # the synthetic listings + the public source behind every figure
+    ├── main.py                    # entrypoint: one listing end to end; --deal / --fault / --no-retrieval
+    ├── app.py                     # Streamlit demo surface; replay by default (U9.7)
+    ├── mcp_server.py              # MCP read-only reference server (FMR + appreciation)
     ├── agents/
-    │   ├── __init__.py
-    │   ├── planner.py             # ✅ pre-flight plan + every route_* function
-    │   ├── extractor.py           # ✅ schema-validated LLM call + geocoding + county
-    │   ├── comps_retrieval.py     # ✅ adaptive relaxation loop
-    │   ├── valuation_rent.py      # ✅ FMR-anchored rent estimate + comp cross-check
-    │   ├── scenario_forecast.py   # ✅ ToT beam search over enumerated framings/pairings
-    │   ├── critic.py              # ◐ confidence + escalation built; consistency checks U7
-    │   ├── summarizer.py          # ✅ real markdown, disclosure-first; polish in U9
-    │   └── human_review.py        # ✅ the interrupt() escalation node
+    │   ├── planner.py             # pre-flight plan + every route_* function
+    │   ├── extractor.py           # schema-validated LLM call + geocoding + county
+    │   ├── comps_retrieval.py     # adaptive relaxation loop + comp-attribute drift check
+    │   ├── valuation_rent.py      # anchored rent estimate, comp cross-check, benchmark, GRM
+    │   ├── scenario_forecast.py   # ToT beam search over enumerated framings/pairings
+    │   ├── critic.py              # confidence, escalation, interaction checks, the recommendation
+    │   ├── summarizer.py          # the report: two axes, verdict, disclosures, evidence
+    │   └── human_review.py        # the interrupt() escalation node
     ├── tools/
-    │   ├── __init__.py
-    │   ├── llm_client.py          # ✅ OpenRouter wrapper + schema-validated retry loop + cache
-    │   ├── llm_cache.py           # ✅ on-disk response cache; off / read_write / replay
-    │   ├── diagnostics.py         # ✅ full error detail to stdout, kept out of the report
-    │   ├── vector_store.py        # ✅ Chroma setup + embedding + hybrid query
-    │   ├── kaggle_data.py         # ✅ single cleaning path: dedupe, completeness, city match
-    │   ├── model/
-    │   │   ├── __init__.py
-    │   │   └── rent_model.py      # sklearn regression: train/load/predict (FMR-normalized target)
-    │   ├── hud_fmr.py             # ✅ HUD FMR API client (§9)
-    │   ├── county_crosswalk.py    # ✅ lat/lon → county_fips via point-in-polygon join (rewritten Aug 15, 2026)
-    │   ├── geocoding.py           # ✅ address → lat/lon: Census primary, corpus centroid fallback
-    │   ├── redfin_data.py         # ✅ load + query, rolling-3 + growth bands computed here
-    │   ├── faults.py              # ✅ the three declared faults + their injector (U9.7a)
-    │   └── tracing.py             # ✅ LangSmith project wiring; env-driven, never required
-    ├── demo_deals.py              # ✅ the synthetic listings + provenance for every figure
-    ├── scripts/
-    │   ├── pull_fmr_sample.py     # ✅ real HUD pull smoke test
-    │   ├── pull_geocode_sample.py # ✅ real Census geocoder calls: all three tiers
-    │   ├── verify_county_geometry.py # ✅ point-in-polygon results cross-checked against live HUD
-    │   ├── verify_metro_selection.py # ✅ reproduces the §2 metro evidence
-    │   ├── extraction_evidence.py # ✅ Loop 1 behaviour + the decision #8 model bake-off
-    │   ├── verify_demo_calibration.py # ✅ re-derives each demo figure from Redfin + HUD
-    │   ├── build_comps_index.py   # ✅ one-off: embed + load Chroma (3,880 listings)
-    │   ├── retrieval_evidence.py  # ✅ Checkpoint 3.1 evidence: 3 density cases + config-flag ablation
-    │   ├── retrieval_ablation_llm.py # ✅ Checkpoint 3.1: ungrounded LLM vs. grounded retrieval
-    │   ├── train_rent_model.py    # one-off: fit + report holdout MAE
-    │   └── export_graph_diagram.py # ✅ generates the diagram AND asserts decision #9's topology
-    ├── notebooks/
-    │   └── 01_data_exploration.ipynb
-    ├── eval/                      # ◐ scaffolding + README landed U3; harness itself is U8
-    │   ├── README.md              # ✅ layout, the two case tiers, record/replay usage
-    │   ├── data/                  # golden DealTerms fixtures + the listings they came from
-    │   │   └── llm_recordings/    # recorded model responses, replayed by llm_cache
-    │   ├── results/               # generated result tables (committed — the report cites them)
-    │   ├── expected.yaml          # listing → expected flags / status
-    │   └── run_eval.py            # batch runner → results table for the report
-    ├── tests/
-    │   ├── conftest.py            # ✅ puts src/ on the import path
-    │   └── test_flag_propagation.py  # ✅ the one test that must never fail — 24 hermetic cases
-    ├── mcp_server.py              # ✅ MCP read-only reference server (FMR + appreciation)
-    ├── app.py                     # ✅ Streamlit demo surface; replay by default (U9.7)
-    └── main.py                    # ✅ entrypoint: run full pipeline on one listing
+    │   ├── llm_client.py          # OpenRouter wrapper + schema-validated retry loop + cache
+    │   ├── llm_cache.py           # on-disk response cache; off / read_write / replay
+    │   ├── diagnostics.py         # full error detail to stdout, account id redacted (U9.M)
+    │   ├── logging_setup.py       # keeps one library's constructor from configuring the process
+    │   ├── faults.py              # the three declared faults + their injector (U9.7a)
+    │   ├── tracing.py             # LangSmith project wiring; env-driven, never required
+    │   ├── vector_store.py        # Chroma setup + embedding + hybrid query
+    │   ├── kaggle_data.py         # single cleaning path: dedupe, completeness, city match
+    │   ├── hud_fmr.py             # HUD FMR API client (§9)
+    │   ├── fmr_history.py         # FMR published history — the rent-growth fallback since #21
+    │   ├── zori.py                # Zillow ZORI panel: the rent anchor's level (#19)
+    │   ├── rent_growth.py         # rent-growth bands from ZORI, FMR history behind it (#21)
+    │   ├── redfin_data.py         # load + query; sale-price series and its metro coverage
+    │   ├── growth_bands.py        # one band estimator, shared by both series (U9.3)
+    │   ├── sale_benchmarks.py     # county-assessor ZIP sale medians (#11, U8.8)
+    │   ├── county_crosswalk.py    # lat/lon → county_fips via point-in-polygon join
+    │   ├── zcta_crosswalk.py      # lat/lon → ZCTA, for ZIP-tier anchoring and benchmarks
+    │   ├── geocoding.py           # address → lat/lon: Census primary, corpus centroid fallback
+    │   ├── tot.py                 # the beam search itself — no domain knowledge (#12, #14)
+    │   └── model/rent_model.py    # gradient-boosted rent model: anchor, train, load, predict
+    ├── eval/                      # the harness (U8); its outputs are the evaluation evidence
+    │   ├── README.md              # layout, the three case tiers, record/replay usage
+    │   ├── cases.py               # every case, its target flag and its declared verdict
+    │   ├── runner.py              # batch runner → results.md; replay by default since U9.5
+    │   ├── data/golden_fixtures.py # golden DealTerms fixtures + the listings they came from
+    │   ├── data/llm_recordings/   # recorded model responses, replayed by llm_cache
+    │   └── results/               # results.md + sensitivity.md — committed; the report cites them
+    ├── scripts/                   # 29 one-off evidence, probe and build scripts (see below)
+    └── tests/                     # 107 hermetic tests across 7 files; no network, no model calls
+        ├── conftest.py            # puts src/ on the import path; keeps the suite off the network
+        ├── test_flag_propagation.py       # the suite that must never fail
+        ├── test_critic_interactions.py    # the three cross-agent interaction checks
+        ├── test_report_verdict.py         # the recommendation rule and its cross-check
+        ├── test_forecast_tie_disclosures.py # ties, cut margins, and the ledger's prune reasons
+        ├── test_stated_rent_disclosure.py # stated rents against the modelled figure
+        ├── test_gross_rent_multiplier.py  # the multiple, its inputs, and its absences
+        └── test_diagnostics_redaction.py  # the account id never reaching a recorded terminal
 ```
+
+**This tree is re-derived from the filesystem, not edited — Sept 2, 2026 (maintenance
+item M7).** The previous version had drifted far enough to be actively misleading: it
+listed `eval/run_eval.py` and `eval/expected.yaml`, **neither of which was ever built**
+(the harness landed as `cases.py` and `runner.py`), marked the Critic and Summarizer
+unfinished after both had shipped, described `tests/` as one file of 24 cases when there
+are seven files and 107, and omitted every `tools/` module added since U6. A file listed
+here that does not exist is worse than an omission — it sends a reviewer looking for
+something that never existed — and this tree is one of the first things a reader of a
+public repository opens.
+
+**The fix is the method, not the content.** It was regenerated against
+`find src -name '*.py'`, and editing it entry by entry is exactly what let it drift. The
+`✅`/`◐` build-status markers are gone with it: they encoded a moment in the build, they
+were never updated as that moment passed, and `history/changelog.md` answers "when did
+this land" properly. `scripts/` is given as a count rather than enumerated for the same
+reason — it turns over faster than this document is read, and each script's own docstring
+says what it measures.
 
 `agents/human_review.py` was not in the original tree. It is not a specialist — it makes
 no estimate and reaches no conclusion — but it *is* a node function, and putting it in
