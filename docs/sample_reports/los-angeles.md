@@ -45,9 +45,9 @@ Rent growth is projected from Zillow Observed Rent Index, county-level monthly m
 </details>
 
 <details>
-<summary><b><code>forecast_branches_near_tied</code></b> — The last scenario pairing to make the table and the best one left out of it were separated by 0.050, inside the 0.05 threshold this system treats as no meaningful difference</summary>
+<summary><b><code>forecast_branches_near_tied</code></b> — The last scenario pairing to make the table and the best one left out of it were separated by less than 0.05, which this system treats as no meaningful difference</summary>
 
-The last scenario pairing to make the table and the best one left out of it were separated by 0.050, inside the 0.05 threshold this system treats as no meaningful difference. This line matters in a way a tie between two reported scenarios does not: it decides which pairings are shown at all, so the set of scenarios below could as defensibly have been a different set. The pairing that missed it is listed in the search ledger with its own score and the reason it was dropped. As with every score here, it comes from a single model call whose repeat runs measurably vary.
+The last scenario pairing to make the table and the best one left out of it were separated by less than 0.05, which this system treats as no meaningful difference. This line matters in a way a tie between two reported scenarios does not: it decides which pairings are shown at all, so the set of scenarios below could as defensibly have been a different set. The pairing that missed it is listed in the search ledger with its own score and the reason it was dropped. As with every score here, it comes from a single model call whose repeat runs measurably vary.
 
 *raised by:* `scenario_forecast`
 </details>
@@ -100,19 +100,21 @@ Measured ranges, one per quantity, each labelled for its own band rather than fo
 
 Projected from modelled rent $2,861/mo and the **asking price** $1,049,000. The price side compounds the asking price rather than an estimated value — this system does not produce one, and says so above.
 
-Scenarios are named for their **combined** outcome across both quantities, so a single column need not fall in label order — the pessimistic case can carry the higher projected price and still be the worse outcome overall. Each row states which band it drew from on each side. Rent and price are paired here rather than forecast independently, and this project has measured how the two move together: weakly, and not in a consistent direction. Read each row as one internally consistent story about this market, not as evidence that rent and price tend to move that way.
+Each row is named for the combination it describes, and the bands beside each figure are the same ones in the table above. **Rows are ordered worst to best by combined outcome**, so the central case is not necessarily in the middle. Rent and price are paired here rather than forecast independently, and this project has measured how the two move together: weakly, and not in a consistent direction. Read each row as one internally consistent story about this market, not as evidence that rent and price tend to move that way.
 
-| Scenario | Rent growth | Price growth | Rent in yr 5 | Price in yr 5 |
-| --- | --- | --- | --- | --- |
-| **Pessimistic** | +2.51%/yr (base) | -0.80%/yr (pessimistic) | $3,239 | $1,007,894 |
-| **Base** | +1.25%/yr (pessimistic) | +2.10%/yr (base) | $3,045 | $1,164,118 |
-| **Optimistic** | +2.51%/yr (base) | +2.10%/yr (base) | $3,239 | $1,164,118 |
+| Scenario | Rent growth | Price growth | Rent in yr 5 | Price in yr 5 | Why this row is shown |
+| --- | --- | --- | --- | --- | --- |
+| **Prices fall, rents hold** | +2.51%/yr (long-run average) | -0.80%/yr (weakest stretch) | $3,239 | $1,007,894 | **0.85** — level with 3 other pairings, kept as the more cautious |
+| **Rents stall, prices hold** | +1.25%/yr (weakest stretch) | +2.10%/yr (long-run average) | $3,045 | $1,164,118 | **0.85** — level with 3 other pairings, kept as the more cautious |
+| **Central case** | +2.51%/yr (long-run average) | +2.10%/yr (long-run average) | $3,239 | $1,164,118 | **0.96** — outscored the pairings left out |
 
-- **Pessimistic** *(scored 0.85)* — Base rent growth is paired with a pessimistic price projection that rests on low‑end historical data with adequate observations.
-- **Base** *(scored 0.85)* — The pessimistic rent estimate is paired with a central price trend that is well supported by 52 monthly observations.
-- **Optimistic** *(scored 0.96)* — Both rent and price use central historical growth rates that are directly observed and therefore most robustly founded.
+**Not represented above:** the strongest stretch for rent and the strongest stretch for sale price. Every band is measured and printed in the table at the top of this section; what the rows show is which *combinations* the search judged worth reporting, and a band reaching no row means it did not survive that judgment in any pairing. The bottom row is therefore the best case among those reported, not the best case measured.
 
-Each score is how well the forecast search judged that hypothesis to be supported by the evidence it was given, from 0 to 1 — shown because a scenario the system itself rated weakly should be read as one. Two cautions: the scenario names above come from each row's projected outcome and not from these scores, so a higher-scoring row is not a more likely one; and the scores come from a single model call whose repeat runs measurably vary, so small differences between them are not reliable.
+- **Prices fall, rents hold** — Base rent growth is paired with a pessimistic price projection that rests on low‑end historical data with adequate observations.
+- **Rents stall, prices hold** — The pessimistic rent estimate is paired with a central price trend that is well supported by 52 monthly observations.
+- **Central case** — Both rent and price use central historical growth rates that are directly observed and therefore most robustly founded.
+
+The score in the last column is how well the forecast search judged that combination to be supported by the evidence it was given, from 0 to 1 — shown because a scenario the system itself rated weakly should be read as one. Two cautions: a score says how well evidenced a combination is, not how likely it is, so a higher-scoring row is not a more probable outcome; and the scores come from a single model call whose repeat runs measurably vary, so small differences between them are not reliable — which is why a row kept on the tie-break says so rather than reporting the gap.
 
 #### How these bands were built
 
@@ -140,8 +142,8 @@ Each score is how well the forecast search judged that hypothesis to be supporte
 - **`f-11-basebase` (0.96) — Both rent and price use central historical growth rates that are directly observed and therefore most robustly founded. ← carried forward**
 - **`f-11-basepess` (0.85) — Base rent growth is paired with a pessimistic price projection that rests on low‑end historical data with adequate observations. ← carried forward**
 - **`f-11-pessbase` (0.85) — The pessimistic rent estimate is paired with a central price trend that is well supported by 52 monthly observations. ← carried forward**
-- `f-11-optibase` (0.80) — Optimistic rent growth is paired with a central price trend that is well documented across many monthly data points. **Discarded:** Scored 0.80, outside the top 3 at this level.
-- `f-11-baseopti` (0.80) — Base rent growth is combined with an optimistic price projection that is observed but not sustained over a long period. **Discarded:** Scored 0.80, outside the top 3 at this level.
+- `f-11-optibase` (0.80) — Optimistic rent growth is paired with a central price trend that is well documented across many monthly data points. **Discarded:** Scored 0.80, level with the last one kept — too close for this system to call a difference — so it was this system's standing preference for the more cautious reading, not the score, that left this one out.
+- `f-11-baseopti` (0.80) — Base rent growth is combined with an optimistic price projection that is observed but not sustained over a long period. **Discarded:** Scored 0.80, level with the last one kept — too close for this system to call a difference — so it was this system's standing preference for the more cautious reading, not the score, that left this one out.
 - `f-11-pesspess` (0.78) — Pessimistic rent and price growth are both derived from low‑end historical extremes with solid observation counts, making this pair reliably low‑end. **Discarded:** Scored 0.78, outside the top 3 at this level.
 - `f-11-optiopti` (0.75) — Both rent and price use optimistic growth rates that reflect high‑end historical values but are not consistently sustained. **Discarded:** Scored 0.75, outside the top 3 at this level.
 - `f-11-optipess` (0.70) — An optimistic rent growth estimate is paired with a pessimistic price outlook, both of which are extreme but each has sufficient observation backing. **Discarded:** Scored 0.70, outside the top 3 at this level.
@@ -170,4 +172,4 @@ Each score is how well the forecast search judged that hypothesis to be supporte
 
 ---
 
-*Generated by the multi-family deal evaluator · run started 2026-09-01 12:52 · planner invocations 1 · rework passes 0*
+*Generated by the multi-family deal evaluator · run started 2026-09-02 02:05 · planner invocations 1 · rework passes 0*

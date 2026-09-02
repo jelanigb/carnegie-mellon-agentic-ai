@@ -95,6 +95,13 @@ class SearchResult:
     # Negative where the tie-break moved a higher-scoring candidate below the line, which
     # can only happen inside a tie group and is itself the finding.
     cut_boundary_gap_by_depth: dict[int, float] = field(default_factory=dict)
+    # Why each surviving candidate is in the report, by candidate id — the survivor's
+    # side of `prune_reason`, added at U9.7T. The ledger has always said why a candidate
+    # was *dropped* and never why one was *kept*, so a reader could see that three
+    # pairings lost and not learn whether the three shown had won on score, been kept by
+    # the tie-break, or been reserved. Domain-neutral like the rest of this module: the
+    # caller supplies `reserved`, and this only reports which mechanism applied.
+    selection_basis_by_id: dict[str, str] = field(default_factory=dict)
     # Set when the beam emptied. Not a failure - it means no hypothesis survived contact
     # with the data, which is a reportable finding rather than a reason to lower the bar.
     exhausted_reason: Optional[str] = None
@@ -250,18 +257,26 @@ def beam_search(
         ranked = [candidate for group in groups for candidate in group]
         survivors, cut = ranked[:width], ranked[width:]
 
-        # Which cut candidates the *tie-break* decided rather than the score: those
-        # sharing a tie group with the last candidate the beam kept. Collected before
-        # any reservation, for the same reason `cut_boundary_gap_by_depth` is — a
-        # displacement is a stated policy overriding a rank the evaluator was clear
-        # about, which is a different fact with its own ledger wording below.
+        # The tie group the cut fell inside, if it fell inside one — the candidates the
+        # *conservatism preference* separated rather than the score. Empty unless that
+        # group straddles the line: a group sitting wholly above the cut was ordered by
+        # the tie-break too, but nothing about who is reported turned on it.
+        #
+        # Collected before any reservation, for the same reason
+        # `cut_boundary_gap_by_depth` is — a displacement is a stated policy overriding a
+        # rank the evaluator was clear about, which is a different fact and keeps its own
+        # ledger wording below.
+        tie_group_ids: set[str] = set()
         tie_broken_ids: set[str] = set()
         if survivors and cut:
-            last_kept = survivors[-1]
+            last_kept_id = survivors[-1].id
             cut_ids = {c.id for c in cut}
             for group in groups:
-                if any(c.id == last_kept.id for c in group):
-                    tie_broken_ids = {c.id for c in group if c.id in cut_ids}
+                if any(c.id == last_kept_id for c in group):
+                    dropped = {c.id for c in group if c.id in cut_ids}
+                    if dropped:
+                        tie_group_ids = {c.id for c in group}
+                        tie_broken_ids = dropped
                     break
 
         if survivors and cut:
@@ -280,11 +295,13 @@ def beam_search(
             )
 
         displaced: Optional[Candidate] = None
+        keeper_kept: Optional[Candidate] = None
         if reserved is not None and survivors and cut:
             if not any(reserved(c) for c in survivors):
                 keeper = next((c for c in cut if reserved(c)), None)
                 if keeper is not None:
                     displaced = survivors[-1]
+                    keeper_kept = keeper
                     survivors = survivors[:-1] + [keeper]
                     cut = [displaced] + [c for c in cut if c is not keeper]
         for candidate in cut:
@@ -313,6 +330,22 @@ def beam_search(
                     f"those reported."
                 )
             result.ledger.append(replace(candidate, prune_reason=reason))
+
+        # The survivors' side of the same question. `tie_group_ids` is the whole group
+        # the cut fell inside, so a survivor in it was kept by the conservatism
+        # preference rather than by having outscored the candidate below the line —
+        # which on this project's depth-2 levels is the majority case, not the exception.
+        for candidate in survivors:
+            if candidate is keeper_kept:
+                basis = "reserved"
+            elif candidate.id in tie_group_ids:
+                # The group's size, not the count of losers — the caller says "tied with
+                # N others" and subtracting one at the point of rendering keeps the two
+                # readings from drifting apart.
+                basis = f"tie:{len(tie_group_ids)}"
+            else:
+                basis = "outright"
+            result.selection_basis_by_id[candidate.id] = basis
         result.ledger.extend(survivors)
 
         if len(ranked) >= 2:

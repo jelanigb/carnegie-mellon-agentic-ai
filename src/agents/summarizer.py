@@ -51,6 +51,7 @@ from state import (
     FlagScope,
     ForecastDetail,
     Recommendation,
+    Scenario,
     Severity,
     count_area_positioned,
     scope_of,
@@ -1093,9 +1094,9 @@ def _scenario_section(state: DealState) -> list[str]:
 
     lines.append(
         "| Scenario | Rent growth | Price growth | "
-        f"Rent in yr {horizon} | Price in yr {horizon} |"
+        f"Rent in yr {horizon} | Price in yr {horizon} | Why this row is shown |"
     )
-    lines.append("| --- | --- | --- | --- | --- |")
+    lines.append("| --- | --- | --- | --- | --- | --- |")
     for scenario in state.scenarios:
         rent_growth = (
             f"{scenario.rent_growth_pct_per_year:+.2f}%/yr ({_band_word(scenario.rent_band)})"
@@ -1110,33 +1111,33 @@ def _scenario_section(state: DealState) -> list[str]:
         lines.append(
             f"| **{scenario.name}** | {rent_growth} | {price_growth} | "
             f"{_money_or_dash(scenario.projected_monthly_rent)} | "
-            f"{_money_or_dash(scenario.projected_price)} |"
+            f"{_money_or_dash(scenario.projected_price)} | "
+            f"{_why_shown(scenario)} |"
         )
     lines.append("")
+    lines.extend(_band_coverage_note(state.scenarios, detail))
 
-    # The score sits with the rationale rather than in the table above, because it is a
-    # judgment *about* that rationale — and because the branch ledger below already
-    # renders every discarded hypothesis as `id (score) — summary`, so a survivor read as
-    # "label (score) — summary" is the same statement about the branches that lived
-    # (U8.6c). Rendered for every scenario that carries one, never used to order them.
-    scored = False
+    # **The score moved into the table at U9.7T and this carries the rationale alone.**
+    # It sat here because the branch ledger renders every discarded hypothesis as
+    # `id (score) — summary`, and a survivor read the same way was the matching statement
+    # (U8.6c). What that missed is that a score alone does not say how the row got in —
+    # the tie-break decides half the pairing levels — so the number now sits beside the
+    # mechanism in the "Why this row is shown" column, where the two are read together.
+    scored = any(s.evaluator_score is not None for s in state.scenarios)
     for scenario in state.scenarios:
         if scenario.rationale:
-            score = ""
-            if scenario.evaluator_score is not None:
-                scored = True
-                score = f" *(scored {scenario.evaluator_score:.2f})*"
-            lines.append(f"- **{scenario.name}**{score} — {scenario.rationale}")
+            lines.append(f"- **{scenario.name}** — {scenario.rationale}")
     if scored:
         lines.append("")
         lines.append(
-            "Each score is how well the forecast search judged that hypothesis to be "
-            "supported by the evidence it was given, from 0 to 1 — shown because a "
-            "scenario the system itself rated weakly should be read as one. Two cautions: "
-            "a score says how well evidenced a combination is, not how likely it is, so "
-            "a higher-scoring row is not a more probable outcome; and the scores come "
-            "from a single model call whose repeat runs measurably vary, so small "
-            "differences between them are not reliable."
+            "The score in the last column is how well the forecast search judged that "
+            "combination to be supported by the evidence it was given, from 0 to 1 — "
+            "shown because a scenario the system itself rated weakly should be read as "
+            "one. Two cautions: a score says how well evidenced a combination is, not "
+            "how likely it is, so a higher-scoring row is not a more probable outcome; "
+            "and the scores come from a single model call whose repeat runs measurably "
+            "vary, so small differences between them are not reliable — which is why a "
+            "row kept on the tie-break says so rather than reporting the gap."
         )
     lines.append("")
 
@@ -1322,6 +1323,96 @@ _BAND_WORDS = {
     "base": "long-run average",
     "optimistic": "strongest stretch",
 }
+
+
+def _band_coverage_note(
+    scenarios: list[Scenario], detail: Optional[ForecastDetail]
+) -> list[str]:
+    """Name any measured band that reached none of the reported rows.
+
+    **The reader's default assumption is that three scenarios span the range, and on
+    this project's own demo deal they do not.** On `los-angeles` the beam kept base
+    rent with base price, base rent with pessimistic price, and pessimistic rent with
+    base price — so neither series' strongest stretch appears in any row, while both are
+    printed in the table above. A reader taking the last row as the upside case is
+    reading a figure the search never claimed was one.
+
+    Stated as an absence rather than fixed by widening the beam, which would be
+    overriding the evaluation to satisfy a layout: the bands that reached no row are the
+    ones the search did not judge well enough evidenced to report, and that is the
+    finding. Silent when the rows cover every band, so the line means something when it
+    does appear.
+    """
+    if detail is None or not scenarios:
+        return []
+
+    missing: list[str] = []
+    sides = (
+        ("rent", detail.rent_growth_base_pct, [s.rent_band for s in scenarios]),
+        ("sale price", detail.price_growth_base_pct, [s.price_band for s in scenarios]),
+    )
+    for label, series_present, used in sides:
+        if series_present is None:
+            # No series at all on this side — already disclosed as an unavailability,
+            # and calling its bands "not shown" would imply bands that were never built.
+            continue
+        for band in ("pessimistic", "base", "optimistic"):
+            if band not in used:
+                missing.append(f"the {_BAND_WORDS[band]} for {label}")
+    if not missing:
+        return []
+
+    return [
+        f"**Not represented above:** {_join(missing)}. Every band is measured and "
+        "printed in the table at the top of this section; what the rows show is which "
+        "*combinations* the search judged worth reporting, and a band reaching no row "
+        "means it did not survive that judgment in any pairing. The bottom row is "
+        "therefore the best case among those reported, not the best case measured.",
+        "",
+    ]
+
+
+def _why_shown(scenario: Scenario) -> str:
+    """The row's own account of how it got into the report.
+
+    **This column exists because the report had the losers' side of the story and not
+    the winners'.** The branch ledger below says why each discarded hypothesis was
+    dropped; nothing said whether a row a reader is looking at had outscored the field,
+    been kept by this system's preference for the more cautious reading, or been held
+    open as the neutral case. Measured across the committed recordings, the tie-break
+    decides **51%** of the pairing levels — so "it scored highest" was the wrong thing
+    to leave a reader inferring about roughly half the rows in front of them.
+
+    It also brings the near-tie disclosure to the row it is about. The flag still fires
+    and is still listed in full, but a caution sixty lines above the table, inside a
+    collapsed block, is not where a reader meets the number it qualifies.
+    """
+    score = (
+        f"**{scenario.evaluator_score:.2f}**"
+        if scenario.evaluator_score is not None
+        else None
+    )
+    basis = scenario.selection_basis or ""
+
+    if basis == "reserved":
+        detail = "the neutral case, always shown"
+    elif basis.startswith("tie:"):
+        # The stored figure is the tie group's size; the reader is being told how many
+        # *others* it was level with.
+        others = max(int(basis.split(":", 1)[1]) - 1, 1)
+        detail = (
+            f"level with {others} other pairing{'s' if others != 1 else ''}, "
+            "kept as the more cautious"
+        )
+    elif basis == "outright":
+        detail = "outscored the pairings left out"
+    else:
+        # No basis recorded — a scenario reconstructed from partial state, or the linear
+        # baseline in `scripts/forecast_evidence.py`, which no search selected. Saying
+        # nothing is right; inventing a mechanism would be worse than an empty cell.
+        return score or "—"
+
+    return f"{score} — {detail}" if score else detail
 
 
 def _band_word(band: Optional[str]) -> str:

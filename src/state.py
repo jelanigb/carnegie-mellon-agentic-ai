@@ -891,6 +891,20 @@ class Scenario(BaseModel):
     rationale: Optional[str] = None
     evaluator_score: Optional[float] = None
 
+    # **Why this row is in the report at all** — `outright`, `tie:<group size>`, or
+    # `reserved`, from `tot.SearchResult.selection_basis_by_id`. Added at U9.7T, and it
+    # is the survivor's half of a disclosure that only ever had the other half: the
+    # branch ledger said why each *discarded* hypothesis lost, and nothing said whether
+    # a reported one had won on score, been kept by the conservatism tie-break, or been
+    # reserved as the neutral case. On this project's own recordings the tie-break
+    # decides 51% of depth-2 levels, so "it scored highest" was the wrong inference to
+    # leave a reader to draw about half the rows they were reading.
+    #
+    # A short code rather than a sentence, because the sentence is reader-facing text
+    # and belongs with the rest of it in the Summarizer (§8) — and because the count in
+    # `tie:<n>` has to be arithmetic on the way out, not prose to re-parse.
+    selection_basis: Optional[str] = None
+
 
 class BranchLedgerEntry(BaseModel):
     """One hypothesis the search considered, surviving or discarded (decision #14).

@@ -678,6 +678,7 @@ def _to_scenarios(
     base_rent: Optional[float],
     base_price: Optional[float],
     horizon: int,
+    selection_basis_by_id: Optional[dict[str, str]] = None,
 ) -> list[Scenario]:
     """Project each survivor, name it for its content, order the set by outcome.
 
@@ -727,6 +728,7 @@ def _to_scenarios(
             ),
             rationale=candidate.summary,
             evaluator_score=candidate.score,
+            selection_basis=(selection_basis_by_id or {}).get(candidate.id),
         )
         projected.append((_outcome_rank(scenario, base_rent, base_price), scenario))
 
@@ -923,7 +925,11 @@ def scenario_forecast_agent(state: DealState) -> dict:
     _record_band_provenance(detail, chosen.get("rent"), chosen.get("price"))
 
     scenarios = _to_scenarios(
-        result.survivors, state.rent_estimate, terms.price, horizon
+        result.survivors,
+        state.rent_estimate,
+        terms.price,
+        horizon,
+        result.selection_basis_by_id,
     )
 
     flags.extend(
@@ -1175,8 +1181,8 @@ def _disclosure_flags(
             flag(
                 AGENT,
                 FlagKind.FORECAST_BRANCHES_NEAR_TIED,
-                f"The two best-scoring scenario pairings were separated by "
-                f"{pairing_gap:.3f}, inside the {config.TOT_TIE_EPSILON} tie threshold — "
+                f"The two best-scoring scenario pairings were separated by less than "
+                f"{config.TOT_TIE_EPSILON}, this system's tie threshold — "
                 f"the evaluator found both equally defensible. Both appear in the "
                 f"scenario table below, and each scenario's label comes from its "
                 f"projected outcome, so no reported figure depends on which of the two "
@@ -1199,16 +1205,27 @@ def _disclosure_flags(
         # candidates within `TOT_TIE_EPSILON` and sorts that group by conservatism, so a
         # margin at or below zero means the tie-break, not the evaluator, chose which
         # pairing was reported.
+        #
+        # **The positive branch states the bound and not the figure, since U9.7T**, and
+        # the reason is arithmetic rather than editorial: the evaluator returns scores at
+        # two decimal places, so a gap of exactly one epsilon arrives as
+        # 0.04999999999999993 and rendered at three places printed *"separated by 0.050,
+        # inside the 0.05 threshold"* — a sentence contradicting itself about the number
+        # beside it. The comparison above is untouched; only what is said about it moves.
+        # (Whether `within 0.05` should be inclusive is a real question and a separate
+        # one: it would widen `tot._rank`'s tie groups and move 11 recorded depth-2
+        # levels, so it needs a re-record. Deferred by the architect, Sept 2.)
         if cut_gap > 0:
             margin = (
-                f"were separated by {cut_gap:.3f}, inside the "
-                f"{config.TOT_TIE_EPSILON} threshold this system treats as no meaningful "
-                f"difference"
+                f"were separated by less than {config.TOT_TIE_EPSILON}, which this "
+                f"system treats as no meaningful difference"
             )
         else:
+            # Safe to print at two places: it is the difference of two two-place scores,
+            # so this is the exact value rather than a rounding of a float artifact.
             margin = (
                 f"were not separated on score at all — the pairing left out scored "
-                f"{abs(cut_gap):.3f} *above* the one kept, and the order was settled by "
+                f"{abs(cut_gap):.2f} *above* the one kept, and the order was settled by "
                 f"this system's standing preference for the more conservative reading, "
                 f"which applies wherever two scores sit within "
                 f"{config.TOT_TIE_EPSILON} of each other"

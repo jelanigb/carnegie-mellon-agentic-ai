@@ -125,6 +125,9 @@ def test_a_cut_line_inside_the_tie_threshold_is_disclosed():
     # The reader is told what is at stake at this line specifically, which is what
     # separates it from a tie between two scenarios that both appear in the report.
     assert "which pairings are shown at all" in flags[0].detail
+    # And it states the bound rather than the measured gap (U9.7T): at one epsilon the
+    # figure renders as the threshold itself and the sentence contradicts itself.
+    assert "separated by less than 0.05" in flags[0].detail
 
 
 def test_a_cut_the_tie_break_decided_says_so_rather_than_claiming_a_margin():
@@ -134,13 +137,18 @@ def test_a_cut_the_tie_break_decided_says_so_rather_than_claiming_a_margin():
     report and lost on the conservatism preference. Describing that as "separated by
     0.050, inside the 0.05 threshold" would be self-contradictory *and* would understate
     what happened.
+
+    **Two decimal places since U9.7T, not three.** The margin is the difference of two
+    two-place evaluator scores, so three places only ever exposed float representation —
+    which is what made the positive branch print "separated by 0.050, inside the 0.05
+    threshold" about a value of 0.04999999999999993.
     """
     result = tot.SearchResult(cut_boundary_gap_by_depth={2: -0.05})
 
     detail = _disclosure_flags(ForecastDetail(), result, {}, [], planner_invocations=1)[0]
 
     assert "not separated on score at all" in detail.detail
-    assert "0.050 *above* the one kept" in detail.detail
+    assert "0.05 *above* the one kept" in detail.detail
     assert "more conservative reading" in detail.detail
 
 
@@ -153,9 +161,14 @@ def test_a_decisive_cut_line_says_nothing():
     assert _disclosure_flags(ForecastDetail(), result, {}, [], planner_invocations=1) == []
 
 
-def test_each_scenario_reports_the_score_it_was_judged_on():
+def test_each_scenario_reports_the_score_it_was_judged_on_and_how_it_got_in():
     """The field was populated and carried on state since U6 and rendered nowhere, so the
-    search's own judgment of each surviving hypothesis was invisible to the reader."""
+    search's own judgment of each surviving hypothesis was invisible to the reader.
+
+    **U9.7T moved the score out of the bullets and into the table, beside the mechanism
+    that selected the row** — a score on its own let a reader infer "it scored highest"
+    about rows the tie-break had actually chosen, which is 51% of recorded pairing
+    levels."""
     state = DealState(
         raw_listing_text="irrelevant to a rendering test",
         deal_terms=DealTerms(),
@@ -168,6 +181,7 @@ def test_each_scenario_reports_the_score_it_was_judged_on():
                 price_growth_pct_per_year=1.0,
                 rationale="Rents lag the schedule.",
                 evaluator_score=0.45,
+                selection_basis="tie:3",
             ),
             Scenario(
                 name="Central case",
@@ -177,13 +191,19 @@ def test_each_scenario_reports_the_score_it_was_judged_on():
                 price_growth_pct_per_year=3.0,
                 rationale="Supply stays tight.",
                 evaluator_score=0.85,
+                selection_basis="reserved",
             ),
         ],
     )
 
     text = "\n".join(_scenario_section(state))
 
-    assert "scored 0.45" in text and "scored 0.85" in text
+    assert "**0.45**" in text and "**0.85**" in text
+    # How each row got in, beside its score. The tie cell says how many it was level
+    # with — three in the group, so two others — and the reserved cell says the neutral
+    # case is shown whatever it scored.
+    assert "level with 2 other pairings, kept as the more cautious" in text
+    assert "the neutral case, always shown" in text
     # The two cautions the score is useless without. **The first one's wording changed at
     # U9.7T and so did its subject.** It used to say the labels do not come from the
     # scores, which was worth saying while a label was a rank; content names cannot be

@@ -79,9 +79,9 @@ Rent growth is projected from Zillow Observed Rent Index, county-level monthly m
 </details>
 
 <details>
-<summary><b><code>forecast_branches_near_tied</code></b> — The two best-scoring scenario pairings were separated by 0.050, inside the 0.05 tie threshold — the evaluator found both equally defensible</summary>
+<summary><b><code>forecast_branches_near_tied</code></b> — The two best-scoring scenario pairings were separated by less than 0.05, this system's tie threshold — the evaluator found both equally defensible</summary>
 
-The two best-scoring scenario pairings were separated by 0.050, inside the 0.05 tie threshold — the evaluator found both equally defensible. Both appear in the scenario table below, and each scenario's label comes from its projected outcome, so no reported figure depends on which of the two nominally ranked first. A tie here is common and often correct: two pairings that mirror each other make equally strong claims about a relationship between rent and price growth that this project has measured and found weak. The scores also come from a single model call whose repeat runs measurably vary, so a gap this small can be a property of this one sample.
+The two best-scoring scenario pairings were separated by less than 0.05, this system's tie threshold — the evaluator found both equally defensible. Both appear in the scenario table below, and each scenario's label comes from its projected outcome, so no reported figure depends on which of the two nominally ranked first. A tie here is common and often correct: two pairings that mirror each other make equally strong claims about a relationship between rent and price growth that this project has measured and found weak. The scores also come from a single model call whose repeat runs measurably vary, so a gap this small can be a property of this one sample.
 
 *raised by:* `scenario_forecast`
 </details>
@@ -145,19 +145,21 @@ Measured ranges, one per quantity, each labelled for its own band rather than fo
 
 Projected from modelled rent $2,654/mo and the **asking price** $875,000. The price side compounds the asking price rather than an estimated value — this system does not produce one, and says so above.
 
-Scenarios are named for their **combined** outcome across both quantities, so a single column need not fall in label order — the pessimistic case can carry the higher projected price and still be the worse outcome overall. Each row states which band it drew from on each side. Rent and price are paired here rather than forecast independently, and this project has measured how the two move together: weakly, and not in a consistent direction. Read each row as one internally consistent story about this market, not as evidence that rent and price tend to move that way.
+Each row is named for the combination it describes, and the bands beside each figure are the same ones in the table above. **Rows are ordered worst to best by combined outcome**, so the central case is not necessarily in the middle. Rent and price are paired here rather than forecast independently, and this project has measured how the two move together: weakly, and not in a consistent direction. Read each row as one internally consistent story about this market, not as evidence that rent and price tend to move that way.
 
-| Scenario | Rent growth | Price growth | Rent in yr 5 | Price in yr 5 |
-| --- | --- | --- | --- | --- |
-| **Pessimistic** | +3.93%/yr (pessimistic) | +1.32%/yr (pessimistic) | $3,218 | $934,077 |
-| **Base** | +3.93%/yr (pessimistic) | +5.61%/yr (base) | $3,218 | $1,149,405 |
-| **Optimistic** | +6.77%/yr (base) | +5.61%/yr (base) | $3,682 | $1,149,405 |
+| Scenario | Rent growth | Price growth | Rent in yr 5 | Price in yr 5 | Why this row is shown |
+| --- | --- | --- | --- | --- | --- |
+| **Rents stall, prices fall** | +3.93%/yr (weakest stretch) | +1.32%/yr (weakest stretch) | $3,218 | $934,077 | **0.85** — outscored the pairings left out |
+| **Rents stall, prices hold** | +3.93%/yr (weakest stretch) | +5.61%/yr (long-run average) | $3,218 | $1,149,405 | **0.80** — outscored the pairings left out |
+| **Central case** | +6.77%/yr (long-run average) | +5.61%/yr (long-run average) | $3,682 | $1,149,405 | **0.70** — the neutral case, always shown |
 
-- **Pessimistic** *(scored 0.85)* — Both bands correspond to low growth extremes that are observed across many periods and are not undermined by upstream flags.
-- **Base** *(scored 0.80)* — Pessimistic rent growth is low and observed, while base price growth is moderate and supported by multiple observations.
-- **Optimistic** *(scored 0.70)* — Both bands represent moderate growth levels that are observed across the series and are not flagged as unreliable.
+**Not represented above:** the strongest stretch for rent and the strongest stretch for sale price. Every band is measured and printed in the table at the top of this section; what the rows show is which *combinations* the search judged worth reporting, and a band reaching no row means it did not survive that judgment in any pairing. The bottom row is therefore the best case among those reported, not the best case measured.
 
-Each score is how well the forecast search judged that hypothesis to be supported by the evidence it was given, from 0 to 1 — shown because a scenario the system itself rated weakly should be read as one. Two cautions: the scenario names above come from each row's projected outcome and not from these scores, so a higher-scoring row is not a more likely one; and the scores come from a single model call whose repeat runs measurably vary, so small differences between them are not reliable.
+- **Rents stall, prices fall** — Both bands correspond to low growth extremes that are observed across many periods and are not undermined by upstream flags.
+- **Rents stall, prices hold** — Pessimistic rent growth is low and observed, while base price growth is moderate and supported by multiple observations.
+- **Central case** — Both bands represent moderate growth levels that are observed across the series and are not flagged as unreliable.
+
+The score in the last column is how well the forecast search judged that combination to be supported by the evidence it was given, from 0 to 1 — shown because a scenario the system itself rated weakly should be read as one. Two cautions: a score says how well evidenced a combination is, not how likely it is, so a higher-scoring row is not a more probable outcome; and the scores come from a single model call whose repeat runs measurably vary, so small differences between them are not reliable — which is why a row kept on the tie-break says so rather than reporting the gap.
 
 #### How these bands were built
 
@@ -200,4 +202,4 @@ Each score is how well the forecast search judged that hypothesis to be supporte
 
 ---
 
-*Generated by the multi-family deal evaluator · run started 2026-09-01 12:53 · planner invocations 1 · rework passes 0*
+*Generated by the multi-family deal evaluator · run started 2026-09-02 02:05 · planner invocations 1 · rework passes 0*
