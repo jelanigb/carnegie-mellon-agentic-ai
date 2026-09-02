@@ -202,6 +202,31 @@ that was never built. **Closes when** the tree is re-derived against `find src -
 
 ---
 
+### M8 — The scenario table never states the error band it compounds from
+
+Every row of the five-year outlook compounds `ForecastDetail.projection_base_rent` as though
+it were exact. On `staten-island` that number carries a metro holdout error of **±$855 — 32%
+of the estimate — against a five-year band spread of 43%**, so the three rows differ from each
+other by less than the error bar on the number all three start from, and the section does not
+say so. `los-angeles` is milder and the same shape: ±18% against a 20% spread.
+
+**One sentence, no new measurement.** `ValuationDetail.subject_metro_mae_dollars` (falling
+back to `model_mae_dollars`) is on state where the projection is rendered, and the rent-basis
+section above the table already prints both figures — *"±$452 overall, ±$509 in Los Angeles"*.
+What is missing is the link between that error and the projection that compounds it.
+`TODO(U9.M)` sits at the site, in `agents/summarizer._scenario_section`.
+
+**Language, not calculation** — nothing about which scenarios are selected or what they
+project changes. That distinction is why this is maintenance rather than a design question:
+the fix states a fact the system already holds, and takes no position on the open one.
+
+**Raised Sept 2, 2026 by the U9 spike on OQ-22's starting-point treatment**
+([`design/forecast_starting_point_spike.md`](../design/forecast_starting_point_spike.md)).
+That spike proposed *projecting* from the error band and the mechanism was not adopted —
+the evaluator held its choice on only 5 of 8 repeat runs. **Stating the band is the part that
+survives that finding**, and it stands whichever way OQ-22 is eventually decided, including
+the wording-only route the architect is testing.
+
 ## Closed Sept 2, 2026 at U9.M — what each fix actually was
 
 **M4** — `implementation_plan.md` §6's U8 row now names U8.9's drop and points at U9.9, so

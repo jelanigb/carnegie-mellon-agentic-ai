@@ -1077,6 +1077,17 @@ def _scenario_section(state: DealState) -> list[str]:
     if base_price is not None:
         basis_parts.append(f"the **asking price** {_money(base_price)}")
     if basis_parts:
+        # TODO(U9.M): state the error band the rent projection compounds from, beside this
+        # sentence. Every scenario below is compounded from `projection_base_rent` as though
+        # it were exact, and on `staten-island` that number carries a metro holdout error of
+        # +/-$855 — 32% of the estimate — against a five-year band spread of 43%. The section
+        # never says so, so three rows whose spread is narrower than the error bar on the
+        # number under them read as more precise than they are. `ValuationDetail`'s
+        # `subject_metro_mae_dollars` (falling back to `model_mae_dollars`) is already on
+        # state here; the rent-basis section above already prints both figures, so this is one
+        # sentence and no new measurement. Deferred from the U9 spike that found it
+        # (`design/forecast_starting_point_spike.md`), which proposed *projecting* from the
+        # band and was not adopted — stating it is the part that stands on its own.
         lines.append(
             f"Projected from {' and '.join(basis_parts)}. The price side compounds the "
             f"asking price rather than an estimated value — this system does not produce "

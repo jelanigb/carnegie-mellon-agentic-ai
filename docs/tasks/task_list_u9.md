@@ -1232,6 +1232,12 @@ those to 5.1 costs a sentence in the close-out rather than a subsection here.
   across all 28 eval rows.
 - **M4 and M5** from `maintenance.md`: §6's U8 row does not disclose that U8.9 was dropped,
   and §6's unit table has no U11 row at all.
+- **M8** from `maintenance.md`: the scenario table compounds the rent estimate as though it
+  were exact and never states the error band it starts from — on `staten-island`, ±32% against
+  a 43% five-year spread. One sentence beside "Projected from…"; the figure is already on
+  state and already printed above the table. `TODO(U9.M)` is at the site in
+  `agents/summarizer._scenario_section`. **Language, not calculation** — it takes no position
+  on OQ-22, which stays open.
 
 ### U9.11 ⬜ — Close-out
 
