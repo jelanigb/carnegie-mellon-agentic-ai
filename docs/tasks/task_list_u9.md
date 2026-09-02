@@ -1132,7 +1132,7 @@ report's own evidence outranks a further improvement to a surface.
 ---
 
 
-### U9.8 ⬜ — Gross rent multiplier *(below the line; first thing built if the schedule allows)*
+### U9.8 ✅ — Gross rent multiplier *(was below the line; built Sept 2 because it measured cheaper than its position implied)*
 
 **The computable subset of investor criteria.** Matching against investor targets was
 explored Aug 31 and is blocked honestly: cap rate needs **NOI**, which needs operating
@@ -1145,6 +1145,36 @@ the investment recommendation, which is the exact thing §2's invariants forbid.
 escalated deal is the cheaper one per dollar of rent. An implied market GRM (ZIP benchmark
 ÷ modelled rent) gives it a comparison from data already committed. Roughly U9.6's size:
 a Valuation computation, a state field, a report block.
+
+#### What landed, Sept 2 — one commit, and the cut-list price was wrong in the usual direction
+
+**It cost one change set, and the reason is the §6 lesson applied to an item inside a
+unit.** This sat below the cut line, where the list's own discipline says to re-measure
+before spending. Measured: `summarizer._lede_prompt` quotes the address, price, units,
+rent estimate, verdict and severity counts; `scenario_forecast._context_block` quotes the
+address, unit mix, price, rent estimate and flag *kinds*. **Neither reads a
+`ValuationDetail` field**, so a new field plus a report block is prompt-inert — no
+re-record, and all 30 eval rows came back byte-identical. The position implied a price
+this item did not carry.
+
+**A property of the two multiples, found before building rather than after.** They share a
+denominator, so `deal GRM / market GRM` is *exactly* `price / benchmark` — the premium the
+report already states, in a different unit. Checked numerically: 15.28 / 15.26 = 1.0010 =
+1,049,000 / 1,047,955. The benchmark multiple ships anyway, because the unit is what it
+buys, but the report says the two are one comparison rather than two agreeing
+measurements. Presenting them as independent would double-count a single fact.
+
+**Staten Island is the figure worth putting in the video.** It asks **9.2×** against its
+ZIP's **11.0×** — cheaper per dollar of rent than the market — while its banner says
+escalated. That is the two axes made arithmetic: axis 1 says the system could not stand
+behind its own numbers here, and axis 2 says the deal is not the problem.
+
+**Cap rate is refused in the report rather than omitted from it.** It needs NOI, which
+needs operating expenses this system does not model; assuming a ratio would put an
+unanchored number at the centre of the recommendation. No flag, no threshold and no
+`config` entry, because what counts as a high multiple depends on the investor's cost of
+capital and hold period, and setting one here would invent a criterion and attribute it to
+the data.
 
 ### U9.9 ⬜ — Capture: live runs, traces, diagram, screenshots *(absorbed U8.9)*
 
@@ -1235,7 +1265,7 @@ Review the changelog rows each commit already wrote; do not reconstruct them.
 | ✅ | **U9.7** Streamlit surface | Done Sept 1, 2026 — five commits; replay by default, a genuine review pause, and the three faults recorded. Cut-list item 4 **spent, not shed** |
 | ✅ | **U9.7T** scenario table: content-named rows, an honest ledger | Done Sept 2, 2026 — three commits; 30 eval rows byte-identical, no re-record |
 | | *✂️ cut line* | |
-| ⬜ | **U9.8** gross rent multiplier | First below the line if U9.1–U9.7 land early |
+| ✅ | **U9.8** gross rent multiplier | Done Sept 2, 2026 — one commit; LA 15.3×, Staten Island 9.2× against its ZIP's 11.0×; 30 rows byte-identical, no re-record |
 | ⬜ | **U9.9** capture: runs, traces, diagram, screenshots | Never sheds |
 | ⬜ | **U9.10** OQ-5 / OQ-10 / OQ-14 written up | All three settled Aug 31 |
 | ⬜ | **U9.M** maintenance | — |
