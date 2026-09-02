@@ -144,15 +144,20 @@ in a focused session or across a fragmented week.
   | `TODO(security)` | `hud_fmr.py`, `llm_client.py`, `tracing.py` | Whether to drop on-disk credential fallbacks in favour of env-var-only. **Three sites since Sept 1, 2026** — `tracing.py` inherited the same trade when a LangSmith key first existed (OQ-10) |
   | ~~`TODO(security)`~~ | `diagnostics.py` | ✅ **closed Sept 2, 2026 at U9.M.** The account identifier is redacted from every line this channel prints, in both the JSON-field and bare-token forms, with the status, provider message and remedy hint left intact. **Redaction was taken over the env-gated verbosity switch this row offered as the alternative**, because a switch has to be remembered once before a capture that cannot be edited afterwards, and the run that exposes the identifier is by definition one where something has already gone wrong. Guarded by `tests/test_diagnostics_redaction.py`, including two near-miss cases — an over-broad pattern eats the detail this channel exists for, and fails just as silently |
   | `TODO(geography)` | `county_crosswalk.py`, `config.py` | New England town-based FMR verified for Boston only, not the other five states |
+  | `TODO(U9.M)` | `summarizer.py` | The scenario table compounds `projection_base_rent` as though it were exact and never states its error band — on `staten-island`, ±32% of the estimate against a five-year band spread of 43%, so three rows read as more precise than the number under them. One sentence, no new measurement; both figures are already on state and already printed one section above. Raised at M8 (Sept 2, 2026) out of the starting-point spike, which proposed *projecting* from the band and was not adopted — **stating** it is the half that stands on its own |
 
-  **Six live sites remain**, all genuinely deferred and none owned by a unit that has
-  closed: `security` ×3, `geography` ×2, `cut-list` ×1. Reconciled against
+  **Seven live sites remain**, all genuinely deferred and none owned by a unit that has
+  closed: `security` ×3, `geography` ×2, `cut-list` ×1, `U9.M` ×1. Reconciled against
   `grep -rn "TODO(" src/` on Sept 2, 2026.
 
-  **The count is unchanged since Aug 31 and the composition is not**, which is the case
-  this reconciliation exists to catch: `diagnostics.py` closed at U9.M and `tracing.py`
-  arrived Sept 1 with the third instance of the credential fallback. A table read for its
-  total would have shown nothing happening while both ends moved.
+  **This table drifted twice in one day, and both instances are the argument for the
+  grep.** First: the count was unchanged from Aug 31 while the composition moved under it
+  — `diagnostics.py` closed and `tracing.py` arrived with the third credential fallback —
+  so a table read for its total would have shown nothing happening. Then, hours after that
+  reconciliation, a parallel session raised M8 and added the `TODO(U9.M)` above, and the
+  table was stale again before the day ended. **Neither drift was anyone's oversight**;
+  they are what happens to a hand-maintained index of a moving tree, which is why the rule
+  is to regenerate this from `grep` at unit close rather than to edit it from memory.
 
   **This table is reviewed at unit close, and was found stale at U8 planning (Aug 28,
   2026).** It carried two `TODO(U7)` rows as open after U7 shipped, and listed none of the

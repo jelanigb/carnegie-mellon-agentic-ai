@@ -399,31 +399,59 @@ candidate payload gains a starting-point treatment beside `(rent_band, price_ban
 `_pairings` and the scenario assembly change shape, `Scenario`/`ForecastDetail` gain a
 field, and everything re-records.
 
-**OQ-22 CLOSED Sept 2, 2026 by the architect, on a basis the entry did not anticipate.**
-It had two stated closing conditions — build the re-purposing, or delete the level — and
-neither was met. What changed instead is that **the level's weakness became legible to a
-reader**, which is the thing the entry was actually worried about. U9.7T made three
-disclosures the report did not previously carry: each row is named for the bands it
-combines rather than for a rank, each says whether the evaluator or this project's
-conservatism preference selected it, and the bands that reached no row are named. A reader
-can now see that the search kept three of nine on scores that separated barely half the
-time, without being told so in a caveat.
+**OQ-22 CLOSED Sept 2, 2026 by the architect, on the third of the three conditions the
+entry itself named** — *"when a wording-only fix is judged sufficient and the redesign is
+dropped on the record."* This is that record.
 
-**Recording the basis precisely, because it is a weaker claim than "the question was
-answered".** The pairing level still enumerates nine and keeps three on a relationship whose
-r² never exceeds 0.10. That is unchanged and the final report should say so. What is settled
-is the *decision*: the level ships as it is, its thinness is disclosed rather than argued
-away, and the re-purposing below is future work rather than a scheduled deferral.
-**One premise that had propped up the deferral is gone too** — the argument that deleting
-depth 2 would cost the system its only reasoning locus expired when U9.4 landed
-`critic.cross_check`, so a future pass can decide this on the level's own merits.
+**Two things happened in the same 24 hours and the close rests on both.** The spike above
+(§3b) ran the re-purposing before building it and found the mechanism does not survive: the
+evaluator reaches the right treatment on a single run and holds it on 5 of 8 repeats for
+`los-angeles`, the deal eight comparables corroborate to 0.5%. Separately, U9.7T asked
+whether wording alone resolves the confusion that prompted the entry, and the architect read
+the result and judged that it does. **The entry predicted that ordering** — it said the ~2×
+finding argued for trying the smaller step first, and that the redesign should be decided
+after the wording change rather than before it.
 
-**What a future pass would still want**, kept here rather than in a closed entry: the
-re-purposing sketched below, and `scripts/spike_starting_point.py`'s measurement that
-projecting from the rent estimate's error-band edges produces a spread roughly 2x the growth
-bands' own width — which means the re-purposed table would mostly display estimate
-uncertainty rather than a growth forecast. That is arguably the honest answer and it changes
-what the section *is*.
+**What the wording change actually did, since "wording" understates it.** Three disclosures
+the report did not previously carry: each row is named for the bands it combines rather than
+for a rank, each says whether the evaluator or this project's conservatism preference
+selected it — the tie-break decides **51%** of depth-2 levels — and any band reaching no row
+is named. A reader can now see that the search keeps three of nine on scores that separated
+barely half the time, without being told so in a caveat.
+
+**The weakness is unchanged, and the final report should say so.** The pairing level still
+enumerates nine and keeps three on a relationship whose r² never exceeds 0.10. What closed
+is the *decision*, not the underlying thinness: the level ships as it is, its thinness is
+disclosed rather than argued away, and the re-purposing is dropped rather than scheduled.
+
+**Three findings kept here because a deleted entry cannot hold them**, and any future pass
+should start from these rather than from the original proposal:
+
+1. **A treatment worth ~2× the growth bands cannot be an LLM judgment on this fleet.** That
+   is the transferable limit, and the boundary is not how hard the question is — it is how
+   much the answer is worth. `los-angeles` moved to the full band on 2 of 8 runs, a year-5
+   rent of $2,503–$4,251 against $3,239, decided by which of four providers answered.
+2. **The same decision as a deterministic rule works.** `full` on a county anchor or no
+   cross-check, `point` on ≥3 comps within 10% at ZIP resolution, `half` between — agrees
+   with the model's modal answer on both deals, never varies, needs no prompt change and
+   therefore **no re-record**. `chicago` lands in the middle at 16.6% divergence, so the
+   third treatment is earned by a real deal rather than by argument. This is the cheapest
+   route if the question is ever re-opened.
+3. **If it is ever built, the treatment must not join depth 1.** Tried there first, and both
+   deals flipped their window treatment (`f-11`→`f-00`, `f-01`→`f-00`) because the two
+   questions get traded against each other on one axis.
+
+**One premise that had propped up the deferral is gone independently** — the argument that
+deleting depth 2 would cost the system its only reasoning locus expired when U9.4 landed
+`critic.cross_check`. A future pass decides this on the level's own merits.
+
+**The broader question the entry carried is not closed by this and belongs to the final
+report**: whether one 4→1 selection and one 9→3 selection is enough reasoning for the
+system's claims. Named candidates for a second locus, strongest first: **retrieval
+relaxation** (a fixed ladder today, where *which* criterion to relax is a genuine judgment
+with a measurable outcome, and `maintenance.md` M6 records that the ladder's stated
+rationale is contradicted by the rent model's own feature importances), and the
+**recommendation**, which U9.4 built.
 
 ### The wider question this belongs to
 
