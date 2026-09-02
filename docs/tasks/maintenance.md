@@ -202,7 +202,7 @@ that was never built. **Closes when** the tree is re-derived against `find src -
 
 ---
 
-### M8 — The scenario table never states the error band it compounds from
+### M8 ✅ — The scenario table never states the error band it compounds from *(done Sept 2, 2026)*
 
 Every row of the five-year outlook compounds `ForecastDetail.projection_base_rent` as though
 it were exact. On `staten-island` that number carries a metro holdout error of **±$855 — 32%
@@ -226,6 +226,22 @@ That spike proposed *projecting* from the error band and the mechanism was not a
 the evaluator held its choice on only 5 of 8 repeat runs. **Stating the band is the part that
 survives that finding**, and it stands whichever way OQ-22 is eventually decided, including
 the wording-only route the architect is testing.
+
+**Closed Sept 2, 2026, the same day it was raised**, ahead of U9.11 so the unit does not
+close with a `TODO` pointing at a subsection marked done — which is the inconsistency the
+close-out exists to catch. `agents/summarizer._projection_rent_error` renders one sentence
+beside *"Projected from…"*: **±$855/mo, 32% of the estimate** on `staten-island`, ±$509
+(18%) on `los-angeles`, ±$343 (16%) on `overpriced`. It prefers the subject's own metro
+over the pooled figure, the same order and for the same reason as the Findings table, and
+returns nothing rather than a hedge when no band is on state.
+
+**What the sentence says, and what it deliberately does not.** It states that every row
+compounds one modelled rent, that the rent carries that error, and that no row widens for
+it — so the spread between rows is the range of *markets* this deal could meet, not the
+range this system's own rent figure could take. It does **not** re-project anything: the
+spike's mechanism stays unadopted, and taking the language half alone is what let this land
+in a freeze week. All three sample reports re-derived; **all 30 eval rows byte-identical**,
+no re-record.
 
 ## Closed Sept 2, 2026 at U9.M — what each fix actually was
 

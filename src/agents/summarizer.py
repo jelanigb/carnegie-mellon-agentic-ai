@@ -1049,6 +1049,43 @@ def _money_or_dash(value: Optional[float]) -> str:
     return _money(value) if value is not None else "—"
 
 
+def _projection_rent_error(state: DealState, base_rent: Optional[float]) -> Optional[str]:
+    """The sentence that stops the outlook reading as more precise than it is.
+
+    Every scenario row compounds one modelled rent figure, and that figure has a measured
+    error band the outlook never widens for. So the spread *between* rows is a statement
+    about how the market might move, not about how far the starting point itself could
+    be off — and on `staten-island` the band is 32% of the estimate against a five-year
+    spread of 43%, meaning the rows differ by less than the error bar under all of them.
+    A reader not told that reads three rows as three measurements.
+
+    Prefers the subject's own metro over the pooled figure — the same order, and for the
+    same reason, as the Findings table one section above: the pooled number averages
+    across markets this deal is not in. Returns `None` rather than a hedge when no band
+    is on state, because a sentence about an error it cannot quantify gives a reader
+    nothing to act on.
+    """
+    detail = state.valuation_detail
+    if detail is None or base_rent is None or base_rent <= 0:
+        return None
+    band = detail.subject_metro_mae_dollars or detail.model_mae_dollars
+    if band is None:
+        return None
+    where = (
+        f"in {detail.subject_metro}"
+        if detail.subject_metro and detail.subject_metro_mae_dollars is not None
+        else "across the markets this model was trained on"
+    )
+    return (
+        f"**Every row compounds the same modelled rent, and that rent carries an error "
+        f"of ± {_money(band)}/mo {where} — about {band / base_rent:.0%} of it.** The "
+        f"rows differ from each other in how the market moves; not one of them widens "
+        f"for how far the starting rent could be off. Read the spread between rows as "
+        f"the range of markets this deal could meet, not as the range this system's "
+        f"own rent figure could take."
+    )
+
+
 def _scenario_section(state: DealState) -> list[str]:
     """The forecast, its basis, and how the search reasoned its way to it.
 
@@ -1091,22 +1128,29 @@ def _scenario_section(state: DealState) -> list[str]:
     if base_price is not None:
         basis_parts.append(f"the **asking price** {_money(base_price)}")
     if basis_parts:
-        # TODO(U9.M): state the error band the rent projection compounds from, beside this
-        # sentence. Every scenario below is compounded from `projection_base_rent` as though
-        # it were exact, and on `staten-island` that number carries a metro holdout error of
-        # +/-$855 — 32% of the estimate — against a five-year band spread of 43%. The section
-        # never says so, so three rows whose spread is narrower than the error bar on the
-        # number under them read as more precise than they are. `ValuationDetail`'s
-        # `subject_metro_mae_dollars` (falling back to `model_mae_dollars`) is already on
-        # state here; the rent-basis section above already prints both figures, so this is one
-        # sentence and no new measurement. Deferred from the U9 spike that found it
-        # (`design/forecast_starting_point_spike.md`), which proposed *projecting* from the
-        # band and was not adopted — stating it is the part that stands on its own.
+        # **The rent side compounds an estimate, and that estimate has an error band
+        # (maintenance item M8, Sept 2, 2026).** Every scenario row starts from
+        # `projection_base_rent` — which is `state.rent_estimate` — and compounds it as
+        # though it were exact. On `staten-island` the figure carries a metro holdout
+        # error of +/-$855, 32% of the estimate, against a five-year band spread of 43%:
+        # the three rows differ from each other by *less* than the error bar on the
+        # number all three start from, and the section did not say so.
+        #
+        # **Language, not calculation.** Nothing about which scenarios are selected or
+        # what they project changes. Raised by the U9 spike on OQ-22's starting-point
+        # treatment (`design/forecast_starting_point_spike.md`), which proposed
+        # *projecting* from the band; that mechanism was not adopted — the evaluator
+        # held its choice on only 5 of 8 repeat runs — and stating the band is the half
+        # that survives that finding, standing whichever way OQ-22 was decided.
         lines.append(
             f"Projected from {' and '.join(basis_parts)}. The price side compounds the "
             f"asking price rather than an estimated value — this system does not produce "
             f"one, and says so above."
         )
+        rent_error_sentence = _projection_rent_error(state, base_rent)
+        if rent_error_sentence:
+            lines.append("")
+            lines.append(rent_error_sentence)
         lines.append("")
         lines.append(
             "Each row is named for the combination it describes, and the bands beside "

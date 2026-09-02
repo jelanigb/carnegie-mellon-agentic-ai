@@ -1341,12 +1341,15 @@ those to 5.1 costs a sentence in the close-out rather than a subsection here.
   across all 28 eval rows.
 - **M4 and M5** from `maintenance.md`: §6's U8 row does not disclose that U8.9 was dropped,
   and §6's unit table has no U11 row at all.
-- **M8** from `maintenance.md`: the scenario table compounds the rent estimate as though it
-  were exact and never states the error band it starts from — on `staten-island`, ±32% against
-  a 43% five-year spread. One sentence beside "Projected from…"; the figure is already on
-  state and already printed above the table. `TODO(U9.M)` is at the site in
-  `agents/summarizer._scenario_section`. **Language, not calculation** — it takes no position
-  on OQ-22, which stays open.
+- **M8** ✅ *(done Sept 2, 2026, as a third commit)* from `maintenance.md`: the scenario
+  table compounds the rent estimate as though it were exact and never states the error band
+  it starts from — on `staten-island`, ±32% against a 43% five-year spread. Built as
+  `_projection_rent_error`, one sentence beside "Projected from…", preferring the subject's
+  own metro over the pooled figure the way the Findings table does. **Language, not
+  calculation** — it takes no position on OQ-22, and all 30 eval rows came back
+  byte-identical, so no re-record. Taken ahead of U9.11 rather than carried, because closing
+  the unit with a `TODO(U9.M)` still at the site would leave the last subsection of the build
+  pointing at a subsection already marked done.
 
 ### U9.11 ⬜ — Close-out
 
@@ -1383,7 +1386,7 @@ Review the changelog rows each commit already wrote; do not reconstruct them.
 | ✅ | **U9.8** gross rent multiplier | Done Sept 2, 2026 — one commit; LA 15.3×, Staten Island 9.2× against its ZIP's 11.0×; 30 rows byte-identical, no re-record |
 | ⬜ | **U9.9** capture: runs, traces, diagram, screenshots | Never sheds |
 | ✅ | **U9.10** OQ-5 / OQ-10 / OQ-14 written up | Done Sept 2, 2026 — OQ-10 and OQ-14 close at U9.11; OQ-5 stays open on an unmet condition, with U9.7T's 51% measurement added |
-| ✅ | **U9.M** maintenance | Done Sept 2, 2026 — two commits; the recording blockers first (they gate U9.9), then M2 and M4–M7 |
+| ✅ | **U9.M** maintenance | Done Sept 2, 2026 — three commits; the recording blockers first (they gate U9.9), then M2 and M4–M7, then M8 |
 | ⬜ | **U9.11** close-out | — |
 
 **Twelve change sets against five days; the honest read is that seven land** — and U9.3

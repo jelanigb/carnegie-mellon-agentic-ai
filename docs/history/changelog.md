@@ -54,6 +54,14 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 2, 2026 — U9.M (M8): the outlook states the error band it compounds from
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 2, 2026 | U9.M (M8) | **Every scenario row compounds one modelled rent, and the section now says how far that rent could be off.** `agents/summarizer._projection_rent_error`, rendered beside *"Projected from…"*. Until now the five-year outlook compounded `projection_base_rent` as though it were exact: on `staten-island` that figure carries a metro holdout error of **±$855/mo — 32% of the estimate — against a five-year band spread of 43%**, so the three rows differed from each other by *less* than the error bar on the number all three start from, and a reader had no way to know it. `los-angeles` reads 18% and `overpriced` 16%. Prefers `subject_metro_mae_dollars` over the pooled `model_mae_dollars`, the same order and for the same reason as the Findings table one section above, and renders nothing rather than a hedge when neither is on state. **Language, not calculation** — nothing about which scenarios are selected or what they project changes, which is why **all 30 eval rows come back byte-identical** and no re-record was needed. Raised the same day by the U9 spike on OQ-22's starting-point treatment, which proposed *projecting* from the band and was **not** adopted (the evaluator held its choice on 5 of 8 repeats); stating the band is the half that survives that finding, and it stands whichever way OQ-22 was decided. Closed ahead of U9.11 so the unit does not close with a `TODO` aimed at a subsection already marked done. All three sample reports re-derived | 7.1 |
+
+---
+
 ## Sept 2, 2026 — U9.8: gross rent multiplier
 
 | Date added | Unit | Work done | Related checkpoint |
