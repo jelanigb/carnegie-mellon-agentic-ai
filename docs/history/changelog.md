@@ -54,6 +54,15 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 2, 2026 — U9.8: gross rent multiplier
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 2, 2026 | U9.8 | **The report states the one investor ratio this project's data supports, and names the line it stops at.** `ValuationDetail` gains `gross_rent_multiplier`, its denominator `grm_annual_gross_rent`, the same multiple at the local benchmark, and an unavailability reason; `_attach_gross_rent_multiplier` computes them and a *Price against rent* block renders them. Built on the **modelled** rent, not the listing's stated rents, so the multiple is available on a listing that states none and describes the rent this system will defend. `los-angeles` reads **15.3×**, `staten-island` **9.2×** against its ZIP's **11.0×** — which inverts the impression the escalation banner gives, since the escalated deal is the cheaper one per dollar of rent. **Cap rate is refused rather than approximated**: it needs NOI, which needs operating expenses this system does not model, and the report says so in place of the figure rather than omitting the subject. No flag, no threshold, and no `config` entry — what counts as a high multiple depends on an investor's cost of capital and hold period, neither of which this system knows | 7.1 |
+| Sept 2, 2026 | U9.8 | **The benchmark multiple is disclosed as a restatement, not as corroboration.** Both multiples divide by the same rent, so their ratio is *exactly* `price / benchmark_median_sale_price` — the premium the report already states, in a different unit. Measured before building rather than noticed after: 15.28 / 15.26 = 1.0010 = 1,049,000 / 1,047,955. It ships anyway because the unit is what it buys — an investor who thinks in multiples reads the market without converting — but the text says the two are one comparison rather than two agreeing measurements, since presenting them as independent would double-count a single fact. Prompt-inert by construction: neither `summarizer._lede_prompt` nor `scenario_forecast._context_block` reads a `ValuationDetail` field, so **no re-record**, and all 30 eval rows come back byte-identical | 7.1 |
+
+---
+
 ## Sept 2, 2026 — U9.7T: the scenario table
 
 | Date added | Unit | Work done | Related checkpoint |

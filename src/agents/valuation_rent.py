@@ -785,6 +785,8 @@ def valuation_rent_agent(state: DealState) -> dict:
         )
     )
 
+    _attach_gross_rent_multiplier(detail, terms, estimate)
+
     return {
         "rent_estimate": estimate,
         "rent_estimate_ratio_to_anchor": ratio,
@@ -793,3 +795,48 @@ def valuation_rent_agent(state: DealState) -> dict:
         "valuation_detail": detail,
         "flags": flags,
     }
+
+
+def _attach_gross_rent_multiplier(
+    detail: ValuationDetail, terms: DealTerms, estimate: float
+) -> None:
+    """Price over annual gross rent, plus the same multiple at the local benchmark.
+
+    **The one investor-facing ratio this project's data can actually support.** Cap rate
+    is the figure that would be more use and it is blocked honestly: it needs NOI, which
+    needs operating expenses this system does not model, and assuming an expense ratio
+    would put an unanchored number at the centre of the recommendation. GRM needs only
+    the asking price, the unit count and a rent — all of which are already here.
+
+    **The modelled rent, deliberately, and not the listing's stated rents.** Three
+    reasons, in order of weight: the multiple is then available on a listing that states
+    no rents at all; it describes the rent this system will defend rather than the one
+    the seller claims, which is the same reasoning the report's stated-versus-modelled
+    section rests on; and it shares a denominator with the benchmark multiple below,
+    which is what makes the two comparable at all.
+
+    **Raises no flag.** Nothing computes from either figure and no check reads them —
+    the same argument `_attach_benchmark` makes for the sale-price benchmark, and for
+    the same reason. There is also no threshold: what counts as a high multiple is a
+    function of the investor's cost of capital and hold period, neither of which this
+    system knows, so setting one here would be inventing a criterion and attributing it
+    to the data.
+    """
+    if terms.price is None:
+        detail.grm_unavailable_reason = "the listing states no asking price"
+        return
+    if not terms.unit_count:
+        detail.grm_unavailable_reason = "the listing's unit count did not resolve"
+        return
+
+    annual_gross = estimate * terms.unit_count * 12
+    if annual_gross <= 0:
+        detail.grm_unavailable_reason = "the modelled rent came out at or below zero"
+        return
+
+    detail.grm_annual_gross_rent = annual_gross
+    detail.gross_rent_multiplier = terms.price / annual_gross
+    if detail.benchmark_median_sale_price:
+        detail.benchmark_gross_rent_multiplier = (
+            detail.benchmark_median_sale_price / annual_gross
+        )

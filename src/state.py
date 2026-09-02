@@ -839,6 +839,37 @@ class ValuationDetail(BaseModel):
     # "we have nothing", and collapsing them would make a degraded report look empty.
     benchmark_local_unavailable_reason: Optional[str] = None
 
+    # --- Gross rent multiplier (U9.8) -------------------------------------------
+    # Asking price divided by annual gross rent. **The computable subset of investor
+    # criteria, and the boundary is where this project's data actually stops.** Cap rate
+    # is the figure an investor would rather have and it needs NOI, which needs operating
+    # expenses — taxes, insurance, vacancy, maintenance, management — none of which this
+    # system models. Assuming an expense ratio would put an unanchored number at the
+    # centre of the investment recommendation, which is what §2's invariants forbid. GRM
+    # needs nothing this system does not already have.
+    #
+    # **Built on the modelled rent, not the listing's stated rents**, so it is available
+    # on a listing that states none, and so the multiple describes the rent this system
+    # will defend rather than the one the seller claims. `grm_annual_gross_rent` carries
+    # the denominator because a multiple whose denominator is invisible cannot be checked.
+    gross_rent_multiplier: Optional[float] = None
+    grm_annual_gross_rent: Optional[float] = None
+
+    # The same multiple at the benchmark's median sale price — what this property's rent
+    # would be bought at if it changed hands at the typical local price.
+    #
+    # **It is not independent evidence, and the report says so.** The two multiples share
+    # a denominator, so their ratio is exactly `price / benchmark_median_sale_price` —
+    # the premium the report already states, expressed in a different unit. It is carried
+    # anyway because the unit is the point: an investor who thinks in multiples can read
+    # "this ZIP trades near 14x, this deal asks 15.3x" without converting anything. What
+    # it must not do is read as a second, corroborating measurement.
+    benchmark_gross_rent_multiplier: Optional[float] = None
+
+    # Which input was missing, in words, when no multiple could be formed. Absence stated
+    # rather than omitted, like every other field on this object.
+    grm_unavailable_reason: Optional[str] = None
+
 
 class Scenario(BaseModel):
     """One reported forecast path: a rent band paired with a price band, projected out.

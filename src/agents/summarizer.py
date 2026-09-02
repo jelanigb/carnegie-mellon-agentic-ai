@@ -1022,6 +1022,9 @@ def _findings_section(state: DealState) -> list[str]:
     # After the basis, deliberately: the gap is only interpretable once the reader knows
     # the estimate's error band and whether the comps corroborated it.
     lines.extend(_stated_rent_section(state, detail))
+    # Last of the price/rent blocks, because it is the only one that combines them and
+    # it should be read after both of its inputs have been qualified.
+    lines.extend(_gross_rent_multiplier_section(state, detail))
 
     lines.extend(_scenario_section(state))
 
@@ -1323,6 +1326,72 @@ _BAND_WORDS = {
     "base": "long-run average",
     "optimistic": "strongest stretch",
 }
+
+
+def _gross_rent_multiplier_section(state: DealState, detail) -> list[str]:
+    """Price against rent, as the one investor ratio this project's data supports.
+
+    **Why this ratio and not cap rate.** Cap rate is what an investor would rather see
+    and it needs net operating income, which needs operating expenses — taxes,
+    insurance, vacancy, maintenance, management — that this system does not model.
+    Assuming an expense ratio would put an invented number at the centre of the
+    recommendation. The report says that plainly rather than omitting the subject,
+    because a reader who came for cap rate should learn why it is absent.
+
+    **The two multiples are not independent, and the text says so.** They share a
+    denominator, so their ratio is exactly the price premium stated above — the same
+    comparison in a different unit. Presenting them as two agreeing measurements would
+    be double-counting one fact, which is the failure the whole report is built against.
+    What the second one buys is the unit itself: an investor who thinks in multiples can
+    read the market without converting anything.
+    """
+    if detail is None:
+        return []
+    if detail.gross_rent_multiplier is None:
+        if not detail.grm_unavailable_reason:
+            return []
+        return [
+            "### Price against rent",
+            "",
+            f"No gross rent multiple was formed for this listing, because "
+            f"{detail.grm_unavailable_reason}.",
+            "",
+        ]
+
+    units = state.deal_terms.unit_count
+    lines = [
+        "### Price against rent",
+        "",
+        f"At the modelled rent, this property's gross rent is "
+        f"**{_money(detail.grm_annual_gross_rent)} a year** across {units} unit"
+        f"{'s' if units != 1 else ''}, so the asking price is "
+        f"**{detail.gross_rent_multiplier:.1f}×** annual gross rent.",
+        "",
+    ]
+
+    if detail.benchmark_gross_rent_multiplier is not None:
+        tier = "this ZIP code" if detail.benchmark_tier == "zip" else "this metro area"
+        lines.append(
+            f"The typical recorded sale in {tier} would buy the same rent at "
+            f"**{detail.benchmark_gross_rent_multiplier:.1f}×**. That is the *same* "
+            f"comparison as the price-versus-benchmark figure above rather than a "
+            f"second one — both multiples divide by the same rent, so the gap between "
+            f"them is the price gap restated. It is shown because the multiple is the "
+            f"unit this comparison is usually made in."
+        )
+        lines.append("")
+
+    lines.append(
+        "> **This is a gross multiple, not a yield, and the difference is the "
+        "expenses.** It divides the price by rent before taxes, insurance, vacancy, "
+        "maintenance or management — none of which this system models, and all of "
+        "which a buyer pays. A capitalization rate would account for them; producing "
+        "one here would mean assuming an expense ratio and presenting the assumption "
+        "as a finding, so this report stops at the ratio its data can support and "
+        "says where the line is."
+    )
+    lines.append("")
+    return lines
 
 
 def _band_coverage_note(
