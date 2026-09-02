@@ -1,6 +1,6 @@
 # The forecast evaluator — what it scores, and why the output reads the way it does
 
-**Written Aug 31, 2026, at U9.6.** Section numbers (§1–§9) and decision numbers (#1–#20)
+**Written Aug 31, 2026, at U9.6.** Section numbers (§1–§9) and decision numbers (#1–#21)
 refer to [`../implementation_plan.md`](../implementation_plan.md).
 
 **This document exists because the architect read a report and did not believe it.** The

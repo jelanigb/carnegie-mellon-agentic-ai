@@ -1,7 +1,7 @@
 # U7 — Critic / Reviewer — task list
 
 > **Conventions for this file are in [`README.md`](README.md).** Section numbers (§1–§9)
-> and decision numbers (#1–#20) refer to
+> and decision numbers (#1–#21) refer to
 > [`../implementation_plan.md`](../implementation_plan.md).
 
 **Feeds Checkpoint 6.1** (due Aug 31, 2026 — this unit is pulled forward to land before
