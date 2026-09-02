@@ -176,6 +176,18 @@ def _verdict_lines(state: DealState) -> list[str]:
     reproducible statement is the first thing on the page and the prose supports it rather
     than the other way round.
 
+    **"System check" was replaced Sept 2, 2026, because it named the instrument rather
+    than the consequence.** A reader meeting *"System check — escalated to human review"*
+    has to work out what a system check is and what escalating one implies for them; the
+    line now says who has to do what before this report goes anywhere — *"Flagged by
+    system — needs human review before sharing with investors"*. That is also exactly
+    what the escalation means operationally, under either routing rule in
+    `design/personas.md`: a deal-substance flag waits on the agent (persona b) before it
+    reaches the investor (persona c), and an infrastructure flag waits on IT (persona a),
+    and in neither case should the report be forwarded first. The cleared branch is
+    worded to match, so the two read as one question answered two ways rather than as two
+    unrelated banners.
+
     Reader-facing throughout (§8): no flag names, no thresholds, no field names.
     """
     lines: list[str] = []
@@ -192,14 +204,16 @@ def _verdict_lines(state: DealState) -> list[str]:
         # disclosure escalates on its own, above the threshold — see agents/critic.py —
         # so a banner that always blamed the score would misreport that case.
         lines.append(
-            "> 🚩 **System check — escalated to human review.** This deal did not clear "
-            "the system's automated checks on its own; the disclosures below say why. "
-            "**This is a statement about the evaluation, not about the property.**"
+            "> 🚩 **Flagged by system — needs human review before sharing with "
+            "investors.** This deal did not clear the system's automated checks on its "
+            "own; the disclosures below say why. **This is a statement about the "
+            "evaluation, not about the property.**"
         )
     else:
         lines.append(
-            "> ✅ **System check — reported.** The figures below cleared the system's "
-            "own checks without needing a human to release them."
+            "> ✅ **Cleared by system — no human review needed before sharing.** The "
+            "figures below passed the system's own checks without a human having to "
+            "release them."
         )
 
     if state.human_review_note:
@@ -1106,9 +1120,14 @@ def _scenario_section(state: DealState) -> list[str]:
         )
         lines.append("")
 
+    # **Each quantity's rate sits beside its own projected level (Sept 2, 2026).** The
+    # previous order put both rates together and both levels together, so reading what
+    # rent does meant crossing the price column and back — and the two columns a reader
+    # most often compares, a rate and the level it compounds to, were the furthest apart.
     lines.append(
-        "| Scenario | Rent growth | Price growth | "
-        f"Rent in yr {horizon} | Price in yr {horizon} | Why this row is shown |"
+        "| Scenario | Rent growth | "
+        f"Rent in year {horizon} | Price growth | Price in year {horizon} | "
+        "Why this row is shown |"
     )
     lines.append("| --- | --- | --- | --- | --- | --- |")
     for scenario in state.scenarios:
@@ -1123,8 +1142,8 @@ def _scenario_section(state: DealState) -> list[str]:
             else "—"
         )
         lines.append(
-            f"| **{scenario.name}** | {rent_growth} | {price_growth} | "
-            f"{_money_or_dash(scenario.projected_monthly_rent)} | "
+            f"| **{scenario.name}** | {rent_growth} | "
+            f"{_money_or_dash(scenario.projected_monthly_rent)} | {price_growth} | "
             f"{_money_or_dash(scenario.projected_price)} | "
             f"{_why_shown(scenario)} |"
         )

@@ -133,6 +133,49 @@ _RECORDED: frozenset[tuple[str, bool, Optional[Fault]]] = frozenset(
 )
 
 
+# The green the report's structural headings are set in. One constant, because it is
+# used in three selectors below and a colour repeated by hand is a colour that drifts.
+_HEADING_GREEN = "#188038"
+
+
+def _heading_colour() -> None:
+    """Colour the report's structural headings, and only those.
+
+    **The colour lives here and not in the report, and that is forced rather than
+    preferred.** The report is a Markdown file committed to a public repository and
+    GitHub strips `style` attributes from Markdown, so a heading coloured at the source
+    would render green in this surface, plain on GitHub, and as raw HTML in anyone's
+    text editor. Keeping the report pure Markdown and colouring it at the point of
+    display costs nothing a reader sees and keeps `docs/sample_reports/` legible in every
+    viewer — which is the same reasoning `split_report` rests on: the report is the
+    artifact, this module is a lens on it.
+
+    **Three selectors, because the report's `##` headings are not `<h2>` here.**
+    `_render_report` turns each one into an expander label, so the section headings a
+    reader sees — *Findings*, *Comparable Rentals* — are expander summaries rather than
+    headings, and styling `h2` alone would colour nothing. The `#####` used for the lede
+    is the third. Sub-headings inside a section (`###` and below) are deliberately left
+    alone: the colour marks the report's structure, and colouring everything would mark
+    nothing.
+    """
+    st.markdown(
+        f"""
+        <style>
+          /* The report title, and this app's own title above it. */
+          h1, [data-testid="stMarkdownContainer"] h1 {{ color: {_HEADING_GREEN}; }}
+          /* Section headings, which reach the reader as expander labels. */
+          [data-testid="stExpander"] summary p {{
+              color: {_HEADING_GREEN};
+              font-weight: 600;
+          }}
+          /* The lede, the one section rendered open rather than in an expander. */
+          [data-testid="stMarkdownContainer"] h5 {{ color: {_HEADING_GREEN}; }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 @st.cache_resource
 def _tracing_enabled() -> bool:
     """Point LangSmith at this project's bucket, once per session.
@@ -473,6 +516,7 @@ def _sidebar() -> tuple[Optional[RunSpec], Optional[str], Optional[tuple], bool]
 
 def main() -> None:
     st.set_page_config(page_title="Deal Evaluator", page_icon="🏘️", layout="wide")
+    _heading_colour()
     st.title("Multi-family deal evaluator")
     st.caption(
         "Seven agents evaluate a small multi-family listing and disclose every point at "

@@ -78,6 +78,17 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 2, 2026 — report language, on the architect's read of the three samples
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 2, 2026 | U9.4 | **The system line names the consequence instead of the instrument.** *"System check — escalated to human review"* made a reader work out what a system check is and what escalating one implies for them. It now reads **"Flagged by system — needs human review before sharing with investors"**, which is also what the escalation means operationally under either routing rule in `design/personas.md`: a deal-substance flag waits on the agent before the deal reaches the investor, an infrastructure flag waits on IT, and neither should be forwarded first. The cleared branch is reworded to mirror it — *"Cleared by system — no human review needed before sharing"* — so the two read as one question answered two ways rather than as unrelated banners. The axis-separation sentence is untouched | 7.1 |
+| Sept 2, 2026 | U9.7T | **"Central case" becomes "Neutral case", and the scenario table's columns are reordered.** *Central* invited "central to what?" — it reads as a claim about a distribution this forecast never estimates, since the bands are observed twelve-month stretches rather than quantiles — and it disagreed with the vocabulary one column over, where the reserved-slot mechanism has always called that row *the neutral case*. Columns now pair each quantity's rate with its own projected level (`Scenario · Rent growth · Rent in year 5 · Price growth · Price in year 5 · Why this row is shown`); previously the two columns a reader most often compares sat furthest apart. "yr" spelled out | 7.1 |
+| Sept 2, 2026 | U9.7c | **The demo surface colours the report's structural headings, and the colour lives in the surface rather than in the report.** `#188038` on the report title and on section headings, sub-headings left alone so the colour marks structure rather than everything. **Three selectors, because a `##` heading is not an `<h2>` here** — `_render_report` turns each into an expander label, so styling `h2` alone would colour nothing. **Not applied at the source deliberately:** the report is Markdown committed to a public repository and GitHub strips `style` attributes, so a heading coloured in the report would render green here, plain on GitHub, and as raw HTML in a text editor. Same reasoning `split_report` rests on — the report is the artifact, the app is a lens on it | 7.1 |
+| Sept 2, 2026 | U9.7T | **OQ-22 closed and OQ-23 opened.** OQ-22 asked whether a pairing search should exist when its governing relationship explains under a tenth of the variance; it closed on a basis neither of its two stated conditions covered — **the level's thinness became legible to a reader** through U9.7T's three disclosures, rather than being fixed or deleted. The weakness itself is unchanged and the final report should say so. OQ-23 is new and is the architect's: the three sample reports run 183–213 lines and every unit since U9.3 has added to the middle without removing anything. **Deliberately not acted on** — almost everything a length pass would cut is a disclosure, and a shorter report bought that way is the failure §1 exists to prevent. All three sample reports re-derived; 30 eval rows byte-identical | 7.1 |
+
+---
+
 ## Sept 2, 2026 — U9.9 prerequisites
 
 | Date added | Unit | Work done | Related checkpoint |

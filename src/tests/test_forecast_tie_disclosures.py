@@ -184,7 +184,7 @@ def test_each_scenario_reports_the_score_it_was_judged_on_and_how_it_got_in():
                 selection_basis="tie:3",
             ),
             Scenario(
-                name="Central case",
+                name="Neutral case",
                 rent_band="base",
                 price_band="base",
                 rent_growth_pct_per_year=4.0,

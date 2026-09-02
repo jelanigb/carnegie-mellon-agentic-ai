@@ -42,7 +42,11 @@ survive re-derivation, so there is now **no directional prior at all** and the n
 candidates are scored on flags, band widths and sample sizes. That is honest and it is
 thin. The redesign — stop asking which pairing is most likely, which needs a joint
 distribution this data cannot supply, and ask which projections *this deal's evidence*
-supports showing — is adopted and deferred on schedule as OQ-22.
+supports showing — is sketched in `docs/design/evaluator.md` as future work. **OQ-22
+closed Sept 2, 2026 without it being built**: the level ships as it is, and what changed is
+that U9.7T made its thinness visible in the report rather than only in this docstring — each
+row is named for the bands it combines, each says whether the evaluator or the conservatism
+tie-break selected it, and any band reaching no row is named.
 
 **Two search levels, then deterministic reconciliation** — stated plainly because
 `config.TOT_MAX_DEPTH` is 3 and it would be easy to imply three levels of search. Depth
@@ -776,11 +780,18 @@ def _row_name(rent_band: Optional[str], price_band: Optional[str]) -> str:
 
     **Three rules, in order:**
 
-    1. *Central case* when nothing departs from its long-run average. Stated as a
+    1. *Neutral case* when nothing departs from its long-run average. Stated as a
        property of the bands rather than as a position in the table, so it stays true on
-       a one-sided deal (Staten Island has no price series) and stays true wherever the
-       sort happens to put it — which matters, because U9.7T kept the worst-to-best
-       ordering, and the central case can therefore land last.
+       a one-sided deal and stays true wherever the sort happens to put it — which
+       matters, because U9.7T kept the worst-to-best ordering, and the neutral case can
+       therefore land last.
+
+       **"Neutral", not "Central", since Sept 2, 2026.** *Central case* invites the
+       question "central to what?" — it reads as a claim about a distribution this
+       forecast never estimated, since the bands are observed twelve-month stretches
+       rather than quantiles of a fitted model. It also disagreed with the vocabulary one
+       column over: the reserved-slot mechanism has always called this row *the neutral
+       case*, in `tot.beam_search` and in the report. One word, used once.
     2. When exactly one side departs, **the departing side is named first**: the row's
        subject is the thing that moved, and the side that held is context for it.
     3. When both depart, rent leads, for no better reason than that a fixed order is
@@ -797,7 +808,7 @@ def _row_name(rent_band: Optional[str], price_band: Optional[str]) -> str:
     rent_departs = rent_band not in (None, "base")
     price_departs = price_band not in (None, "base")
     if not rent_departs and not price_departs:
-        return "Central case"
+        return "Neutral case"
     if rent_departs and not price_departs:
         parts = [rent, price]
     elif price_departs and not rent_departs:

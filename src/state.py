@@ -888,15 +888,17 @@ class Scenario(BaseModel):
     So the level has **no directional prior at all**: it does not prefer the diagonal and
     does not prefer its opposite, and the nine candidates are scored on this deal's own
     evidence — the flags raised upstream, how wide each band is, and how many
-    observations sit behind it. That is honest and it is thin, and OQ-22 carries the
-    redesign.
+    observations sit behind it. That is honest and it is thin. **OQ-22 closed Sept 2, 2026
+    with the level shipping as it is** — what changed is that the report now discloses the
+    thinness rather than carrying it silently; `docs/design/evaluator.md` holds the
+    redesign as future work.
 
     Every rate here is an observed figure from `tools/rent_growth.py` or
     `tools/redfin_data.py` - never a model's invention. The search selects among
     measured values; it does not produce new ones.
     """
 
-    # What this row says, in the reader's words — "Central case", "Prices fall, rents
+    # What this row says, in the reader's words — "Neutral case", "Prices fall, rents
     # hold". A deterministic lookup on the two bands below
     # (`scenario_forecast._row_name`), not chosen by the evaluator and **not a rank**.
     #
@@ -909,7 +911,7 @@ class Scenario(BaseModel):
     name: str
 
     # Which band each side contributes. Still carried separately from `name` — the name
-    # is derived from them but is not reversible (both "Central case" and a one-sided
+    # is derived from them but is not reversible (both "Neutral case" and a one-sided
     # deal's central row collapse several states), and everything downstream that needs
     # to know *which band* must read these rather than parse the name.
     rent_band: Optional[str] = None

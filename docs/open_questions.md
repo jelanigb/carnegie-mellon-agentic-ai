@@ -134,142 +134,6 @@ could leave the expired argument standing uncorrected in `_attach_benchmark`'s d
 No code follows from this — it's a reminder that closing check B has to include revisiting
 the tier-flag half, not a separate question.
 
-### OQ-22 · U9.3 — the forecast's pairing search rests on a relationship too weak to support it
-**Raised Aug 31, 2026 at U9.3, and it is what is *left over* after #21 rather than what #21
-fixes.** The Tree-of-Thought's depth-2 level exists to choose which rent band to pair with
-which price band, and the evidence it reasons from is the measured rent/price growth
-correlation. Re-measured across three passes (`scripts/growth_correlation.py`), **r² never
-exceeds 0.10** — 4% to 10% of variance — and the *sign* flips depending on which rent series
-is used and which market is examined.
-
-**#21 stops the evaluator being told something false.** It will be told the relationship is
-weak, sign-unstable, and not a basis for preferring anti-correlated pairings. **What it does
-not answer is whether a pairing search should exist at all** when its governing relationship
-is this weak: a level that enumerates nine combinations and keeps three, on a signal that
-explains under a tenth of the variance, may be reasoning about noise.
-
-**#21 made this sharper rather than milder, and that is the honest framing.** Before #21 the
-level had a clear decision criterion — prefer anti-correlated pairings — which was wrong.
-After #21 it has no directional prior at all, and scores nine candidates on flags, band
-widths and sample sizes. The false criterion is gone and **nothing replaced it.**
-
-**The closing condition first written here was unreachable** — "a longer panel, or a rent
-series matched to multi-family" — neither of which this project will acquire, which made
-this an entry that could never close. **Restated and decided Aug 31, 2026 by the architect:
-depth 2 ships as-is with #21's corrected instructions, and the re-purposing below is adopted
-as the answer, deferred on schedule rather than left open.**
-
-**What ships now.** The nine-way enumeration, beam of 3 with a reserved base/base slot, and
-an evaluator told the relationship is weak and supports no directional rule. **This is
-knowingly thin** — a level that enumerates nine and keeps three on grounds that explain
-under a tenth of the variance — and the final report should describe it that way rather than
-as settled reasoning.
-
-**What it becomes.** Stop asking *which pairing is most likely*, which needs a joint
-distribution this data cannot supply. Ask instead: **which projections does this deal's
-evidence support showing, and how wide should the starting point be?** The bands describe
-what the *market* did; the deal's evidence describes how far to trust the *estimate the
-projection compounds from*, and depth 2 ignores the second entirely today:
-
-| | `los-angeles` | `staten-island` |
-| --- | --- | --- |
-| Rent estimate | $2,861 **±$509** | $2,654 **±$855** |
-| Comps | 8, all ZIP-anchored | **0** |
-| Comp cross-check | implies $2,875 — **1% away** | **not run** |
-| Anchor | ZIP 90026 | **county-wide** |
-
-Both get the same three growth bands today, and both are projected five years forward with
-equal apparent confidence. Re-purposed: `los-angeles` projects the bands from the point
-estimate because eight comparables corroborate it within 1%; `staten-island` projects from
-the **edges of its error band**, or declines the optimistic case as unsupported, because
-nothing checks it and the anchor is county-wide.
-
-**Deal-specific, grounded in evidence this project already measures, and needing no
-correlation at all** — which is exactly what makes it survive #21. *(Corrected Sept 2: this
-line read "already in the evaluator's prompt", which is false. Every field is on
-`ValuationDetail` before the forecast runs, and **none of it reaches `_context_block`**, which
-passes flag names and a point estimate. The evidence exists; the prompt has never carried it.)*
-
-**Why it is deferred rather than built.** *(First clause superseded Sept 2 — see the spike
-below. `_DEPTH_INSTRUCTIONS[2]` already tells the evaluator it is "choosing which projections
-are worth showing a reader, not ranking which is most likely to happen", so that half landed
-at U9.3 and the remaining cost is an evidence block plus a treatment axis.)* The prompt changes
-from *"score this pairing's plausibility"* to *"score what this evidence supports showing"*;
-the candidate payload gains
-a starting-point treatment beside `(rent_band, price_band)`, so `_pairings` and the scenario
-assembly both change shape; `Scenario`/`ForecastDetail` need a field for it; and everything
-re-records. That is a full change set of **new design** inside a five-day window, against a
-unit already estimated at seven of twelve landing.
-
-**Closes when** the re-purposing is built, or when a later pass decides the pairing level is
-not worth its evidence and deletes it in favour of forecasting the two series independently.
-*(Superseded Sept 2 — a third route was added at the foot of this entry, and that statement
-governs.)*
-
-**Its real subject is broader than the forecast, and one premise under it expired on
-Sept 1, 2026.** This entry deferred the redesign partly on the grounds that the forecast's
-search was the *only* reasoning locus in the build, so deleting depth 2 would cost the
-system its only demonstration of reasoning. **U9.4's `critic.cross_check` is a second
-locus** — model proposes, rule decides, disagreement disclosed — so that cost is gone, and
-whether depth 2 earns its evidence is now a judgment that can be taken on its own merits.
-Nothing about what ships changes; the argument this closes on does.
-
-**A measurement U9.7T added, which sharpens the same question.** Across the committed
-recordings, reproducing `tot._rank`'s grouping: depth 1 is decided by the model's scores on
-**78 of 78** levels, and depth 2 on **39 of 79** — so **51% of pairing levels are decided by
-the conservatism tie-break**, not by the evaluator. The level that has no directional prior
-is also the level where the model separates the candidates barely half the time. U9.7T
-disclosed this rather than acting on it: the ledger and the scenario table now both name
-which mechanism selected each row.
-
-**A spike ran the re-purposing before building it, Sept 1–2, 2026, and the mechanism did not
-survive.** Full write-up in [`design/forecast_starting_point_spike.md`](design/forecast_starting_point_spike.md);
-evidence committed under `src/eval/data/exploratory/`, off any replay path. Four results bear
-on this entry, and **none of them closes it**:
-
-- **The evaluator answers the new question correctly on a single run.** Given the error band,
-  comp count, cross-check divergence and anchor resolution, it chose the point estimate for
-  `los-angeles` ("a corroborated point rent estimate") and the full error band for
-  `staten-island` ("to reflect high uncertainty") — the behavior this entry predicts, reached
-  with no per-deal hint.
-- **It cannot hold that answer steady.** Eight repeat searches per deal at temperature 0, cache
-  off: `los-angeles` **5/8**, `staten-island` 7/8. Los Angeles is the deal eight comparables
-  corroborate to 0.5%, and two runs in eight still widened it to the full band — a year-5 rent
-  of $2,503–$4,251 against $3,239, decided by which of four providers answered. **A treatment
-  worth ~2× the growth bands cannot be an LLM judgment on this fleet.**
-- **The starting point is roughly twice the width of the growth bands beside it** — 2.04× on
-  `los-angeles`, 2.08× on `staten-island`. So the re-purposing does not refine the scenario
-  section, it **changes what the section is**: mostly a statement about what is unknown of
-  *today's* rent rather than about what the market did to rents. Defensible, and a decision in
-  its own right.
-- **If it is ever built, the treatment must not join depth 1.** Tried there first, both deals
-  flipped their window treatment (`f-11`→`f-00`, `f-01`→`f-00`) because the two questions get
-  traded against each other on one axis.
-
-**What this changes about the entry: the mechanism, not the question.** The same decision made
-by a deterministic rule over the same fields — `full` on a county anchor or no cross-check,
-`point` on ≥3 comps within 10% at ZIP resolution, `half` between — agrees with the model's
-modal answer on both deals, never varies, and needs no prompt change and therefore **no
-re-record**. `chicago` lands in the middle at 16.6% divergence, so the third treatment is
-earned by a real deal rather than by argument.
-
-**Deliberately not adopted, and the entry stays open.** The architect is separately testing
-whether **report wording alone** resolves the confusion that prompted all of this, keeping
-today's calculation paths untouched — which the ~2× finding argues for trying first, since it
-is a far smaller step than changing what the section is. This entry should be decided after
-that, not before it. **Closes when** the re-purposing is built in some form, when the pairing
-level is deleted in favour of forecasting the two series independently, or when a wording-only
-fix is judged sufficient and the redesign is dropped on the record.
-
-Whether one 4→1 selection and one 9→3 selection is enough reasoning for the system's claims
-is a question the final report has to answer either way. **Named candidates if a second locus is wanted**, strongest first:
-**retrieval relaxation** (today a fixed ladder — size band, then radius, then bedroom count
-— where *which criterion to relax for this deal* is a genuine judgment with a measurable
-outcome, and U4's ablation harness could score it); and the **recommendation**, where
-model-proposes/rule-decides with disagreement disclosed is already designed and deferred at
-U9.4. `agents/scenario_forecast.py`, `agents/comps_retrieval.py`,
-[`design/evaluator.md`](design/evaluator.md).
-
 ### OQ-4 · cut list 1a — rent-model feature engineering, tuning, and transfer
 **Retargeted Aug 30, 2026, not closed, and the original wording is kept above the change
 so the retarget is visible.** As written it read: *"Measured: ~17% of rent error is
@@ -540,6 +404,28 @@ U8.8 uses to show a neighborhood median against a metro one.
 
 **Closes when** U9 adds the deal, calibrates it under #11's rules, and re-derives the demo
 table. [`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.6b, §U8.6e, §U8.7.
+
+### OQ-23 · no unit — is the report too long?
+**Raised Sept 2, 2026 by the architect**, reading the three sample reports after U9.7T and
+U9.8. The disclosure expanders work and are staying; the objection is to total length.
+`los-angeles` runs 183 lines, `staten-island` 213, `overpriced` 203 — and every unit since
+U9.3 has *added* to the middle of the report (two band tables, a why-shown column, a band
+coverage note, a gross-multiple block) without anything being removed.
+
+**Deliberately not acted on before the freeze**, and the risk of acting on it is specific:
+almost everything a length pass would cut is a disclosure, and this system's whole argument
+is that it discloses. A shorter report bought by dropping the caveat beside a number is the
+failure §1 exists to prevent, not a fix for it. The cheap version — collapse more of the
+middle into expanders — is presentation and could be done; the expensive and more useful
+version is deciding what a reader of *many* of these actually re-reads, which needs a reader
+who has read many of them and does not exist yet.
+
+**What a pass should measure first**, so it does not start by cutting: which sections a
+reader opens when they are collapsed. The surface already renders every `##` section as an
+expander, so the question is answerable by watching one demo rather than by argument.
+**Closes when** a length decision is taken with that evidence, or when the final report
+records the length as a known property of a disclosure-first design.
+`agents/summarizer.py`, `docs/sample_reports/`.
 
 ### OQ-13 · no unit — LangSmith account
 Wiring is done and env-driven; every run prints whether tracing is on, so a silently

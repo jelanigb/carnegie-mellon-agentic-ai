@@ -254,7 +254,11 @@ def test_the_two_axes_render_as_separate_lines_that_do_not_merge():
     report = _report(state)
 
     assert "Recommendation — Proceed." in report
-    assert "System check — escalated to human review" in report
+    # **The label changed Sept 2, 2026 and the assertion follows the meaning, not the
+    # wording.** "System check" named the instrument; the line now names the consequence
+    # — who has to do what before this report goes anywhere — which is the readability
+    # fix this test exists to protect, applied one level deeper than it was.
+    assert "Flagged by system — needs human review before sharing with investors" in report
     assert "not about the property" in report
 
 
@@ -263,7 +267,10 @@ def test_a_clean_run_says_so_on_the_system_line_rather_than_staying_silent():
     state.recommendation = recommend(state)
     report = _report(state)
 
-    assert "System check — reported" in report
+    assert "Cleared by system — no human review needed before sharing" in report
+    # Worded to mirror the escalated branch, so the two read as one question answered two
+    # ways. A pair that drifts apart is how the axis distinction stops being legible.
+    assert "System check" not in report
     assert "escalated" not in report.lower()
 
 

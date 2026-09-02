@@ -397,7 +397,33 @@ what makes it survive #21.
 Deferred because it is a full change set of new design: the prompt's question changes, the
 candidate payload gains a starting-point treatment beside `(rent_band, price_band)`,
 `_pairings` and the scenario assembly change shape, `Scenario`/`ForecastDetail` gain a
-field, and everything re-records. Tracked as **OQ-22**.
+field, and everything re-records.
+
+**OQ-22 CLOSED Sept 2, 2026 by the architect, on a basis the entry did not anticipate.**
+It had two stated closing conditions — build the re-purposing, or delete the level — and
+neither was met. What changed instead is that **the level's weakness became legible to a
+reader**, which is the thing the entry was actually worried about. U9.7T made three
+disclosures the report did not previously carry: each row is named for the bands it
+combines rather than for a rank, each says whether the evaluator or this project's
+conservatism preference selected it, and the bands that reached no row are named. A reader
+can now see that the search kept three of nine on scores that separated barely half the
+time, without being told so in a caveat.
+
+**Recording the basis precisely, because it is a weaker claim than "the question was
+answered".** The pairing level still enumerates nine and keeps three on a relationship whose
+r² never exceeds 0.10. That is unchanged and the final report should say so. What is settled
+is the *decision*: the level ships as it is, its thinness is disclosed rather than argued
+away, and the re-purposing below is future work rather than a scheduled deferral.
+**One premise that had propped up the deferral is gone too** — the argument that deleting
+depth 2 would cost the system its only reasoning locus expired when U9.4 landed
+`critic.cross_check`, so a future pass can decide this on the level's own merits.
+
+**What a future pass would still want**, kept here rather than in a closed entry: the
+re-purposing sketched below, and `scripts/spike_starting_point.py`'s measurement that
+projecting from the rent estimate's error-band edges produces a spread roughly 2x the growth
+bands' own width — which means the re-purposed table would mostly display estimate
+uncertainty rather than a growth forecast. That is arguably the honest answer and it changes
+what the section *is*.
 
 ### The wider question this belongs to
 
