@@ -80,6 +80,11 @@ cd src
 export OPENROUTER_API_KEY=...    # LLM access, via OpenRouter
 export HUD_FMR_TOKEN=...         # HUD Fair Market Rent API (free account)
 
+# Optional: LangSmith tracing. Off unless the switch is set, so a run without it
+# is a normal run rather than a degraded one, and every run prints which it was.
+export LANGSMITH_TRACING=true
+export LANGSMITH_API_KEY=...
+
 .venv/bin/python main.py --deal los-angeles         # dense market, clean run
 .venv/bin/python main.py --deal staten-island       # thin market, escalates to review
 .venv/bin/python main.py --deal chicago             # moderate: retrieval relaxes once

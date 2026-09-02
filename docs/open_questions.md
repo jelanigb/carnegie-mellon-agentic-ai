@@ -288,10 +288,12 @@ no LLM call in this design and `config.MODEL_CRITIC` stays untested by construct
 by omission.
 
 ### OQ-10 · `TODO(security)` · no unit — the on-disk token fallback
-Keys fall back to plaintext files in `ignore/` when the env var is unset. **The question is
-whether to drop the fallback and require the env var.** Affects `tools/hud_fmr.py:24`,
-`tools/llm_client.py:41`, and `tools/diagnostics.py:36` (which deliberately prints the
-account identifier). Raise before any public demo.
+Keys fall back to plaintext files in a gitignored directory when the env var is unset.
+**The question is whether to drop the fallback and require the env var.** Affects
+`tools/hud_fmr.py:24`, `tools/llm_client.py:41`, `tools/tracing.py:41` (added Sept 1, 2026
+when a LangSmith key first existed — the same trade, taken the same way), and
+`tools/diagnostics.py:36` (which deliberately prints the account identifier). Raise before
+any public demo.
 
 ### OQ-17 · `TODO(reliability)` · no unit — live model calls are not perfectly deterministic, even at temperature 0
 Found Aug 29, 2026 while building U8.5's OQ-16 case. `scenario_forecast`'s ToT scorer gave
@@ -427,7 +429,15 @@ table. [`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.6b, §U8.6e, §U8.7
 Wiring is done and env-driven; every run prints whether tracing is on, so a silently
 uncaptured run is not a failure mode. **Not a build blocker.** It *is* a blocker on
 Checkpoint 5.1's trace evidence, and free-tier traces expire after 14 days — so set it up
-close to the write-up, not long before. No key present in `ignore/` as of Aug 24, 2026.
+close to the write-up, not long before.
+
+**A key exists as of Sept 1, 2026**, and `tools/tracing.py` gained the same on-disk
+fallback the other two credentials use, so only `LANGSMITH_TRACING=true` has to be typed.
+The switch deliberately kept no file fallback: a key on disk says *this machine can
+trace*, the variable says *this run should be traced*, and merging them would start
+shipping every local run to a hosted service. **Closes when** U9.9 captures traces against
+the surface that ships — which is the 14-day clock this entry exists to protect, now
+started rather than pending.
 
 ### OQ-14 · U9 — checkpoint criteria as build artifacts
 Where a checkpoint publishes completion criteria, the unit is specified to *produce* each

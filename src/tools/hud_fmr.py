@@ -27,7 +27,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 # Env-var-only is stricter; the file fallback is more convenient for local runs.
 # Same question applies to tools/llm_client.py. Owner's call — not changed unilaterally
 # because it would break a working auth path.
-_TOKEN_FILE = _REPO_ROOT / "ignore" / "fmr_key"
+_TOKEN_FILE = _REPO_ROOT / "ignore" / "fmr_key.txt"
 
 # Resolved in U2: writes are now atomic (write-to-temp then rename), and the residual
 # concurrency limitation is documented on _DiskCache rather than left as a TODO.

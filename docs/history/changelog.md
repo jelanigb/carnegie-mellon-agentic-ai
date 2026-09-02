@@ -54,6 +54,16 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 1, 2026 — maintenance: credential paths, and a LangSmith key that now exists
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 1, 2026 | maintenance | **The two on-disk credential paths follow the files they point at.** Both token loaders named extension-less paths that no longer exist; `tools/llm_client.py` and `tools/hud_fmr.py` now resolve the renamed files. Nothing about the resolution order changed — env var first, file second — and both were re-verified to load rather than assumed to | maintenance |
+| Sept 1, 2026 | maintenance | **`tools/tracing.py` gains the same on-disk key fallback the other two credentials have**, because a LangSmith key exists as of today (OQ-13) and only the *switch* should have to be typed. `_load_key` returns `None` rather than raising — the one way it differs from its two siblings, since the pipeline cannot run without a model and can run without a record of having run — and the key is written back into the environment because the LangChain runtime reads the variable itself. **`LANGSMITH_TRACING` deliberately kept no file fallback:** a key on disk says this machine *can* trace, the variable says this run *should be* traced, and merging the two would start shipping every local run to a hosted service. Both paths exercised | 5.1, 7.1 |
+| Sept 1, 2026 | maintenance | **The README's setup block names the tracing variables**, marked optional, so a reviewer reproducing a trace is not left to infer them from the source. Still no reference to any gitignored path (§8) | 7.1 |
+
+---
+
 ## Sept 1, 2026 — U9.6: the demo deals
 
 | Date added | Unit | Work done | Related checkpoint |

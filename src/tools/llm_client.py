@@ -43,7 +43,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 # file advertises where a key is kept, even though the file is gitignored. Unlike the
 # HUD token this one is billable if leaked, so it is the stronger candidate for
 # env-var-only.
-_TOKEN_FILE = _REPO_ROOT / "ignore" / "openrouter_key"
+_TOKEN_FILE = _REPO_ROOT / "ignore" / "openrouter_key.txt"
 
 T = TypeVar("T", bound=BaseModel)
 
