@@ -1191,7 +1191,7 @@ deliberately prints the account identifier, correct for a terminal and wrong for
 run, then an escalated run, then under the hood, with the investor-facing sections named
 verbally. Live runs included, with waiting time edited out.
 
-### U9.10 ⬜ — OQ-5, OQ-10 and OQ-14 written up
+### U9.10 ✅ — OQ-5, OQ-10 and OQ-14 written up *(done Sept 2, 2026)*
 
 **OQ-5** — the four ToT constants were set by reading output, not tuning. What is known:
 `TOT_TIE_EPSILON` is **not meaningfully straddleable** (noise-dominated, U8.6b/OQ-17), and
@@ -1267,8 +1267,8 @@ Review the changelog rows each commit already wrote; do not reconstruct them.
 | | *✂️ cut line* | |
 | ✅ | **U9.8** gross rent multiplier | Done Sept 2, 2026 — one commit; LA 15.3×, Staten Island 9.2× against its ZIP's 11.0×; 30 rows byte-identical, no re-record |
 | ⬜ | **U9.9** capture: runs, traces, diagram, screenshots | Never sheds |
-| ⬜ | **U9.10** OQ-5 / OQ-10 / OQ-14 written up | All three settled Aug 31 |
-| ⬜ | **U9.M** maintenance | — |
+| ✅ | **U9.10** OQ-5 / OQ-10 / OQ-14 written up | Done Sept 2, 2026 — OQ-10 and OQ-14 close at U9.11; OQ-5 stays open on an unmet condition, with U9.7T's 51% measurement added |
+| ✅ | **U9.M** maintenance | Done Sept 2, 2026 — two commits; the recording blockers first (they gate U9.9), then M2 and M4–M7 |
 | ⬜ | **U9.11** close-out | — |
 
 **Twelve change sets against five days; the honest read is that seven land** — and U9.3

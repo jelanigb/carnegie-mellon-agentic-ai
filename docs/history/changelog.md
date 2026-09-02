@@ -78,6 +78,15 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 2, 2026 — U9.10: three open questions written up
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 2, 2026 | U9.10 | **OQ-5 written up and left open on an unmet condition, with a third measurement that changes what the question is.** The entry treated four ToT constants as one question; U9.7T's grouping measurement separates them. Depth 1 is decided by the evaluator on **78 of 78** recorded levels — its constants do what they were set to do — while at depth 2 `TOT_TIE_EPSILON` is load-bearing on **51%**, so on half of all levels it is this project's conservatism preference rather than the model that chooses which pairings are reported. That makes a *tuning* question about the epsilon really a design question about how often the search should defer to policy. The inclusive-versus-strict boundary was priced (26 of 57 nominal-0.05 pairs land "tied"; making it inclusive moves 11 recorded levels and needs a re-record) and declined by the architect. Closing condition unchanged and unmet: no fixture in this project has a known-correct branch, because every one was authored by a pass that already knew the shipped values | 7.1 |
+| Sept 2, 2026 | U9.10 | **OQ-10 and OQ-14 close.** OQ-10 keeps the on-disk credential fallback — `ignore/` is gitignored, and requiring env vars would only make a fresh clone harder to run, which is what 7.1 grades — and records that the entry stayed open because it conflated two questions with different answers: whether a key may sit on disk, and whether an account identifier may print into a recording. The second had no defensible yes and was fixed at U9.M. OQ-14 closes as **discharged**: 5.1 asked for design rationale rather than measurable completion criteria, so U4's acceptance-table treatment does not apply, and 6.1's half closed at U7.8. The generalizable practice is kept for the register | 5.1, 7.1 |
+
+---
+
 ## Sept 2, 2026 — U9.M: the two things that would have contaminated a recording
 
 | Date added | Unit | Work done | Related checkpoint |

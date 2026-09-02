@@ -277,6 +277,42 @@ batch was considered and declined** — those fixtures were authored by the unit
 have tuned against them, which is the error Q1 exists to prevent, applied to a different
 tunable.
 
+**Written up Sept 2, 2026 at U9.10, and it stays open on an unmet condition rather than an
+unowned one.** No further measurement is scheduled before the freeze; what follows is the
+whole of what is known, so the final report can state it rather than re-derive it.
+
+**A third measurement landed at U9.7T, and it is the sharpest of the three because it is
+about how much the constants decide rather than about what value they should take.**
+Reproducing `tot._rank`'s grouping across every committed recording:
+
+| Level | Recorded levels | Decided by the model's scores | Decided by the tie-break |
+| --- | --- | --- | --- |
+| Depth 1 — `TOT_FRAMING_BEAM_WIDTH = 1` | 78 | **78 (100%)** | 0 |
+| Depth 2 — `TOT_BEAM_WIDTH = 3` | 79 | 39 (49%) | **40 (51%)** |
+
+**So the two levels are in different situations and the entry should stop treating the four
+constants as one question.** Depth 1's values are special cases found by inspection and the
+level they govern is decided by the evaluator every recorded time — the constant is doing
+what it was set to do. Depth 2's `TOT_TIE_EPSILON` is **load-bearing on half of all
+levels**: on those, it is this project's conservatism preference and not the model that
+chooses which pairings reach the report. That is a defensible policy, it is now disclosed
+in both the ledger and the scenario table (U9.7T), and it means a *tuning* question about
+`TOT_TIE_EPSILON` is really a question about how often the search should defer to policy —
+which is a design question, not a parameter sweep.
+
+**One boundary was priced and declined.** Whether `within TOT_TIE_EPSILON` should be
+inclusive rather than strict is decided by floating point at the boundary today: of the
+2-decimal score pairs a nominal 0.05 apart, 26 land "tied" and 31 do not. Making it
+inclusive widens the tie groups and would move **11 recorded depth-2 levels**, requiring a
+re-record and a 30-row diff. Architect's call Sept 2: not now — the epsilon is
+noise-dominated (above), so a re-record five days before the freeze would buy a different
+arbitrary line rather than a better one. U9.7Te fixed the *sentence* that reported it and
+left the comparison alone.
+
+**Closing condition unchanged and unmet**, and it is worth stating why it is not a
+formality: tuning needs a case whose correct branch is known by construction, and every
+fixture this project has was authored by a pass that already knew the shipped values.
+
 ---
 
 ## Geography & anchoring
@@ -306,6 +342,15 @@ Keys fall back to plaintext files in a gitignored directory when the env var is 
 `tools/hud_fmr.py:24`, `tools/llm_client.py:41` and `tools/tracing.py:41` (added Sept 1,
 2026 when a LangSmith key first existed — the same trade, taken the same way). Raise
 before any public demo.
+
+**CLOSES Sept 2, 2026 at U9.10 — keep the fallback, and the exposure it was really about
+is already fixed.** Settled by the architect Aug 31: `ignore/` is gitignored, so no key
+reaches the public repository, and requiring env vars would only make a fresh clone harder
+to run — which is what Checkpoint 7.1 grades. **The two halves of this entry had different
+answers and conflating them is why it stayed open**: one asks whether a key may sit on disk
+in a gitignored directory, and the other asked whether an account identifier should be
+printed into a terminal that is about to be recorded. The first is a defensible trade taken
+deliberately at three sites. The second had no defensible yes and is fixed.
 
 **The `diagnostics.py` half is closed and was a different question, Sept 2, 2026 at
 U9.M.** This entry used to carry it alongside the three fallbacks; it is not the same
@@ -472,3 +517,17 @@ evidence exists as build artifacts rather than as write-up —
 table, `tests/test_critic_interactions.py` for the interaction checks, and
 `tests/test_flag_propagation.py` for the rework cycle terminating and disclosing that it
 did.
+
+**CLOSES as discharged, Sept 2, 2026 at U9.10 — settled by the architect Aug 31.** The 5.1
+half does not apply, and the reason is what 5.1 actually asked for: **design rationale** —
+roles, coordination strategy, communication approach — rather than build artifacts. The
+treatment U4 gave its acceptance criteria answers a checkpoint that publishes *measurable*
+criteria, and 5.1 does not; 5.1's response is submitted. 6.1's half closed at U7.8 as
+recorded above. U9.9 regenerates the diagram and captures traces regardless, so attributing
+those to 5.1 costs a sentence in the close-out rather than a subsection of its own.
+
+**The generalizable half is worth keeping when this entry is deleted**, because it is a
+practice this project adopted rather than a question it answered: where a checkpoint
+publishes measurable completion criteria, build the artifact that satisfies each one as
+part of the unit, instead of writing a claim about it afterwards. U4's acceptance table and
+U7.8's evidence scripts are both instances. Recorded in the §7 register at close-out.
