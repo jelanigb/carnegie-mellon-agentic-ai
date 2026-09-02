@@ -1,5 +1,5 @@
 **§8 of the plan of record — [`implementation_plan.md`](../implementation_plan.md).**
-Section numbers (§1–§9) and decision numbers (#1–#20) anywhere in this repository refer
+Section numbers (§1–§9) and decision numbers (#1–#21) anywhere in this repository refer
 to that file: §-numbers to its sections, #-numbers to the **decisions register in §7**,
 which names every decision and links to its full reasoning in
 [`decision_log.md`](../history/decision_log.md). A
@@ -277,6 +277,22 @@ had checked, and they were landing as single change sets too large to review in 
    move any decision taken during the build into §7's register with its reasoning in
    [`../history/decision_log.md`](../history/decision_log.md); delete anything from
    [`../open_questions.md`](../open_questions.md) that the unit closed.
+
+**Where a checkpoint publishes measurable completion criteria, build the artifact that
+satisfies each one as part of the unit** — do not write a claim about it afterwards. Adopted
+in practice at U4 and recorded here Sept 2, 2026 when OQ-14 closed as discharged at U9's
+close-out (the entry is deleted from [`../open_questions.md`](../open_questions.md), per that
+file's own rule). Two instances: U4's acceptance-criteria table, and U7.8's evidence scripts
+(`scripts/confidence_evidence.py` for the confidence mechanism,
+`tests/test_critic_interactions.py` for the interaction checks,
+`tests/test_flag_propagation.py` for the rework cycle terminating *and* disclosing that it
+did). **The qualifier is load-bearing and is what closed the entry**: it applies only where
+the criteria are *measurable*. Checkpoint 5.1 asked for design rationale — roles, coordination
+strategy, communication approach — and there is no artifact that satisfies a rationale, so
+the treatment did not apply and inventing one would have been ceremony. Recorded here rather
+than in §7's register, which the closing entry named, because §7 is a table of *numbered
+decisions* and this is a practice with no decision number; a row there would have had nothing
+to put in the `#` column.
 
 **Before a proposed check enters a plan, answer three questions about it.** Added Aug 24,
 2026, after U7's planning pass proposed eight consistency checks and measurement killed

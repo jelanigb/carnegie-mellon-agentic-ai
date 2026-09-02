@@ -1,7 +1,7 @@
 # Changelog
 
 **Chronological record for the plan of record — [`implementation_plan.md`](../implementation_plan.md).**
-Section numbers (§1–§9) and decision numbers (#1–#20) anywhere in this repository refer
+Section numbers (§1–§9) and decision numbers (#1–#21) anywhere in this repository refer
 to that file: §-numbers to its sections, #-numbers to the **decisions register in §7**,
 which names every decision and links to its full reasoning in
 [`decision_log.md`](decision_log.md). A
@@ -51,6 +51,17 @@ rows. The unit of a row is the change, not the file.
 - Work predating the unit numbering is labelled by the `implementation_plan.md` section
   that specifies it (`§2`, `§9`), so it stays findable by the same identifier the plan
   uses.
+
+---
+
+## Sept 2, 2026 — U9.11: the close-out
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 2, 2026 | U9.11 | **The plan of record closes U9, and the two decisions it owed are recorded with the weaker claim rather than the flattering one.** `implementation_plan.md` §6 and §7, `history/decision_log.md`, `tasks/README.md`, `tasks/task_list_u9.md`. §6's U9 row is restated as what the unit produced — two axes, a second reasoning locus, #21's re-sourced forecast, the surface, the pinned tier — and says plainly that **U9.9's capture is outstanding**, the way M4 made the U8 row disclose U8.9's drop. **§7 #8 goes 🟨 → ✅ as *inherited, not selected***: the Summarizer now makes real calls, which is the condition OQ-9 named, but the model was chosen in U3's bake-off on schema-valid extraction, latency and price, and **no pass has ever scored a model on prose** — the decision log carries the three reasons a prose bake-off was not run and notes this is the second decision here closed on a condition rather than a comparison, #6's held threshold being the first. **§7 #3 is confirmed** with what the surface deliberately does *not* do: it never lays the evidence out from state, because two renderings drift the first time either is edited. `decision_log.md` gains #3's outcome and U9.4's recommendation design — the deterministic rule, its percentile-backed thresholds, and the model-proposes/rule-decides cross-check that can annotate a verdict but never move it. **Cut-list item 4 leaves the list *spent*, and the row says why that differs from shed**: U9.9 captures the terminal recording and traces the item named as its fallback, but alongside the surface as evidence rather than instead of it | 7.1 |
+| Sept 2, 2026 | U9.11 | **Two documents were missing from the map that is supposed to list every document.** `implementation_plan.md`'s document map gains `design/recommendation.md` — the only file in `design/` absent from it, and the design behind the report's second axis — and `sample_reports/`, which is the artifact a reviewer of a public repository meets before any of the prose. Found by reading the map against `ls docs/design/` rather than by noticing a broken link, which is the same method M7 used on `architecture.md`'s tree a day earlier and the reason both drifted: a hand-maintained index of a directory has no failure that surfaces on its own | 7.1 |
+| Sept 2, 2026 | U9.11 (maintenance) | **Every document's boilerplate pointer said the register runs #1–#20; it has run to #21 since U9.3.** Sixteen files, one line each, plus the map's own "All 19 numbered decisions". Mechanical and worth a row because of *what it is an instance of*: the same hand-maintained-index drift that M7 found in `architecture.md`'s tree, that the `TODO` table records three times in one day, and that M1 still carries — a pointer copied into fifteen headers has no failure mode that surfaces on its own, and nothing in this project's workflow re-reads a header. The pointer is deliberately a *range* rather than a count per file, so the cheapest durable fix would be for it to stop naming a bound at all | maintenance |
+| Sept 2, 2026 | U9.11 | **A practice this project adopted, recorded where practices live rather than where the closing entry said to put it.** `design/engineering_standards.md`, "How a unit is built": where a checkpoint publishes *measurable* completion criteria, build the artifact that satisfies each one as part of the unit instead of writing a claim about it afterwards — U4's acceptance table and U7.8's three evidence scripts are the instances. OQ-14 said to record it in §7's register; §7 is a table of **numbered decisions** and a practice has no number to put in the column, so it went to §8 with the reason stated. The qualifier is what closed the entry: Checkpoint 5.1 asked for design *rationale*, and no artifact satisfies a rationale | 7.1 |
 
 ---
 

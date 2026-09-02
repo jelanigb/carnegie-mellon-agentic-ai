@@ -7,7 +7,7 @@ plan of record and states the *current* design; this file holds the reasoning th
 produced it, the premises that were measured and disproved, and the corrections made
 along the way.
 
-**Section numbers (§1–§9) and decision numbers (#1–#20) throughout this repository refer
+**Section numbers (§1–§9) and decision numbers (#1–#21) throughout this repository refer
 to [`implementation_plan.md`](../implementation_plan.md)** — §-numbers to its sections,
 #-numbers to the decisions register in its §7. That register is the index to this file.
 
@@ -29,7 +29,7 @@ and its date, so a chronological or by-unit lookup still works via search.
 - [Forecasting & reasoning](#forecasting--reasoning) — #12, #13, #14, #16, #17
 - [Orchestration & control flow](#orchestration--control-flow) — #1, #6, #9, U2's findings, and U7's Critic record
 - [Models & infrastructure](#models--infrastructure) — #8, #13, and the free-tier accounting
-- [Evaluation & demo](#evaluation--demo) — #3, and U8's standing
+- [Evaluation & demo](#evaluation--demo) — #3, U9.4's recommendation and its cross-check, and U8's standing
 - [Appendix — build inventory](#appendix--build-inventory-as-of-u6)
 
 ---
@@ -1531,7 +1531,7 @@ Decision #13 (MCP adoption) is recorded under
 [Forecasting & reasoning](#12-13-14--u6u7--aug-18-2026--tot-scope-mcp-adoption-and-branch-state-persistence),
 with #12 and #14, because the three were taken together and concern one sub-system.
 
-### #8 · U3 · Aug 9–16, 2026 — OpenRouter model selection
+### #8 · U3 → U9 · Aug 9, 2026 – Sept 2, 2026 — OpenRouter model selection
 
 **Decision #8 detail (Aug 9, 2026).** The `TODO(U3)` in `config.py` warned that the four
 model IDs were unverified placeholders. Checked against OpenRouter's live catalogue while
@@ -1638,6 +1638,50 @@ reader as a caveat, so a system that flags everything is indistinguishable to th
 one that flags nothing, which is §2's always-on-signal argument applied to extraction.
 
 
+**Closed in full Sept 2, 2026 (U9) — and the Summarizer half closes as *inherited*, which
+is a weaker claim than "chosen" and is the one the record supports.**
+
+The entry above is a bake-off record, and everything in it measured **extraction**: schema
+validity on three listings, hand-checked field accuracy, assumption verdicts, latency, price.
+That is the right evidence for the Extractor, which is the role U3 was building. The four-way
+split across `MODEL_EXTRACTOR`, `MODEL_CRITIC`, `MODEL_SUMMARIZER` and the rest was noted at
+the time as **"structural, not a real selection — all four constants are identical"**, and
+that is still true two months later.
+
+**What changed at U9 is that the setting stopped being dormant, not that it became chosen.**
+The Summarizer now makes real calls: U9.4's written lede, and the recommendation cross-check
+where the model proposes a verdict the rule then decides. OQ-9's closing condition was
+literally *"closes when the Summarizer first calls a model"*, and it has. So the entry closes
+— but the verdict has to say **what the setting was selected on**, because the natural reading
+of a closed decision is that someone compared candidates for this job, and nobody did.
+
+**Three reasons a prose bake-off was not run, in the order they bind:**
+
+1. **There is no rubric.** Extraction has a ground truth — 23 hand-checkable fields — and
+   prose does not. The bake-off's own finding was that *accuracy discriminated almost nothing*
+   even where a ground truth existed; a prose comparison would have had no ground truth and a
+   single judge.
+2. **OQ-17 makes a single draw uninformative.** This model scores an identical prompt 0.05 on
+   one call and 0.95 on the next. Comparing one lede per candidate would be comparing draws.
+3. **The cost is a re-record, not the calls.** U9.5 froze one lede per eval row. Changing
+   `MODEL_SUMMARIZER` invalidates every one of those recordings, and the change would land
+   inside the freeze week to buy a subjective comparison with no rubric.
+
+**What *is* known about the Summarizer's prose is a negative result and it is carried rather
+than buried** — [OQ-26](../open_questions.md#models--infrastructure). The lede needed two
+prompt passes and then a structural change, dropping the disclosure excerpts entirely, before
+it stopped mischaracterizing evidence; it twice described rental comparables as sales.
+Iteration stopped there on U9.3's precedent. **The figures the lede quotes are checked; its
+prose is not**, and the report should say so rather than present it as verified output.
+
+**The generalizable half, because this is the second time this project has closed a decision
+on a condition rather than on a comparison.** #6's threshold was **held** on a sweep that
+found 63 of 160 grid points deciding the batch identically, and its close says the claim is
+robustness rather than optimality. This one is the same shape: a decision can be legitimately
+closed by *exercising* a setting and recording what it was and was not measured on. What
+makes both defensible is that the verdict states the weaker claim. A ✅ that quietly implies
+the stronger one is how a register stops being trustworthy.
+
 ### Free-tier request cap · U3 · Aug 16, 2026 — moving to paid inference
 
 This is the accounting decision #8 refers to above.
@@ -1691,9 +1735,80 @@ accidental outage is what exposed.
 
 ## Evaluation & demo
 
-Decision #3 (Streamlit, run locally, scheduled at U9) was taken early and has not been
-revisited; the demo surface is on §6's cut list at position 4, with a terminal recording
-plus LangSmith traces as the fallback.
+### #3 · U9 · Aug 8 – Sept 1, 2026 — the demo surface, and what it deliberately does not do
+
+**Taken early, never revisited, and shipped almost unchanged** — which makes it the least
+interesting decision in this file and the reason it is recorded at all is the *shape* of what
+was built, not the choice of framework. Streamlit, run locally, scheduled at U9, kept on §6's
+cut list at position 4 with a terminal recording plus LangSmith traces as the fallback. It was
+**spent, not shed**: the app landed Sept 1, 2026 at U9.7 and the fallback artifacts are being
+captured anyway, as evidence rather than as a substitute.
+
+**Four properties, each of which was a decision inside the build:**
+
+- **It replays by default.** The demo deals run from committed recordings — instant,
+  deterministic, no quota. That sentence was *planned* before U9.5 and *true* only after it:
+  the demo deals had no committed recordings at all, and four of the six escalate, which the
+  eval harness structurally cannot record because `run_case` never resumes a paused deal. A
+  `CacheMiss` subclasses `Exception` rather than `LlmError`, so it would have taken the node
+  down rather than degrading — the surface would have crashed on exactly the deals whose
+  degraded paths demo best.
+- **It never lays the evidence out from state.** `split_report` cuts the Summarizer's own
+  markdown at its `##` headings; the one place the app reads state is the status strip, and
+  every figure there is one the report also prints. **Two renderings of one body of evidence
+  drift the first time either is edited**, and the report is the artifact under review. This
+  is U9.4's declined "two renderings" taken deliberately in the other direction, and the
+  audience-split version of the question is [OQ-27](../open_questions.md#evaluation--demo).
+- **It carries a genuine review pause.** An escalating deal stops at `human_review`, the
+  surface names the desk it routed to, and a typed reviewer note reaches the report verbatim.
+  **This is the one thing no terminal recording can show**, and it is the human-in-the-loop
+  evidence Checkpoint 7.1 asks for.
+- **It declares a fault before running it.** The three simulated failures are selected on
+  screen and name themselves in the report, so a demonstration cannot be mistaken for an
+  incident.
+
+### U9.4 · Sept 1, 2026 — the recommendation, and the second reasoning locus
+
+**Full design and evidence: [`../design/recommendation.md`](../design/recommendation.md).**
+Recorded here because two things about it are decisions rather than implementation, and both
+were nearly taken the other way.
+
+**Until U9.4 this system never said whether a property was worth buying.** It said whether it
+could stand behind its own numbers — `reports` or `escalates` — and readers took that for the
+other question. On `staten-island` the two answers are opposites: the deal escalates because
+no comparables were found, while asking **17% below its ZIP median**. So the report now
+carries **two axes rendered as two lines that never merge** — one about the software, one
+about the property.
+
+**Decision 1: the rule is deterministic, and "agentic" is not "stochastic".** OQ-17 measured
+this model scoring an identical prompt 0.05 then 0.95 at `temperature=0`. A recommendation
+behind that would make the same deal *proceed* on Tuesday and *do not proceed* on Wednesday
+with nothing able to explain why, and it would create a second axis the eval harness cannot
+score. The Critic's escalate decision was already a pure function; this is the same kind of
+judgment over the same state. **Its thresholds are set at stated percentiles of 44,358 real
+sales rather than at round numbers**, so the report can say what a threshold *means* — and
+that measurement is what falsified the worked example the subsection was planned around,
+sending `overpriced` to a market with a local benchmark tier rather than bending the threshold
+to fit the fixture.
+
+**Decision 2: a second reasoning locus, where the model proposes and the rule decides.** Once
+#12's Critic half was retired on evidence at U7.7, the forecast's search was the **only** place
+a model exercised judgment in this build — so a system described as agentic rested that claim
+on one node. The model now reads the same state, in the rule's own rounded figures and without
+the confidence score or the escalation decision, and reaches its own verdict. **It can never
+move the rule's, only annotate it**, which is what keeps reproducibility intact under OQ-17
+where a model-decides design would not. **The disagreement is the product**: a deal both
+readings agree on is more trustworthy than one they split over, and the reader learns which
+they are holding. It degrades to *no annotation* rather than to a flag — a missing second
+opinion is not a disagreement, and rendering it as one would manufacture a finding out of an
+outage.
+
+**One thing the build corrected in the rule itself, worth carrying because it is the same
+error one level down.** The first draft let an uncorroborated rent claim reach *caution* on
+its own — which put an axis-1 fact (can the comp cross-check run in this market) onto the
+axis-2 line, re-merging the two axes one line below where the unit had just separated them.
+The price finding is now the only thing that can *start* a verdict; the rent side only ever
+modifies one, and *do not proceed* still requires both.
 
 ### U8 · why the eval harness is protected from the cut list
 

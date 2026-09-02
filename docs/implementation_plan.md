@@ -56,7 +56,10 @@ the system currently *is*, `history/` is *how it got that way*.
 | `design/evaluator.md` | What the forecast's Tree-of-Thought evaluator scores, the four defects found at U9.6, and the re-measured rent/price correlation that retired #16's pairing premise | Touching the forecast, the scenario table, or the evaluator prompt |
 | `design/forecast_starting_point_spike.md` | A spike, not a build: what OQ-22's re-purposed forecast would produce, why the model-scored version was not adopted (5/8 stability on the easy deal), and the deterministic rule that reproduces its modal answer. Evidence in `src/eval/data/exploratory/` | Deciding OQ-22, or before re-opening the starting-point question |
 | `design/personas.md` | The four personas this system is built for, their journeys, and the escalation routing rule (which human-review desk a pause is waiting on) | Touching `human_review`, the escalation payload, or writing report content aimed at a specific reader |
-| `history/decision_log.md` | All 19 numbered decisions with their full reasoning, grouped by system area | Revisiting a decision, or checking a premise before relying on it again |
+| `design/recommendation.md` | What the system is willing to say about a *deal* rather than about its own numbers: the two axes, the four verdicts, the 44,358-sale percentile evidence under their thresholds, and the model-proposes/rule-decides cross-check | Touching `critic.recommend` or `cross_check`, or any threshold on the asking price |
+| `sample_reports/` | Three full reports the pipeline produced, committed as-is — a clean run, an escalated one, and one where the *deal* rather than the software is the problem | Seeing real output without running anything, or checking what a change does to the report |
+| `demo.md` | The eight demo listings in plain language — what each exists to show, and what in the output demonstrates it | Preparing a demo or a recording, adding a demo deal, or explaining why a given listing is in the set |
+| `history/decision_log.md` | All 21 numbered decisions with their full reasoning, grouped by system area | Revisiting a decision, or checking a premise before relying on it again |
 | `history/changelog.md` | Chronological code changes, by date and unit | Closing a unit; tracing when something landed |
 | `diagrams/` | Graph topology generated from the compiled graph (`.mmd`, `.png`) | Reviewing or describing the topology |
 
@@ -187,7 +190,7 @@ building them — including the ones that changed the design — are in
 | **U7** ✅ | Critic: three cross-agent **interaction** checks (a combination changing what a measurement means — the four checks §1 named did not survive contact with the built system), comp-attribute drift owned by Retrieval, confidence scoring evidenced on the real pipeline, a rework cycle that fires on its own and is bounded by its counter rather than by score decay, human-review escalation via `interrupt()` | **6.1** | [Orchestration](history/decision_log.md#orchestration--control-flow) |
 | **U8** ✅ | Eval harness, stated as what it produced rather than as what it was sized as. **28 rows across three tiers** — 21 with a verdict *declared before the first run*, 7 live demo baselines — with **30 of 30 flag kinds raised, none uncovered and none unreachable**, and verdict agreement 18/21 with every mismatch triaged. Plus: a published parameter sweep closing #6, six straddle fixtures measuring brittleness at the per-flag lines, per-metro rent-error disclosure, pass-scoped flags, and a sub-metro price benchmark that arrived from the cut list. **Absorbed U10** — the demo deals are rows in the same batch, so the end-to-end evidence is a harness output rather than a separate pass | **6.1** + report + video | [Orchestration](history/decision_log.md#orchestration--control-flow), [Eval & demo](history/decision_log.md#evaluation--demo) |
 | **U11** ✅ | Rent model, re-opened on measurement rather than on plan. Model form cross-validated and moved to **gradient boosting** (#18); the rent anchor re-based on a **ZORI/FMR hybrid** — ZORI for the level at the subject's own ZIP, HUD for the bedroom step (#19), which spent §6 cut-list item 6 and retired U8.4b's drift correction structurally. Per metro: New York $981 → $855, Chicago $454 → $343, overall flat — the headline hides the result, which is why per-metro reporting is now standard | — | [Rent & valuation](history/decision_log.md#rent--valuation) |
-| **U9** ⬜ | Summarizer polish + Streamlit demo app | report + video | — |
+| **U9** ✅ | **Planned as "Summarizer polish + a Streamlit app" and rewritten after the architect ran the pipeline and read two reports** — none of what the unit became was visible from the code. **Two axes separated and never merged**: `needs_human_review` is a statement about the software, `recommendation` about the property. **A second reasoning locus** — the model proposes a verdict from the same state, the deterministic rule decides, and disagreement is disclosed rather than resolved. Rent growth re-sourced to ZORI (**#21**) after its pairing premise was re-measured and found false. Personas and an escalation *routing* rule. The **Streamlit surface** (#3; §6 cut-list item 4 **spent**), a sixth demo deal so the set shows a clean run twice, and the live tier pinned so **all 30 eval rows and three sample reports replay from a clone**. **U9.9's capture is outstanding at close** — see the note below | report + video | [Eval & demo](history/decision_log.md#evaluation--demo), [Models & infra](history/decision_log.md#models--infrastructure), [Forecasting](history/decision_log.md#forecasting--reasoning) |
 | — | **Code frozen Sept 4, 2026.** Final report + 8–10 min video, due Sept 7 | **7.1** | — |
 
 ### Notes on the sequence
@@ -213,6 +216,16 @@ the Sept 4 freeze, but it is the better structure regardless: **the demo becomes
 in the evaluation, not a separate performance.** The absorbed scope, so it is not lost when
 U8 is planned: per-metro runs across all three metros, LangSmith traces captured, demo
 screenshots, and the graph diagram generated from the compiled graph.
+
+**U9 closed Sept 2, 2026 with U9.9 — the capture — outstanding, and it is the unit's one
+gap.** Live runs, LangSmith traces, screenshots off the shipped surface. It is not deferred
+work in the ordinary sense: every prerequisite is discharged and verified, and a runbook with
+the exact commands is in [`tasks/task_list_u9.md`](tasks/task_list_u9.md) §U9.9. What it needs
+is a live account and a screen. **Noted here rather than only in the task file for the same
+reason M4 added U8.9's drop to the U8 row** — this table is read every session, and a ✅ with
+an outstanding subsection under it is exactly the kind of thing that stops being visible.
+[OQ-13](open_questions.md) is the entry that carries it, and it is the only open question U9
+was expected to close and did not.
 
 ### Cut list, in order
 
@@ -322,7 +335,24 @@ If the schedule slips, shed scope in this order rather than improvising:
    as designed-but-unbuilt; Checkpoint 2.1 already anticipated this exact trade. Recorded
    here rather than struck out, because this item left the cut list by being *spent*, not
    by becoming unnecessary — the remaining list is one item shorter than it looks.
-4. **Streamlit app** — fall back to a terminal recording plus LangSmith traces.
+4. ~~**Streamlit app**~~ — **TAKEN Sept 1, 2026 at U9.7, and like items 2, 3 and 6 this one
+   leaves the list by being *spent* rather than shed.** The surface shipped: it **replays by
+   default** from committed recordings, so a demo is instant, deterministic and costs no
+   quota; it carries a **genuine review pause** whose typed note reaches the report verbatim;
+   and it declares each simulated fault before running it, so a demonstration cannot be
+   mistaken for an incident.
+
+   **The fallback this row named is being produced anyway, and that is not the same as the
+   item being shed.** U9.9 captures a terminal recording and LangSmith traces *alongside* the
+   surface, as evidence for Checkpoints 5.1 and 6.1, rather than *instead of* it. Worth
+   stating because a fallback that is also an artifact makes a spent item look like a taken
+   cut — and this list's whole value is that the difference stays legible.
+
+   **This item's price was not wrong, which is itself worth one line** after items 2, 2a and 6
+   were each mis-priced in the direction that made them look expensive. It was never priced at
+   all: it named a substitute and no cost. The substitute turned out to be *complementary*, so
+   nothing here had to be re-measured before it was spent — the check item 2's close asks for
+   found nothing to correct.
 5. **Critic rework-loop depth** — reduce to single-pass review with escalation,
    keeping the cycle in the graph but capping `MAX_REWORKS = 1`.
 
@@ -436,12 +466,12 @@ Each decision has a stable number. Code comments and the other documents cite th
 | --- | --- | --- | --- | --- |
 | 1 | Orchestration framework | Orchestration | U1 | ✅ LangGraph, from day one |
 | 2 | Inference metro trio | Data & sources | U1 | ✅ Chicago, Los Angeles, Cleveland |
-| 3 | Demo surface | Eval & demo | U9 | ✅ Streamlit, local |
+| 3 | Demo surface | Eval & demo | U9 | ✅ **Streamlit, run locally — landed Sept 1, 2026 at U9.7 and confirmed at U9's close.** Taken early and never revisited, which is unusual on this list and is why the confirmation is recorded rather than assumed. What shipped is narrower than "a Streamlit app" and the narrowness is the design: it **replays by default**, so a demo is deterministic and costs no quota; it renders the Summarizer's own markdown split at its `##` headings and **never lays the evidence out from state**, because two renderings of one body of evidence drift the first time either is edited; it carries a **genuine review pause** whose typed note reaches the report verbatim, which no terminal recording can show; and it declares each simulated fault before running it. Spends §6 cut-list item 4 |
 | 4 | Training metro shortlist | Data & sources | U5 | ✅ Eight metros; 5,717 usable rows |
 | 5 | X / Y / Z retrieval loop parameters | Retrieval | U4 | ✅ X = 2.0 mi, Y = 8, Z = 4; rationale in `config.py` |
 | 6 | Confidence threshold for escalation | Orchestration | U7 → **U8** | ✅ **HELD on measurement Aug 30, 2026, and the claim is robustness rather than optimality.** Threshold 0.60 and warn 0.15 unchanged, now with the stable region published (`eval/results/sensitivity.md`): **63 of 160 grid points** decide the 21-case batch identically, and through the shipped point the threshold moves 0.30–0.70 and the warn weight 0.100–0.200 with no verdict changing. Both axes were widened after the first sweep reported 0.30 as a bound when 0.30 was the *edge of the search*; on the widened grid the plateau ends at a measured 0.25, so that bound now means what it says. **The critical weight is inert across its whole range including zero** — every deal carrying a critical escalates on the independent rule regardless, which is the confirmation U7 left open. Zero cases give evidence the shipped numbers are wrong; a batch that cannot separate two settings has no evidence either way, and the close says so rather than claiming an optimum |
 | 7 | Redfin minimum-price floor | Data & sources | U1 | ✅ $10,000; inert for all three inference metros |
-| 8 | OpenRouter model per role | Models & infra | U3 → U9 | 🟨 **PART OPEN** — `nvidia/nemotron-3-nano-30b-a3b`, paid variant. Critic half closed in U7: the checks that shipped are pure functions, so the Critic makes no model call and `MODEL_CRITIC` is untested by construction. Summarizer role revisits at U9 |
+| 8 | OpenRouter model per role | Models & infra | U3 → **U9** | ✅ **BOTH HALVES CLOSED Sept 2, 2026 at U9's close** — `nvidia/nemotron-3-nano-30b-a3b`, paid variant, and all five role constants still hold the one ID. **Critic half** closed in U7: the checks that shipped are pure functions, so `MODEL_CRITIC` is untested *by construction* rather than by omission. **Summarizer half closes as inherited, not selected**, and that distinction is the verdict. The Summarizer now makes real calls — U9.4's written lede and the recommendation cross-check — so the setting is exercised rather than dormant, which is the condition OQ-9 named. But it was chosen in U3's bake-off on **schema-valid extraction, latency and price**; **no pass has ever scored a model on prose**, and saying the Summarizer's model was selected for the Summarizer's job is a claim the record does not support. What is known about the prose is a negative result, carried as OQ-26: the lede needed two prompt passes and a structural change before it stopped describing rental comparables as sales, and iteration stopped there because under OQ-17 further tuning fits a single draw. Re-opening it would invalidate the lede recording on every eval row |
 | 9 | Planner topology — pre-flight vs. supervisor | Orchestration | U2 | ✅ Pre-flight + rework re-entry; one back edge, asserted on every diagram export |
 | 10 | Geocoding source for `latitude`/`longitude` | Geography | U3 | ✅ Census Geocoder + corpus-centroid fallback; county now resolved by point-in-polygon |
 | 11 | Grounding for demo and evaluation deal terms | Data & sources | U3 → **U8** | ✅ **Both halves settled Aug 30, 2026.** Demo listings calibrated against Redfin + FMR (U3); the public-record half **built at U8.8, two days inside its drop-dead**, respecified as a sub-metro sale-price *benchmark* rather than ground truth — #15 had removed the value estimate it was written to score. ZIP tier live for **New York and Chicago** from county-assessor transaction records (27,309 and 18,251 sales); **Los Angeles and Cleveland keep the metro figure with the reason disclosed per deal**, because California assessors publish assessed value and a Prop 13 base-year figure is a different instrument. The entry's original source list was wrong on LA County for exactly that reason. Q3's unbounded address-to-parcel join never appears: a benchmark needs a median over the subject's ZIP, never its parcel |

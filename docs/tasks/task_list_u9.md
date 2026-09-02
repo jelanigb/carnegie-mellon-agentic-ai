@@ -1,7 +1,7 @@
 # U9 — Report, recommendation, and the demo surface — task list
 
 > **Conventions for this file are in [`README.md`](README.md).** Section numbers (§1–§9)
-> and decision numbers (#1–#20) refer to
+> and decision numbers (#1–#21) refer to
 > [`../implementation_plan.md`](../implementation_plan.md).
 
 **The last build unit. Feeds the final report and the video (Checkpoint 7.1).**
@@ -1351,7 +1351,7 @@ those to 5.1 costs a sentence in the close-out rather than a subsection here.
   the unit with a `TODO(U9.M)` still at the site would leave the last subsection of the build
   pointing at a subsection already marked done.
 
-### U9.11 ⬜ — Close-out
+### U9.11 ✅ — Close-out *(done Sept 2, 2026)*
 
 Review the changelog rows each commit already wrote; do not reconstruct them.
 
@@ -1367,6 +1367,47 @@ Review the changelog rows each commit already wrote; do not reconstruct them.
   model-proposes deferrals.
 - **`decision_log.md`**: #8's Summarizer half; #3's outcome; the recommendation design.
 - **`tasks/README.md`**: the U9 row.
+
+#### What landed, Sept 2 — and four of the bullets above were stale before they were read
+
+**The bullets are left exactly as written Aug 31 rather than edited in place**, because the
+gap between them and what the close-out actually did is the most useful thing this subsection
+records: **a close-out plan written at unit start is a prediction, and this one was wrong in
+four places by the time the unit reached it.** Every one of the four was wrong because a later
+subsection had already settled the question.
+
+| The bullet said | What was true on Sept 2 |
+| --- | --- |
+| OQ-5 closes | **It does not.** U9.10 wrote it up and recorded it as staying open on an *unmet condition* — a case whose correct branch is known by construction, which no fixture in this project has. Closing it would have contradicted two documents written the day before. **Retargeted U9 → no unit** instead |
+| OQ-22 stays open | **It closed Sept 2 at U9.7T**, on the third of the three conditions the entry named for itself, and was already deleted from `open_questions.md`. The bullet was written before U9.7T existed |
+| A **model-proposes** deferral becomes a new entry | **There is no deferral.** It was adopted Aug 31 — hours after this bullet was written — and built at U9.4 as `critic.cross_check`. Recorded as a *decision* in `decision_log.md`, which is where it belongs |
+| **#16's rent-growth source** becomes a new entry | Ambiguous by Sept 2, since #21 settled the source itself. Opened as **OQ-25** against the two residuals #21 genuinely left: the bands read at **county** grain against a **ZIP**-grain estimate, and `ZORI_GROWTH_MIN_SUSTAINED_STRETCHES` set against a distribution rather than an outcome |
+
+**Two things the bullets did not name and the close-out did.**
+
+- **`design/recommendation.md` was missing from the document map** — the only file in
+  `design/` that was, and the design behind axis 2. Added, with `sample_reports/`, which a
+  reviewer meets before any of it.
+- **M6 had left a real deferral tagged nowhere.** It closed earlier the same day on its
+  docstring half, leaving the relaxation-ladder *reorder* deferred in prose across three
+  documents with no `TODO` at the site — so no grep could find it and §8's inventory was
+  correct while incomplete. Landed as its own commit before the close-out proper, along with
+  **M8**, which was still carrying a `TODO(U9.M)` under a subsection already marked ✅.
+
+**Four open questions opened, all of them things U9 *decided* rather than discovered** —
+OQ-24 (should relaxation be a judgment at all), OQ-25 (above), OQ-26 (the lede's figures are
+checked and its prose is not), OQ-27 (one report, two readers). **OQ-24 carries its closing
+criteria in the entry rather than leaving them to whoever picks it up**, including the
+prediction that step 2 settles it and no locus is bought — written so the measurement can
+falsify it.
+
+**OQ-13 is the one thing U9 owed and did not deliver**, because U9.9's capture needs a live
+account and a screen. Every prerequisite is discharged and the runbook is above. **One
+correction to that runbook found here:** it claims `> report.md` captures the report alone
+because the status lines stay out of a redirect. They do not — `main.py` prints all four
+lines, and the escalation payload, to **stdout**. A committed report is produced by taking
+the file from its `# Deal Evaluation` heading onward, which is how the three in
+`docs/sample_reports/` were re-derived today.
 
 ---
 
@@ -1387,7 +1428,7 @@ Review the changelog rows each commit already wrote; do not reconstruct them.
 | ⬜ | **U9.9** capture: runs, traces, diagram, screenshots | Never sheds |
 | ✅ | **U9.10** OQ-5 / OQ-10 / OQ-14 written up | Done Sept 2, 2026 — OQ-10 and OQ-14 close at U9.11; OQ-5 stays open on an unmet condition, with U9.7T's 51% measurement added |
 | ✅ | **U9.M** maintenance | Done Sept 2, 2026 — three commits; the recording blockers first (they gate U9.9), then M2 and M4–M7, then M8 |
-| ⬜ | **U9.11** close-out | — |
+| ✅ | **U9.11** close-out | Done Sept 2, 2026 — three commits; M8 and the untagged ladder deferral first, then the register, the map and the open questions. **U9.9 remains, and OQ-13 with it** |
 
 **Twelve change sets against five days; the honest read is that seven land** — and U9.3
 grew substantially on Aug 31, so that estimate is tighter than it was. The cut line is where
