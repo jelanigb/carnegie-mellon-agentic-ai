@@ -764,37 +764,188 @@ silent edit here.
 adds two more deals to it. Folding it in keeps the demo guide true; splitting it out keeps
 U9.6 to three code commits with three days left and U9.7 unstarted.
 
-### U9.7 ⬜ — The Streamlit surface (decision #3, §6 cut-list item 4)
+### U9.7 ✅ — The Streamlit surface (decision #3, §6 cut-list item 4)
 
 `src/app.py`, run as `.venv/bin/streamlit run app.py` from `src/`. Pure Python: the
-pipeline is untouched and the app is a form plus `st.markdown(report)`.
+pipeline is untouched and the app renders what the Summarizer already produces.
 
-**Replay by default, paste forces live.** The demo deals run from committed recordings —
-instant, deterministic, no quota. A pasted listing has no recording, so it runs live and
-**the surface says so**. That default is a direct answer to OQ-17, which names a live
-Streamlit demo as exposed to run-to-run variance measured at ~1 in 15–20 attempts, on the
-`los-angeles` deal specifically. A demo that replays cannot drift mid-presentation.
+**Replay by default, and the surface says which mode it is in.** The demo deals run from
+committed recordings — instant, deterministic, no quota. That default is a direct answer
+to OQ-17, which names a live Streamlit demo as exposed to run-to-run variance measured at
+~1 in 15–20 attempts, on the `los-angeles` deal specifically. A demo that replays cannot
+drift mid-presentation.
 
 Renders: the listing → status strip (recommendation, confidence, threshold, disclosure
-counts, comps) → lede → disclosures, property-scoped first → findings → comps → forecast
-and ledger collapsed. **The `human_review` interrupt as a genuine pause**, with the desk it
-routed to (U9.2), a note box and a Resume control — `main.py` auto-resumes with a canned
-note, and letting a person type it is the honest version and the clearest human-oversight
-evidence 7.1 asks for.
-
-**A fault selector**, exposing `eval/cases.Fault` — `LLM_UNAVAILABLE`, `GEOCODER_OUTAGE`,
-`STALE_RENT_INDEX` — which exist and are well-built but are reachable only from the eval
-runner today. Needed for the demo's degraded-path moment, because a model outage cannot be
-produced on demand. **Three demo deals already degrade naturally** (`no-geography`,
-`staten-island`, `coord-conflict`) and those are the stronger demonstration, so the
-selector is for the one failure a real input cannot reach.
+counts, comps) → lede → disclosures → findings → comps → forecast and ledger collapsed.
+**The `human_review` interrupt as a genuine pause**, with the desk it routed to (U9.2), a
+note box and a Resume control — `main.py` auto-resumes with a canned note, and letting a
+person type it is the honest version and the clearest human-oversight evidence 7.1 asks
+for.
 
 **Two mechanical risks, named because they are how Streamlit demos break:** the script
 re-runs top to bottom on every interaction, so the graph invoke must be guarded and its
 result held in `st.session_state`; and the checkpointer needs a stable per-session
 `thread_id`, since reusing one resumes a paused thread instead of starting a deal.
 
----
+#### Measured Sept 1, before starting — four premises, three confirmed and one defect
+
+**Every claim below was run rather than reasoned about**, because this unit's own
+opening records that reading one actual run changed the whole unit. What follows is what
+the surface can and cannot replay, established before anything was built against it.
+
+| Path | Replays from committed recordings? | Evidence |
+| --- | --- | --- |
+| The 8 demo deals, escalation and resume included | **yes** | Both sample reports re-derived byte-identical |
+| A reviewer's **free-text** note at the pause | **yes** | The note reaches no prompt — `_lede_prompt` never reads it; verified by resuming under a novel note |
+| `LLM_UNAVAILABLE` | **yes, for free** | Patches `LlmClient.complete` *above* the cache, so no lookup happens. Completes, 5 flags, escalates at 0.00 |
+| `GEOCODER_OUTAGE`, `STALE_RENT_INDEX` | **no** | The fault changes state that reaches the forecast prompt → `CacheMiss` |
+| `--no-retrieval` | **no, but barely** | Replays *to the pause*, then misses on the post-resume summary call alone |
+| A pasted listing | **no, by construction** | No recording exists for a prompt nobody has seen |
+
+**The free-text note replaying is the single most load-bearing result here**, and it was
+not obvious: it is what makes a genuine human-in-the-loop pause compatible with a
+deterministic demo. If the note had reached the lede's prompt, the surface would have had
+to choose between honest oversight and reproducibility.
+
+**The ablation's near-miss is a gap U9.5 left, not a new problem.** That subsection
+recorded the demo deals through `main.py`'s full path precisely because the eval harness
+never resumes and so never records the Summarizer's summary call. It did that for the
+eight deals in `DEMO_DEALS` and not for the ablation variant, which is an eval row
+(`chicago--no-retrieval`) rather than a demo deal. One recording closes it.
+
+**And one real defect, found by reading a log line nobody was reading.**
+`graph.state_serde()`'s allowlist was missing four types reachable from `DealState` —
+`ConfidenceBreakdown` (U7), `FlagScope` (U8.5), `Recommendation` and
+`RecommendationDetail` (U9.4). The two `BaseModel` types deserialized to a plain **dict**
+on the resume path. No report was ever wrong, because Pydantic re-validates at the node
+boundary — but `graph.invoke`'s *return value* carries the raw dict, and **this surface's
+status strip is the first caller in the project that reads a typed field off a resumed
+run.** `main.py` reads only `report_markdown`; the eval harness never resumes. Fixed and
+verified as maintenance ahead of this subsection: 97 tests pass, all 30 eval rows and both
+sample reports byte-identical. **The recurrence is the finding** — the rule that would
+have prevented it was already written in that function's own docstring, by the pass that
+learned it in U5.
+
+#### Three decisions taken Sept 1 by the architect
+
+1. **One rendering, split on its own headings.** The report is rendered as the Summarizer
+   emitted it, split at each `##` into a collapsible section, with the top matter
+   (verdict, system check, lede) always visible and the status strip built from typed
+   state. **Chosen over the app laying out its own components**, which would create the
+   second rendering U9.4 recorded as deliberately not taken: two renderings of the same
+   evidence drift the first time either is edited, and the report is the artifact under
+   review. Progressive detail is bought mechanically rather than by re-authoring.
+2. **All three faults, pre-recorded.** The degraded-path demo stays offline and identical
+   every time. Costs one recording session and puts the recordings in the diff, against
+   the alternative of 30–60 seconds of dead air and OQ-17 exposure at the exact moment the
+   demo is showing a failure path.
+3. **The retrieval ablation gets a control**, on the measurement that it costs one
+   recording rather than a design change. It is Checkpoint 3.1's headline evidence and the
+   surface can show it as a before/after on one listing — 8 comps and a warn against 0
+   comps and a critical — from the same code path as everything else, rather than citing a
+   number from `results.md`.
+
+#### Subsections, each its own commit
+
+**U9.7a — one fault-injection seam, and a CLI that can reach every state the surface
+replays.** The injection logic lives inside `eval/runner._case_environment`, which takes
+an `EvalCase`; the app needs the same three faults against a `DemoDeal`. Extracted to a
+shared context manager both call, rather than reimplemented — on the precedent
+`hud_fmr.bedroom_field` states explicitly, that a rule reimplemented at a second call
+site produces *"a training set capped differently from the inference path"*, which is a
+silent defect rather than a loud one. **A fault that behaved differently in the demo than
+in the evaluation would invalidate both at once**, and neither would say so. `main.py` gains
+`--fault`, which is also how U9.7b records. No behavior change to any existing row.
+
+**U9.7b — record the three new combinations.** `chicago --no-retrieval`,
+`los-angeles --fault geocoder-outage`, `los-angeles --fault stale-rent-index`, each
+through `main.py`'s full path so the resume and the written summary are captured — the
+thing U9.5 established the eval batch structurally cannot do. `los-angeles` is the siting
+for both faults because it is the one demo deal that reports clean at 1.00, so the
+contrast is attributable to the fault and nothing else; it is also where the existing
+golden fixture `la-stale-rent-index` already sites that fault. **The check is that the 30
+eval rows come back byte-identical** — nothing in this subsection changes a prompt an
+existing row uses — and that the recording diff is **additions only**.
+
+**U9.7c — the surface.** `app.py`: deal picker, guarded invoke held in
+`st.session_state`, a stable per-session `thread_id`, cached graph and index resources,
+replay pinned by assigning `config.LLM_CACHE_MODE`/`LLM_CACHE_DIR` the way
+`eval/runner._case_environment` does. Status strip from typed state; report split on `##`
+into expanders. **The model liveness check is skipped when the run will not go live** —
+in replay it can only add a network round-trip and a failure mode to a path that calls no
+model.
+
+**U9.7d — the pause, the controls, and the mode badge.** The `human_review` interrupt
+rendered as a genuine pause: the desk it routed to, the flags that caused it, the
+unanswered questions, an editable note and a Resume control. Plus the ablation checkbox,
+the fault selector, and the paste box — all three unified by **one question the surface
+answers before it runs anything: is this combination recorded, or will it call the
+model?** A live run is stated and confirmed rather than discovered. That is Transparent
+Degradation applied to the surface itself, and it is one mechanism serving four controls
+instead of four special cases. **The largest of the four commits and where review should
+focus**; it splits cleanly at the pause if review capacity says so.
+
+**U9.7e — docs.** README gains the app and **its stale figures are corrected**: it says
+28 eval cases where there are now 30, and lists 6 demo deals where there are 8, both
+since U9.6. `docs/demo.md` gains the surface. Folded in here rather than left to U9.M
+because the README is a graded artifact (7.1) and the numbers are wrong today.
+
+#### What landed, Sept 1 — five commits, and every premise held
+
+**`src/app.py` ships**, and §6's cut-list item 4 **leaves the list by being spent** rather
+than shed — the fourth item to do so, after #3's LLM rent fallback, #11's public-record
+benchmark and #19's anchor.
+
+| Run | Confidence | Disclosures | Comps | Recommendation |
+| --- | --- | --- | --- | --- |
+| `los-angeles` | 1.00 | 4 | 8 | Proceed |
+| `staten-island`, released by a reviewer | 0.00 | 12 | 0 | Proceed ⚖ |
+| `chicago`, no comparables | 0.60 | 6 | **0** | Proceed ⚖ |
+| `los-angeles` + address lookup down | 0.85 | **20** | 8 | Proceed |
+| `los-angeles` + stale rent index | 0.85 | 6 | 8 | Proceed |
+| `los-angeles` + model unreachable | 0.00 | 5 | 0 | No recommendation |
+
+**Every figure matches the command line exactly**, which is the check that the surface
+renders the pipeline rather than a second reading of it. Verified through Streamlit's own
+`AppTest` rather than by eye, including the full oversight path: escalate, route to the
+agent desk, type a novel note, release, and read the note back verbatim in the finished
+report.
+
+**The geocoder row is the best single demo beat and was not planned as one.** 20
+disclosures against the same deal's baseline 4, because the outage is the system's *only*
+retryable objection — so the Critic sends the deal back to the Planner, the retry fails
+the same way, and the bounded rework cycle visibly spends its budget before escalating.
+Three passes of the same flag, and the counter terminating is the thing Checkpoint 6.1
+asks to see.
+
+**Two findings the plan did not contain.**
+
+1. **`Proceed ⚖` on a resumed run only renders because of the serde repair.** The
+   disagreement marker lives on `RecommendationDetail`, which reached the status strip as
+   a bare `dict` before the allowlist was fixed. The pre-flight predicted an
+   `AttributeError` here; this is that prediction being confirmed from the other side.
+2. **The simulated-failure marker was internal vocabulary in reader-facing text**, and
+   nobody had noticed because until now only the eval harness produced it. *"[eval fault
+   injection, case 'x']"* is wrong twice over on a demo run — neither an evaluation nor a
+   case — and it renders in the report. Rewritten, and **the safety of rewriting it was
+   measured rather than argued**: it reaches no prompt, confirmed by re-deriving all 30
+   rows byte-identical rather than by reading the two call sites.
+
+**One thing deliberately left behind.** `architecture.md`'s repository tree lists
+`eval/run_eval.py` and `eval/expected.yaml`, neither of which exists, and marks the Critic
+and Summarizer as unfinished. `app.py` and `tools/faults.py` were added to it correctly;
+the rest is recorded as **M7** in `maintenance.md`, because re-deriving that tree from the
+filesystem is the only fix that stops it drifting again, and editing it entry by entry is
+what let it drift.
+
+#### Open, and deliberately not resolved here
+
+**Whether the surface should ever be the thing that goes live.** The paste box forces a
+live call by construction, and OQ-17 says a live call on this model can move a verdict on
+a genuinely borderline deal. The surface discloses the mode; it does not defend against
+the variance, and nothing in this unit can. Named so the final report describes the demo
+as replayed evidence plus one live path, rather than as a live system.
+
 
 ### ✂️ Cut line — I expect the freeze to land here
 
@@ -910,7 +1061,7 @@ Review the changelog rows each commit already wrote; do not reconstruct them.
 | ✅ | **U9.4** report: axes, recommendation + cross-check, lede, template | Done Sept 1, 2026 — six commits; `critic.recommend` + `cross_check`, the 2nd reasoning locus, `overpriced` re-sited to Uptown 60640 |
 | ✅ | **U9.5** pin the live tier; Staten Island | Done Sept 1, 2026 — five commits; all 28 rows + both sample reports replay from a clone, 0 verdicts moved, `sensitivity.md` byte-identical |
 | ✅ | **U9.6** sixth deal + one shadow | Done Sept 1, 2026 — six commits; `chicago-uptown` + `los-angeles-current`, both `PREDICTED` and both held; 30 rows, 28 byte-identical |
-| ⬜ | **U9.7** Streamlit surface | Pre-agreed fallback if it slips |
+| ✅ | **U9.7** Streamlit surface | Done Sept 1, 2026 — five commits; replay by default, a genuine review pause, and the three faults recorded. Cut-list item 4 **spent, not shed** |
 | | *✂️ cut line* | |
 | ⬜ | **U9.8** gross rent multiplier | First below the line if U9.1–U9.7 land early |
 | ⬜ | **U9.9** capture: runs, traces, diagram, screenshots | Never sheds |
