@@ -1,0 +1,390 @@
+{
+  "tier": 1,
+  "shape": "framing",
+  "deals": {
+    "los-angeles": {
+      "evidence": {
+        "deal": "1425 W Sunset Blvd, Los Angeles, CA 90026",
+        "rent_estimate": 2860.961246967948,
+        "mae_overall": 452.4003156693096,
+        "mae_metro": 508.98212515608947,
+        "metro": "Los Angeles",
+        "comps_available": 8,
+        "comps_cross_checked": 8,
+        "comps_zip_anchored": 8,
+        "comp_implied_median": 2875.473786346881,
+        "divergence_pct": -0.005047008061016056,
+        "anchor_tier": "zip",
+        "anchor_zip": "90026",
+        "flags": []
+      },
+      "rows": [
+        {
+          "id": "f-00+point-basebase",
+          "score": 0.9,
+          "rent_band": "base",
+          "price_band": "base",
+          "starting_point": "point",
+          "rationale": "Both bands are central median values with 88 observations and no upstream concerns, making them the most defensible.",
+          "rent_low": 3315.6309083715473,
+          "rent_high": 3315.6309083715473,
+          "rent_point": 3315.6309083715473,
+          "price_rate": 5.2841731763285855
+        },
+        {
+          "id": "f-00+point-basepess",
+          "score": 0.7,
+          "rent_band": "base",
+          "price_band": "pessimistic",
+          "starting_point": "point",
+          "rationale": "Base rent growth is well founded; the pessimistic price growth is an observed low value but still supported by the full sample.",
+          "rent_low": 3315.6309083715473,
+          "rent_high": 3315.6309083715473,
+          "rent_point": 3315.6309083715473,
+          "price_rate": -3.3501832120622255
+        },
+        {
+          "id": "f-00+point-pessbase",
+          "score": 0.7,
+          "rent_band": "pessimistic",
+          "price_band": "base",
+          "starting_point": "point",
+          "rationale": "The price band is central and well documented, while the rent pessimistic rate lacks strong independent corroboration.",
+          "rent_low": 2630.0482081142827,
+          "rent_high": 2630.0482081142827,
+          "rent_point": 2630.0482081142827,
+          "price_rate": 5.2841731763285855
+        }
+      ],
+      "ledger": [
+        {
+          "id": "f-00+half",
+          "depth": 1,
+          "score": 0.88,
+          "pruned": "Scored 0.88, outside the top 1 at this level.",
+          "summary": "Still based on large samples but acknowledges the estimate's measured error, reducing confidence slightly."
+        },
+        {
+          "id": "f-00+full",
+          "depth": 1,
+          "score": 0.78,
+          "pruned": "Scored 0.78, outside the top 1 at this level.",
+          "summary": "Uses the same extensive data but projects from the full error range, making it the least certain of the full\u2011sample treatments."
+        },
+        {
+          "id": "f-01+point",
+          "depth": 1,
+          "score": 0.68,
+          "pruned": "Scored 0.68, outside the top 1 at this level.",
+          "summary": "Includes the rent window but excludes the abnormal price window, limiting the price growth data to a smaller, less representative set."
+        },
+        {
+          "id": "f-01+half",
+          "depth": 1,
+          "score": 0.58,
+          "pruned": "Scored 0.58, outside the top 1 at this level.",
+          "summary": "Same composition as f\u201101+point but projects from half the error, further lowering confidence."
+        },
+        {
+          "id": "f-10+point",
+          "depth": 1,
+          "score": 0.62,
+          "pruned": "Scored 0.62, outside the top 1 at this level.",
+          "summary": "Excludes the rent window while retaining the full price window, but the reduced rent sample and lower growth base reduce overall defensibility."
+        },
+        {
+          "id": "f-01+full",
+          "depth": 1,
+          "score": 0.48,
+          "pruned": "Scored 0.48, outside the top 1 at this level.",
+          "summary": "Same composition as f\u201101+point but projects from the full error, yielding the weakest defensibility among the mixed\u2011window cases."
+        },
+        {
+          "id": "f-10+half",
+          "depth": 1,
+          "score": 0.52,
+          "pruned": "Scored 0.52, outside the top 1 at this level.",
+          "summary": "Same as f\u201110+point but incorporates half the error range, further weakening the estimate."
+        },
+        {
+          "id": "f-10+full",
+          "depth": 1,
+          "score": 0.42,
+          "pruned": "Scored 0.42, outside the top 1 at this level.",
+          "summary": "Same as f\u201110+point but projects from the full error, making it the least defensible of the rent\u2011excluded group."
+        },
+        {
+          "id": "f-11+point",
+          "depth": 1,
+          "score": 0.3,
+          "pruned": "Scored 0.30, outside the top 1 at this level.",
+          "summary": "Both series exclude the 2020\u20112022 window, resulting in the smallest samples and lowest confidence."
+        },
+        {
+          "id": "f-11+half",
+          "depth": 1,
+          "score": 0.2,
+          "pruned": "Scored 0.20, outside the top 1 at this level.",
+          "summary": "Same as f\u201111+point but projects from half the error, slightly improving confidence but still weak."
+        },
+        {
+          "id": "f-11+full",
+          "depth": 1,
+          "score": 0.1,
+          "pruned": "Scored 0.10, outside the top 1 at this level.",
+          "summary": "Both series exclude the 2020\u20112022 window and use the full error range, representing the least defensible treatment."
+        },
+        {
+          "id": "f-00+point",
+          "depth": 1,
+          "score": 0.96,
+          "pruned": null,
+          "summary": "High sample sizes and a corroborated point rent estimate make this the most defensible treatment for the deal."
+        },
+        {
+          "id": "f-00+point-baseopti",
+          "depth": 2,
+          "score": 0.7,
+          "pruned": "Scored 0.70, outside the top 3 at this level.",
+          "summary": "Base rent is well founded; the optimistic price growth is an observed extreme, though tied to an anomalous period."
+        },
+        {
+          "id": "f-00+point-optibase",
+          "depth": 2,
+          "score": 0.6,
+          "pruned": "Scored 0.60, outside the top 3 at this level.",
+          "summary": "Optimistic rent growth is an observed high rate; base price growth is well documented, giving moderate defensibility."
+        },
+        {
+          "id": "f-00+point-pesspess",
+          "depth": 2,
+          "score": 0.5,
+          "pruned": "Scored 0.50, outside the top 3 at this level.",
+          "summary": "Both bands are extreme and based on limited observed YoY rates, with little direct evidence of sustained foundation."
+        },
+        {
+          "id": "f-00+point-optiopti",
+          "depth": 2,
+          "score": 0.5,
+          "pruned": "Scored 0.50, outside the top 3 at this level.",
+          "summary": "Both bands are optimistic extremes, supported by observed data but not central, reducing confidence."
+        },
+        {
+          "id": "f-00+point-optipess",
+          "depth": 2,
+          "score": 0.4,
+          "pruned": "Scored 0.40, outside the top 3 at this level.",
+          "summary": "Pairs an optimistic rent growth with a pessimistic price growth, both extremes lacking strong independent validation."
+        },
+        {
+          "id": "f-00+point-pessopti",
+          "depth": 2,
+          "score": 0.4,
+          "pruned": "Scored 0.40, outside the top 3 at this level.",
+          "summary": "Combines a pessimistic rent growth with an optimistic price growth, both extremes with limited supporting evidence."
+        },
+        {
+          "id": "f-00+point-basebase",
+          "depth": 2,
+          "score": 0.9,
+          "pruned": null,
+          "summary": "Both bands are central median values with 88 observations and no upstream concerns, making them the most defensible."
+        },
+        {
+          "id": "f-00+point-basepess",
+          "depth": 2,
+          "score": 0.7,
+          "pruned": null,
+          "summary": "Base rent growth is well founded; the pessimistic price growth is an observed low value but still supported by the full sample."
+        },
+        {
+          "id": "f-00+point-pessbase",
+          "depth": 2,
+          "score": 0.7,
+          "pruned": null,
+          "summary": "The price band is central and well documented, while the rent pessimistic rate lacks strong independent corroboration."
+        }
+      ]
+    },
+    "staten-island": {
+      "evidence": {
+        "deal": "7001 Amboy Rd, Staten Island, NY 10307",
+        "rent_estimate": 2653.707884076775,
+        "mae_overall": 452.4003156693096,
+        "mae_metro": 855.3416611138413,
+        "metro": "New York",
+        "comps_available": 0,
+        "comps_cross_checked": 0,
+        "comps_zip_anchored": 0,
+        "comp_implied_median": null,
+        "divergence_pct": null,
+        "anchor_tier": "county",
+        "anchor_zip": null,
+        "flags": []
+      },
+      "rows": [
+        {
+          "id": "f-00+full-basebase",
+          "score": 0.65,
+          "rent_band": "base",
+          "price_band": "base",
+          "starting_point": "full",
+          "rationale": "Higher score as it uses the central (base) growth rates for both rent and price, which are the most consistently observed and least dependent on tenuous extremes.",
+          "rent_low": 2495.17060723155,
+          "rent_high": 4868.684238326761,
+          "rent_point": 3681.9274227791557,
+          "price_rate": 5.607067999286787
+        }
+      ],
+      "ledger": [
+        {
+          "id": "f-01+full",
+          "depth": 1,
+          "score": 0.81,
+          "pruned": "Scored 0.81, outside the top 1 at this level.",
+          "summary": "Includes rent growth from the 2020\u20112022 period but excludes it from price growth, reducing the price sample while still applying the full error to reflect uncertainty."
+        },
+        {
+          "id": "f-10+full",
+          "depth": 1,
+          "score": 0.66,
+          "pruned": "Scored 0.66, outside the top 1 at this level.",
+          "summary": "Excludes the 2020\u20112022 window from rent growth, losing many observations, but still applies the full error and retains the full price sample."
+        },
+        {
+          "id": "f-11+full",
+          "depth": 1,
+          "score": 0.46,
+          "pruned": "Scored 0.46, outside the top 1 at this level.",
+          "summary": "Excludes the 2020\u20112022 period from both series, resulting in the smallest samples, yet still uses the full error to account for the rent estimate\u2019s uncertainty."
+        },
+        {
+          "id": "f-00+half",
+          "depth": 1,
+          "score": 0.36,
+          "pruned": "Scored 0.36, outside the top 1 at this level.",
+          "summary": "Applies a half\u2011error projection to a fully sampled dataset, which understates the measured uncertainty despite retaining all observations."
+        },
+        {
+          "id": "f-01+half",
+          "depth": 1,
+          "score": 0.26,
+          "pruned": "Scored 0.26, outside the top 1 at this level.",
+          "summary": "Uses a half\u2011error projection while excluding the 2020\u20112022 window from price growth, further limiting the sample and underestimating uncertainty."
+        },
+        {
+          "id": "f-00+point",
+          "depth": 1,
+          "score": 0.12,
+          "pruned": "Scored 0.12, outside the top 1 at this level.",
+          "summary": "Projects from a point estimate that ignores the substantial error, though it retains the full set of observations."
+        },
+        {
+          "id": "f-10+half",
+          "depth": 1,
+          "score": 0.16,
+          "pruned": "Scored 0.16, outside the top 1 at this level.",
+          "summary": "Applies half\u2011error projection after excluding the 2020\u20112022 window from rent growth, compounding sample loss with insufficient error coverage."
+        },
+        {
+          "id": "f-01+point",
+          "depth": 1,
+          "score": 0.08,
+          "pruned": "Scored 0.08, outside the top 1 at this level.",
+          "summary": "Relies on a point estimate while excluding the 2020\u20112022 period from price growth, reducing the sample and ignoring uncertainty."
+        },
+        {
+          "id": "f-11+half",
+          "depth": 1,
+          "score": 0.07,
+          "pruned": "Scored 0.07, outside the top 1 at this level.",
+          "summary": "Uses half\u2011error projection on the most reduced dataset, providing the least robust estimate."
+        },
+        {
+          "id": "f-10+point",
+          "depth": 1,
+          "score": 0.04,
+          "pruned": "Scored 0.04, outside the top 1 at this level.",
+          "summary": "Projects from a point estimate after excluding the 2020\u20112022 window from rent growth, yielding the weakest combination of data and certainty."
+        },
+        {
+          "id": "f-11+point",
+          "depth": 1,
+          "score": 0.02,
+          "pruned": "Scored 0.02, outside the top 1 at this level.",
+          "summary": "Projects from a point estimate on the smallest dataset, making it the least defensible overall."
+        },
+        {
+          "id": "f-00+full",
+          "depth": 1,
+          "score": 0.96,
+          "pruned": null,
+          "summary": "Uses the full error margin to reflect high uncertainty in the rent estimate and retains the full 2020\u20112022 window, preserving the largest number of observations for both rent and price growth."
+        },
+        {
+          "id": "f-00+full-pesspess",
+          "depth": 2,
+          "score": 0.35,
+          "pruned": "Scored 0.35, below the 0.40 threshold this project requires before a hypothesis is carried forward.",
+          "summary": "Low score because both rent and price growth rates are drawn from extreme low ends of historical bands with limited observations, and the weak rent\u2011price relationship offers no justification for pairing them."
+        },
+        {
+          "id": "f-00+full-pessbase",
+          "depth": 2,
+          "score": 0.3,
+          "pruned": "Scored 0.30, below the 0.40 threshold this project requires before a hypothesis is carried forward.",
+          "summary": "Low score as the pessimistic rent growth relies on a sparse historical extreme while the price growth uses a moderate band, but the overall weak relationship makes the combination questionable."
+        },
+        {
+          "id": "f-00+full-pessopti",
+          "depth": 2,
+          "score": 0.2,
+          "pruned": "Scored 0.20, below the 0.40 threshold this project requires before a hypothesis is carried forward.",
+          "summary": "Very low score because it pairs the lowest rent growth with the highest price growth, an opposite\u2011extreme pairing unsupported by the weak observed relationship."
+        },
+        {
+          "id": "f-00+full-basepess",
+          "depth": 2,
+          "score": 0.3,
+          "pruned": "Scored 0.30, below the 0.40 threshold this project requires before a hypothesis is carried forward.",
+          "summary": "Low score due to the pessimistic price growth being an extreme low band with few supporting observations, while rent growth is moderate."
+        },
+        {
+          "id": "f-00+full-baseopti",
+          "depth": 2,
+          "score": 0.35,
+          "pruned": "Scored 0.35, below the 0.40 threshold this project requires before a hypothesis is carried forward.",
+          "summary": "Moderate score because it pairs a central rent growth with an optimistic price growth, but the optimistic price band rests on limited historical support."
+        },
+        {
+          "id": "f-00+full-optipess",
+          "depth": 2,
+          "score": 0.2,
+          "pruned": "Scored 0.20, below the 0.40 threshold this project requires before a hypothesis is carried forward.",
+          "summary": "Very low score as it combines the highest rent growth with the lowest price growth, an opposite\u2011extreme pairing lacking empirical support."
+        },
+        {
+          "id": "f-00+full-optibase",
+          "depth": 2,
+          "score": 0.3,
+          "pruned": "Scored 0.30, below the 0.40 threshold this project requires before a hypothesis is carried forward.",
+          "summary": "Low score because the optimistic rent growth is based on a narrow historical stretch, while price growth is moderate, and the weak relationship does not justify the mix."
+        },
+        {
+          "id": "f-00+full-optiopti",
+          "depth": 2,
+          "score": 0.3,
+          "pruned": "Scored 0.30, below the 0.40 threshold this project requires before a hypothesis is carried forward.",
+          "summary": "Low score as both rent and price growth are taken from the optimistic extremes, which are poorly substantiated given the limited data and weak relationship."
+        },
+        {
+          "id": "f-00+full-basebase",
+          "depth": 2,
+          "score": 0.65,
+          "pruned": null,
+          "summary": "Higher score as it uses the central (base) growth rates for both rent and price, which are the most consistently observed and least dependent on tenuous extremes."
+        }
+      ]
+    }
+  }
+}

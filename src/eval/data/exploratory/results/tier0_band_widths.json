@@ -1,0 +1,113 @@
+{
+  "tier": 0,
+  "shape": "framing",
+  "deals": {
+    "los-angeles": {
+      "tier0": {
+        "deal": "los-angeles",
+        "rent_estimate": 2860.961246967948,
+        "error": 508.98212515608947,
+        "error_share_pct": 17.79059837652501,
+        "bands_pct": [
+          1.2541850685908982,
+          2.5102852179235913,
+          4.75581787823724
+        ],
+        "growth_only": [
+          3044.927022318091,
+          3609.131739631455,
+          564.2047173133637
+        ],
+        "starting_point_only": [
+          2662.383858717784,
+          3814.6949331014157,
+          1152.3110743836319
+        ],
+        "both": [
+          2503.2162849191977,
+          4251.217872308977,
+          1748.0015873897796
+        ],
+        "ratio": 2.0423634170779703,
+        "band_spread_share_pct": 19.720809497552928
+      },
+      "evidence": {
+        "deal": "los-angeles",
+        "rent_estimate": 2860.961246967948,
+        "mae_overall": 452.4003156693096,
+        "mae_metro": 508.98212515608947,
+        "metro": "Los Angeles",
+        "comps_available": 8,
+        "comps_cross_checked": 8,
+        "comps_zip_anchored": 8,
+        "comp_implied_median": 2875.473786346881,
+        "divergence_pct": -0.005047008061016056,
+        "anchor_tier": "zip",
+        "anchor_zip": "90026",
+        "flags": [
+          "appreciation_source",
+          "forecast_branches_near_tied",
+          "rent_anchored_to_market_index",
+          "rent_growth_source"
+        ]
+      }
+    },
+    "staten-island": {
+      "tier0": {
+        "deal": "staten-island",
+        "rent_estimate": 2653.707884076775,
+        "error": 855.3416611138413,
+        "error_share_pct": 32.23194482882635,
+        "bands_pct": [
+          3.931441935220052,
+          6.768814788717644,
+          10.44892032832459
+        ],
+        "growth_only": [
+          3218.0136220684617,
+          4361.747181009748,
+          1143.733558941286
+        ],
+        "starting_point_only": [
+          2495.17060723155,
+          4868.684238326761,
+          2373.513631095211
+        ],
+        "both": [
+          2180.785246819238,
+          5767.623125965698,
+          3586.8378791464597
+        ],
+        "ratio": 2.0752330055719352,
+        "band_spread_share_pct": 43.099452121467806
+      },
+      "evidence": {
+        "deal": "staten-island",
+        "rent_estimate": 2653.707884076775,
+        "mae_overall": 452.4003156693096,
+        "mae_metro": 855.3416611138413,
+        "metro": "New York",
+        "comps_available": 0,
+        "comps_cross_checked": 0,
+        "comps_zip_anchored": 0,
+        "comp_implied_median": null,
+        "divergence_pct": null,
+        "anchor_tier": "county",
+        "anchor_zip": null,
+        "flags": [
+          "anomalous_period_included",
+          "appreciation_source",
+          "forecast_branches_near_tied",
+          "low_confidence_estimate",
+          "relaxed_match_criteria",
+          "relaxed_search_radius",
+          "rent_anchor_county_level",
+          "rent_anchored_to_market_index",
+          "rent_estimate_market_error_elevated",
+          "rent_growth_source",
+          "sparse_comps"
+        ]
+      }
+    }
+  }
+}

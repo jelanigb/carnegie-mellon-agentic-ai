@@ -1,0 +1,279 @@
+{
+  "tier": 3,
+  "shape": "framing",
+  "deals": {
+    "los-angeles": {
+      "evidence": {
+        "deal": "los-angeles",
+        "rent_estimate": 2860.961246967948,
+        "mae_overall": 452.4003156693096,
+        "mae_metro": 508.98212515608947,
+        "metro": "Los Angeles",
+        "comps_available": 8,
+        "comps_cross_checked": 8,
+        "comps_zip_anchored": 8,
+        "comp_implied_median": 2875.473786346881,
+        "divergence_pct": -0.005047008061016056,
+        "anchor_tier": "zip",
+        "anchor_zip": "90026",
+        "flags": []
+      },
+      "treatment": "point",
+      "why": "8 comparables independently imply a rent within 0.5% of this estimate, at postal-code resolution",
+      "rows": [
+        {
+          "band": "weakest",
+          "pct": 1.2541850685908982,
+          "low": 3044.927022318091,
+          "high": 3044.927022318091
+        },
+        {
+          "band": "long-run",
+          "pct": 2.5102852179235913,
+          "low": 3238.5393959096,
+          "high": 3238.5393959096
+        },
+        {
+          "band": "strongest",
+          "pct": 4.75581787823724,
+          "low": 3609.131739631455,
+          "high": 3609.131739631455
+        }
+      ]
+    },
+    "los-angeles-current": {
+      "evidence": {
+        "deal": "los-angeles-current",
+        "rent_estimate": 2860.961246967948,
+        "mae_overall": 452.4003156693096,
+        "mae_metro": 508.98212515608947,
+        "metro": "Los Angeles",
+        "comps_available": 8,
+        "comps_cross_checked": 8,
+        "comps_zip_anchored": 8,
+        "comp_implied_median": 2875.473786346881,
+        "divergence_pct": -0.005047008061016056,
+        "anchor_tier": "zip",
+        "anchor_zip": "90026",
+        "flags": []
+      },
+      "treatment": "point",
+      "why": "8 comparables independently imply a rent within 0.5% of this estimate, at postal-code resolution",
+      "rows": [
+        {
+          "band": "weakest",
+          "pct": 1.2541850685908982,
+          "low": 3044.927022318091,
+          "high": 3044.927022318091
+        },
+        {
+          "band": "long-run",
+          "pct": 2.5102852179235913,
+          "low": 3238.5393959096,
+          "high": 3238.5393959096
+        },
+        {
+          "band": "strongest",
+          "pct": 4.75581787823724,
+          "low": 3609.131739631455,
+          "high": 3609.131739631455
+        }
+      ]
+    },
+    "chicago": {
+      "evidence": {
+        "deal": "chicago",
+        "rent_estimate": 2520.0841559508453,
+        "mae_overall": 452.4003156693096,
+        "mae_metro": 343.3570395902012,
+        "metro": "Chicago",
+        "comps_available": 8,
+        "comps_cross_checked": 8,
+        "comps_zip_anchored": 8,
+        "comp_implied_median": 3020.7123365132265,
+        "divergence_pct": -0.16573182904938594,
+        "anchor_tier": "zip",
+        "anchor_zip": "60647",
+        "flags": []
+      },
+      "treatment": "half",
+      "why": "8 comparable(s) check this estimate and land 16.6% away, which is partial corroboration rather than none",
+      "rows": [
+        {
+          "band": "weakest",
+          "pct": -1.0302284463522873,
+          "low": 2229.902903740459,
+          "high": 2555.9338277912393
+        },
+        {
+          "band": "long-run",
+          "pct": 4.0764661135217475,
+          "low": 2867.713767425904,
+          "high": 3286.998108434069
+        },
+        {
+          "band": "strongest",
+          "pct": 7.261103830857805,
+          "low": 3334.1445463414343,
+          "high": 3821.6250664749195
+        }
+      ]
+    },
+    "chicago-uptown": {
+      "evidence": {
+        "deal": "chicago-uptown",
+        "rent_estimate": 2293.2382976667704,
+        "mae_overall": 452.4003156693096,
+        "mae_metro": 343.3570395902012,
+        "metro": "Chicago",
+        "comps_available": 8,
+        "comps_cross_checked": 8,
+        "comps_zip_anchored": 8,
+        "comp_implied_median": 2292.8564616614813,
+        "divergence_pct": 0.00016653288667381138,
+        "anchor_tier": "zip",
+        "anchor_zip": "60640",
+        "flags": []
+      },
+      "treatment": "point",
+      "why": "8 comparables independently imply a rent within 0.0% of this estimate, at postal-code resolution",
+      "rows": [
+        {
+          "band": "weakest",
+          "pct": -1.0302284463522873,
+          "low": 2177.5193604572073,
+          "high": 2177.5193604572073
+        },
+        {
+          "band": "long-run",
+          "pct": 4.0764661135217475,
+          "low": 2800.3471533872616,
+          "high": 2800.3471533872616
+        },
+        {
+          "band": "strongest",
+          "pct": 7.261103830857805,
+          "low": 3255.8208198406405,
+          "high": 3255.8208198406405
+        }
+      ]
+    },
+    "overpriced": {
+      "evidence": {
+        "deal": "overpriced",
+        "rent_estimate": 2153.802278981237,
+        "mae_overall": 452.4003156693096,
+        "mae_metro": 343.3570395902012,
+        "metro": "Chicago",
+        "comps_available": 8,
+        "comps_cross_checked": 8,
+        "comps_zip_anchored": 8,
+        "comp_implied_median": 2292.8564616614813,
+        "divergence_pct": -0.060646702052810045,
+        "anchor_tier": "zip",
+        "anchor_zip": "60640",
+        "flags": []
+      },
+      "treatment": "point",
+      "why": "8 comparables independently imply a rent within 6.1% of this estimate, at postal-code resolution",
+      "rows": [
+        {
+          "band": "weakest",
+          "pct": -1.0302284463522873,
+          "low": 2045.1194129499024,
+          "high": 2045.1194129499024
+        },
+        {
+          "band": "long-run",
+          "pct": 4.0764661135217475,
+          "low": 2630.0773395598176,
+          "high": 2630.0773395598176
+        },
+        {
+          "band": "strongest",
+          "pct": 7.261103830857805,
+          "low": 3057.856790924002,
+          "high": 3057.856790924002
+        }
+      ]
+    },
+    "staten-island": {
+      "evidence": {
+        "deal": "staten-island",
+        "rent_estimate": 2653.707884076775,
+        "mae_overall": 452.4003156693096,
+        "mae_metro": 855.3416611138413,
+        "metro": "New York",
+        "comps_available": 0,
+        "comps_cross_checked": 0,
+        "comps_zip_anchored": 0,
+        "comp_implied_median": null,
+        "divergence_pct": null,
+        "anchor_tier": "county",
+        "anchor_zip": null,
+        "flags": []
+      },
+      "treatment": "full",
+      "why": "the estimate is anchored at a county median rather than this property's own postal code, and rents span roughly 2x within a county",
+      "rows": [
+        {
+          "band": "weakest",
+          "pct": 3.931441935220052,
+          "low": 2180.785246819238,
+          "high": 4255.241997317685
+        },
+        {
+          "band": "long-run",
+          "pct": 6.768814788717644,
+          "low": 2495.17060723155,
+          "high": 4868.684238326761
+        },
+        {
+          "band": "strongest",
+          "pct": 10.44892032832459,
+          "low": 2955.8712360537966,
+          "high": 5767.623125965698
+        }
+      ]
+    },
+    "coord-conflict": {
+      "evidence": {
+        "deal": "coord-conflict",
+        "rent_estimate": 2860.961246967948,
+        "mae_overall": 452.4003156693096,
+        "mae_metro": 508.98212515608947,
+        "metro": "Los Angeles",
+        "comps_available": 8,
+        "comps_cross_checked": 8,
+        "comps_zip_anchored": 8,
+        "comp_implied_median": 2875.473786346881,
+        "divergence_pct": -0.005047008061016056,
+        "anchor_tier": "zip",
+        "anchor_zip": "90026",
+        "flags": []
+      },
+      "treatment": "point",
+      "why": "8 comparables independently imply a rent within 0.5% of this estimate, at postal-code resolution",
+      "rows": [
+        {
+          "band": "weakest",
+          "pct": 1.2541850685908982,
+          "low": 3044.927022318091,
+          "high": 3044.927022318091
+        },
+        {
+          "band": "long-run",
+          "pct": 2.5102852179235913,
+          "low": 3238.5393959096,
+          "high": 3238.5393959096
+        },
+        {
+          "band": "strongest",
+          "pct": 4.75581787823724,
+          "low": 3609.131739631455,
+          "high": 3609.131739631455
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,166 @@
+tier 2 | shape framing | deals ['los-angeles', 'staten-island'] | horizon 5y
+cache dir : /private/tmp/claude-501/-Users-jelanigould-bailey-Desktop-carnegie-mellon-agentic-repo/876f13cb-4e70-4b35-b280-eea12f7c1546/scratchpad/spike_cache
+cache mode: off
+
+
+==============================================================================
+los-angeles
+==============================================================================
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by DeepInfra
+[diagnostic]   system_fingerprint=none
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Novita
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp2-99b8a850
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Nebius
+[diagnostic]   system_fingerprint=vllm-0.22.0-b08c96cd
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Nebius
+[diagnostic]   system_fingerprint=vllm-0.22.0-b08c96cd
+  run 1/8: treatment=full  top score=0.90
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Novita
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp2-99b8a850
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Novita
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp2-99b8a850
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Novita
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp2-99b8a850
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by DeepInfra
+[diagnostic]   system_fingerprint=none
+  run 2/8: treatment=point  top score=0.90
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by DeepInfra
+[diagnostic]   system_fingerprint=none
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Nebius
+[diagnostic]   system_fingerprint=vllm-0.22.0-b08c96cd
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Crusoe
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp4-2eac015f
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Nebius
+[diagnostic]   system_fingerprint=vllm-0.22.0-b08c96cd
+  run 3/8: treatment=point  top score=0.80
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Crusoe
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp4-2eac015f
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Crusoe
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp4-2eac015f
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Novita
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp2-99b8a850
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by DeepInfra
+[diagnostic]   system_fingerprint=none
+  run 4/8: treatment=point  top score=0.95
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Nebius
+[diagnostic]   system_fingerprint=vllm-0.22.0-b08c96cd
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Novita
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp2-99b8a850
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by DeepInfra
+[diagnostic]   system_fingerprint=none
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by DeepInfra
+[diagnostic]   system_fingerprint=none
+  run 5/8: treatment=point  top score=0.90
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Novita
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp2-99b8a850
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Novita
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp2-99b8a850
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Novita
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp2-99b8a850
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Crusoe
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp4-2eac015f
+  run 6/8: treatment=full  top score=0.95
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Nebius
+[diagnostic]   system_fingerprint=vllm-0.22.0-b08c96cd
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Nebius
+[diagnostic]   system_fingerprint=vllm-0.22.0-b08c96cd
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Novita
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp2-99b8a850
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Nebius
+[diagnostic]   system_fingerprint=vllm-0.22.0-b08c96cd
+  run 7/8: treatment=point  top score=0.85
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by DeepInfra
+[diagnostic]   system_fingerprint=none
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Crusoe
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp4-2eac015f
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Nebius
+[diagnostic]   system_fingerprint=vllm-0.22.0-b08c96cd
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Nebius
+[diagnostic]   system_fingerprint=vllm-0.22.0-b08c96cd
+  run 8/8: treatment=half  top score=1.00
+
+  treatment distribution: {'full': 2, 'point': 5, 'half': 1}
+  stability: 5/8 runs agreed on the modal treatment
+  top score mean 0.906, stdev 0.058, range 0.80-1.00
+
+==============================================================================
+staten-island
+==============================================================================
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by DeepInfra
+[diagnostic]   system_fingerprint=none
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Crusoe
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp4-2eac015f
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Nebius
+[diagnostic]   system_fingerprint=vllm-0.22.0-b08c96cd
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Crusoe
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp4-2eac015f
+  run 1/8: treatment=half  top score=0.88
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Crusoe
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp4-2eac015f
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by DeepInfra
+[diagnostic]   system_fingerprint=none
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Crusoe
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp4-2eac015f
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Crusoe
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp4-2eac015f
+  run 2/8: treatment=full  top score=0.60
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Crusoe
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp4-2eac015f
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Novita
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp2-99b8a850
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Novita
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp2-99b8a850
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Novita
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp2-99b8a850
+  run 3/8: treatment=full  top score=0.95
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by DeepInfra
+[diagnostic]   system_fingerprint=none
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Novita
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp2-99b8a850
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by DeepInfra
+[diagnostic]   system_fingerprint=none
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Nebius
+[diagnostic]   system_fingerprint=vllm-0.22.0-b08c96cd
+  run 4/8: treatment=full  top score=0.85
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Crusoe
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp4-2eac015f
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by DeepInfra
+[diagnostic]   system_fingerprint=none
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Crusoe
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp4-2eac015f
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Crusoe
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp4-2eac015f
+  run 5/8: treatment=full  top score=0.65
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by DeepInfra
+[diagnostic]   system_fingerprint=none
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by DeepInfra
+[diagnostic]   system_fingerprint=none
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Novita
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp2-99b8a850
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by DeepInfra
+[diagnostic]   system_fingerprint=none
+  run 6/8: treatment=full  top score=0.92
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Nebius
+[diagnostic]   system_fingerprint=vllm-0.22.0-b08c96cd
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by DeepInfra
+[diagnostic]   system_fingerprint=none
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Novita
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp2-99b8a850
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Novita
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp2-99b8a850
+  run 7/8: treatment=full  top score=0.70
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Crusoe
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp4-2eac015f
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Crusoe
+[diagnostic]   system_fingerprint=vllm-0.24.0-tp4-2eac015f
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by DeepInfra
+[diagnostic]   system_fingerprint=none
+[diagnostic] llm_client.complete: nvidia/nemotron-3-nano-30b-a3b answered by Nebius
+[diagnostic]   system_fingerprint=vllm-0.22.0-b08c96cd
+  run 8/8: treatment=full  top score=1.00
+
+  treatment distribution: {'half': 1, 'full': 7}
+  stability: 7/8 runs agreed on the modal treatment
+  top score mean 0.819, stdev 0.139, range 0.60-1.00
+
+wrote /private/tmp/claude-501/-Users-jelanigould-bailey-Desktop-carnegie-mellon-agentic-repo/876f13cb-4e70-4b35-b280-eea12f7c1546/scratchpad/spike_tier2_framing.json
