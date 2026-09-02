@@ -65,6 +65,7 @@ from demo_deals import DEMO_DEALS
 from graph import build_graph, state_serde
 from state import RECOMMENDATION_LABEL, DealState, DealTerms, Severity
 from tools.llm_client import LlmError, verify_models_live
+from tools.tracing import configure_tracing
 from tools.faults import Fault, injected
 from tools.llm_cache import CacheMode
 
@@ -130,6 +131,30 @@ _RECORDED: frozenset[tuple[str, bool, Optional[Fault]]] = frozenset(
         ("los-angeles", True, Fault.STALE_RENT_INDEX),
     ]
 )
+
+
+@st.cache_resource
+def _tracing_enabled() -> bool:
+    """Point LangSmith at this project's bucket, once per session.
+
+    `configure_tracing` is idempotent, but Streamlit reruns the whole script on every
+    interaction, so an uncached call would print its status line on each one.
+    """
+    return configure_tracing(verbose=False)
+
+
+def _tracing_status() -> None:
+    """Say in the surface whether this session is being traced.
+
+    In the sidebar rather than the main column because it is a fact about the *session*,
+    not about the deal on screen — and stated whichever way it comes out, since the
+    absence of a trace is the thing worth knowing during a capture.
+    """
+    with st.sidebar:
+        if _tracing_enabled():
+            st.caption(f"Tracing to LangSmith project `{config.LANGSMITH_PROJECT}`.")
+        else:
+            st.caption("Not tracing. Set `LANGSMITH_TRACING=true` before launching to record this session.")
 
 
 def is_recorded(spec: RunSpec) -> bool:
@@ -453,6 +478,16 @@ def main() -> None:
         "Seven agents evaluate a small multi-family listing and disclose every point at "
         "which they had to work with less than they wanted."
     )
+
+    # **Tracing is configured here for the same reason `main.py` does it, and the failure
+    # it prevents is silent.** LangSmith activates itself from the environment, so a
+    # `LANGSMITH_TRACING=true` shell would trace this surface either way — but into the
+    # project named `default`, with the key resolved only if it happens to be exported
+    # rather than sitting in its file, and with nothing on screen saying which happened.
+    # `tracing.py`'s own docstring names that case: a trace you believed was being
+    # captured and was not is worse than no trace. Cached so the status line renders
+    # once per session rather than on every Streamlit rerun.
+    _tracing_status()
 
     with st.sidebar:
         spec, listing, coords, run_clicked = _sidebar()

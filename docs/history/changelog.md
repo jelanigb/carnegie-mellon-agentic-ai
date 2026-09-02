@@ -78,6 +78,15 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 2, 2026 — U9.9 prerequisites
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 2, 2026 | U9.9 | **The demo surface says whether it is being traced, which it could not before.** `app.py` called `configure_tracing` nowhere, so `LANGSMITH_TRACING=true` in the launching shell would still have traced the session — into the project named `default`, with the key resolved only if it happened to be exported rather than sitting in its file, and with nothing on screen saying which. That is the exact case `tools/tracing.py`'s docstring calls worse than no trace: one you believed was captured and was not, discovered after the capture. Now `@st.cache_resource`-wrapped so the status renders once per session rather than on every Streamlit rerun, and stated in the sidebar **either way** — the absence of a trace is the thing worth knowing during a capture. Both states verified through `AppTest` | 5.1, 7.1 |
+| Sept 2, 2026 | U9.9 | **The graph diagram regenerated and the topology check passed — byte-identical output, so nothing had drifted.** `scripts/export_graph_diagram.py` asserts decision #9's three properties: exactly one loop-closing edge (`critic → planner`), exactly two branching nodes (`critic`, `planner`), and every node in `nodes.ALL_NODES` reachable. Recorded as a row rather than left silent because "the diagram is unchanged" is a finding about the topology, not an absence of work | 5.1, 7.1 |
+
+---
+
 ## Sept 2, 2026 — a third sample report
 
 | Date added | Unit | Work done | Related checkpoint |

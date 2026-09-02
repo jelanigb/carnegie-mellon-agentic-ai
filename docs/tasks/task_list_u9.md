@@ -1191,6 +1191,115 @@ deliberately prints the account identifier, correct for a terminal and wrong for
 run, then an escalated run, then under the hood, with the investor-facing sections named
 verbally. Live runs included, with waiting time edited out.
 
+#### Prepared Sept 2, 2026 — three prerequisites checked, two already discharged
+
+**This subsection is the only one left above its own bar, so what follows is a runbook
+rather than a plan.** Everything that could be done without a live account or a screen has
+been; what remains needs one or the other.
+
+| Prerequisite | State |
+| --- | --- |
+| **The terminal is clean enough to record** | ✅ **discharged at U9.M.** A run prints 4 lines before the report, down from ~190 — the cause was decision #13's MCP server reconfiguring process-wide logging, not HuggingFace. Two lines remain on stderr (an HF Hub advisory, a progress bar), both invisible to `> report.md` |
+| **The account identifier cannot reach a recording** | ✅ **discharged at U9.M.** `diagnostics.py` redacts it in both the JSON-field and bare-token forms, guarded by `tests/test_diagnostics_redaction.py`. Verify before recording with the one-liner below rather than trusting this row |
+| **The diagram is current** | ✅ **regenerated Sept 2, byte-identical**, topology check passing with the single `critic → planner` back edge asserted. Nothing to do unless the graph changes |
+| **A LangSmith key exists** | ✅ present since Sept 1; `tools/tracing.py` resolves it from disk, so only the switch has to be typed |
+| **The surface reports whether it is tracing** | ✅ **fixed Sept 2.** `app.py` called `configure_tracing` nowhere, so a `LANGSMITH_TRACING=true` shell would have traced it into the project named `default`, with no status on screen — the silent-failure case `tracing.py`'s own docstring names. Now cached per session and stated in the sidebar either way |
+
+**The 14-day clock argues for capturing now rather than later.** Traces captured Sept 2 are
+viewable through **Sept 16**; submission is Sept 7. There is no reason left to hold the
+capture back, and one reason not to: it is the last item above the freeze, and leaving it to
+Sept 4 puts a graded artifact on the day with no slack behind it.
+
+#### The runbook, in order
+
+Every command runs from `src/`. Nothing below changes code.
+
+**0 — verify the redaction rather than trusting it.** One line, no network:
+
+```bash
+.venv/bin/python -m pytest tests/test_diagnostics_redaction.py -q
+```
+
+**1 — the traces (Checkpoint 5.1).** Two runs, and the pair is the point.
+
+```bash
+# a) replayed — deterministic, no model calls, no quota. Every node and the state
+#    flowing between them; this is the multi-agent coordination evidence.
+LANGSMITH_TRACING=true LLM_CACHE_MODE=replay LLM_CACHE_DIR=eval/data/llm_recordings \
+  .venv/bin/python main.py --deal los-angeles
+
+# b) live — the same graph with real model spans inside it.
+LANGSMITH_TRACING=true .venv/bin/python main.py --deal los-angeles
+```
+
+**Both, because a replayed trace and a live one show different things and only one of them
+is reproducible.** The replayed run makes no model call, so its trace has every node and no
+LLM span — which is exactly what 5.1 asks about (roles, coordination, communication) and it
+can be re-derived by anyone from a clone. The live run adds the model spans and cannot be
+re-derived, because OQ-17 measured this model's scores moving between identical calls.
+Capturing only the live one would make the trace evidence unreproducible; capturing only the
+replayed one would leave a reader wondering whether the model is ever called.
+
+**Then the trace worth putting in the report**, which is not either of the above:
+
+```bash
+LANGSMITH_TRACING=true LLM_CACHE_MODE=replay LLM_CACHE_DIR=eval/data/llm_recordings \
+  .venv/bin/python main.py --deal los-angeles --fault geocoder-outage
+```
+
+**This is the one that shows the system reasoning rather than running.** The geocoder
+outage is the system's only *retryable* objection, so the Critic sends the deal back to the
+Planner, the retry fails identically, and the bounded rework cycle spends its budget before
+escalating — three passes of the same flag on a trace, with the counter terminating. That is
+Checkpoint 6.1's ask rendered as a picture instead of a claim. It replays, so it is
+deterministic and costs no quota.
+
+Each run prints `tracing: on -> LangSmith project 'deal-evaluator'` before it starts. **If
+that line does not appear, the run was not traced** — do not screenshot it and assume.
+
+**2 — screenshots off the surface that ships.**
+
+```bash
+.venv/bin/streamlit run app.py
+# to trace the session as well:
+LANGSMITH_TRACING=true .venv/bin/streamlit run app.py
+```
+
+The sidebar states whether the session is tracing. Five screens, chosen so each shows
+something the others do not:
+
+1. **`los-angeles`, clean** — the status strip at 1.00 / 4 disclosures / 8 comps, and the
+   verdict block. The baseline everything else is read against.
+2. **`overpriced`** — the two axes disagreeing on one screen: system check reported, and
+   *Proceed with caution* with the model/rule disagreement rendered beneath it. The second
+   reasoning locus, visible rather than described.
+3. **`staten-island`, paused at review** — the desk it routed to, the flags that caused it,
+   and the empty note box. This is the human-in-the-loop evidence 7.1 asks for, and it is
+   the screen no CLI recording can produce.
+4. **The same deal after Release**, with the typed note appearing verbatim in the report.
+   Screens 3 and 4 are a pair and are worth more than either alone.
+5. **The fault selector open**, showing that a simulated failure is declared before it runs
+   and names itself in the report — so a demonstration cannot be mistaken for an incident.
+
+**3 — the terminal recording**, if the video wants one. `--deal los-angeles` for the clean
+path and `--deal staten-island` for the escalation; both replay, so neither waits on a
+model. `> report.md` captures the report alone, since the four status lines and the two
+stderr lines stay out of a redirect.
+
+#### Two things to decide before recording, neither of which blocks starting
+
+- **Whether the video's live run is genuinely live.** The plan says "live runs included,
+  with waiting time edited out." A live run is the honest demonstration and it is exposed to
+  OQ-17: roughly 1 in 15–20 live attempts on this model lands a different forecast pairing,
+  and the `los-angeles` deal has escalated on a live re-run before. Replaying is
+  deterministic and is what the surface defaults to. **Recommended: narrate one live run to
+  show it is real, and use replay for anything the video makes a claim about** — which is
+  also what the report says the demo is.
+- **Whether the paste box appears at all.** It is the one path that forces a live call by
+  construction. It demonstrates the system takes real input rather than only canned deals;
+  it also cannot be rehearsed. Showing it last, after the claims have been made from
+  replayed runs, costs nothing if it drifts.
+
 ### U9.10 ✅ — OQ-5, OQ-10 and OQ-14 written up *(done Sept 2, 2026)*
 
 **OQ-5** — the four ToT constants were set by reading output, not tuning. What is known:
