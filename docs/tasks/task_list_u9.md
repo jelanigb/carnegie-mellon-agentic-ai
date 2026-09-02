@@ -947,6 +947,134 @@ the variance, and nothing in this unit can. Named so the final report describes 
 as replayed evidence plus one live path, rather than as a live system.
 
 
+### U9.7T ⬜ — The scenario table: name the rows for what they say, and the ledger for what decided them
+
+**Raised by the architect Sept 1–2, 2026, reading `docs/sample_reports/los-angeles.md`.**
+The reported symptom: *"the scenario table shows base in the pessimistic row and pessimistic
+in the base row."* It is expected behavior, it is documented in three places, and it is still
+unreadable — which is the same lesson U9.3 recorded and only half-acted on. **Inserted above
+the cut line on Sept 2 at the architect's direction**, ahead of U9.8/U9.9/U9.M.
+
+**Presentation and disclosure only. The search is not touched** — no prompt changes, no
+candidate payload changes, no re-record. That boundary is deliberate: the deeper question
+about depth 2 is OQ-22's and is not affordable before the freeze (see *Open* below).
+
+#### Three findings, each measured before the plan was written
+
+**1 — the same three words carry two meanings in one row.** The row label names the
+*combined* outcome rank among survivors (`scenario_forecast._to_scenarios`); the
+parenthetical names the *band one series* drew from. U9.3's fix was partial: `_band_tables`
+correctly abandoned the optimistic/base/pessimistic vocabulary for "Weakest sustained
+stretch / Long-run average / Strongest sustained stretch", and the combined table directly
+beneath it was never brought into line. So the report now prints plain words for the bands
+in one table and internal band names for the same bands in the next.
+
+**2 — the labels claim a spread the set does not have.** `_labels_for` stamps
+`pessimistic / base / optimistic` onto whatever three survive, unconditionally. On
+`los-angeles` the "Optimistic" row is base rent × base price, and **neither series' strongest
+band appears in any row**. A reader takes +2.51%/+2.10% for the upside case when it is the
+central case and no upside case was shown.
+
+**3 — the ledger attributes to the model a decision policy made, on half of all runs.**
+Measured across `eval/data/llm_recordings/`, reproducing `tot._rank`'s grouping exactly:
+
+| Level | Recorded levels | Decided by the model's scores | Decided by the conservatism tie-break |
+| --- | --- | --- | --- |
+| Depth 1 — which framing | 78 | **78 (100%)** | 0 |
+| Depth 2 — which pairings | 79 | 39 (49%) | **40 (51%)** |
+
+Depth 1 is clean: the single reading of history the whole forecast rests on is genuinely the
+model's, every recorded time. **Depth 2 is not**: on 51% of levels the beam's cut falls
+*inside* a tie group (2–6 candidates wide), so `tot._rank`'s "prefer the lower combined
+growth assumption" chooses which pairings reach the report. `los-angeles` is one of these —
+`basebase` won outright at 0.96, and the other two rows came out of a four-way group at
+0.85/0.85/0.80/0.80 the evaluator could not separate.
+
+**And `tot.py`'s cut path calls that a score loss.** A candidate cut by the tie-break gets
+`Scored 0.80, outside the top 3 at this level`, indistinguishable from one that was
+outscored; only reservation-displacement gets its own wording. This is the *"pruning that
+leaves no trace"* failure `tools/tot.py`'s own docstring says the ledger exists to prevent,
+surviving one layer up — and it is the only one of the three findings that is an
+**auditability** defect rather than a readability one.
+
+#### Subsections, each its own commit
+
+**U9.7Ta — rows named for what they say.** Row label becomes a deterministic 3×3 lookup on
+`(rent_band, price_band)` — "Central case", "Prices fall, rents hold", "Rents stall, prices
+hold" — and the cells carry the plain band words `_band_tables` already uses. No model call,
+no new variance. Retires `_labels_for` and the combined-outcome naming convention; the
+`Scenario.name` field keeps its shape, so nothing downstream changes.
+
+**U9.7Tb — a "why this row is shown" column.** Carries the evaluator score and the actual
+mechanism: won outright / neutral case, always shown / tied with N others, kept as the more
+cautious. This pulls `forecast_branches_near_tied` down from a collapsed `<details>` sixty
+lines above the table to the row it qualifies. Replaces the score parenthetical in the
+bullets beneath.
+
+**U9.7Tc — the ledger tells the truth about tie-break losses.** `tot.beam_search` gains a
+third prune reason for a candidate inside the cut tie group, saying it tied and lost on the
+conservatism preference rather than that it was outscored. **The one commit here that is not
+presentation** — it changes `BranchLedgerEntry.prune_reason` text for ~51% of runs — and
+where review should focus.
+
+**U9.7Td — state band coverage.** When a band appears in no row, say so beneath the table.
+Answers finding 2 without touching selection.
+
+**U9.7Te — the tie-epsilon wording.** `forecast_branches_near_tied` currently prints
+*"separated by 0.050, inside the 0.05 threshold"*, which contradicts itself: the real gap is
+`0.04999999999999993` rendered at 3dp. Print "less than 0.05" and drop the figure.
+**Wording only — the comparison is not touched** (see *Open* below).
+
+**U9.7Tf — re-derive and check.** Replay the batch and both sample reports. **No re-record:
+nothing above changes a prompt.** The check is that all 30 verdicts, confidences and
+disclosure counts are unchanged while report *text* moves — any verdict movement is a defect
+to chase, not a diff to accept.
+
+**U9.7Tg — docs.** OQ-22 and `design/evaluator.md` gain the 51% measurement, and both lose a
+premise that expired (below). `design/evaluator.md`'s Defect 2 entry records that U9.3's fix
+was partial and what finished it.
+
+#### A premise behind OQ-22's deferral expired on Sept 1, and both documents still assert it
+
+OQ-22 and `design/evaluator.md` argue the pairing level must survive because the forecast's
+search is *"the only reasoning locus in the build."* **That stopped being true when U9.4
+landed `critic.cross_check`**, which the status table already calls the 2nd reasoning locus.
+Deleting or re-pointing depth 2 no longer costs the system its only demonstration of
+reasoning. This does not change what U9.7B builds; it changes the argument OQ-22 will be
+decided on after the freeze, so it is recorded rather than acted on.
+
+#### Blocking question — answer before U9.7Ta starts
+
+**Row order, once the names no longer encode rank.** Combined-outcome ordering was
+load-bearing while the labels were a ranking; with content names it is a free choice.
+Neutral-first reads as "here is what we expect, and here are the two departures from it";
+worst-to-best preserves today's ordering and the reader's habit. Not resolved — the
+architect selected content-named rows without settling the sort.
+
+#### Open, and deliberately not resolved here
+
+**Whether `within 0.05` should mean `<=` inclusive.** The comparison is decided by floating
+point at the boundary: of 2dp score pairs a nominal 0.05 apart, 26 land "tied" and 31 do not,
+and both render as `0.050`. Making it inclusive would also widen `tot._rank`'s tie groups, so
+it can change which pairings survive — **11 recorded depth-2 levels sit at that boundary and
+would flip**, needing a re-record and a 30-row diff. **Architect's call Sept 2: not now.**
+`config.py` already records that this epsilon is noise-dominated and "not meaningfully
+straddleable" (OQ-17), which is the argument for not spending a re-record on it before the
+freeze. U9.7Be fixes the sentence and leaves the semantics.
+
+**Whether depth 2 should be re-pointed at all.** OQ-22's re-purposing — ask what this deal's
+evidence supports showing rather than which pairing is most likely — is the right long answer
+and stays deferred. One measurement taken Sept 2 that OQ-22 does not have: projecting from
+the rent estimate's error band edges rather than its point estimate produces a spread
+**2.04×** the growth bands' own width on `los-angeles` and **2.07×** on `staten-island`. The
+re-purposed table would therefore be mostly an estimate-uncertainty display rather than a
+growth forecast. That is arguably the honest answer — Staten Island's error band is ±32% of
+its estimate against a 43% five-year band spread — but it changes what the section *is*, and
+settling it is design work this unit does not have room for.
+
+---
+
+
 ### ✂️ Cut line — I expect the freeze to land here
 
 Everything below is real and none of it is speculative. If Sept 4 arrives with U9.7
@@ -1062,6 +1190,7 @@ Review the changelog rows each commit already wrote; do not reconstruct them.
 | ✅ | **U9.5** pin the live tier; Staten Island | Done Sept 1, 2026 — five commits; all 28 rows + both sample reports replay from a clone, 0 verdicts moved, `sensitivity.md` byte-identical |
 | ✅ | **U9.6** sixth deal + one shadow | Done Sept 1, 2026 — six commits; `chicago-uptown` + `los-angeles-current`, both `PREDICTED` and both held; 30 rows, 28 byte-identical |
 | ✅ | **U9.7** Streamlit surface | Done Sept 1, 2026 — five commits; replay by default, a genuine review pause, and the three faults recorded. Cut-list item 4 **spent, not shed** |
+| ⬜ | **U9.7B** scenario table: content-named rows, an honest ledger | Inserted above the line Sept 2 — presentation + disclosure only, search untouched |
 | | *✂️ cut line* | |
 | ⬜ | **U9.8** gross rent multiplier | First below the line if U9.1–U9.7 land early |
 | ⬜ | **U9.9** capture: runs, traces, diagram, screenshots | Never sheds |
