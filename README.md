@@ -46,18 +46,27 @@ rather than degrading its own confidence claim — see `agents/human_review.py` 
 
 ## Where the evidence already lives
 
-- **`docs/sample_reports/`** — two full reports the pipeline produced, committed as-is:
-  `los-angeles.md` (a clean run) and `staten-island.md` (an escalated one, sparse
-  comps). Read these before running anything — they're the fastest way to see what the
-  system actually outputs, disclosures included. **`staten-island.md` is the one to read
-  if you only read one**: it is escalated to human review *and* recommends proceeding,
-  because the two are different questions — whether the system can stand behind its own
-  numbers, and whether the property is worth buying. It also carries a disagreement
-  between the rule that decides and an independent model reading of the same evidence,
-  disclosed rather than resolved.
+- **`docs/sample_reports/`** — three full reports the pipeline produced, committed as-is.
+  Read these before running anything: they are the fastest way to see what the system
+  actually outputs, disclosures included. **The three are chosen so the two questions the
+  report answers vary independently** — whether the system can stand behind its own
+  numbers, and whether the property is worth buying:
+
+  | | System check | Recommendation | What it shows |
+  | --- | --- | --- | --- |
+  | `los-angeles.md` | reported, confidence 1.00 | Proceed | the clean path, 8 comparables, nothing degraded |
+  | `staten-island.md` | **escalated**, 0.00 | Proceed | no comparable listings exist within reach, and the deal is still cheap — 9.2× gross rent against its ZIP's 11.0× |
+  | `overpriced.md` | reported, 1.00 | **Proceed with caution** | the mirror: the system is confident and the *deal* is the problem, asking 55% over its ZIP's recorded sales |
+
+  **If you read one, read `staten-island.md`** — it is escalated to human review *and*
+  recommends proceeding, which is the clearest demonstration that the two questions are
+  separate. **If you read two, add `overpriced.md`**, which carries a disagreement between
+  the rule that decides and an independent model reading of the same evidence, disclosed
+  rather than resolved.
 - **Every figure in this repository re-derives from a fresh clone.** All 30 evaluation
-  rows and both sample reports replay from committed model recordings, so nothing quoted
-  here rests on a call you cannot reproduce. Reaching a live model takes an explicit flag.
+  rows and all three sample reports replay from committed model recordings, so nothing
+  quoted here rests on a call you cannot reproduce. Reaching a live model takes an
+  explicit flag.
 - **`src/eval/results/results.md` and `sensitivity.md`** — the evaluation harness's
   output: a batch of 30 real and engineered cases run through the compiled graph, a
   flag-coverage census, and a sweep over the confidence-scoring weights. This is what a

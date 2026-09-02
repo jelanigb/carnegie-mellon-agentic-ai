@@ -229,7 +229,7 @@ carnegie_mellon_agentic_repo/
 │   ├── demo.md                    # the demo guide: what each deal shows
 │   ├── design/                    # what the system IS — architecture, state, data, evaluator, personas
 │   ├── history/                   # how it got that way — changelog, decision_log
-│   ├── sample_reports/            # two committed reports, replayed byte-identically from a clone
+│   ├── sample_reports/            # three committed reports, replayed byte-identically from a clone
 │   └── diagrams/                  # generated from the compiled graph, not drawn
 └── src/                           # project root for all application code
     ├── requirements.txt

@@ -78,6 +78,14 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 2, 2026 — a third sample report
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 2, 2026 | U9.8 | **`docs/sample_reports/overpriced.md` added, and the set now crosses the two axes rather than sampling one.** The two committed reports were *clean + Proceed* and *escalated + Proceed*, which varies axis 1 and holds axis 2 fixed — so nothing showed the recommendation doing work of its own. `overpriced` is the mirror of `staten-island`: the system reports at confidence 1.00 and the **deal** is the problem, asking 55% over its ZIP's recorded sales. It is also the only demo deal whose model/rule cross-check disagrees, so the second reasoning locus renders in full for a reader rather than being described. Its gross multiple states the premium in the investor's own unit — **26.0× against the ZIP's 16.8×**. README gains a table saying which report shows what and why; `architecture.md`'s tree count follows. The two existing reports were re-derived in the same pass and came back **byte-identical apart from the run timestamp**, which is the reproducibility claim holding rather than being asserted | 7.1 |
+
+---
+
 ## Sept 2, 2026 — U9.10: three open questions written up
 
 | Date added | Unit | Work done | Related checkpoint |
