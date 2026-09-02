@@ -857,14 +857,22 @@ class Scenario(BaseModel):
     measured values; it does not produce new ones.
     """
 
-    # "optimistic" | "base" | "pessimistic" - the label this path is reported under,
-    # assigned after the search by ordering the survivors, not chosen by the evaluator.
+    # What this row says, in the reader's words — "Central case", "Prices fall, rents
+    # hold". A deterministic lookup on the two bands below
+    # (`scenario_forecast._row_name`), not chosen by the evaluator and **not a rank**.
+    #
+    # **It was a rank until U9.7T**, holding "optimistic" | "base" | "pessimistic"
+    # assigned from the survivors' ordering, and that is why this field and the two below
+    # could contradict each other in the same row: the label named the combined outcome
+    # while the bands named what each series drew from, so a row called "Optimistic"
+    # routinely carried the base rent band. Same three words, two meanings, one row. The
+    # name now comes *from* the bands, so the two can no longer disagree.
     name: str
 
-    # Which band each side contributes. Carried separately from `name` because they can
-    # legitimately differ: a "base" scenario may pair an optimistic rent band with a
-    # pessimistic price band, and hiding that would make the label look like a
-    # measurement rather than a composition.
+    # Which band each side contributes. Still carried separately from `name` — the name
+    # is derived from them but is not reversible (both "Central case" and a one-sided
+    # deal's central row collapse several states), and everything downstream that needs
+    # to know *which band* must read these rather than parse the name.
     rent_band: Optional[str] = None
     price_band: Optional[str] = None
 

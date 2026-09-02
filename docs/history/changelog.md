@@ -54,6 +54,15 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 2, 2026 — U9.7T: the scenario table
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 2, 2026 | U9.7Ta | **A scenario row is named for what it says, not for its rank.** `Scenario.name` held `pessimistic` / `base` / `optimistic`, assigned from the survivors' ordering — while the parenthetical beside each figure used *the same three words* for the band one series drew from. So the row labelled "Optimistic" routinely carried the base rent band, and the report explained the collision in a paragraph. New `scenario_forecast._row_name` is a deterministic 3×3 lookup on `(rent_band, price_band)` — "Central case", "Prices fall, rents hold" — with the departing side named first and the central case defined as *no side departs*, which keeps it true on a one-sided deal and wherever the sort puts it. Cells now carry `summarizer._band_words`' plain words, the same ones `_band_tables` heads its columns with, so one vocabulary serves both tables. **Ordering is untouched**: worst-to-best by combined outcome, kept deliberately by the architect over neutral-first, with the cost stated in the report — the central case need not be in the middle. `_labels_for` retires; no prompt, payload or band moves, and all 30 eval rows are byte-identical | 7.1 |
+| Sept 2, 2026 | U9.7Ta (defect) | **`scripts/forecast_evidence.py` had been comparing against the wrong row, and the rename surfaced it.** Its base-case delta found the scenario whose *name* was `base` — but U9.3 reserved a beam slot for the neutral pairing, after which the row labelled base was routinely not base/base at all (on `los-angeles` it was pessimistic-rent with base-price). Now matched on the bands, which is what "the base case" meant all along. Found because content names break the string match loudly rather than because anything failed | 7.1, maintenance |
+
+---
+
 ## Sept 2, 2026 — U9.M: the two things that would have contaminated a recording
 
 | Date added | Unit | Work done | Related checkpoint |

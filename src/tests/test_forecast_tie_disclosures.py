@@ -134,14 +134,18 @@ def test_each_scenario_reports_the_score_it_was_judged_on():
         deal_terms=DealTerms(),
         scenarios=[
             Scenario(
-                name="pessimistic",
+                name="Rents stall, prices fall",
+                rent_band="pessimistic",
+                price_band="pessimistic",
                 rent_growth_pct_per_year=1.0,
                 price_growth_pct_per_year=1.0,
                 rationale="Rents lag the schedule.",
                 evaluator_score=0.45,
             ),
             Scenario(
-                name="optimistic",
+                name="Central case",
+                rent_band="base",
+                price_band="base",
                 rent_growth_pct_per_year=4.0,
                 price_growth_pct_per_year=3.0,
                 rationale="Supply stays tight.",
@@ -153,10 +157,18 @@ def test_each_scenario_reports_the_score_it_was_judged_on():
     text = "\n".join(_scenario_section(state))
 
     assert "scored 0.45" in text and "scored 0.85" in text
-    # Both cautions the score is useless without: the labels are not a score ranking, and
-    # one draw of a noisy judge is not a rank (OQ-17).
-    assert "not from these scores" in text
+    # The two cautions the score is useless without. **The first one's wording changed at
+    # U9.7T and so did its subject.** It used to say the labels do not come from the
+    # scores, which was worth saying while a label was a rank; content names cannot be
+    # mistaken for a ranking, so the caution that remains is the one that outlived it —
+    # a score measures how well *evidenced* a combination is, never how likely.
+    assert "not how likely it is" in text
     assert "repeat runs measurably vary" in text
+
+    # The bands reach the reader in the same words the series table uses, not as the
+    # internal band names (U9.7T finding 1).
+    assert "long-run average" in text and "weakest stretch" in text
+    assert "(base)" not in text and "(pessimistic)" not in text
 
 
 def test_a_scenario_with_no_score_renders_without_one():

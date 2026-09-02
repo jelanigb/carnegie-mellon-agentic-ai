@@ -679,19 +679,30 @@ def _to_scenarios(
     base_price: Optional[float],
     horizon: int,
 ) -> list[Scenario]:
-    """Project each survivor and label the set by outcome — the reconciliation step.
+    """Project each survivor, name it for its content, order the set by outcome.
 
-    Labels are assigned here rather than chosen by the evaluator: a scenario's name has
-    to describe its outcome, or a reader comparing three rows cannot trust the column.
+    **Naming and ordering were one thing until U9.7T and are now two.** The name used to
+    be the row's *rank* among survivors — pessimistic, base, optimistic — assigned from
+    the ordering below. That made the same three words mean two different things in one
+    row: the label named the combined outcome while the parenthetical beside each figure
+    named the band one series drew from, so the row labelled "Optimistic" routinely
+    carried the base rent band and the report explained the collision in a paragraph.
+    Explaining a confusing thing clearly does not stop it being confusing (U9.3 reached
+    the same conclusion for `_band_tables` and fixed only that half).
 
-    **Ordering is by the sum of the two growth multiples, and that is a stated convention
-    rather than a return model.** Ranking on rent alone produced exactly the incoherence
-    this step exists to prevent - a first Chicago run labelled a path "pessimistic" while
-    it projected a price of $1.29M against the "optimistic" path's $390K, because the two
-    shared a rent band and the price column was never consulted. Weighting the two sides
-    equally is a choice; a real total-return model would weight them by holding period,
-    leverage and exit assumption, none of which this system has. What matters is that the
-    label follows both quantities and that the reader is told how.
+    So the name now comes from `_row_name`, a deterministic lookup on the two bands, and
+    says what the row *is*. Nothing about the search changed, and neither did the sort.
+
+    **Ordering is still by the sum of the two growth multiples, and that is a stated
+    convention rather than a return model.** Ranking on rent alone produced exactly the
+    incoherence this step exists to prevent - a first Chicago run labelled a path
+    "pessimistic" while it projected a price of $1.29M against the "optimistic" path's
+    $390K, because the two shared a rent band and the price column was never consulted.
+    Weighting the two sides equally is a choice; a real total-return model would weight
+    them by holding period, leverage and exit assumption, none of which this system has.
+    Worst-to-best was **kept deliberately at U9.7T** rather than moved to neutral-first:
+    the ordering still carries information, and the reader's habit is worth more than the
+    one thing it costs, which is that the central case can land in the last row.
     """
     projected: list[tuple[float, Scenario]] = []
     for candidate in survivors:
@@ -720,9 +731,8 @@ def _to_scenarios(
         projected.append((_outcome_rank(scenario, base_rent, base_price), scenario))
 
     projected.sort(key=lambda pair: pair[0])
-    names = _labels_for(len(projected))
-    for name, (_, scenario) in zip(names, projected):
-        scenario.name = name
+    for _, scenario in projected:
+        scenario.name = _row_name(scenario.rent_band, scenario.price_band)
     return [scenario for _, scenario in projected]
 
 
@@ -744,18 +754,57 @@ def _outcome_rank(
     return total
 
 
-def _labels_for(count: int) -> list[str]:
-    """Names for however many branches survived.
+# What each band means in a row's name. The verbs are chosen against the band headings
+# `summarizer._band_tables` already prints — "Weakest sustained stretch / Long-run average
+# / Strongest sustained stretch" — so a reader meets one vocabulary for the two tables
+# rather than one per table, which is the collision U9.7T exists to close.
+_RENT_PHRASE = {"pessimistic": "rents stall", "base": "rents hold", "optimistic": "rents climb"}
+_PRICE_PHRASE = {"pessimistic": "prices fall", "base": "prices hold", "optimistic": "prices climb"}
 
-    Fewer than three survivors is a real outcome — pruning is allowed to leave two — and
-    labelling two branches "pessimistic" and "optimistic" with no base case says more
-    than padding the set would.
+
+def _row_name(rent_band: Optional[str], price_band: Optional[str]) -> str:
+    """Name a scenario for what it says, from its two bands alone.
+
+    **Deterministic, and that is the point.** No model call, no dependence on which
+    other branches survived, and no dependence on the ordering — so the same pairing is
+    named the same thing in every report, and a reader who learns the vocabulary once
+    can carry it between deals. The previous scheme could not offer that: a name came
+    from rank among survivors, so an identical pairing was "Base" in one report and
+    "Optimistic" in the next depending on what it was sitting beside.
+
+    **Three rules, in order:**
+
+    1. *Central case* when nothing departs from its long-run average. Stated as a
+       property of the bands rather than as a position in the table, so it stays true on
+       a one-sided deal (Staten Island has no price series) and stays true wherever the
+       sort happens to put it — which matters, because U9.7T kept the worst-to-best
+       ordering, and the central case can therefore land last.
+    2. When exactly one side departs, **the departing side is named first**: the row's
+       subject is the thing that moved, and the side that held is context for it.
+    3. When both depart, rent leads, for no better reason than that a fixed order is
+       required and rent is the column the report reaches first. Stated rather than left
+       implicit so nobody has to infer a rule from examples.
     """
-    if count >= 3:
-        return ["pessimistic"] + ["base"] * (count - 2) + ["optimistic"]
-    if count == 2:
-        return ["pessimistic", "optimistic"]
-    return ["base"]
+    rent = _RENT_PHRASE.get(rent_band or "")
+    price = _PRICE_PHRASE.get(price_band or "")
+    if not rent and not price:
+        # Neither side carries a band worth naming. Reached only if the search returns a
+        # candidate with no bands at all, which `_pairings` does not produce today.
+        return "Scenario"
+
+    rent_departs = rent_band not in (None, "base")
+    price_departs = price_band not in (None, "base")
+    if not rent_departs and not price_departs:
+        return "Central case"
+    if rent_departs and not price_departs:
+        parts = [rent, price]
+    elif price_departs and not rent_departs:
+        parts = [price, rent]
+    else:
+        parts = [rent, price]
+
+    phrase = ", ".join(part for part in parts if part)
+    return phrase[0].upper() + phrase[1:]
 
 
 def scenario_forecast_agent(state: DealState) -> dict:

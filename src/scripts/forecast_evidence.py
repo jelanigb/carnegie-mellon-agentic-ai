@@ -149,8 +149,16 @@ def _delta(searched: list, linear: list) -> str:
     """How far apart the two forecasts are, on the base case."""
 
     def base_of(scenarios):
+        # **Matched on the bands, not on the name, since U9.7T** — and this is a repair
+        # rather than a translation. The old test was `name == "base"`, which found the
+        # row *labelled* base; since U9.3 reserved a beam slot for the neutral pairing,
+        # the row labelled base was routinely not base/base at all (on `los-angeles` it
+        # was pessimistic-rent with base-price), so this comparison had quietly been
+        # against the wrong row. The bands are what "the base case" meant all along.
         for scenario in scenarios:
-            if scenario.name == "base":
+            neutral_rent = scenario.rent_band in (None, "base")
+            neutral_price = scenario.price_band in (None, "base")
+            if neutral_rent and neutral_price:
                 return scenario, True
         return (scenarios[len(scenarios) // 2], False) if scenarios else (None, False)
 

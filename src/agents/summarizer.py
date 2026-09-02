@@ -1080,14 +1080,14 @@ def _scenario_section(state: DealState) -> list[str]:
         )
         lines.append("")
         lines.append(
-            "Scenarios are named for their **combined** outcome across both quantities, "
-            "so a single column need not fall in label order — the pessimistic case can "
-            "carry the higher projected price and still be the worse outcome overall. "
-            "Each row states which band it drew from on each side. Rent and price are "
-            "paired here rather than forecast independently, and this project has "
-            "measured how the two move together: weakly, and not in a consistent "
-            "direction. Read each row as one internally consistent story about this "
-            "market, not as evidence that rent and price tend to move that way."
+            "Each row is named for the combination it describes, and the bands beside "
+            "each figure are the same ones in the table above. **Rows are ordered worst "
+            "to best by combined outcome**, so the central case is not necessarily in "
+            "the middle. Rent and price are paired here rather than forecast "
+            "independently, and this project has measured how the two move together: "
+            "weakly, and not in a consistent direction. Read each row as one internally "
+            "consistent story about this market, not as evidence that rent and price "
+            "tend to move that way."
         )
         lines.append("")
 
@@ -1098,17 +1098,17 @@ def _scenario_section(state: DealState) -> list[str]:
     lines.append("| --- | --- | --- | --- | --- |")
     for scenario in state.scenarios:
         rent_growth = (
-            f"{scenario.rent_growth_pct_per_year:+.2f}%/yr ({scenario.rent_band})"
+            f"{scenario.rent_growth_pct_per_year:+.2f}%/yr ({_band_word(scenario.rent_band)})"
             if scenario.rent_growth_pct_per_year is not None
             else "—"
         )
         price_growth = (
-            f"{scenario.price_growth_pct_per_year:+.2f}%/yr ({scenario.price_band})"
+            f"{scenario.price_growth_pct_per_year:+.2f}%/yr ({_band_word(scenario.price_band)})"
             if scenario.price_growth_pct_per_year is not None
             else "—"
         )
         lines.append(
-            f"| **{scenario.name.title()}** | {rent_growth} | {price_growth} | "
+            f"| **{scenario.name}** | {rent_growth} | {price_growth} | "
             f"{_money_or_dash(scenario.projected_monthly_rent)} | "
             f"{_money_or_dash(scenario.projected_price)} |"
         )
@@ -1126,17 +1126,17 @@ def _scenario_section(state: DealState) -> list[str]:
             if scenario.evaluator_score is not None:
                 scored = True
                 score = f" *(scored {scenario.evaluator_score:.2f})*"
-            lines.append(f"- **{scenario.name.title()}**{score} — {scenario.rationale}")
+            lines.append(f"- **{scenario.name}**{score} — {scenario.rationale}")
     if scored:
         lines.append("")
         lines.append(
             "Each score is how well the forecast search judged that hypothesis to be "
             "supported by the evidence it was given, from 0 to 1 — shown because a "
             "scenario the system itself rated weakly should be read as one. Two cautions: "
-            "the scenario names above come from each row's projected outcome and not from "
-            "these scores, so a higher-scoring row is not a more likely one; and the "
-            "scores come from a single model call whose repeat runs measurably vary, so "
-            "small differences between them are not reliable."
+            "a score says how well evidenced a combination is, not how likely it is, so "
+            "a higher-scoring row is not a more probable outcome; and the scores come "
+            "from a single model call whose repeat runs measurably vary, so small "
+            "differences between them are not reliable."
         )
     lines.append("")
 
@@ -1310,6 +1310,28 @@ def _band_tables(detail: Optional[ForecastDetail]) -> list[str]:
 
 def _pct_or_dash(value: Optional[float]) -> str:
     return "—" if value is None else f"{value:+.2f}%/yr"
+
+
+# The short form of `_band_tables`' column headings, for use inside a table cell. One
+# vocabulary across both forecast tables is the whole of U9.7T's first finding: the
+# report used to print plain words for the bands in one table and the internal names
+# `pessimistic` / `base` / `optimistic` for the same bands in the next, where those three
+# words *also* named the combined outcome in the row label beside them.
+_BAND_WORDS = {
+    "pessimistic": "weakest stretch",
+    "base": "long-run average",
+    "optimistic": "strongest stretch",
+}
+
+
+def _band_word(band: Optional[str]) -> str:
+    """The reader-facing name for a band. Falls back to whatever it was given.
+
+    A band this map does not know is a defect rather than a case to design for, and
+    printing it is how it gets noticed — silently rendering "unknown" would hide which
+    value arrived.
+    """
+    return _BAND_WORDS.get(band or "", band or "—")
 
 
 def _branch_ledger_block(state: DealState) -> list[str]:
