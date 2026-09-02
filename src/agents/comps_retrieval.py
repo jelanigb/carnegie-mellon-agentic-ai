@@ -184,6 +184,35 @@ def comps_retrieval_agent(state: DealState) -> dict:
 
         # Relax exactly one criterion per pass, in the order the module docstring
         # states — and see it for why that order's original rationale was retired.
+        #
+        # TODO(retrieval): reorder this ladder on a measurement of comp comparability,
+        # or record that the order is right for a reason other than the one it was
+        # written with. **What is missing.** The order is inherited from U4 and the
+        # rationale it was written with does not survive: it called floor area the
+        # weakest signal, and the shipped rent model measures `square_feet` at 0.502
+        # against `bedrooms` at 0.300 — so this ladder concedes the strongest measured
+        # attribute first and the weakest last. M6 corrected the *claim* (module
+        # docstring, with the two cautions against over-reading it); the *order* is
+        # still the one the retired claim chose.
+        #
+        # **Why deferred (Sept 2, 2026, maintenance item M6).** Reordering changes which
+        # comps every deal retrieves, and comp counts feed the drift flag, confidence and
+        # the verdict — so it re-derives the published results table across all 30 eval
+        # rows, inside a freeze week, against a finding that is real but whose fix is not
+        # established.
+        #
+        # **What it would take.** Score the six orderings of these three concessions on
+        # comp-set quality measured against held-out corpus rows, whose actual rents are
+        # known — U4's ablation harness is the instrument and it needs no model call.
+        # Then check the second argument, which points the same way and is **unverified**:
+        # a bedroom mismatch has a correction available through #19's FMR bedroom step
+        # while a floor-area mismatch has none, which would mean this ladder concedes the
+        # uncorrectable attribute first. Note also that the order lives here as control
+        # flow rather than in `config.py`; if it is ever measured, it should move there
+        # under §8's single-home rule, because at that point it is a tuned parameter.
+        #
+        # Whether the choice should be a per-deal judgment rather than any fixed order is
+        # a larger and separate question — OQ-24, which this measurement gates.
         if sqft_tolerance is not None:
             sqft_tolerance = None
             flags.append(

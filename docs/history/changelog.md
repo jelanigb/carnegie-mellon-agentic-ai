@@ -54,6 +54,14 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 2, 2026 — U9.11 (maintenance): a deferral that existed in prose only
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 2, 2026 | U9.11 (maintenance) | **The comp relaxation ladder's deferred reorder becomes a tagged `TODO(retrieval)` at the branch that applies the order.** `agents/comps_retrieval.py`, `design/engineering_standards.md`, `tasks/maintenance.md`. M6 closed earlier the same day on its *first* condition — correcting the module docstring, which had called floor area the weakest signal against the shipped model's `square_feet` 0.502 versus `bedrooms` 0.300 — and left the reorder itself deferred in prose across three documents **with no tag anywhere**. So `grep -rn "TODO(" src/` could not see it, and §8's inventory table was correct while the inventory it indexes was incomplete: a grep-derived table cannot detect work that was never tagged. The tag states what is missing, why it is deferred (a reorder re-derives comp sets across all 30 eval rows) and what closing it takes — the six orderings scored on comp-set quality against held-out corpus rows, which U4's ablation harness can do with no model call. It also records something the maintenance entry did not: the order lives as control flow rather than in `config.py`, which is defensible while it is inherited and unmeasured and stops being so the moment it is chosen on evidence. **A third drift rule follows and is written beside the other two: when a maintenance item closes in half, tag the half that stays open before marking the entry done.** Comment-only; no logic, no test or report movement | maintenance |
+
+---
+
 ## Sept 2, 2026 — U9.M (M8): the outlook states the error band it compounds from
 
 | Date added | Unit | Work done | Related checkpoint |

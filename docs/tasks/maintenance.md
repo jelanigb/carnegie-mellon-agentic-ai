@@ -116,7 +116,7 @@ supposed to be the at-a-glance record of what shipped.
 Fix: add a U11 row between U8 and U9, stated as what it produced (model form, the hybrid
 anchor, the two decisions) the same way the other closed rows are. Prose-only; no logic.
 
-### M6 ✅ — The comp relaxation ladder's stated rationale is contradicted by the rent model *(docstring corrected Sept 2, 2026; the reorder stays open)*
+### M6 ✅ — The comp relaxation ladder's stated rationale is contradicted by the rent model *(docstring corrected Sept 2, 2026; the reorder is now `TODO(retrieval)`)*
 
 **Found Aug 31, 2026, during U9's reasoning-layer review.** The architect asked whether the
 ladder's ordering was still sound given #19 moved the anchor to a rent index without a
@@ -173,10 +173,27 @@ comparability directly — U4's ablation harness is the instrument — and reord
 Reproduce the importances by loading `config.RENT_MODEL_PATH` and reading
 `bundle["model"].feature_importances_` against `config.RENT_MODEL_FEATURES`.
 
-**Relevant to OQ-22.** Retrieval relaxation is the strongest candidate for a second
-reasoning locus in this system, and this finding is why: *which* criterion to relax for a
-given deal is a real judgment with alternatives and a measurable outcome, and the fixed
-ladder answering it today rests on a premise that measurement contradicts.
+**Tagged at the site Sept 2, 2026 at U9.11, and the gap is worth naming because this entry
+created it.** M6 closed on its first condition — the docstring — which left the *reorder*
+deferred in prose across three documents and tagged nowhere, so `grep -rn "TODO(" src/`
+could not see it and §8's inventory was correct while being incomplete. It is now
+`TODO(retrieval)` at the branch that applies the order, stating what is missing, why it is
+deferred (a reorder re-derives all 30 eval rows) and what closing it takes. **The lesson
+generalizes: when a maintenance item closes in half, tag the half that stays open before
+marking the entry done** — recorded in `engineering_standards.md` beside the two drift
+rules, neither of which could have caught this one.
+
+**One thing the tag adds that this entry did not say.** The order lives in
+`agents/comps_retrieval.py` as control flow, not in `config.py`. That is defensible while
+it is inherited and unmeasured; the moment it is *chosen* on evidence it becomes a tuned
+parameter and belongs in `config.py` under §8's single-home rule.
+
+**Relevant to OQ-22, and now tracked as OQ-24 in its own right.** Retrieval relaxation is
+the strongest candidate for a further reasoning locus in this system, and this finding is
+why: *which* criterion to relax for a given deal is a real judgment with alternatives and a
+measurable outcome, and the fixed ladder answering it today rests on a premise that
+measurement contradicts. The measurement above is what OQ-24 must take **first** — if the
+best fixed order captures the gain, there is no locus to buy.
 
 ### M7 ✅ — `architecture.md`'s repository tree has drifted from the build *(re-derived Sept 2, 2026)*
 
