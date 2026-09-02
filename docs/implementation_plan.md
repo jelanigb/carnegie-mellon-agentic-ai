@@ -54,6 +54,7 @@ the system currently *is*, `history/` is *how it got that way*.
 | `design/engineering_standards.md` | §8 — the bar every change set is held to in review | **Before writing code** |
 | `design/hud_fmr_client.md` | §9 — `tools/hud_fmr.py` behaviour, caching, rate limits | Touching FMR |
 | `design/evaluator.md` | What the forecast's Tree-of-Thought evaluator scores, the four defects found at U9.6, and the re-measured rent/price correlation that retired #16's pairing premise | Touching the forecast, the scenario table, or the evaluator prompt |
+| `design/forecast_starting_point_spike.md` | A spike, not a build: what OQ-22's re-purposed forecast would produce, why the model-scored version was not adopted (5/8 stability on the easy deal), and the deterministic rule that reproduces its modal answer. Evidence in `src/eval/data/exploratory/` | Deciding OQ-22, or before re-opening the starting-point question |
 | `design/personas.md` | The four personas this system is built for, their journeys, and the escalation routing rule (which human-review desk a pause is waiting on) | Touching `human_review`, the escalation payload, or writing report content aimed at a specific reader |
 | `history/decision_log.md` | All 19 numbered decisions with their full reasoning, grouped by system area | Revisiting a decision, or checking a premise before relying on it again |
 | `history/changelog.md` | Chronological code changes, by date and unit | Closing a unit; tracing when something landed |

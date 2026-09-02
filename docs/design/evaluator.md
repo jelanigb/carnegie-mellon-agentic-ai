@@ -227,6 +227,25 @@ a subsection — and ships as a disclosed gap.
 
 ---
 
+## 3b. The starting-point question, tested and not adopted
+
+OQ-22's proposed replacement for depth 2 — ask what this deal's evidence supports showing,
+rather than which pairing is most likely — was **run as a spike before being built**, Sept 1–2
+2026, and the write-up is
+[`forecast_starting_point_spike.md`](forecast_starting_point_spike.md).
+
+The short version, because it bears directly on what this evaluator can be asked to do: given
+the estimate's error band, comp count, cross-check divergence and anchor resolution, the
+evaluator chooses the *right* treatment on a single run — and holds it on only **5 of 8**
+repeat runs for `los-angeles`, the deal eight comparables corroborate to 0.5%. The same
+decision made by a deterministic rule over the same fields agrees with its modal answer and
+never moves.
+
+**The general lesson for this document**: a judgment worth ~2× the growth bands is not a
+judgment this evaluator can carry, and the boundary is not how hard the question is — it is
+how much the answer is worth. Section 1's account of what the search decides should be read
+with that limit in mind.
+
 ## 4. What U9.6 changes, and what it does not
 
 **Not taken: splitting rent and price into separate forecasts.** It was considered. Doing so

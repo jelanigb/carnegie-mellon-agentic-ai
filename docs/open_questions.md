@@ -184,11 +184,18 @@ estimate because eight comparables corroborate it within 1%; `staten-island` pro
 the **edges of its error band**, or declines the optimistic case as unsupported, because
 nothing checks it and the anchor is county-wide.
 
-**Deal-specific, grounded in evidence already in the evaluator's prompt, and needing no
-correlation at all** — which is exactly what makes it survive #21.
+**Deal-specific, grounded in evidence this project already measures, and needing no
+correlation at all** — which is exactly what makes it survive #21. *(Corrected Sept 2: this
+line read "already in the evaluator's prompt", which is false. Every field is on
+`ValuationDetail` before the forecast runs, and **none of it reaches `_context_block`**, which
+passes flag names and a point estimate. The evidence exists; the prompt has never carried it.)*
 
-**Why it is deferred rather than built.** The prompt changes from *"score this pairing's
-plausibility"* to *"score what this evidence supports showing"*; the candidate payload gains
+**Why it is deferred rather than built.** *(First clause superseded Sept 2 — see the spike
+below. `_DEPTH_INSTRUCTIONS[2]` already tells the evaluator it is "choosing which projections
+are worth showing a reader, not ranking which is most likely to happen", so that half landed
+at U9.3 and the remaining cost is an evidence block plus a treatment axis.)* The prompt changes
+from *"score this pairing's plausibility"* to *"score what this evidence supports showing"*;
+the candidate payload gains
 a starting-point treatment beside `(rent_band, price_band)`, so `_pairings` and the scenario
 assembly both change shape; `Scenario`/`ForecastDetail` need a field for it; and everything
 re-records. That is a full change set of **new design** inside a five-day window, against a
@@ -196,6 +203,8 @@ unit already estimated at seven of twelve landing.
 
 **Closes when** the re-purposing is built, or when a later pass decides the pairing level is
 not worth its evidence and deletes it in favour of forecasting the two series independently.
+*(Superseded Sept 2 — a third route was added at the foot of this entry, and that statement
+governs.)*
 
 **Its real subject is broader than the forecast, and one premise under it expired on
 Sept 1, 2026.** This entry deferred the redesign partly on the grounds that the forecast's
@@ -212,6 +221,45 @@ the conservatism tie-break**, not by the evaluator. The level that has no direct
 is also the level where the model separates the candidates barely half the time. U9.7T
 disclosed this rather than acting on it: the ledger and the scenario table now both name
 which mechanism selected each row.
+
+**A spike ran the re-purposing before building it, Sept 1–2, 2026, and the mechanism did not
+survive.** Full write-up in [`design/forecast_starting_point_spike.md`](design/forecast_starting_point_spike.md);
+evidence committed under `src/eval/data/exploratory/`, off any replay path. Four results bear
+on this entry, and **none of them closes it**:
+
+- **The evaluator answers the new question correctly on a single run.** Given the error band,
+  comp count, cross-check divergence and anchor resolution, it chose the point estimate for
+  `los-angeles` ("a corroborated point rent estimate") and the full error band for
+  `staten-island` ("to reflect high uncertainty") — the behavior this entry predicts, reached
+  with no per-deal hint.
+- **It cannot hold that answer steady.** Eight repeat searches per deal at temperature 0, cache
+  off: `los-angeles` **5/8**, `staten-island` 7/8. Los Angeles is the deal eight comparables
+  corroborate to 0.5%, and two runs in eight still widened it to the full band — a year-5 rent
+  of $2,503–$4,251 against $3,239, decided by which of four providers answered. **A treatment
+  worth ~2× the growth bands cannot be an LLM judgment on this fleet.**
+- **The starting point is roughly twice the width of the growth bands beside it** — 2.04× on
+  `los-angeles`, 2.08× on `staten-island`. So the re-purposing does not refine the scenario
+  section, it **changes what the section is**: mostly a statement about what is unknown of
+  *today's* rent rather than about what the market did to rents. Defensible, and a decision in
+  its own right.
+- **If it is ever built, the treatment must not join depth 1.** Tried there first, both deals
+  flipped their window treatment (`f-11`→`f-00`, `f-01`→`f-00`) because the two questions get
+  traded against each other on one axis.
+
+**What this changes about the entry: the mechanism, not the question.** The same decision made
+by a deterministic rule over the same fields — `full` on a county anchor or no cross-check,
+`point` on ≥3 comps within 10% at ZIP resolution, `half` between — agrees with the model's
+modal answer on both deals, never varies, and needs no prompt change and therefore **no
+re-record**. `chicago` lands in the middle at 16.6% divergence, so the third treatment is
+earned by a real deal rather than by argument.
+
+**Deliberately not adopted, and the entry stays open.** The architect is separately testing
+whether **report wording alone** resolves the confusion that prompted all of this, keeping
+today's calculation paths untouched — which the ~2× finding argues for trying first, since it
+is a far smaller step than changing what the section is. This entry should be decided after
+that, not before it. **Closes when** the re-purposing is built in some form, when the pairing
+level is deleted in favour of forecasting the two series independently, or when a wording-only
+fix is judged sufficient and the redesign is dropped on the record.
 
 Whether one 4→1 selection and one 9→3 selection is enough reasoning for the system's claims
 is a question the final report has to answer either way. **Named candidates if a second locus is wanted**, strongest first:
