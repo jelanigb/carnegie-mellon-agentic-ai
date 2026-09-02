@@ -1034,22 +1034,65 @@ to chase, not a diff to accept.
 premise that expired (below). `design/evaluator.md`'s Defect 2 entry records that U9.3's fix
 was partial and what finished it.
 
+#### What landed, Sept 2 — three commits, and the build order was not the plan's
+
+**All five render subsections shipped and the eval table did not move**: 30 rows
+byte-identical on verdicts, confidences, disclosure counts and comp counts, no re-record,
+and both sample reports refreshed — 30 lines on `los-angeles`, 26 on `staten-island`, every
+one traceable to Ta, Tb, Td or Te.
+
+**Tc was built before Tb, and the plan had them the other way round.** Tb's column has to
+say *how* a row was selected — won outright, tied and kept as the more cautious, or
+reserved — and that fact only exists once `_rank` stops discarding its tie groups, which is
+Tc. Built in the plan's order, Tb would have had to reconstruct the grouping a second time
+at the render layer, which is the `hud_fmr.bedroom_field` defect U9.7a cites. So Tc landed
+first and Tb consumed it; Td, Te and Tf rode with Tb because they touch the same block.
+
+**The reserved slot becomes visible in a report for the first time.** `staten-island`'s
+central case reads *0.70 — the neutral case, always shown* — the lowest score of its three
+rows, reported because U9.3 reserved it a beam slot. That mechanism has been running since
+Aug 31 and nothing in any report said so.
+
+**One thing the plan predicted and the build confirmed.** `los-angeles` is one of the 51%:
+its central case won outright at 0.96 while the other two rows came out of a four-way group
+at 0.85/0.85/0.80/0.80, and the two survivors now say *level with 3 other pairings, kept as
+the more cautious* rather than carrying a bare score a reader would read as a ranking.
+
+**A defect found by the rename rather than by a failing test.**
+`scripts/forecast_evidence.py` located the base case with `scenario.name == "base"`. Since
+U9.3 reserved a beam slot, the row *labelled* base was routinely not base/base — on
+`los-angeles` it was pessimistic-rent with base-price — so the linear-baseline delta had
+been comparing against the wrong row. Now matched on the bands, which is what "the base
+case" meant all along. Content names broke the string match loudly; nothing else would have.
+
+**One residual, and it is the naming inconsistency in this file.** The section was written
+as `U9.7T` with subsections `U9.7Ta`–`U9.7Tg`, while the status row and two prose references
+said `U9.7B`. `U9.7T` won on Sept 2 because the heading and all seven subsections used it.
+
 #### A premise behind OQ-22's deferral expired on Sept 1, and both documents still assert it
 
 OQ-22 and `design/evaluator.md` argue the pairing level must survive because the forecast's
 search is *"the only reasoning locus in the build."* **That stopped being true when U9.4
 landed `critic.cross_check`**, which the status table already calls the 2nd reasoning locus.
 Deleting or re-pointing depth 2 no longer costs the system its only demonstration of
-reasoning. This does not change what U9.7B builds; it changes the argument OQ-22 will be
+reasoning. This does not change what U9.7T builds; it changes the argument OQ-22 will be
 decided on after the freeze, so it is recorded rather than acted on.
 
-#### Blocking question — answer before U9.7Ta starts
+#### Blocking question — ANSWERED Sept 2, 2026 by the architect
 
 **Row order, once the names no longer encode rank.** Combined-outcome ordering was
 load-bearing while the labels were a ranking; with content names it is a free choice.
 Neutral-first reads as "here is what we expect, and here are the two departures from it";
-worst-to-best preserves today's ordering and the reader's habit. Not resolved — the
-architect selected content-named rows without settling the sort.
+worst-to-best preserves today's ordering and the reader's habit.
+
+**Taken: worst-to-best, unchanged.** `_outcome_rank` and its sort survive untouched, which
+also makes this the smallest of the three candidate diffs. **One argument was surfaced
+before the choice and is recorded because it is the cost being accepted, not an objection
+that was overruled:** with content names, keeping worst-to-best puts *"Central case"* in the
+slot a reader has learned means the best case. The architect took the ordering's information
+value and the reader's habit over that, and U9.7Td's coverage note is what keeps the last row
+from being misread — it states in the report that the bottom row is the best case *among
+those reported*, not the best case measured.
 
 #### Open, and deliberately not resolved here
 
@@ -1060,7 +1103,7 @@ it can change which pairings survive — **11 recorded depth-2 levels sit at tha
 would flip**, needing a re-record and a 30-row diff. **Architect's call Sept 2: not now.**
 `config.py` already records that this epsilon is noise-dominated and "not meaningfully
 straddleable" (OQ-17), which is the argument for not spending a re-record on it before the
-freeze. U9.7Be fixes the sentence and leaves the semantics.
+freeze. U9.7Te fixes the sentence and leaves the semantics.
 
 **Whether depth 2 should be re-pointed at all.** OQ-22's re-purposing — ask what this deal's
 evidence supports showing rather than which pairing is most likely — is the right long answer
@@ -1190,7 +1233,7 @@ Review the changelog rows each commit already wrote; do not reconstruct them.
 | ✅ | **U9.5** pin the live tier; Staten Island | Done Sept 1, 2026 — five commits; all 28 rows + both sample reports replay from a clone, 0 verdicts moved, `sensitivity.md` byte-identical |
 | ✅ | **U9.6** sixth deal + one shadow | Done Sept 1, 2026 — six commits; `chicago-uptown` + `los-angeles-current`, both `PREDICTED` and both held; 30 rows, 28 byte-identical |
 | ✅ | **U9.7** Streamlit surface | Done Sept 1, 2026 — five commits; replay by default, a genuine review pause, and the three faults recorded. Cut-list item 4 **spent, not shed** |
-| ⬜ | **U9.7B** scenario table: content-named rows, an honest ledger | Inserted above the line Sept 2 — presentation + disclosure only, search untouched |
+| ✅ | **U9.7T** scenario table: content-named rows, an honest ledger | Done Sept 2, 2026 — three commits; 30 eval rows byte-identical, no re-record |
 | | *✂️ cut line* | |
 | ⬜ | **U9.8** gross rent multiplier | First below the line if U9.1–U9.7 land early |
 | ⬜ | **U9.9** capture: runs, traces, diagram, screenshots | Never sheds |

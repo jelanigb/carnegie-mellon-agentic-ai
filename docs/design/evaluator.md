@@ -121,6 +121,28 @@ So "Optimistic" can carry — and here does carry — the *pessimistic* price ba
 explains this honestly in a paragraph. Explaining a confusing thing clearly does not make it
 less confusing.
 
+**Fixed in two passes, and the first one was half of it — recorded Sept 2, 2026 (U9.7T).**
+U9.3 accepted the argument above and acted on it in one place: `_band_tables` abandoned the
+optimistic/base/pessimistic vocabulary for *"Weakest sustained stretch / Long-run average /
+Strongest sustained stretch"*, and the combined table directly beneath it was left alone. So
+the report went on to print plain words for the bands in one table and the internal band
+names for the same bands in the next — and the row label above them still used those same
+three words for a *third* thing, the combined outcome. One vocabulary, three meanings, on
+one screen.
+
+**U9.7T finished it.** Row names come from `scenario_forecast._row_name`, a deterministic
+lookup on the two bands — "Central case", "Prices fall, rents hold" — so a name can no
+longer disagree with the bands beside it, and the cells use the same plain words the series
+table heads its columns with. The paragraph explaining the collision is gone because the
+collision is.
+
+**The half of this defect that is not about naming is now disclosed rather than fixed.**
+"Nothing in the logic guarantees all three bands of either series appear" is still true —
+on `los-angeles` neither series' strongest stretch reaches any row. Forcing coverage would
+mean overriding the evaluator to satisfy a layout, so the report names the bands that
+reached no row instead, and says the bottom row is the best case *among those reported*
+rather than the best case measured.
+
 ### Defect 3 — the two series' bands are not built comparably
 
 | | Rent (HUD FMR, LA county, 2br) | Price (Redfin MF 2–4, LA metro) |
@@ -361,8 +383,32 @@ field, and everything re-records. Tracked as **OQ-22**.
 ### The wider question this belongs to
 
 Only two agents in this system call a model, and #12's Critic half was retired on evidence
-at U7.7 — so this search is the **only reasoning locus in the build**, one 4→1 selection and
-one 9→3 selection. U9.4 adds a second at the recommendation (model proposes, rule decides,
-disagreement disclosed). The strongest remaining candidate is **retrieval relaxation**, where
+at U7.7. **This search was therefore the only reasoning locus in the build — and it stopped
+being so on Sept 1, 2026, when U9.4 landed `critic.cross_check`** (model proposes, rule
+decides, disagreement disclosed). The distinction matters more than a date, because the
+"only locus" claim was doing argumentative work: it is what OQ-22 cites when it defers the
+pairing level's redesign rather than deleting the level, on the grounds that deleting it
+would cost the system its only demonstration of reasoning. **That cost no longer exists.**
+Re-pointing or removing depth 2 is now a judgment about whether the level earns its evidence,
+with a second locus standing either way — which does not change what U9.7T built, and does
+change the argument OQ-22 will be decided on after the freeze.
+
+**And the level's own decisions are less the evaluator's than the count implies.** Measured
+across the committed recordings at U9.7T, reproducing `tot._rank`'s grouping exactly:
+
+| Level | Recorded levels | Decided by the model's scores | Decided by the conservatism tie-break |
+| --- | --- | --- | --- |
+| Depth 1 — which framing | 78 | **78 (100%)** | 0 |
+| Depth 2 — which pairings | 79 | 39 (49%) | **40 (51%)** |
+
+Depth 1 is clean: the single reading of history the whole forecast rests on is genuinely the
+model's, every recorded time. Depth 2 is not — on half of all levels the beam's cut falls
+*inside* a tie group and this project's preference for the lower combined growth assumption
+chooses which pairings reach the report. That is a defensible policy and it was invisible:
+until U9.7T the ledger recorded those candidates as *"outside the top 3 at this level"*, and
+the survivors carried no account of why they were kept at all. Both halves now say which
+mechanism applied.
+
+The strongest remaining candidate for a further locus is **retrieval relaxation**, where
 `maintenance.md` M6 records that the fixed ladder's stated rationale is contradicted by the
 rent model's own feature importances.

@@ -197,11 +197,24 @@ unit already estimated at seven of twelve landing.
 **Closes when** the re-purposing is built, or when a later pass decides the pairing level is
 not worth its evidence and deletes it in favour of forecasting the two series independently.
 
-**Its real subject is broader than the forecast.** Only two agents in this system call a
-model, and #12's Critic half was retired on evidence at U7.7, so the forecast's search is
-the *only* reasoning locus in the build — one 4→1 selection and one 9→3 selection. Whether
-that is enough reasoning for the system's claims is a question the final report has to
-answer either way. **Named candidates if a second locus is wanted**, strongest first:
+**Its real subject is broader than the forecast, and one premise under it expired on
+Sept 1, 2026.** This entry deferred the redesign partly on the grounds that the forecast's
+search was the *only* reasoning locus in the build, so deleting depth 2 would cost the
+system its only demonstration of reasoning. **U9.4's `critic.cross_check` is a second
+locus** — model proposes, rule decides, disagreement disclosed — so that cost is gone, and
+whether depth 2 earns its evidence is now a judgment that can be taken on its own merits.
+Nothing about what ships changes; the argument this closes on does.
+
+**A measurement U9.7T added, which sharpens the same question.** Across the committed
+recordings, reproducing `tot._rank`'s grouping: depth 1 is decided by the model's scores on
+**78 of 78** levels, and depth 2 on **39 of 79** — so **51% of pairing levels are decided by
+the conservatism tie-break**, not by the evaluator. The level that has no directional prior
+is also the level where the model separates the candidates barely half the time. U9.7T
+disclosed this rather than acting on it: the ledger and the scenario table now both name
+which mechanism selected each row.
+
+Whether one 4→1 selection and one 9→3 selection is enough reasoning for the system's claims
+is a question the final report has to answer either way. **Named candidates if a second locus is wanted**, strongest first:
 **retrieval relaxation** (today a fixed ladder — size band, then radius, then bedroom count
 — where *which criterion to relax for this deal* is a genuine judgment with a measurable
 outcome, and U4's ablation harness could score it); and the **recommendation**, where
