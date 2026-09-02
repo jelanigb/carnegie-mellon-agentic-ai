@@ -10,8 +10,8 @@ at the start of every session, so it is kept short on purpose — an entry that 
 close it and what closing it looks like. `OQ-n` numbers are stable handles for
 conversation; they are not decision numbers.
 
-Last reviewed: Aug 30, 2026 — at U8's close-out
-([`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.10).
+Last reviewed: Sept 2, 2026 — at U9's close-out
+([`tasks/task_list_u9.md`](tasks/task_list_u9.md) §U9.11).
 
 **Six entries closed there and two areas emptied.** *Orchestration & control flow* and
 *Data & sources* now carry nothing open: OQ-1 closed as #6, OQ-15 and OQ-16 as U8.5's build,
@@ -30,6 +30,31 @@ tier-flag argument (below) has an expiry condition with no independent trigger, 
 at the entry. Two `maintenance.md` items (M1, M2) were reconfirmed still open and two more
 (M4, M5) were added there — the §6 unit table omits U8.9's drop and carries no row for U11
 at all, despite U11 being closed.
+
+**U9's close-out, Sept 2, 2026 — five entries closed, four opened, one retargeted, and one
+left open on purpose.**
+
+**Closed:** OQ-9 (the Summarizer's model role — it now makes a real call, and decision #8
+records the setting as **inherited** rather than chosen; see the register), OQ-10 (keep the
+on-disk credential fallback; the exposure it was really about was an account identifier
+printed into a recording, fixed at U9.M), OQ-14 (discharged — Checkpoint 5.1 asked for design
+rationale, not build artifacts), OQ-21 (the sixth demo deal shipped as `chicago-uptown`, so
+the set shows a clean run twice), and OQ-22 (closed Sept 2 at U9.7T on the third of the three
+conditions it named for itself, with the record in
+[`design/evaluator.md`](design/evaluator.md)).
+
+**Left open on purpose: OQ-13.** It is the one thing U9 owed and did not deliver, because the
+capture needs a live account and a screen. Everything it depends on is discharged. Its entry
+says so at the bottom of this file rather than in a close-out note nobody re-reads.
+
+**Retargeted, not closed: OQ-5.** U9 owned writing it up and did — twice. It never owned
+closing it, because the condition is a case that does not exist.
+
+**Opened: OQ-24, OQ-25, OQ-26, OQ-27.** All four are things U9 *decided* rather than things
+it discovered — a fixed relaxation ladder, a county-grain rent forecast, a model-written lede
+whose prose is unchecked, and one report serving two readers. Each is written with what would
+falsify it, because a deferral recorded without a closing condition is indistinguishable from
+one that was forgotten.
 
 ---
 
@@ -163,9 +188,65 @@ allows all three, or when they are written up as gaps. `config.RENT_MODEL_ESTIMA
 
 ---
 
+## Retrieval
+
+### OQ-24 · `TODO(retrieval)` · no unit — should *which* criterion to relax be a judgment rather than a fixed ladder?
+**Raised Sept 2, 2026 at U9's close, out of maintenance item M6.** The Comps agent relaxes
+in one fixed order — floor-area band, then radius, then bedroom tolerance — inherited from
+U4 with a rationale measurement has since retired: it called floor area the weakest signal,
+and the shipped rent model measures `square_feet` at **0.502** against `bedrooms` at
+**0.300**, so the ladder concedes the strongest measured attribute first.
+
+**Two questions live behind that and they must be taken in order.** Is the order wrong —
+deterministic, and now tagged `TODO(retrieval)` at the site? And should the order be chosen
+per deal at all? This entry is the second. It is the strongest candidate for a further
+reasoning locus in this system, because *which* criterion to relax for **this** deal is a
+real judgment with alternatives and a measurable outcome: a thin-but-dense ZIP wants the
+radius held and the size band conceded, a subject with an unusual footprint wants the
+opposite, and today both get the same answer.
+
+**What deciding it needs, in order — proposed at U9.11 and awaiting the architect's
+review**, since this entry exists precisely so the criteria are fixed before anyone builds
+toward them:
+
+1. **A quality metric that does not depend on a model being asked.** Comps feed a
+   cross-check against the modelled rent, so *better comps* means a comp-derived rent that
+   tracks the subject's actual rent more closely. Held-out corpus rows are subjects whose
+   rent is **known**: drop one from the index, force the loop to fire, score
+   `|comp median rent − actual rent|`. Deterministic, no model call, no new data — and it
+   is the number U4's docstring asserted and never measured.
+2. **Establish the deterministic ceiling first.** Score all **six** orderings of the three
+   concessions on that metric. If the best fixed order captures the gain, this closes as a
+   *reorder* — the `TODO(retrieval)` — and there is no locus to buy. **This is OQ-22's
+   precedent applied**: the starting-point spike found a deterministic rule reproducing the
+   model's modal answer and the model was not adopted.
+3. **Only if per-deal variation beats the best fixed order does a locus have a case.** Then,
+   declared before it is built, not after:
+   - **Stability** — the same concession chosen on **≥7 of 8** repeats at a fixed deal. That
+     bar is not invented here: the starting-point spike failed it at 5 of 8, which is why its
+     mechanism was declined (OQ-17).
+   - **Reproducibility** — it puts a model call in a node **every** deal reaches, so the comp
+     set itself becomes cache-dependent rather than just the prose about it, and every eval
+     row needs a recording. Both model calls this system has today sit *downstream* of
+     retrieval; this one would sit above everything.
+   - **Transparent degradation** — on model outage it must fall back to the fixed order and
+     say which order it used, because a silently different comp set moves every number
+     downstream of it.
+
+**The likely outcome, stated in advance so the measurement can falsify it** rather than
+confirm it: step 2 settles it and step 3 never runs, because the ladder is a three-way choice
+over one static attribute set and there is little for a judgment to add over a measured order.
+Written down because that is what OQ-20 asks of check B, and it is the discipline this project
+uses.
+
+**Closes when** step 1 exists and step 2 has been scored — as a reorder, or as a locus that
+clears step 3. `agents/comps_retrieval.py`, [`tasks/maintenance.md`](tasks/maintenance.md) M6.
+
+---
+
 ## Forecasting & reasoning
 
-### OQ-5 · U9 — the ToT constants are provisional
+### OQ-5 · no unit — the ToT constants are provisional
 `TOT_BRANCHING_FACTOR`, `TOT_MAX_DEPTH`, `TOT_BEAM_WIDTH`, `TOT_PRUNE_THRESHOLD` were set
 by reading output, not by tuning. **Closes when** synthetic cases supply a known-correct
 branch to tune against. Note the framing-level values are already special cases found by
@@ -225,6 +306,44 @@ left the comparison alone.
 formality: tuning needs a case whose correct branch is known by construction, and every
 fixture this project has was authored by a pass that already knew the shipped values.
 
+**Label retargeted U9 → no unit at U9's close, Sept 2, 2026.** U9 was the unit that owned
+writing this up and it did — at U9.10, and again at U9.7T with the measurement above. It
+never owned closing it, because the condition is a *case that does not exist* rather than a
+task nobody scheduled. Carrying `U9` in the label past U9's close would say a closed unit
+still owes something.
+
+
+### OQ-25 · decision #21 · no unit — the forecast's rent bands are county-grain against a ZIP-grain estimate, and the fallback threshold is a judgment
+**Raised Sept 2, 2026 at U9's close, out of what U9.3 built.** #21 itself is settled: rent
+growth comes from Zillow ZORI, chosen by following #16's own architectural argument to where
+#19 moved the system. **Two residuals came with it and neither was decided.**
+
+**1. The grain mismatch, disclosed rather than resolved.** #19 anchors the rent *estimate* at
+the subject's own **ZIP**; #21 reads growth at the **county**. The reason is coverage and it
+was measured: ZIP 10307 — `staten-island`'s own ZIP, on the one demo deal whose forecast is
+rent-only — carries no ZORI series at all, and 65–95% of ZIPs in this project's market
+counties begin after 2018-01, so a ZIP-first design would have turned a one-sided forecast
+into none. Where both tiers exist the answer barely moves (LA 90026 +0.68/+2.37/+3.86 against
+its county's +1.25/+2.51/+4.76). **That is a good reason to ship county and not a
+demonstration that the grain does not matter** — one ZIP is one observation. Closing it means
+measuring the ZIP-versus-county band difference across every ZIP where both exist, then
+deciding whether to prefer ZIP with a county fallback — the anchor's own shape — rather than
+county throughout.
+
+**2. `ZORI_GROWTH_MIN_SUSTAINED_STRETCHES` was set against a distribution, not against an
+outcome.** The first rule tried — one contiguous twelve-month run — let Adams County IL
+publish a five-year projection banded +9.18/+9.86/+10.51 off **14 months**, because **a thin
+series does not look unreliable, it looks confident**: median band width runs 0.13pp at 1–3
+distinct stretches against 6.15pp at 24–43. The shipped requirement is a full year of distinct
+stretches and it drops 97 further counties to the FMR fallback. It sits on a smooth
+distribution and is recorded as a judgment, but **nothing has measured what a wrong fallback
+costs a forecast** — the same shape `MIN_QUALIFYING_COMPS` was in before U4 measured density.
+
+**Neither is a defect and neither blocked the freeze.** They are the two places #21 chose on
+coverage and on shape because no outcome measurement was available in the time it had.
+**Closes when** both are decided. `tools/rent_growth.py`, `tools/growth_bands.py`,
+`config.ZORI_GROWTH_MIN_SUSTAINED_STRETCHES`.
+
 ---
 
 ## Geography & anchoring
@@ -239,41 +358,6 @@ county-subdivision layer is built. `tools/county_crosswalk.py:44`, `config.py:18
 ---
 
 ## Models & infrastructure
-
-### OQ-9 · decision #8 · U9 — Summarizer model role
-Holds the extraction model's value and makes no LLM call yet, so the setting is untested
-rather than chosen. **Closes when** the Summarizer first calls a model, U9. **The Critic
-half is resolved, not open:** decision #12's Critic ToT half was retired on evidence in
-U7.7 — the checks that shipped are pure functions over `state.flags`, so the Critic makes
-no LLM call in this design and `config.MODEL_CRITIC` stays untested by construction, not
-by omission.
-
-### OQ-10 · `TODO(security)` · no unit — the on-disk token fallback
-Keys fall back to plaintext files in a gitignored directory when the env var is unset.
-**The question is whether to drop the fallback and require the env var.** Affects
-`tools/hud_fmr.py:24`, `tools/llm_client.py:41` and `tools/tracing.py:41` (added Sept 1,
-2026 when a LangSmith key first existed — the same trade, taken the same way). Raise
-before any public demo.
-
-**CLOSES Sept 2, 2026 at U9.10 — keep the fallback, and the exposure it was really about
-is already fixed.** Settled by the architect Aug 31: `ignore/` is gitignored, so no key
-reaches the public repository, and requiring env vars would only make a fresh clone harder
-to run — which is what Checkpoint 7.1 grades. **The two halves of this entry had different
-answers and conflating them is why it stayed open**: one asks whether a key may sit on disk
-in a gitignored directory, and the other asked whether an account identifier should be
-printed into a terminal that is about to be recorded. The first is a defensible trade taken
-deliberately at three sites. The second had no defensible yes and is fixed.
-
-**The `diagnostics.py` half is closed and was a different question, Sept 2, 2026 at
-U9.M.** This entry used to carry it alongside the three fallbacks; it is not the same
-trade. The fallbacks ask whether a key may sit on disk in a gitignored directory — a
-question with a real answer either way. `diagnostics.py:36` asked whether the account
-identifier should be *printed to a terminal that is about to be recorded*, which has no
-defensible yes. **Redacted rather than gated behind a quiet-during-recording switch**,
-because a switch has to be remembered once, before a capture nobody can edit afterwards,
-and on a run where something has already gone wrong. `tests/test_diagnostics_redaction.py`
-guards it in both directions — the identifier out, the status and remedy hint in. What
-remains under this entry is only the fallback question, and U9.10 closes that.
 
 ### OQ-17 · `TODO(reliability)` · no unit — live model calls are not perfectly deterministic, even at temperature 0
 Found Aug 29, 2026 while building U8.5's OQ-16 case. `scenario_forecast`'s ToT scorer gave
@@ -331,9 +415,54 @@ turns out to move a real decision. Noted here rather than acted on now, per the
 architect's explicit call to document and defer. `agents/scenario_forecast.py`,
 `docs/design/architecture.md` §3.
 
+
+### OQ-26 · U9.4 · no unit — the written summary's figures are checked; its prose is not
+**Raised Sept 1, 2026 at U9.4 as a residual, recorded here Sept 2 at U9's close.** The lede is
+a model-written paragraph above the report. It is **additive by construction** — nothing below
+it is removed or reworded by the model — and it quotes rounded reader-facing figures rather
+than raw floats, so it adds no second instance of OQ-18's fragility. **The prose carries no
+such guarantee.** It needed two prompt passes and then a structural change — dropping the
+disclosure excerpts entirely — before it stopped mischaracterizing evidence, twice describing
+rental comparables as sales. Iteration stopped there on U9.3's precedent: under OQ-17, further
+tuning fits a single draw.
+
+**The strongest mitigation available inside the freeze is already taken, and it is not an
+answer.** U9.5's recording pass freezes one draw per row, so every committed report and every
+replayed demo carries a lede that was read once and can be read again — run-to-run exposure
+becomes a fixed artifact. **A live run has no such guarantee**, which is the paste box and any
+fresh deal.
+
+**Closes when** either the lede is constrained to a form that cannot mischaracterize — quoting
+only figures and disclosure names the report already renders, which is nearer a template than
+a summary — or a check exists that scores a generated lede against the report it sits above.
+The second is the useful one and the harder one; the first is cheap and costs the thing the
+lede exists for. `agents/summarizer._lede_section`, `config.SUMMARY_NARRATIVE_ENABLED`.
+
 ---
 
 ## Evaluation & demo
+
+### OQ-27 · U9.4 · no unit — one report, two readers
+**Deferred on timeline Sept 1, 2026 at U9.4; recorded here at U9's close so the next reader
+sees a choice rather than an oversight.** U9.4's finding was that someone reading many of
+these reports meets the same boilerplate every time and the pricing is buried. The fix taken
+was **progressive detail in one document** — recommendation and headline figures first,
+disclosures condensed with full text expandable, evidence below. **Two renderings, one
+investor-facing and one internal, is the cleaner design and was not taken**, on schedule.
+
+**Distinct from OQ-23**, which asks whether the report is too *long*. This asks who each part
+is *for*. Their cheap fixes point in different directions — OQ-23's is to collapse more of the
+middle, this one's is to split by audience — and taking the first forecloses very little of the
+second.
+
+**Adjacent to work that already exists**, which is part of why it is cheap to state and easy
+to underestimate: [`design/personas.md`](design/personas.md) names four readers, and the
+escalation routing rule already sends a *pause* to the right desk. Nothing yet sends a
+*report* to the right reader.
+
+**Closes when** the split is taken, or when the single rendering is defended on evidence
+rather than on schedule — which is the same evidence OQ-23 asks for first: which sections a
+reader opens when they are collapsed. `agents/summarizer.py`, `design/personas.md`.
 
 ### OQ-18 · no unit — a replay row missed its recordings once, and the cause is not established
 **Found Aug 29, 2026 during U8.4c's batch re-derivation.** Three replay-tier cases
@@ -363,47 +492,6 @@ already passes. Kept open on OQ-17's precedent rather than closed, because the m
 newer than the fault: every replay prompt now rides on ZIP resolution being stable, and that
 coupling arrived with the ZIP-grain anchor. **Re-open with a unit if a second miss occurs** —
 two is a pattern and would pay for the re-record.
-
-### OQ-21 · U9 — a sixth demo deal, in Chicago, so the set shows a clean run twice
-**Raised Aug 30, 2026 by U8.6e; resolved in approach Aug 31 by the architect.** Ungating the
-Critic's first interaction check made `chicago` escalate — it carries
-`comps_outside_match_criteria` on an ordinary run, 3 of 8 comparables outside the size band
-— so the deal that served as the middle-of-the-road demo now routes to human review, and
-`los-angeles` became the only demo deal reaching 1.00 and reporting clean. That escalation is
-the system working and nothing about it was reverted.
-
-**Taken: add a sixth deal, also in Chicago. `chicago` is left exactly as it is.** The two
-rejected alternatives are recorded because the reason is about what the demo has to show:
-*accepting the set as it stands* leaves one clean run against five escalations, and a range
-carried entirely by degrees of escalation understates a system whose whole argument is that
-it reports cleanly when it can; *re-siting `chicago`* would spend the escalating deal to buy
-the clean one, which is a trade, not a gain.
-
-**Why re-siting is not free, in plain terms** — this replaces an earlier note that said only
-that `chicago`'s terms are "#11-calibrated". Under decision #11, no demo figure is invented:
-each one names the public source it was derived from in `demo_deals.py`, and
-`scripts/verify_demo_calibration.py` re-derives every figure from those sources on demand.
-The asking price comes from Redfin's median sale price for multi-family in that metro; the
-stated rents come from HUD's schedule for **the county the listing's own address geocodes
-to**. Move the address and both derivations move with it, the verification script's expected
-values change, and — because the address determines the ZIP — the deal stops being the one
-U8.8 uses to show a neighborhood median against a metro one.
-
-**Two things the new deal needs, both already known so U9 does not rediscover them:**
-
-- **The siting does not have to be searched for.** U8.6b already found and measured one:
-  Chicago Uptown at **1,100 sq ft** returns 8 comparables with 2 outside the size band — the
-  share the threshold admits — and raises **no warn-severity disclosure at all**. It runs at
-  confidence **1.00** as the eval fixture `chicago-uptown-band-under`. Its 1,300 sq ft
-  sibling is the straddle partner that escalates, so the pair also documents how narrow the
-  clean margin is.
-- **Its rent basis must not be copied from the existing deals.** U8.7 found `DemoDeal.
-  rent_basis` is `hud_fmr:2` across the set — #11 set those rents from the anchor #19
-  retired — so the existing basis is stale. A new deal should declare its rents against the
-  market index the system now uses, or it ships stale on day one.
-
-**Closes when** U9 adds the deal, calibrates it under #11's rules, and re-derives the demo
-table. [`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.6b, §U8.6e, §U8.7.
 
 ### OQ-23 · no unit — is the report too long?
 **Raised Sept 2, 2026 by the architect**, reading the three sample reports after U9.7T and
@@ -441,27 +529,17 @@ shipping every local run to a hosted service. **Closes when** U9.9 captures trac
 the surface that ships — which is the 14-day clock this entry exists to protect, now
 started rather than pending.
 
-### OQ-14 · U9 — checkpoint criteria as build artifacts
-Where a checkpoint publishes completion criteria, the unit is specified to *produce* each
-one rather than write it up afterward. U4 did this (see the acceptance-criteria table in
-[`history/decision_log.md`](history/decision_log.md#retrieval)). **Apply the same treatment
-to 5.1** as its criteria are published. **6.1's half is discharged (U7.8):** the unit's
-evidence exists as build artifacts rather than as write-up —
-`scripts/confidence_evidence.py` for the confidence mechanism and the re-derived demo
-table, `tests/test_critic_interactions.py` for the interaction checks, and
-`tests/test_flag_propagation.py` for the rework cycle terminating and disclosing that it
-did.
+**The only entry U9 left open that U9 was expected to close, Sept 2, 2026.** Everything
+the capture depends on is discharged and verified: the terminal prints four lines before
+the report rather than ~190, the account identifier is redacted with a test guarding both
+directions, the diagram regenerated byte-identical with the single `critic → planner` back
+edge asserted, and the Streamlit sidebar now states whether the session is tracing — which
+it did not before Sept 2, so a `LANGSMITH_TRACING=true` shell would have traced the demo
+into the project named `default` with nothing on screen saying so. What remains needs a
+live account and a screen, and the runbook with the exact commands is in
+[`tasks/task_list_u9.md`](tasks/task_list_u9.md) §U9.9. **One correction to that runbook,
+found Sept 2 while re-deriving the sample reports:** it says `> report.md` captures the
+report alone because the status lines stay out of a redirect. They do not — `main.py`
+prints all four, and the escalation payload, to **stdout**. A committed report is produced
+by taking the file from its `# Deal Evaluation` heading onward.
 
-**CLOSES as discharged, Sept 2, 2026 at U9.10 — settled by the architect Aug 31.** The 5.1
-half does not apply, and the reason is what 5.1 actually asked for: **design rationale** —
-roles, coordination strategy, communication approach — rather than build artifacts. The
-treatment U4 gave its acceptance criteria answers a checkpoint that publishes *measurable*
-criteria, and 5.1 does not; 5.1's response is submitted. 6.1's half closed at U7.8 as
-recorded above. U9.9 regenerates the diagram and captures traces regardless, so attributing
-those to 5.1 costs a sentence in the close-out rather than a subsection of its own.
-
-**The generalizable half is worth keeping when this entry is deleted**, because it is a
-practice this project adopted rather than a question it answered: where a checkpoint
-publishes measurable completion criteria, build the artifact that satisfies each one as
-part of the unit, instead of writing a claim about it afterwards. U4's acceptance table and
-U7.8's evidence scripts are both instances. Recorded in the §7 register at close-out.
