@@ -54,6 +54,14 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 3, 2026 — the New York disclosure's claim becomes a measurement
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 3, 2026 | maintenance | **`RENT_ESTIMATE_MARKET_ERROR_ELEVATED` needed no change, and recording why is the point.** Its message already tells the reader this is *"not a sign the model has never seen a market like it — those listings are part of what the model trained on; they are just harder to price accurately than most."* Until leave-one-metro-out ran that was an inference from construction — New York is in `TRAINING_METROS`, therefore the model has seen it. LOMO tests the stronger form by deleting New York from training entirely: **the error moves $855 → $875, a 2% transfer cost, the smallest of any market measured**, against Los Angeles's 19%. So New York carries the largest absolute error and the smallest dependence on having been trained on. `_attach_metro_error`'s docstring now records that, plus the instruction not to soften the sentence into *"more data would help"* — it would not, and the cause is within-ZIP dispersion three location-blind features cannot recover (§2). The README's limitations section gains the same finding, because that flag is the most visible disclosure the system produces and a reviewer meets it in two of the three sample reports. **Docstring and prose only**; the reader-facing message is unchanged and correct as written | 7.1 |
+
+---
+
 ## Sept 2, 2026 — M1: every decision citation names the decision
 
 | Date added | Unit | Work done | Related checkpoint |

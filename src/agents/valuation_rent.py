@@ -335,6 +335,23 @@ def _attach_metro_error(
     on every run, not only a flagged one, so a reader in a good market can see what good
     looks like. A subject outside these four markets gets `None` — a fact about this
     breakdown's coverage, not a degradation to disclose.
+
+    **The message's central claim stopped being an argument and became a measurement on
+    Sept 2, 2026.** It tells the reader this is "not a sign the model has never seen a
+    market like it — those listings are part of what the model trained on; they are just
+    harder to price accurately than most." Until leave-one-metro-out ran
+    (`scripts/lomo_validation.py`) that was an inference from construction: New York is in
+    `config.TRAINING_METROS`, therefore the model has seen it. LOMO tests the stronger
+    form by deleting New York from training entirely, and **the error moves from $855 to
+    $875 — a 2% transfer cost, the smallest of any market measured**, against Los Angeles's
+    19%. So New York carries the largest absolute error and the smallest dependence on
+    having been trained on, which is the sentence above stated as evidence.
+
+    **Do not soften that sentence into "more data would help."** It would not: the market
+    with the worst error is the one least sensitive to how much of it the model saw, and
+    the cause is within-ZIP rent dispersion that three location-blind features cannot
+    recover (§2). This is a permanent property of pricing New York with this feature set,
+    not a coverage gap awaiting a bigger corpus.
     """
     by_metro = (bundle.get("report") or {}).get("mae_dollars_by_metro") or {}
     label = _resolve_market_label(terms)

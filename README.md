@@ -202,6 +202,14 @@ disclosed deliberately rather than hidden:
   number is the upper bound for one. It is an upper bound rather than an estimate because a
   fold that removes a large market also trains on far less data; Los Angeles is 42% of the
   corpus.
+
+  **The same run explains the report's most visible disclosure.** New York carries the
+  largest per-market error — $855/mo, which the report flags on every New York deal — and
+  the *smallest* transfer cost: removing New York from training entirely moves that figure
+  only to $875, **2%**, against Los Angeles's 19%. So the elevated New York error is not a
+  coverage gap that more New York listings would close. It is within-ZIP rent dispersion
+  that three location-blind features cannot recover, and it is disclosed as a permanent
+  property of this feature set rather than as work outstanding.
 - **Test coverage is deliberately scoped, not exhaustive.** Two suites are load-bearing —
   flag propagation and the evaluation harness — and broad unit coverage was a deliberate
   cut, not an oversight; see `docs/implementation_plan.md` §8.
