@@ -7,7 +7,7 @@ plan of record and states the *current* design; this file holds the reasoning th
 produced it, the premises that were measured and disproved, and the corrections made
 along the way.
 
-**Section numbers (§1–§9) and decision numbers (#1–#21) throughout this repository refer
+**Section numbers (§1–§9) and decision numbers (#1–#22) throughout this repository refer
 to [`implementation_plan.md`](../implementation_plan.md)** — §-numbers to its sections,
 #-numbers to the decisions register in its §7. That register is the index to this file.
 
@@ -25,7 +25,7 @@ and its date, so a chronological or by-unit lookup still works via search.
 - [Data & sources](#data--sources) — #2, #4, #7, #11
 - [Geography & anchoring](#geography--anchoring) — #10
 - [Retrieval](#retrieval) — #5, and U4's design and ablation record
-- [Rent & valuation](#rent--valuation) — #15, #18, #19, #20, and cut-list 1a's deferral
+- [Rent & valuation](#rent--valuation) — #15, #18, #19, #20, #22, and cut-list 1a's deferral
 - [Forecasting & reasoning](#forecasting--reasoning) — #12, #13, #14, #16, #17
 - [Orchestration & control flow](#orchestration--control-flow) — #1, #6, #9, U2's findings, and U7's Critic record
 - [Models & infrastructure](#models--infrastructure) — #8, #13, and the free-tier accounting
@@ -548,6 +548,63 @@ make a listing less lifelike but cannot make the system wrong — the same reaso
 in the Chicago deal's note, where a reader of the fixture will meet it.
 
 ---
+
+### #22 · U7 → U9 · Sept 2, 2026 — check B stays a disclosure, and there is no column to threshold
+
+**The sibling of #20, and it closes two units later on its own measurement rather than on
+that one's.** U7 Q4 shipped two Summarizer disclosures and scheduled promoting both to Critic
+objections: **check A**, the listing's stated rents against the modelled rent, and **check
+B**, the asking price (`deal_terms.price`) against the market benchmark
+(`ValuationDetail.benchmark_median_sale_price`). U8.7 measured A and held it. **B was carried
+along by the phrase "checks A and B" with no measurement and no decision of its own** — a gap
+tracked as OQ-20 for three days and closed here.
+
+**Reproduce with `scripts/asking_price_gap.py`** — 22 fixtures, the golden tier plus the demo
+deals, no live model calls.
+
+**The finding, which is stronger than the prediction OQ-20 recorded in advance.** That entry
+predicted B would close as a disclosure because a threshold would restate #11's calibration.
+It does — and the measurement found the reason is structural rather than a matter of degree:
+**the fixtures do not share a calibration basis, so no single column exists for a threshold to
+sit on.**
+
+| Fixture | Declared basis | Declared offset | Raw gap | Residual to metro |
+| --- | --- | --- | --- | --- |
+| `chicago` | Redfin metro median | +0% | **−31%** | +2% |
+| `los-angeles` | Redfin metro median | +0% | +0% | +0% |
+| `chicago-uptown` | ZIP 60640 benchmark | +0% | +0% | **+77%** |
+| `overpriced` | ZIP 60640 benchmark | **+55%** | **+55%** | **+174%** |
+
+For a **ZIP-calibrated** deal the raw gap recovers the declared truth exactly and the residual
+is nonsense; for a **metro-calibrated** deal it is the other way round. #11 set the original
+demo prices from the metro median; U9.4 and U9.6 calibrated the two newest deals against the
+ZIP benchmark. A threshold fitted to either column is right about half the batch.
+
+**Two further findings, and the second is what makes this a decision rather than a deferral.**
+
+- **At the metro tier the gap ranks by *where* a property is, not by what it costs.** The
+  three largest raw gaps are `ny-manhattan-dispersed` **+146%**, `la-oversized-loft` **+129%**
+  and `cleveland-divergence-under` **+43%**, none declaring a premium. A Manhattan listing
+  reads expensive against a New York metro median because it is in Manhattan.
+- **On three fixtures the check cannot fail by construction.** `los-angeles`,
+  `coord-conflict` and `los-angeles-current` take their price *from* the metro median and are
+  scored *against* the metro median, so the gap is structurally **+0%**. §8's own rule is that
+  a check that cannot fail is not a check — and those are the markets with **no ZIP tier at
+  all**, Los Angeles and Cleveland, which is half the inference set.
+
+**The tier-flag question closes with it, and it closes by its condition not being met.**
+OQ-20's dependent half asked whether `benchmark_tier` should raise a flag the way
+`RENT_ANCHOR_COUNTY_LEVEL` does. The argument for *no* — a coarse rent anchor propagates into
+the estimate, the forecast and the comp cross-check, while **nothing computes from the
+benchmark** — carried a stated expiry: *"the moment check B is promoted."* B is not promoted,
+so the argument stands unexpired and the grain keeps disclosing itself in prose. This is
+recorded rather than left in the docstring because an argument with an expiry condition is one
+nobody re-reads on the day it expires.
+
+**What would re-open it**, unchanged from what OQ-20 named and now cheap to state precisely:
+asking prices set independently of any benchmark — real listings, which §8 excludes, or a
+fixture set declaring one consistent basis. The measurement above names exactly which two
+deals already do that and which four do not.
 
 ### #18 · U11 · Aug 30, 2026 — gradient boosting, and the better-scoring form was not the one taken
 

@@ -1,7 +1,7 @@
 # Changelog
 
 **Chronological record for the plan of record — [`implementation_plan.md`](../implementation_plan.md).**
-Section numbers (§1–§9) and decision numbers (#1–#21) anywhere in this repository refer
+Section numbers (§1–§9) and decision numbers (#1–#22) anywhere in this repository refer
 to that file: §-numbers to its sections, #-numbers to the **decisions register in §7**,
 which names every decision and links to its full reasoning in
 [`decision_log.md`](decision_log.md). A
@@ -51,6 +51,14 @@ rows. The unit of a row is the change, not the file.
 - Work predating the unit numbering is labelled by the `implementation_plan.md` section
   that specifies it (`§2`, `§9`), so it stays findable by the same identifier the plan
   uses.
+
+---
+
+## Sept 2, 2026 — check B measured, and decision #22
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 2, 2026 | U9.11 | **The decision that was never taken gets taken, three days after the gap was noticed.** New `scripts/asking_price_gap.py` measures check B — the asking price against `ValuationDetail.benchmark_median_sale_price` — over **22 fixtures**, the golden tier plus the demo deals, with no live calls. B had shipped as a Summarizer disclosure at U7 Q4 and been carried past U8.7 by the phrase *"checks A and B"* while only A was measured and settled as #20. **It stays a disclosure, and the reason is structural rather than a matter of degree: the fixtures do not share a calibration basis, so no column exists for a threshold to sit on.** #11 set the original demo prices from the *metro* median; U9.4 and U9.6 calibrated the newest two against the *ZIP* benchmark. So the raw gap recovers `overpriced`'s declared **+55%** exactly and simultaneously reports an ordinary Uptown duplex as **39% cheap**, while the metro-residual column is right about the first group and gives `overpriced` **+174%** against its declared +55%. Two further findings: at the metro tier the gap ranks by **where** a property is (`ny-manhattan-dispersed` +146%, `la-oversized-loft` +129%, neither declaring a premium), and on **three fixtures the check cannot fail by construction** — price set from the metro median, scored against the metro median, gap structurally +0% — on exactly the markets with no ZIP tier, which is half the inference set. §8's own rule is that a check that cannot fail is not a check. **The benchmark's tier flag closes alongside it**, by its stated expiry (*"the moment check B is promoted"*) not being met. Recorded as **#22**; OQ-20 deleted; the docstrings at `valuation_rent._attach_benchmark` and both `critic.py` sites repointed off the open question and onto the decision. **All 30 eval rows byte-identical** — this measures, it does not promote | 7.1 |
 
 ---
 

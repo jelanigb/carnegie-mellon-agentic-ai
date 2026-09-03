@@ -1,6 +1,6 @@
 # The recommendation — what the system is willing to say about a deal
 
-**Written Sept 1, 2026, at U9.4.** Section numbers (§1–§9) and decision numbers (#1–#21)
+**Written Sept 1, 2026, at U9.4.** Section numbers (§1–§9) and decision numbers (#1–#22)
 refer to [`../implementation_plan.md`](../implementation_plan.md).
 
 **Until U9.4 this system never said whether a property was worth buying.** It said whether

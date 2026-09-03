@@ -1,7 +1,7 @@
 # U9 — Report, recommendation, and the demo surface — task list
 
 > **Conventions for this file are in [`README.md`](README.md).** Section numbers (§1–§9)
-> and decision numbers (#1–#21) refer to
+> and decision numbers (#1–#22) refer to
 > [`../implementation_plan.md`](../implementation_plan.md).
 
 **The last build unit. Feeds the final report and the video (Checkpoint 7.1).**
@@ -1472,7 +1472,7 @@ the file from its `# Deal Evaluation` heading onward, which is how the three in
 | ⬜ | **U9.9** capture: runs, traces, diagram, screenshots | Never sheds |
 | ✅ | **U9.10** OQ-5 / OQ-10 / OQ-14 written up | Done Sept 2, 2026 — OQ-10 and OQ-14 close at U9.11; OQ-5 stays open on an unmet condition, with U9.7T's 51% measurement added |
 | ✅ | **U9.M** maintenance | Done Sept 2, 2026 — three commits; the recording blockers first (they gate U9.9), then M2 and M4–M7, then M8 |
-| ✅ | **U9.11** close-out | Done Sept 2, 2026 — four commits: the untagged ladder deferral, the open questions, the `#1–#21` range, and the register + map. M8 landed first under U9.M. **U9.9 remains, and OQ-13 with it** |
+| ✅ | **U9.11** close-out | Done Sept 2, 2026 — four commits: the untagged ladder deferral, the open questions, the `#1–#22` range, and the register + map. M8 landed first under U9.M. **U9.9 remains, and OQ-13 with it** |
 
 **Twelve change sets against five days; the honest read is that seven land** — and U9.3
 grew substantially on Aug 31, so that estimate is tighter than it was. The cut line is where

@@ -469,7 +469,7 @@ the very figure its price was calibrated from and reads 0% by construction. Its 
 is circular. This listing is calibrated to **ZIP 60640's own median, built from 148
 recorded county-assessor sales** — a benchmark #11 did not supply — so its *Proceed* is
 measured against a local figure rather than against itself. The circularity on the other
-deals is real, is tracked as OQ-20, and is out of this unit's scope.
+deals is real, was measured at decision **#22** (Sept 2, 2026), and is a property of how the fixtures were calibrated rather than of the code — which is why check B stays a disclosure and never became a Critic objection.
 
 **Read it next to `overpriced`.** Same ZIP, same benchmark, same unit mix, both reporting
 at 1.00 with nothing but info-severity disclosures — and opposite axis-2 verdicts,

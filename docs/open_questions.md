@@ -26,8 +26,8 @@ cross-check of `task_list_u7.md`, `task_list_u8.md`, `task_list_u11.md`,
 `maintenance.md` and `changelog.md` against the code found no discrepancy in anything
 already ✅ or already tracked here — this project's own audits (U8.6c, U8.6b, U11.5) had
 already caught what there was to catch. One thing wasn't previously written down: OQ-20's
-tier-flag argument (below) has an expiry condition with no independent trigger, now noted
-at the entry. Two `maintenance.md` items (M1, M2) were reconfirmed still open and two more
+tier-flag argument had an expiry condition with no independent trigger, noted at the entry
+at the time and carried into decision **#22** when that entry closed Sept 2. Two `maintenance.md` items (M1, M2) were reconfirmed still open and two more
 (M4, M5) were added there — the §6 unit table omits U8.9's drop and carries no row for U11
 at all, despite U11 being closed.
 
@@ -55,6 +55,15 @@ it discovered — a fixed relaxation ladder, a county-grain rent forecast, a mod
 whose prose is unchecked, and one report serving two readers. Each is written with what would
 falsify it, because a deferral recorded without a closing condition is indistinguishable from
 one that was forgotten.
+
+**Two more closed later the same day, both reclaimed from the cut list after the close-out
+found the schedule had room.** **OQ-4's transfer half** — leave-one-metro-out measured at a
+13% cost, `scripts/lomo_validation.py`; hyperparameter tuning and feature engineering stay
+open under that entry, because both change the shipped model and force a re-record. And
+**OQ-20 in full**, as decision **#22**: check B measured over 22 fixtures and held as a
+disclosure, with the benchmark's tier flag closing alongside it because the condition that
+would have expired its argument did not occur. Both were cut in the belief they were
+expensive; both cost a script and moved no shipped number.
 
 ---
 
@@ -84,80 +93,56 @@ mix shifts 51 percentage points between the window's halves — so any future te
 analysis of it must hold geography constant or it will measure the scrape's schedule
 instead. `config.py`, `tools/model/rent_model.py`.
 
-### OQ-20 · no unit — check B was never separately decided, and the benchmark's tier flag waits on it
-**Two questions, in order, because the first gates the second.** Raised Aug 30–31, 2026 at
-U8.8 and U8.10.
+---
 
-**What "check B" is.** One of the six cross-agent pairs enumerated in
-[`tasks/task_list_u7.md`](tasks/task_list_u7.md) Q1: **the listing's asking price
-(`deal_terms.price`, Extractor) against the market benchmark
-(`ValuationDetail.benchmark_median_sale_price`, Valuation).** Its sibling, **check A**, is
-the listing's *stated rents* against the modelled rent. U7 Q4 shipped both as **Summarizer
-disclosures rather than Critic objections** — rendered as prose, raising no flag and moving
-no verdict — and scheduled promoting them to U8.
+**CHECK B MEASURED AND CLOSED Sept 2, 2026 — it stays a disclosure, on its own evidence
+rather than by inheritance, and the tier-flag half closes with it because the condition that
+would have expired the argument did not occur.** `scripts/asking_price_gap.py`, 22 fixtures
+(the golden tier plus the demo deals, which is where the control lives — no golden fixture
+declares a price basis). No live calls; it replays.
 
-**Check A closed on measurement as #20. Check B closed only by inheritance, and that is the
-gap.** U8.7 measured *A* (`scripts/stated_rent_gap.py`, 13 fixtures) and held it as a
-disclosure on a specific finding: every fixture a 20–35% threshold would fire on already
-carried a flag naming a more specific cause. The phrase "checks A and B" then carried B
-along with it — the code at `valuation_rent._attach_benchmark` now says "check B was not
-promoted at U8.7" — but **no measurement of B was taken and no decision about B was
-recorded.** #20's register row is about the stated-rent comparison alone.
+**The prediction above was confirmed and then sharpened, and the sharpening is the finding.**
+This entry predicted B closes as a disclosure because a threshold would restate #11's
+calibration. True — and the measurement found something the entry did not anticipate:
+**there is no single column a threshold could sit on, because the fixtures do not share a
+calibration basis.**
 
-**What closing check B would take, in order:**
+| Fixture | Declared basis | Declared | Raw gap | Residual |
+| --- | --- | --- | --- | --- |
+| `chicago` | Redfin metro median | +0% | **−31%** | +2% |
+| `los-angeles` | Redfin metro median | +0% | +0% | +0% |
+| `chicago-uptown` | ZIP 60640 benchmark | +0% | +0% | **+77%** |
+| `overpriced` | ZIP 60640 benchmark | **+55%** | **+55%** | **+174%** |
 
-1. **The measurement that does not exist** — the B analogue of `scripts/stated_rent_gap.py`:
-   each fixture's asking price against its own ZIP benchmark, printed beside the flags the
-   report already raises and beside the fixture's declared price basis. Every input is
-   committed (`tools/data/zip_sale_benchmarks.json`), no model calls, so it costs roughly
-   what A's script cost.
-2. **A confound worse than A's, which that measurement has to survive.** #11 set the demo
-   and eval asking prices *from the Redfin metro median*, and U8.8 replaced the comparison
-   basis with the **ZIP** median. So the measured gap is now mostly *(metro median − ZIP
-   median)* for that ZIP, plus whatever the deal itself carries — and the first term
-   dominates: ZIP 60640 runs **77% above** the Chicago metro, which is why
-   `chicago-uptown-duplex` reads 39% cheap while nothing about the property is unusual.
-   A threshold fitted to that would bury #11's calibration inside a production constant,
-   which is the class of error U7 Q4 refused for A. The one fixture carrying a
-   deal-specific signal is `overpriced`, whose `price_premium_to_basis` is a **declared**
-   +55%.
-3. **The likely outcome, stated in advance so the measurement can falsify it** rather than
-   confirm it: B closes as a disclosure like A did, but for a *different* reason — A's
-   threshold would have restated an existing flag, B's would restate #11's calibration.
-4. **What would change the answer:** asking prices set independently of the benchmark —
-   either fixtures declaring an offset from their **ZIP** figure (the `overpriced` pattern,
-   repointed), or real listings, which §8 excludes. The first is cheap and is the only route
-   inside the freeze.
+For a **ZIP-calibrated** deal the raw gap recovers the declared truth exactly and the
+residual is nonsense; for a **metro-calibrated** deal it is the other way round. #11 set the
+original demo prices from the metro median and U9.4/U9.6 calibrated the two newest deals
+against the ZIP benchmark, so any threshold fitted to either column is right about half the
+batch and wrong about the other half.
 
-**The dependent half — should the benchmark's *tier* raise a flag?** The rent anchor
-discloses its own grain: `rent_anchor_county_level` fires at warn when it resolves coarser
-than ZIP. The **sale-price benchmark** — `ValuationDetail.benchmark_median_sale_price`, the
-figure U8.8 made ZIP-level for New York and Chicago and left metro-level for Los Angeles and
-Cleveland — has the same two tiers and discloses which it used **in prose, without a flag**.
+**Two further findings, and the second is the one that decides the tier question.**
 
-**Why not, as argued at `valuation_rent._attach_benchmark`:** a coarse rent anchor
-*propagates* — into the estimate, the forecast, and the comp cross-check — while **nothing
-computes from the sale-price benchmark.** It is printed beside the asking price and read by
-a human. Charging confidence for the width of a figure that enters no calculation would tell
-the reader this deal's numbers are shakier when none of them moved.
+- **At the metro tier the gap ranks by *where* a property is, not what it costs.** The three
+  largest raw gaps are `ny-manhattan-dispersed` **+146%**, `la-oversized-loft` **+129%** and
+  `cleveland-divergence-under` **+43%**, none of which declares a premium. A Manhattan
+  listing reads expensive against a New York metro median because it is in Manhattan.
+- **On three fixtures check B cannot fail by construction.** `los-angeles`, `coord-conflict`
+  and `los-angeles-current` have their price set *from* the metro median and their benchmark
+  *is* the metro median, so the gap is structurally **+0%**. §8's own rule: *a check that
+  cannot fail is not a check.* Those are the markets with no ZIP tier — Los Angeles and
+  Cleveland — which is half the inference set.
 
-**That argument expires the moment check B is promoted**, because the benchmark then becomes
-an input to a check and its grain starts deciding an outcome. And promotion would need a
-rule *first*, not after: Los Angeles and Cleveland have **no ZIP tier at all**, so B would
-compare an asking price against a metro-wide median in half the inference set. **Closes
-when** check B is decided — as a disclosure with its own measured reason, or as an objection
-with the tier rule that promotion requires. Recorded here rather than left in a docstring
-because an argument with an expiry condition is one nobody re-reads on the day it expires.
-`agents/valuation_rent._attach_benchmark`, `agents/critic._consistency_objections`,
-[`tasks/task_list_u8.md`](tasks/task_list_u8.md) §U8.7–U8.8.
+**So the tier-flag half closes too, and it closes the way the argument said it would.** That
+argument's stated expiry was *"the moment check B is promoted"*; B is not promoted, so the
+argument stands unexpired and the benchmark's grain keeps disclosing itself in prose without
+a flag. Nothing computes from the benchmark, and charging confidence for the width of a
+figure that enters no calculation would tell a reader this deal's numbers are shakier when
+none of them moved.
 
-**Documentation audit, Aug 31, 2026: the coupling has no independent trigger.** Both
-halves — check B's own measurement and the tier-flag question — still share no owner and
-no unit. The tier-flag argument's stated expiry ("the moment check B is promoted") isn't
-wired to anything: a future unit that promotes check B without also re-reading this entry
-could leave the expired argument standing uncorrected in `_attach_benchmark`'s docstring.
-No code follows from this — it's a reminder that closing check B has to include revisiting
-the tier-flag half, not a separate question.
+**What would re-open this, unchanged from what the entry named:** asking prices set
+independently of any benchmark — real listings, which §8 excludes, or a fixture set that
+declares one consistent basis. The second is now cheap to describe precisely, because the
+measurement above says exactly which two deals already do it and which four do not.
 
 ### OQ-4 · cut list 1a — rent-model feature engineering, tuning, and transfer
 **Retargeted Aug 30, 2026, not closed, and the original wording is kept above the change
@@ -262,8 +247,8 @@ toward them:
 **The likely outcome, stated in advance so the measurement can falsify it** rather than
 confirm it: step 2 settles it and step 3 never runs, because the ladder is a three-way choice
 over one static attribute set and there is little for a judgment to add over a measured order.
-Written down because that is what OQ-20 asks of check B, and it is the discipline this project
-uses.
+Written down because that is what OQ-20 asked of check B before it closed as **#22**, and
+it is the discipline this project uses.
 
 **Closes when** step 1 exists and step 2 has been scored — as a reorder, or as a locus that
 clears step 3. `agents/comps_retrieval.py`, [`tasks/maintenance.md`](tasks/maintenance.md) M6.

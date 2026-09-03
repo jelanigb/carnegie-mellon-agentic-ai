@@ -1,7 +1,7 @@
 # The presentation, the script, and the report
 
 **The Checkpoint 7.1 deliverables, written down so they are not assembled at midnight.**
-Section numbers (§1–§9) and decision numbers (#1–#21) refer to
+Section numbers (§1–§9) and decision numbers (#1–#22) refer to
 [`implementation_plan.md`](implementation_plan.md).
 
 **Split out of [`tasks/task_list_u9.md`](tasks/task_list_u9.md) §U9.9 on Sept 2, 2026**, by

@@ -260,11 +260,14 @@ def _consistency_objections(state: DealState) -> list[Objection]:
     vaguer words and attribute them to the listing's stated rent. See U8.7 for the open
     decision and what evidence would reopen it.
 
-    **That reasoning covers the rent comparison only.** The price comparison against the
-    benchmark was carried along by the phrase "checks A and B" and has had no measurement
-    of its own — and its confound is a different one, since #11 set every fixture's asking
-    price from the *metro* median while U8.8 made the benchmark *ZIP*-level. Tracked as
-    OQ-20, with what closing it would take.
+    **That reasoning covers the rent comparison only, and the price comparison was settled
+    separately as #22 (Sept 2, 2026, `scripts/asking_price_gap.py`).** It had been carried
+    along by the phrase "checks A and B" with no measurement of its own — tracked as OQ-20
+    until then. It stays a disclosure for a stronger reason than A's: **the fixtures do not
+    share a calibration basis, so no column exists to threshold.** #11 set the original
+    demo prices from the *metro* median while U9.4/U9.6 calibrated the newest two against
+    the *ZIP* benchmark, so the raw gap recovers `overpriced`'s declared +55% exactly while
+    reporting an ordinary Uptown duplex as 39% cheap.
 
     This stays the single seam the Critic calls and the tests substitute, even though
     every surviving check it delegates to is one family, `_interaction_objections()`.
@@ -735,7 +738,10 @@ def recommend(state: DealState) -> RecommendationDetail:
     # prices were derived *from* the metro median, and Los Angeles has no ZIP tier
     # (California assessors publish assessed value, not sale price), so the deal is
     # compared against the very figure it was calibrated from. The wording is fixed here;
-    # the circularity underneath it is OQ-20's and is out of U9's scope.
+    # the circularity underneath it was measured at #22 and is a property of the fixtures
+    # rather than of this code — three of them are scored against the median their price
+    # was set from, so the comparison is inert by construction on exactly the markets with
+    # no ZIP tier. That is why check B stays a disclosure and never became an objection.
     elif round(premium * 100) == 0:
         reasons.append(
             f"The asking price is in line with the typical sale price for this area, "

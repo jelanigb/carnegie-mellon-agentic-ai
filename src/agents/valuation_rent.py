@@ -220,20 +220,32 @@ def _attach_benchmark(detail: ValuationDetail, terms: DealTerms) -> None:
     precisely U8.6d's argument for keeping market-scoped doubt inside the confidence
     score. **The benchmark propagates nowhere.** Nothing computes from
     `benchmark_median_sale_price`, and no objection reads it either — check B
-    ships as a Summarizer disclosure (U7 Q4) and **has never been separately measured or
-    decided**. U8.7 measured and settled its sibling, check A, as #20; the phrase "checks A
-    and B" carried B along without evidence of its own, which OQ-20 now records as the open
-    question it is. It is printed beside the asking price and read by a human. Charging
-    confidence for the width of a figure that enters no calculation would say this deal's
-    *numbers* are shakier when none of them moved.
+    ships as a Summarizer disclosure (U7 Q4). It is printed beside the asking price and
+    read by a human. Charging confidence for the width of a figure that enters no
+    calculation would say this deal's *numbers* are shakier when none of them moved.
 
-    **The condition under which that stops being true is worth naming**, because it is a
-    live decision rather than a closed one (OQ-20): if check B is ever promoted to a
-    Critic objection, the benchmark becomes an input to a check, its grain starts
-    deciding an outcome, and it earns a flag on the same reasoning the rent anchor has
-    one. Sequencing the promotion after this subsection is what makes that decision
-    answerable, since deciding it against a metro-wide median would be deciding it
-    against the number this replaces.
+    **Check B was measured and settled as decision #22 on Sept 2, 2026**, and until then
+    this docstring recorded it as never separately measured — U8.7 settled its sibling,
+    check A, as #20, and the phrase "checks A and B" carried B along without evidence of
+    its own. `scripts/asking_price_gap.py` supplied that evidence over 22 fixtures and B
+    **stays a disclosure**, for a reason stronger than A's: there is no column a threshold
+    could sit on, because the fixtures do not share a calibration basis. #11 set the
+    original demo prices from the *metro* median while U9.4/U9.6 calibrated the two newest
+    against the *ZIP* benchmark, so the raw gap recovers `overpriced`'s declared +55%
+    exactly while reporting an ordinary Uptown duplex as 39% cheap.
+
+    **And on three fixtures the check cannot fail by construction** — `los-angeles`,
+    `coord-conflict` and `los-angeles-current` take their price *from* the metro median and
+    are scored *against* the metro median, so the gap is structurally +0%. Per §8, a check
+    that cannot fail is not a check, and those are the markets with no ZIP tier: Los
+    Angeles and Cleveland, half the inference set.
+
+    **So the condition that would have expired the no-flag argument above did not occur.**
+    It was: if check B is ever promoted to a Critic objection, the benchmark becomes an
+    input to a check, its grain starts deciding an outcome, and it earns a flag on the same
+    reasoning the rent anchor has one. B is not promoted, so the argument stands. Naming
+    the condition anyway, because it is the thing a future reader has to check before
+    reusing this reasoning.
 
     **A cost that is real but is not the argument:** a new `FlagKind` raised here would
     join `scenario_forecast._context_block`'s upstream-flag list, change every forecast
