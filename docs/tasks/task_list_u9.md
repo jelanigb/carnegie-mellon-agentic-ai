@@ -1474,6 +1474,16 @@ the file from its `# Deal Evaluation` heading onward, which is how the three in
 | ✅ | **U9.M** maintenance | Done Sept 2, 2026 — three commits; the recording blockers first (they gate U9.9), then M2 and M4–M7, then M8 |
 | ✅ | **U9.11** close-out | Done Sept 2, 2026 — four commits: the untagged ladder deferral, the open questions, the `#1–#22` range, and the register + map. M8 landed first under U9.M. **U9.9 remains, and OQ-13 with it** |
 
+**The reserve was spent on reclaimed scope, Sept 2, 2026.** The build finished two days
+inside the Sept 4 freeze, so the architect swept §6's cut list and `open_questions.md` for
+anything still worth taking. Three items came back, none of which moved a shipped number:
+**leave-one-metro-out** (cut-list 1a's third bullet — a 13% transfer cost, OQ-4's transfer
+half closed), **check B** (decision **#22**, OQ-20 closed in full), and **M1** (69 decision
+citations glossed). Each was cut in the belief it was expensive; each cost a script or a
+mechanical pass. The sweep also found **two README bullets claiming shipped features did not
+exist** — the Streamlit surface and the gross rent multiplier — in the artifact a grader
+reads first.
+
 **Twelve change sets against five days; the honest read is that seven land** — and U9.3
 grew substantially on Aug 31, so that estimate is tighter than it was. The cut line is where
 it falls.

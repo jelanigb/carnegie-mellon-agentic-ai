@@ -143,13 +143,17 @@ in a focused session or across a fragmented week.
   | `TODO(cut-list)` | `valuation_rent.py` | **One site, down from three (Aug 30, 2026).** Only the descoped LLM rent fallback remains (§6 item 3, taken Aug 21). Model form was **spent** rather than deferred — U11.1 measured three candidates under cross-validation and gradient boosting was adopted; feature engineering, hyperparameter tuning and LOMO were **cut** to §6 item 1a the same day |
   | `TODO(security)` | `hud_fmr.py`, `llm_client.py`, `tracing.py` | Whether to drop on-disk credential fallbacks in favour of env-var-only. **Three sites since Sept 1, 2026** — `tracing.py` inherited the same trade when a LangSmith key first existed (OQ-10) |
   | ~~`TODO(security)`~~ | `diagnostics.py` | ✅ **closed Sept 2, 2026 at U9.M.** The account identifier is redacted from every line this channel prints, in both the JSON-field and bare-token forms, with the status, provider message and remedy hint left intact. **Redaction was taken over the env-gated verbosity switch this row offered as the alternative**, because a switch has to be remembered once before a capture that cannot be edited afterwards, and the run that exposes the identifier is by definition one where something has already gone wrong. Guarded by `tests/test_diagnostics_redaction.py`, including two near-miss cases — an over-broad pattern eats the detail this channel exists for, and fails just as silently |
-  | `TODO(geography)` | `county_crosswalk.py`, `config.py` | New England town-based FMR verified for Boston only, not the other five states |
+  | `TODO(geography)` | `county_crosswalk.py` (`config.py` cross-references it) | New England town-based FMR verified for Boston only, not the other five states |
   | `TODO(retrieval)` | `comps_retrieval.py` | The relaxation ladder concedes floor area first on a rationale the shipped rent model contradicts — `square_feet` 0.502 against `bedrooms` 0.300. **Added Sept 2, 2026 at U9.11's close-out, and the gap it fixes is the interesting part:** M6 closed the same day having corrected the *claim* in the module docstring, and left the *order* deferred **in prose only** — so the deferral existed nowhere `grep -rn "TODO(" src/` could find it, which is precisely what this format exists to prevent. Reordering re-derives all 30 eval rows, so it is post-freeze; what it needs first is a measurement of comp comparability against held-out corpus rows (U4's ablation harness, no model call). Gates [OQ-24](../open_questions.md#retrieval) |
   | ~~`TODO(U9.M)`~~ | `summarizer.py` | ✅ **closed Sept 2, 2026 at M8, the same day it was raised — the shortest-lived row in this table, and that is the point of the format.** The scenario section now names the error band under the figure every row compounds: `staten-island` reads ±$855/mo, **32%** of the estimate, `los-angeles` 18% and `overpriced` 16%. Rendered as one sentence from `subject_metro_mae_dollars` with `model_mae_dollars` behind it, preferring the subject's own market for the same reason the Findings table does. **Language, not calculation** — no scenario is selected differently and no projection moved, which is why all 30 eval rows come back byte-identical and no re-record was needed |
 
-  **Seven live sites remain**, all genuinely deferred and none owned by a unit that has
-  closed: `security` ×3, `geography` ×2, `cut-list` ×1, `retrieval` ×1. Reconciled against
-  `grep -rn "TODO(" src/` on Sept 2, 2026.
+  **Six live sites remain**, all genuinely deferred and none owned by a unit that has
+  closed: `security` ×3, `geography` ×1, `cut-list` ×1, `retrieval` ×1. Reconciled against
+  `grep -rn "TODO(" src/` on Sept 2, 2026 — and the reconciliation found this row had
+  double-counted `geography` since it was written. `config.py`'s New England line *mentions*
+  `TODO(geography)` in prose; the tag itself is only at `county_crosswalk.py`. **Count tags,
+  not mentions** — the grep this table is supposed to agree with matches both, so the rule is
+  to grep for `TODO(<scope>):` with the colon.
 
   **A third failure mode, found at U9.11 and not covered by either rule below.** Both of
   those assume the deferral reached the tree as a `TODO` and only the *table* went stale.
