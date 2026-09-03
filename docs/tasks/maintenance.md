@@ -4,7 +4,7 @@
 > and decision numbers (#1–#22) refer to
 > [`../implementation_plan.md`](../implementation_plan.md).
 
-### M1 — Name the decision at every citation site
+### M1 ✅ — Name the decision at every citation site *(done Sept 2, 2026)*
 
 ~50 code comments cite decisions bare (`decision #9`, `§7 decision #4`). A reader who does
 not already know what #9 was has to leave the file to find out. Append a short gloss at
@@ -16,6 +16,31 @@ Comment-only; no logic. Sites: `graph.py`, `config.py`, `state.py`, `critic.py`,
 **Reconfirmed by documentation audit, Aug 31, 2026** — still open, no sites touched since
 raised. Carried here rather than in `open_questions.md` because it's comment-only
 maintenance, not a design question.
+
+**Closed Sept 2, 2026**, taken as reclaimed scope once the build finished two days inside the
+freeze — it is the one maintenance item whose audience is a *reviewer of the public
+repository* rather than a future session, which is what made it worth spending freeze-week
+time on. **69 citations glossed across 30 files**, from a mechanical pass keyed on §7's own
+register so a gloss cannot name a decision the register does not.
+
+**Three judgments inside a mechanical change, each recorded because a reader will meet the
+result and wonder:**
+
+- **The glosses are short forms, not the register's full titles.** `decision #17
+  (enumerate, do not sample)` rather than *"ToT structure at build time"* — a comment gloss
+  exists to spare the reader a lookup, and a title that only makes sense to someone who
+  already knows the decision does not do that. The register stays the resolution rule.
+- **Possessives were left bare** — 12 of them. `decision #9 (Planner topology)'s back edge`
+  is worse than `decision #9's back edge`, and a gloss that makes a sentence harder to read
+  has defeated its own purpose.
+- **A citation already inside parentheses uses an em dash rather than nesting** —
+  `(decision #13 — MCP adoption)`, 17 sites. And `graph.py`'s topology line took the gloss
+  back out entirely, because the clause immediately after it already said *"pre-flight
+  Planner, not a supervisor."*
+
+Comment-only, verified as such rather than assumed: 107 tests pass, **all 30 eval rows
+byte-identical**, and all three sample reports re-derive unchanged apart from their run
+timestamp.
 
 ### M2 ✅ — Audit the remaining agents' flag messages for internal vocabulary *(done Sept 2, 2026)*
 

@@ -58,7 +58,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import config
 from tools import fmr_history, hud_fmr
 
-# The HUD FMR areas behind this project's eight training metros (§7 decision #4), as
+# The HUD FMR areas behind this project's eight training metros (§7 decision #4 (training metro shortlist)), as
 # resolved from listing coordinates by `tools/county_crosswalk.py` during U5. Listed
 # explicitly rather than re-derived from the corpus so the panel is reproducible on a
 # fresh clone without loading 100MB of Kaggle rows.

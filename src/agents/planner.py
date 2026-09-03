@@ -54,7 +54,7 @@ from state import DealState, DealTerms, FlagKind
 AGENT = "planner"
 
 # The fixed spine of the pipeline, in data-dependency order. Not a decision the Planner
-# makes — decision #9 — so it is stated once here rather than reassembled per run.
+# makes — decision #9 (Planner topology) — so it is stated once here rather than reassembled per run.
 _PIPELINE: tuple[str, ...] = (
     nodes.COMPS_RETRIEVAL,
     nodes.VALUATION_RENT,

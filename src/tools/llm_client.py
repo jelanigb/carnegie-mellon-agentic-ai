@@ -141,7 +141,7 @@ def available_models() -> set[str]:
 
 
 def verify_models_live(*model_ids: str) -> set[str]:
-    """Fail loudly at launch if a configured model has left the catalogue (decision #8).
+    """Fail loudly at launch if a configured model has left the catalogue (decision #8 — model per role).
 
     This exists because of a specific, recorded failure: the four model IDs in
     `config.py` were valid when written and dead six days later — the free Llama variant
@@ -168,13 +168,13 @@ def verify_models_live(*model_ids: str) -> set[str]:
     missing = sorted(wanted - catalogue)
     if missing:
         # Suggest same-vendor models rather than "everything free". The project runs on
-        # paid variants (decision #8), so a free-model list is the wrong remedy — and a
+        # paid variants (decision #8 — model per role), so a free-model list is the wrong remedy — and a
         # dead model is usually replaced by its sibling, not by whatever is cheapest.
         vendors = {model.split("/")[0] for model in missing}
         alternatives = sorted(m for m in catalogue if m.split("/")[0] in vendors)
         raise LlmError(
             f"Configured model(s) absent from the OpenRouter catalogue: {missing}. "
-            f"Update config.py — see decision #8 in docs/implementation_plan.md §7. "
+            f"Update config.py — see decision #8 (model per role) in docs/implementation_plan.md §7. "
             f"Still listed from the same vendor(s): {alternatives or 'none'}"
         )
     return wanted

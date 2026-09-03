@@ -192,7 +192,7 @@ def offline_scenario_evaluator(monkeypatch):
     Forcing the constructor to raise routes the agent down its documented fallback: a
     deterministic scorer that prefers whichever pairing claims least, scoring a candidate
     by how far it departs from the neutral case. **Not a scorer over the rent/price
-    correlation, which is what this docstring said until U9.7T** — decision #21 retired
+    correlation, which is what this docstring said until U9.7T** — decision #21 (forecast rent source) retired
     that correlation as a basis for preferring any pairing, and rewrote the fallback to
     the one thing a scorer with no model can defend. That path is worth exercising on its
     own account, since it is what a real run degrades to when the model is unreachable. The evaluator's live behaviour belongs to

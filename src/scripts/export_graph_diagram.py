@@ -39,14 +39,14 @@ OUT_DIR = Path(__file__).resolve().parents[2] / "docs" / "diagrams"
 MMD_PATH = OUT_DIR / "deal_evaluator_graph.mmd"
 PNG_PATH = OUT_DIR / "deal_evaluator_graph.png"
 
-# The one loop-closing edge decision #9 permits, as a (source, target) pair.
+# The one loop-closing edge decision #9 (Planner topology) permits, as a (source, target) pair.
 EXPECTED_CYCLE = (nodes.CRITIC, nodes.PLANNER)
 
 # LangGraph's entry sentinel. Traversal starts here rather than at an arbitrary node so
 # that "reachable" means reachable in a real run.
 START_NODE = "__start__"
 
-# The two nodes decision #9 permits to branch. Everything else is a static edge,
+# The two nodes decision #9 (Planner topology) permits to branch. Everything else is a static edge,
 # because the pipeline order is forced by data dependency.
 EXPECTED_BRANCHING_NODES = {nodes.PLANNER, nodes.CRITIC}
 
@@ -97,14 +97,14 @@ def _find_back_edges(edges: list[tuple[str, str]], start: str) -> set[tuple[str,
 
 
 def verify_topology(drawable) -> list[str]:
-    """Check the compiled graph against decision #9. Returns a list of violations."""
+    """Check the compiled graph against decision #9 (Planner topology). Returns a list of violations."""
     edges = _edge_pairs(drawable)
     violations: list[str] = []
 
     back_edges = _find_back_edges(edges, START_NODE)
     if back_edges != {EXPECTED_CYCLE}:
         violations.append(
-            f"Loop-closing edges are {sorted(back_edges)}; decision #9 permits only "
+            f"Loop-closing edges are {sorted(back_edges)}; decision #9 (Planner topology) permits only "
             f"{EXPECTED_CYCLE}. A second one means the topology drifted toward the "
             f"supervisor pattern that decision rejected."
         )
@@ -118,7 +118,7 @@ def verify_topology(drawable) -> list[str]:
     }
     if branching != EXPECTED_BRANCHING_NODES:
         violations.append(
-            f"Branching nodes are {sorted(branching)}; decision #9 permits only "
+            f"Branching nodes are {sorted(branching)}; decision #9 (Planner topology) permits only "
             f"{sorted(EXPECTED_BRANCHING_NODES)}."
         )
 

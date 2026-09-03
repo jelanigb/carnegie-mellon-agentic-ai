@@ -1,4 +1,4 @@
-"""HUD FMR published history as a rent-growth series (§7 decision #16, U6).
+"""HUD FMR published history as a rent-growth series (§7 decision #16 (rent-growth source), U6).
 
 Why this module exists
 ----------------------
@@ -11,7 +11,7 @@ the one this project already had: FY2017 onward through the client in `hud_fmr.p
 already cached, no new dependency.
 
 **Both halves of that have since moved, and this module is now the fallback rather than
-the source — decision #21, U9.3.** The correlation was re-derived
+the source — decision #21 (forecast rent source), U9.3.** The correlation was re-derived
 (`scripts/growth_correlation.py`) and is a property of the *rent series* rather than of
 the market: -0.317 on the HUD schedule, -0.197 with HUD's two national step-up years
 removed, and **+0.222 on market rent**, r² never above 0.10. And #19 moved this system's
@@ -45,7 +45,7 @@ Reproduce all three with `scripts/fmr_history_evidence.py`.
    2021-22 market surge reaching an administrative series two years late. What is
    observable is *whether every area moved at once*, so that is what
    `cohort_shift_years` measures and what the report says. Zillow ZORI, being
-   market-observed, is what could attribute it later (decision #16).
+   market-observed, is what could attribute it later (decision #16 — rent-growth source).
 
 3. **The growth rate is county-level even where the rent anchor is ZIP-level.** HUD's
    Small Area FMR history is too shallow to difference: the panel has nine years of ZIP
@@ -414,7 +414,7 @@ def compute_rent_growth_bands(
 
     `exclude_years` holds out fiscal years the caller names. `tools/rent_growth.py` passes
     `config.FMR_ANOMALOUS_FISCAL_YEARS` through it, so the fallback path is asked the same
-    2020-2022 question the price side is asked, which is what decision #21 made the
+    2020-2022 question the price side is asked, which is what decision #21 (forecast rent source) made the
     depth-1 rent fork.
 
     `exclude_cohort_shift_years` holds out the years *this panel* found every area moving

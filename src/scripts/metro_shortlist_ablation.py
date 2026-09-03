@@ -1,4 +1,4 @@
-"""Does training on more metros help, and where? (§7 decision #4)
+"""Does training on more metros help, and where? (§7 decision #4 (training metro shortlist))
 
 Decision #4 selected an eight-metro training shortlist on the argument that a *ratio*
 target — rent ÷ local FMR — benefits more from structural market diversity than from raw

@@ -16,7 +16,7 @@ Built in two passes, because its two halves had different dependencies:
 
 **What U7 checks is not the list U2 anticipated**, and the reason is worth carrying at
 the top of this file: of the four checks named in U2's `TODO(U7)`, one was already built
-in the agent that owns its inputs, one was made dead by decision #15, and two could not
+in the agent that owns its inputs, one was made dead by decision #15 (no value estimate), and two could not
 fail by construction. See `_consistency_objections()` for the full accounting. What
 replaced them is the one judgment no other agent can make — **whether a *combination* of
 disclosures changes what the result means** — because this is the only node that sees
@@ -335,7 +335,7 @@ def _kinds(state: DealState) -> frozenset[FlagKind]:
     - **An agent skipped this pass is judged on its last examination, never treated as
       cleared.** `state.plan` records which agents ran; absence from it means "not
       re-examined," not "found nothing." In this build only the Extractor is ever
-      conditionally skipped (decision #9) — every other node in `_PIPELINE` runs on
+      conditionally skipped (decision #9 — Planner topology) — every other node in `_PIPELINE` runs on
       every pass — but the rule is written against `state.plan` membership rather than
       naming the Extractor specifically, so it does not silently stop applying if a
       second step becomes optional later.
@@ -422,7 +422,7 @@ def _interaction_objections(state: DealState) -> list[Objection]:
       property's. That holds however the numbers came out, and agreement between two
       mis-specified quantities is not evidence about either. **Ungated.**
     - **I2 says the comp median is imprecise** — a point sample over one coordinate that
-      decision #15 measured carrying 150 listings spanning $760-$6,995. Imprecision
+      decision #15 (no value estimate) measured carrying 150 listings spanning $760-$6,995. Imprecision
       degrades a *disagreement*; on its own it is what `COMPS_SPATIALLY_CONCENTRATED`
       already discloses at WARN. Ungating it would make a market's data density a
       critical objection on every listing in Cleveland and Brooklyn — a large behavioral

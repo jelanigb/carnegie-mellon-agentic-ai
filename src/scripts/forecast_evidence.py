@@ -19,7 +19,7 @@ a competent implementation without a search would emit, and it is exactly the pa
 this project's own measurement argues against: rent and price growth are negatively
 correlated here (pooled r = -0.309), so the diagonal describes a market behaving in a way
 it usually has not. **That last clause is why the baseline is still worth running and is
-no longer why**: decision #21 re-derived the correlation and found the sign to be a
+no longer why**: decision #21 (forecast rent source) re-derived the correlation and found the sign to be a
 property of the rent series rather than of the market (+0.222 on market rent, r² never
 above 0.10), so the search no longer argues against the diagonal — it has no directional
 prior at all. The linear baseline remains the right control because it is what an

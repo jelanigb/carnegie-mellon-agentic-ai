@@ -207,7 +207,7 @@ class FlagKind(StrEnum):
     # counterpart to APPRECIATION_SOURCE, and INFO like it: this describes how the system
     # works rather than a degradation of the run.
     #
-    # **This member was `RENT_GROWTH_COHORT_SHIFT_SCREENED` until decision #21**, and the
+    # **This member was `RENT_GROWTH_COHORT_SHIFT_SCREENED` until decision #21 (forecast rent source)**, and the
     # change of subject is the point rather than the rename. That flag disclosed which
     # fiscal years HUD's cohort screen had held out of the rent bands — a fact with no
     # referent once the bands stopped coming from HUD. The alternative was to delete it,
@@ -536,7 +536,7 @@ class DealTerms(BaseModel):
       a misparse is a silent error unless the observed original is retained to check
       against, which is why `full_address` is kept rather than reconstructed.
     - **Derived** — produced by a lookup rather than read from the listing at all.
-      `latitude`/`longitude` (decision #10, `tools/geocoding.py`) carry known
+      `latitude`/`longitude` (decision #10 — geocoding source, `tools/geocoding.py`) carry known
       approximation error and raise a flag when it's material: a parcel-accurate geocode
       raises nothing, but the city-centroid fallback is a coarser approximation and is
       disclosed as one. `county_fips` (`tools/county_crosswalk.py`, rewritten Aug 15,
@@ -875,7 +875,7 @@ class Scenario(BaseModel):
     """One reported forecast path: a rent band paired with a price band, projected out.
 
     **The pairing is the reasoning, not a formatting choice** — and the reason it gives
-    for existing changed at decision #21. This docstring used to argue that the diagonal
+    for existing changed at decision #21 (forecast rent source). This docstring used to argue that the diagonal
     pairings (optimistic with optimistic, and so on) describe a market behaving in a way
     it usually has not, because rent and price growth are *negatively* correlated across
     the inference trio at pooled r = -0.309. **That measurement did not survive
@@ -922,7 +922,7 @@ class Scenario(BaseModel):
 
     # Projected levels at `ForecastDetail.horizon_years`. Rent projects from
     # `DealState.rent_estimate`; price projects from the **asking price**, which is an
-    # observed fact about this property rather than an estimate - decision #15 leaves
+    # observed fact about this property rather than an estimate - decision #15 (no value estimate) leaves
     # `value_estimate` null, and §7 assigned this choice to U6.
     projected_monthly_rent: Optional[float] = None
     projected_price: Optional[float] = None
@@ -948,7 +948,7 @@ class Scenario(BaseModel):
 
 
 class BranchLedgerEntry(BaseModel):
-    """One hypothesis the search considered, surviving or discarded (decision #14).
+    """One hypothesis the search considered, surviving or discarded (decision #14 — ToT branch persistence).
 
     **Pruning that leaves no trace is the failure mode this project has already had
     once.** In U2 a single critical flag cost 0.40, landed confidence at exactly 0.60,
@@ -967,7 +967,7 @@ class BranchLedgerEntry(BaseModel):
     id: str
     parent: Optional[str] = None
     depth: int = 0
-    # Which node produced it. Present so the Critic's own search (U7, decision #12) can
+    # Which node produced it. Present so the Critic's own search (U7, decision #12 (ToT scope)) can
     # append to the same ledger rather than needing a second one.
     agent: str = ""
     summary: str = ""
@@ -1003,7 +1003,7 @@ class ForecastDetail(BaseModel):
     projection_base_rent: Optional[float] = None
 
     # --- Rent side (Zillow ZORI county median; HUD FMR schedule as fallback) ----
-    # Reworked at decision #21, which re-sourced this side. The FMR-shaped fields that
+    # Reworked at decision #21 (forecast rent source), which re-sourced this side. The FMR-shaped fields that
     # stood here - the cohort panel's baseline, its area count, the fiscal years it found
     # moving together, this area's deviation from them - described a screen the forecast
     # no longer runs, and are gone rather than carried empty.
@@ -1075,7 +1075,7 @@ class DealState(BaseModel):
     # inputs
     raw_listing_text: str
 
-    # planning (written by the Planner; see decision #9 in §7)
+    # planning (written by the Planner; see decision #9 (Planner topology) in §7)
     # The Planner runs pre-flight rather than as a supervisor, so its decision about
     # which optional steps run is recorded here rather than recomputed inside a router.
     # §3 requires routing to be state-encoded: a conditional edge reads this list, it
@@ -1135,7 +1135,7 @@ class DealState(BaseModel):
     forecast_detail: Optional[ForecastDetail] = None
 
     # Every hypothesis the Tree-of-Thought search considered, surviving or pruned
-    # (decision #14). Carries a reducer because the Critic's own search appends to it in
+    # (decision #14 — ToT branch persistence). Carries a reducer because the Critic's own search appends to it in
     # U7, and because a rework pass re-runs the Scenario node - the raw history stays
     # inspectable and the Summarizer de-duplicates at render time, matching `stub_nodes`.
     branch_ledger: Annotated[list[BranchLedgerEntry], operator.add] = Field(

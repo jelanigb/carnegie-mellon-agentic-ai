@@ -178,7 +178,7 @@ def main() -> None:
     print("-" * 70)
     print("gap      = (price - benchmark) / benchmark          <- what a naive check B "
           "would threshold on")
-    print("calib    = (metro median - ZIP median) / ZIP median <- decision #11's "
+    print("calib    = (metro median - ZIP median) / ZIP median <- decision #1 (LangGraph)1's "
           "calibration, not the deal")
     print("residual = (price - metro median) / metro median    <- the only column about "
           "the property\n")
@@ -237,7 +237,7 @@ def main() -> None:
               f"{', '.join(on_residual) or '(none)'}")
 
     print("\nVERDICT INPUT: OQ-20 predicted B closes as a disclosure because a threshold")
-    print("would restate decision #11's calibration. The measurement agrees and sharpens")
+    print("would restate decision #1 (LangGraph)1's calibration. The measurement agrees and sharpens")
     print("it: there is no single column to fit a threshold to, because the fixtures do")
     print("not share a basis — and on the metro-tier markets the check is inert by")
     print("construction. Closing B as a disclosure is not a deferral here; it is the")

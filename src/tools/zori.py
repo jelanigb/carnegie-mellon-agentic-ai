@@ -1,4 +1,4 @@
-"""Zillow ZORI — the independent, market-observed rent series (decision #16, OQ-6).
+"""Zillow ZORI — the independent, market-observed rent series (decision #16 — rent-growth source, OQ-6).
 
 Why this module exists
 ------------------------

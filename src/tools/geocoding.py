@@ -1,4 +1,4 @@
-"""Resolves `DealTerms.latitude/longitude` — decision #10 in docs/implementation_plan.md §7.
+"""Resolves `DealTerms.latitude/longitude` — decision #10 (geocoding source) in docs/implementation_plan.md §7.
 
 Why this module exists
 -----------------------

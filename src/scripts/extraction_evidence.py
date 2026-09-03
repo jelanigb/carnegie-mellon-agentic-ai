@@ -64,7 +64,7 @@ from tools.llm_cache import ResponseCache
 from tools.llm_client import LlmClient, LlmError, SchemaValidationExhausted, available_models
 
 # Candidates are resolved against the live catalogue at run time rather than pinned here,
-# which is the same staleness lesson decision #8 recorded: a list of model IDs written
+# which is the same staleness lesson decision #8 (model per role) recorded: a list of model IDs written
 # into a file is a list that goes wrong quietly. These prefixes select the families worth
 # considering for structured extraction; anything free matching one and present in the
 # catalogue gets run.
@@ -376,7 +376,7 @@ def bakeoff_models(tier: str) -> list[str]:
 
 
 def report_bakeoff(tier: str) -> None:
-    """Artifact 2: the comparison decision #8 needs."""
+    """Artifact 2: the comparison decision #8 (model per role) needs."""
     models = bakeoff_models(tier)
     print("=" * 78)
     print(f"DECISION #8 BAKE-OFF — {tier} tier")
@@ -440,7 +440,7 @@ def main() -> None:
     parser.add_argument(
         "--bakeoff",
         action="store_true",
-        help="run every candidate model, not just the configured one (decision #8)",
+        help="run every candidate model, not just the configured one (decision #8 — model per role)",
     )
     parser.add_argument(
         "--tier",

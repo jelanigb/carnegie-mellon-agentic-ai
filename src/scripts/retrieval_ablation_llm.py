@@ -22,7 +22,7 @@ property used in Case A, with no retrieval and no corpus access, and is asked to
 identifier it returns is then looked up in the Chroma collection. The question "does this
 comp exist?" therefore gets a checked answer rather than an asserted one.
 
-Model selection note (decision #8, docs/implementation_plan.md §7)
+Model selection note (decision #8 — model per role, docs/implementation_plan.md §7)
 -----------------------------------------------------------------
 **As of Aug 9, 2026**, when this script was written, `config.MODEL_*` still held the
 unverified placeholders that `TODO(U3)` warned about, and that TODO turned out to be
@@ -64,7 +64,7 @@ from tools.llm_client import LlmClient, LlmError, SchemaValidationExhausted
 # Verified live against https://openrouter.ai/api/v1/models on Aug 9, 2026. Both
 # responded to a smoke call. Sized differently on purpose (see module docstring).
 #
-# **Deliberately still `:free`, and deliberately not repointed** when decision #8 moved
+# **Deliberately still `:free`, and deliberately not repointed** when decision #8 (model per role) moved
 # the rest of the build to paid variants on Aug 16, 2026. The Checkpoint 3.1 result this
 # script produced — 0 of 16 returned comps existing in the corpus, rent dispersion
 # collapsing from CV 19.7% to 3.1%/4.3% — is quoted in the plan and the report as a

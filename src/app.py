@@ -1,4 +1,4 @@
-"""Streamlit demo surface — decision #3, §6 cut-list item 4, built at U9.7.
+"""Streamlit demo surface — decision #3 (demo surface), §6 cut-list item 4, built at U9.7.
 
     .venv/bin/streamlit run app.py        # from src/
 

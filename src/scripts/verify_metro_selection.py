@@ -15,7 +15,7 @@ It answers two questions:
 A metro must clear both bars. Chicago, Los Angeles, and Cleveland do; New York fails
 the first and Philadelphia fails both.
 
-Also produces the ranked Kaggle density list backing decision #4 in §7 (the ~5-8 metro
+Also produces the ranked Kaggle density list backing decision #4 (training metro shortlist) in §7 (the ~5-8 metro
 training shortlist, which is a superset of the inference trio).
 
 Run: .venv/bin/python scripts/verify_metro_selection.py
@@ -78,7 +78,7 @@ REDFIN_REGION = {
 
 # Minimum bars a metro must clear to be viable as an inference metro. Provisional and
 # deliberately loose — they exist to make the pass/fail judgment explicit rather than
-# to be precise. Tune alongside decision #4 in §7.
+# to be precise. Tune alongside decision #4 (training metro shortlist) in §7.
 MIN_KAGGLE_LISTINGS = 500
 MIN_REDFIN_SALES = 100
 
@@ -125,7 +125,7 @@ def main() -> None:
     times = pd.to_datetime(pd.to_numeric(kaggle["time"], errors="coerce"), unit="s")
     print(f"\n=== Vintage (from `time`) ===\n{times.min()}  ->  {times.max()}")
 
-    print("\n=== Top 25 (state, cityname) by listing count — backs §7 decision #4 ===")
+    print("\n=== Top 25 (state, cityname) by listing count — backs §7 decision #4 (training metro shortlist) ===")
     top = kaggle.groupby(["state", "cityname"]).size().sort_values(ascending=False).head(25)
     print(top.to_string())
 

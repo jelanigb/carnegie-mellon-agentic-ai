@@ -54,6 +54,14 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 2, 2026 — M1: every decision citation names the decision
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 2, 2026 | maintenance (M1) | **69 bare decision citations across 30 files now say what the decision was.** `decision #9` becomes `decision #9 (Planner topology)`, keyed on §7's own register so a gloss cannot name a decision the register does not. Raised Aug 24 and reconfirmed still-open twice; taken now because the build finished two days inside the freeze and **this is the one maintenance item whose audience is a reviewer of the public repository** rather than a future session. Three judgments inside the mechanical pass: glosses are short forms rather than register titles (`enumerate, do not sample`, not *"ToT structure at build time"* — a gloss that only reads to someone who already knows the decision spares nobody a lookup); **12 possessives left bare**, since `decision #9 (Planner topology)'s back edge` is harder to read than what it replaced; and 17 citations already inside parentheses use an em dash rather than nesting. Comment-only and verified as such: 107 tests, **30 eval rows byte-identical**, three sample reports re-derived unchanged | maintenance |
+
+---
+
 ## Sept 2, 2026 — check B measured, and decision #22
 
 | Date added | Unit | Work done | Related checkpoint |

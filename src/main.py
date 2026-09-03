@@ -18,7 +18,7 @@ evidence directly rather than against a separate set of inputs.
 
 **Coordinates are derived from the listing, not supplied alongside it (U3).** The
 Extractor calls `tools/geocoding.py` as an ordinary step, so a listing arriving as text
-now reaches comp retrieval on its own — which was the point of closing decision #10.
+now reaches comp retrieval on its own — which was the point of closing decision #10 (geocoding source).
 Two consequences visible here:
 
 - The demo listings carry **real street addresses**, because an invented one resolves to

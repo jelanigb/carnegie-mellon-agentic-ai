@@ -9,7 +9,7 @@ throughout (`tools/diagnostics.py` records that choice and its cost). It is also
 the libraries' own default: Python's root logger starts at WARNING with no handler, so
 an INFO record from `httpx` goes nowhere unless something asks for it.
 
-**Something does, and it is decision #13's reference server.** `MCPServer.__init__`
+**Something does, and it is decision #1 (LangGraph)3's reference server.** `MCPServer.__init__`
 calls the SDK's own `configure_logging()`, which calls
 `logging.basicConfig(level="INFO", handlers=[RichHandler(...)])` — a process-wide
 change made as a side effect of constructing an object.

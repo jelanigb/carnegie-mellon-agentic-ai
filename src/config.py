@@ -9,7 +9,7 @@ tunes each one is named alongside it.
 
 **Reconciled Aug 31, 2026 (U8.M), because that convention had quietly decayed.** Seven
 constants still named U4 or U8 as their tuning owner after both units had closed — two of
-them settled by decision #5 three units earlier — which reads as scheduled work and is
+them settled by decision #5 (retrieval X/Y/Z) three units earlier — which reads as scheduled work and is
 really unowned work. Every value that U8 measured now states *what* was measured and that
 it is **held** rather than tuned; every value nothing measured says so plainly and names no
 unit. The one PROVISIONAL block left is the Tree-of-Thought group, retargeted to U9 with
@@ -429,7 +429,7 @@ SUMMARY_NARRATIVE_ENABLED = True
 KAGGLE_MIN_RENT = 300.0
 KAGGLE_MAX_RENT = 10_000.0
 
-# Training metros (§7 decision #4, closed Aug 21, 2026). Distinct from INFERENCE_METROS
+# Training metros (§7 decision #4 (training metro shortlist), closed Aug 21, 2026). Distinct from INFERENCE_METROS
 # above, and deliberately a superset of it: the regression predicts a *ratio* to local
 # FMR rather than a dollar level, so it benefits from markets it will never be asked to
 # price, while comp retrieval needs density in the specific subject market.
@@ -899,7 +899,7 @@ ZORI_MAX_VINTAGE_SUBSTITUTION_MONTHS = 12
 # Scenario / Forecast agent (U6 - agents/scenario_forecast.py)
 # --------------------------------------------------------------------------
 # Two quantities, two sources, still not interchangeable — but the reason changed at
-# decision #21. Redfin drives price appreciation; **Zillow ZORI drives rent growth**,
+# decision #21 (forecast rent source). Redfin drives price appreciation; **Zillow ZORI drives rent growth**,
 # with HUD FMR history as the fallback where ZORI has no county. #16 kept them apart on
 # a measured negative correlation (pooled r = -0.309); `scripts/growth_correlation.py`
 # re-derived that number and found it to be a property of the *rent series* rather than
@@ -960,7 +960,7 @@ ANOMALOUS_PERIOD_END = "2022-12-31"
 # whether a stretch ending 2018-12 is admitted, and nothing on the price side covers it.
 FORECAST_SERIES_WINDOW_START = "2018-01-01"
 
-# --- ZORI rent-growth series (tools/rent_growth.py) — decision #21 ---------
+# --- ZORI rent-growth series (tools/rent_growth.py) — decision #21 (forecast rent source) ---------
 # The forecast's rent bands come from Zillow's Observed Rent Index at the subject's
 # county, not from HUD's Fair Market Rent schedule. #16 chose FMR on an architectural
 # argument — "the rent estimate is `ratio x FMR`, so projecting the anchor forward
@@ -1046,7 +1046,7 @@ FMR_HISTORY_MIN_YOY_OBSERVATIONS = 5
 FMR_COHORT_PANEL_PATH = SRC_DIR / "tools" / "data" / "fmr_cohort_panel.json"
 
 # --- Cohort-shift screen ---------------------------------------------------
-# **No longer a forecast branch, and still load-bearing (decision #21).** The screen was
+# **No longer a forecast branch, and still load-bearing (decision #21 — forecast rent source).** The screen was
 # built to hold HUD's national step-ups out of the rent bands; the rent bands no longer
 # come from HUD on any path a demo deal takes, so the depth-1 rent fork is now the same
 # 2020-2022 question the price side is asked and this screen does not enter it.
@@ -1065,7 +1065,7 @@ FMR_COHORT_PANEL_PATH = SRC_DIR / "tools" / "data" / "fmr_cohort_panel.json"
 # market surge reached an administrative series two years late is not determinable from
 # FMR alone - both produce a cohort-wide move. What IS observable is whether every area
 # moved at once, so that is what this measures and what the report says. Attribution
-# waits for Zillow ZORI, which is market-observed (decision #16).
+# waits for Zillow ZORI, which is market-observed (decision #16 — rent-growth source).
 #
 # Measured, not chosen: sorting the nine fiscal years by cohort excess leaves a 4.05pp
 # gap between the largest ordinary year (FY2021, +1.05pp) and the smallest shifted one
@@ -1261,7 +1261,7 @@ LANGSMITH_ENABLED = os.environ.get("LANGSMITH_TRACING", "").lower() == "true"
 
 # Third-party library logging — off by default, and "off" here means *restoring* the
 # root logger rather than silencing anything. Nothing in this project logs; the ~190
-# lines that print before every report arrive because decision #13's MCP reference
+# lines that print before every report arrive because decision #1 (LangGraph)3's MCP reference
 # server reconfigures logging for the whole process when it is constructed. See
 # `tools/logging_setup.py` for the measurement and why the fix is shaped that way.
 #
@@ -1346,7 +1346,7 @@ TOT_SCENARIO_DISTINCTNESS_PCT = 1.0
 
 # Branches scoring below this are discarded. Pruning is never silent: each discarded
 # branch writes {id, parent, depth, score, prune_reason} to the ledger on DealState so
-# the report can disclose what was considered and why it was dropped (decision #14).
+# the report can disclose what was considered and why it was dropped (decision #14 — ToT branch persistence).
 TOT_PRUNE_THRESHOLD = 0.40
 
 # Scores within this distance are treated as tied, and resolved toward the more
@@ -1367,7 +1367,7 @@ TOT_MAX_EVIDENCE_CALLS = 3
 
 
 # --------------------------------------------------------------------------
-# MCP reference server (§7 decision #13 — mcp_server.py)
+# MCP reference server (§7 decision #13 (MCP adoption) — mcp_server.py)
 # --------------------------------------------------------------------------
 # Read-only surface over tools/hud_fmr.py and tools/redfin_data.py. Consumed by the U6
 # ToT evaluator's per-branch evidence pulls, and by any MCP host during U8 evaluation and

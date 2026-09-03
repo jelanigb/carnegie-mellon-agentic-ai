@@ -1,7 +1,7 @@
 """StateGraph assembly — nodes, edges, routing, compile.
 
 This module is *only* wiring. Every decision it expresses was made elsewhere: the
-topology in §7 decision #9, the state schema in §5, the node names in `nodes.py`. If a
+topology in §7 decision #9 (Planner topology), the state schema in §5, the node names in `nodes.py`. If a
 piece of reasoning shows up here, it is in the wrong file — a specialist's logic
 belongs in `agents/`, and a routing rule belongs in a `route_*` function beside the
 Planner (§3, "agents communicate only through shared state").
@@ -210,7 +210,7 @@ def build_graph(checkpointer: Optional[object] = None):
         _checked_mapping(nodes.EXTRACTOR, nodes.COMPS_RETRIEVAL),
     )
 
-    # The pipeline spine. Static, because decision #9 established that this ordering is
+    # The pipeline spine. Static, because decision #9 (Planner topology) established that this ordering is
     # fixed by data dependency and is not something the Planner decides.
     builder.add_edge(nodes.EXTRACTOR, nodes.COMPS_RETRIEVAL)
     builder.add_edge(nodes.COMPS_RETRIEVAL, nodes.VALUATION_RENT)

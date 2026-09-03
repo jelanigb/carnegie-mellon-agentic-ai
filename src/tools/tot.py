@@ -137,7 +137,7 @@ def beam_search(
 ) -> SearchResult:
     """Run the beam, recording every candidate's fate.
 
-    Beam search rather than BFS or DFS, per decision #12. BFS over the full space costs
+    Beam search rather than BFS or DFS, per decision #12 (ToT scope). BFS over the full space costs
     evaluations the budget does not justify for a three-output forecast; DFS commits to
     a framing before comparing it against the alternatives, which reintroduces exactly
     the premature commitment Tree-of-Thought is here to prevent. Beam keeps cross-branch

@@ -293,7 +293,7 @@ def main() -> None:
         print(
             "  0 of 6 deals isolate the critical-flag rule: every deal carrying a "
             "critical flag already sits below threshold on the score alone. The rule "
-            "is real (`agents/critic.py`, decision #6) and proven by "
+            "is real (`agents/critic.py`, decision #6 (confidence threshold)) and proven by "
             "`test_a_single_critical_flag_escalates_regardless_of_score`."
         )
 

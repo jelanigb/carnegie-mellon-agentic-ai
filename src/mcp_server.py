@@ -1,4 +1,4 @@
-"""MCP server exposing this project's read-only reference data (decision #13).
+"""MCP server exposing this project's read-only reference data (decision #13 — MCP adoption).
 
 **What this is for, and — just as importantly — what it is not for.**
 
@@ -15,7 +15,7 @@ Two consumers motivated this server, and neither of them is the pipeline itself:
    interrogate the same reference layer the pipeline uses, which replaces writing a
    one-off script every time a number needs checking.
 
-**The honest accounting, per §7 decision #13: the pipeline does not require this.**
+**The honest accounting, per §7 decision #13 (MCP adoption): the pipeline does not require this.**
 `tools/hud_fmr.py` and `tools/redfin_data.py` are in-process Python functions, and
 LangChain's `@tool` decorator would give the evaluator dynamic tool selection with no
 protocol hop. What MCP adds is portability and that second consumer — a real benefit and
@@ -43,7 +43,7 @@ Run it directly for stdio transport:
 **No `query_comps` tool.** A U6 TODO deferred one pending a Critic rent-vs-comp check
 that might need it. That check was never built in the Critic — Q1 (U7) resolved that the
 Critic consumes `RENT_DIVERGES_FROM_COMPS` from `agents/valuation_rent.py` rather than
-re-deriving it, and U7.7 retired decision #12's Critic ToT half entirely on evidence: the
+re-deriving it, and U7.7 retired decision #1 (LangGraph)2's Critic ToT half entirely on evidence: the
 checks that shipped are pure functions over `state.flags`, with no LLM evaluator to call
 a tool in the first place. `docs/history/decision_log.md` #12.
 """

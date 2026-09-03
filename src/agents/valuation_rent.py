@@ -224,7 +224,7 @@ def _attach_benchmark(detail: ValuationDetail, terms: DealTerms) -> None:
     read by a human. Charging confidence for the width of a figure that enters no
     calculation would say this deal's *numbers* are shakier when none of them moved.
 
-    **Check B was measured and settled as decision #22 on Sept 2, 2026**, and until then
+    **Check B was measured and settled as decision #22 (check B) on Sept 2, 2026**, and until then
     this docstring recorded it as never separately measured — U8.7 settled its sibling,
     check A, as #20, and the phrase "checks A and B" carried B along without evidence of
     its own. `scripts/asking_price_gap.py` supplied that evidence over 22 fixtures and B

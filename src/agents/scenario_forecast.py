@@ -181,7 +181,7 @@ def _framings(
     A side with only one usable treatment contributes one option rather than two, which
     is why this enumerates from what was actually computed instead of from a constant.
 
-    **The two axes ask the same question of both series since decision #21**, where they
+    **The two axes ask the same question of both series since decision #21 (forecast rent source)**, where they
     used to ask different ones — screen HUD's national step-ups out of rent, or exclude
     the 2020-2022 rate window from price. That was two questions in one fork, and a
     reader had to hold both to read a framing id. Now `f-01` means "keep 2020-2022 in the

@@ -1,9 +1,9 @@
-"""The forecast's rent-growth bands, and which series produced them (decision #21).
+"""The forecast's rent-growth bands, and which series produced them (decision #21 — forecast rent source).
 
 Why this module exists
 ----------------------
 Through U8 the forecast projected rent forward on HUD's Fair Market Rent schedule, chosen
-by decision #16 on an argument about mechanism rather than about data: *"the rent estimate
+by decision #16 (rent-growth source) on an argument about mechanism rather than about data: *"the rent estimate
 is `ratio x FMR`, so projecting the anchor forward while holding the structural ratio
 constant forecasts rent by the same mechanism that produced the estimate."* That argument
 was right and it now points somewhere else. Since #19 the estimate is `ratio x ZORI(ZIP) x

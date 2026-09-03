@@ -8,7 +8,7 @@ mock. `tests/` stays hermetic.
     .venv/bin/python scripts/train_rent_model.py --dry-run  # assemble and report only
 
 `--dry-run` exists because the training-set size is itself a documented quantity — §7
-decision #4 requires the row count to be re-derived rather than inherited from §2, whose
+decision #4 (training metro shortlist) requires the row count to be re-derived rather than inherited from §2, whose
 21,768 figure turned out to describe a state-level rollup rather than a metro-filtered
 set. This is the re-derivation.
 """
@@ -36,7 +36,7 @@ def main() -> None:
 
     metros = sum(len(v) for v in config.TRAINING_METROS.values())
     print(f"Training metros: {len(config.TRAINING_METROS)} states, "
-          f"{metros} city patterns (§7 decision #4)")
+          f"{metros} city patterns (§7 decision #4 (training metro shortlist))")
     print(f"Features: {', '.join(config.RENT_MODEL_FEATURES)}")
     print()
 
