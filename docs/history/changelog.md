@@ -54,6 +54,16 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 2, 2026 — U9.9 planning, and three stale figures in the plan of record
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 2, 2026 | U9.9 | **U9.9 was planned as "capture traces and screenshots" and is actually three deliverables; the other two had no plan.** `tasks/task_list_u9.md` §U9.9 gains a slide outline timed to **9:30** against the 10-minute limit, a full ~1,150-word script draft, a five-beat demo sheet naming the two beats that must survive a cut, a section-by-section source map for the 1,000–1,500 word report, and a 90-second elevator-pitch draft. Built against Checkpoint 7.1's planning templates and two completed capstones from the cohort, and **the most useful thing the references gave was a negative**: both ran ~12½ minutes against a 10-minute limit, and both named *evaluation* as their own weakest point — Crosscheck's words were "I do not have an automated scoring benchmark... right now I'm just spot checking it." A 30-case batch with verdicts declared before the first run is therefore the differentiator, and it gets a slide of its own | 7.1 |
+| Sept 2, 2026 | U9.9 (defect) | **The runbook's redirect instruction was wrong and would have cost a confusing artifact mid-capture.** It said `> report.md` captures the report alone because the status lines stay out of a redirect. `main.py` prints all four status lines — and the whole `human_review` interrupt payload on an escalating deal — to **stdout**; only the two HuggingFace advisories are on stderr. Corrected with the `awk '/^# Deal Evaluation/{f=1} f'` filter that actually produces `docs/sample_reports/`, plus the observation that for the *video* those lines are an asset rather than noise: `tracing: on` and `Model check OK` are what prove the run is real | 7.1 |
+| Sept 2, 2026 | U9.11 (correction) | **Three stale statuses in documents read every session.** `implementation_plan.md`, `tasks/task_list_u9.md`. (1) §6's **U8 row still quotes U8's closing figures** — 28 rows, 18 of 21 — while `eval/results/results.md` now reports **30 rows, 23 predicted, 20 of 23**, because U9.6 added two demo deals; the row now says both, since the final report will read its evaluation numbers off this table. (2) **Cut-list item 1 read as deferred when it is closed on evidence**: the Redfin ZIP extract carries a median **2 homes sold per ZIP-period**, so a year-over-year rate off it is noise, recorded at `redfin_data.SERIES_DESCRIPTION` since U6 — and a cut list is read at exactly the moment someone is hunting for scope to reclaim, so an item that reads *deferred* invites a re-open that measurement has already foreclosed. (3) U9.7T and U9.M carried `⬜` headings against `✅` status rows | maintenance |
+
+---
+
 ## Sept 2, 2026 — U9.11: the close-out
 
 | Date added | Unit | Work done | Related checkpoint |
