@@ -54,6 +54,14 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 2, 2026 — U9.9: the presentation deliverables get their own document
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 2, 2026 | U9.9 | **`docs/presentation.md` split out of the task list**, on the architect's call. It carries the slide outline timed to 9:30, the narration script, the demo beat sheet, the report's ten-section source map and the elevator pitch; added to the document map. **The capture runbook deliberately stays in `task_list_u9.md` §U9.9 and is not duplicated** — two copies of a command list diverge the first time either is edited, which is the same argument `app.py` is built on, where the surface renders the Summarizer's markdown rather than laying the evidence out a second time. A script is a document opened repeatedly while recording; a task list is not, and it is also the wrong home for something that outlives its unit | 7.1 |
+
+---
+
 ## Sept 2, 2026 — U9.9 planning, and three stale figures in the plan of record
 
 | Date added | Unit | Work done | Related checkpoint |
