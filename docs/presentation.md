@@ -221,6 +221,11 @@ are **not reproducible even at temperature zero** — I measured that, it's a pr
 serving stack rather than of my code, and it's why the demo replays from committed recordings
 by default. And one report currently serves two very different readers.
 
+On transfer, I can give you a number rather than a shrug: leaving each training market out
+entirely and scoring it with a model that never saw it costs about **13 percent** — $512 a
+month against $452 — and the model still beats a predict-the-average baseline in all nine
+held-out markets.
+
 The repository is public at **[URL]**. It has the README, the full seven-agent
 implementation, the evaluation harness with every input committed so the results re-derive
 from a fresh clone, three sample reports, and a decision log — twenty-one numbered decisions

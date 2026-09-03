@@ -54,6 +54,15 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 2, 2026 — reclaimed from the cut list: leave-one-metro-out, and two README claims that had gone false
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 2, 2026 | cut list 1a | **The transfer question gets a number instead of a shrug.** New `scripts/lomo_validation.py` holds each of the nine training metros out entirely, fits on the other eight, and scores the held-out rows against a per-fold predict-the-average baseline. **Pooled $512/mo against the cross-validated $452 — 13% — and the model beats the baseline in all nine held-out markets.** Two findings the k-fold table could not have shown: **New York has the largest absolute error and the smallest transfer cost (+2%)**, so its elevated-error disclosure is about that market rather than about how much New York the model has seen; and Los Angeles has the largest (+19%) while carrying the one confound, since LA is 42% of the corpus and its fold therefore trains on 58% of the data. Both effects push the same way, so the column is stated as an **upper bound** and a `train %` column prints the confound rather than hiding it. Reuses `build_training_frame` and `_estimator` rather than reimplementing either, so it cannot drift from the shipped protocol; the persisted artifact is never read or written. **Closes OQ-4's transfer half** and takes §6 cut-list item 1a's third bullet. **The mis-pricing this corrects is a new kind for that list** — not a wrong estimate but a wrong *grouping*: it was cut in one breath with hyperparameter tuning and feature engineering, which both change the shipped model and force a re-record of 30 eval rows, while this one fits models the pipeline never loads | 7.1 |
+| Sept 2, 2026 | U9.11 (defect) | **The README claimed two shipped features did not exist, in the artifact a grader reads first.** "There is no demo UI yet... a Streamlit surface is planned but not yet built" — it shipped at U9.7 on Sept 1, and the same README documents `streamlit run app.py` sixty lines above. "A gross rent multiplier... is planned but not yet built" — it shipped at U9.8 on Sept 2, and the same README quotes `staten-island` at **9.2× against its ZIP's 11.0×** in its sample-report table. Both bullets were written when the statements were true and neither was revisited by the unit that made them false. Replaced: the first by the LOMO transfer limitation above, which is a real gap in the same place; the second by what the system does compute and what it refuses. **The pattern is the one M7 and the `TODO` inventory keep hitting** — a hand-maintained list of what is missing has no failure that surfaces when something stops being missing | 7.1 |
+
+---
+
 ## Sept 2, 2026 — U9.9: the presentation deliverables get their own document
 
 | Date added | Unit | Work done | Related checkpoint |

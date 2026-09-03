@@ -192,16 +192,26 @@ disclosed deliberately rather than hidden:
   and scores can swing meaningfully between otherwise-identical calls. This mainly
   affects the forecast's scenario-scoring step; a committed recording (the eval harness's
   `golden`/`replay` tiers) is exact regardless, since it never calls a model live.
-- **There is no demo UI yet.** The pipeline runs from the command line
-  (`main.py`) today; a Streamlit surface is planned but not yet built.
+- **The rent model has never seen a market outside its training set, and transfer costs
+  about 13%.** Leave-one-metro-out validation (`scripts/lomo_validation.py`) holds each of
+  the nine training metros out entirely and scores it with a model fit on the other eight:
+  **$512/mo pooled against the $452 the cross-validated figure reports**, and the model beats
+  a predict-the-average baseline in **all nine** held-out markets. The figure the reports
+  publish is the cross-validated one, and that is correct for this system — every market it
+  indexes is in the training set — but it says nothing about a new market, and the LOMO
+  number is the upper bound for one. It is an upper bound rather than an estimate because a
+  fold that removes a large market also trains on far less data; Los Angeles is 42% of the
+  corpus.
 - **Test coverage is deliberately scoped, not exhaustive.** Two suites are load-bearing —
   flag propagation and the evaluation harness — and broad unit coverage was a deliberate
   cut, not an oversight; see `docs/implementation_plan.md` §8.
 - **No cap-rate or NOI-based investment scoring.** This project has no operating-expense
   data (taxes, insurance, vacancy, maintenance), so it does not estimate net operating
-  income and will not invent one. What it computes today is the asking price against a
-  market benchmark; a gross rent multiplier (which needs nothing beyond data already in
-  this project) is planned but not yet built.
+  income and will not invent one. What it computes is the asking price against a market
+  benchmark and a **gross rent multiplier** — the one investor ratio this project's data
+  supports — built on the modelled rent rather than the listing's claimed rent, so it is
+  available on a listing that states none. The report says what it is refusing and why,
+  rather than approximating a cap rate from operating costs it does not have.
 
 ## License
 

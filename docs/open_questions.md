@@ -186,6 +186,32 @@ granularity, which may cap the ceiling well below the probe. **Closes when** the
 allows all three, or when they are written up as gaps. `config.RENT_MODEL_ESTIMATOR` and
 `config.py:479`.
 
+**The TRANSFER half CLOSED Sept 2, 2026 — leave-one-metro-out was measured, and it cost a
+script.** `scripts/lomo_validation.py` holds each of the nine training metros out entirely,
+fits on the other eight and scores the held-out rows, so every scored row comes from a market
+absent from its model's training data. **Pooled $512/mo against the cross-validated $452 — a
+transfer cost of $59, about 13% — and the model beats a per-fold predict-the-average baseline
+in all nine held-out markets.** Per metro: Chicago 361 (k-fold 343), Cleveland 395 (357),
+Los Angeles 607 (509), New York **875 (855)**.
+
+**Two findings worth carrying, because neither was predictable from the k-fold table.** New
+York has the *largest* absolute error and the *smallest* transfer cost — +2% — so its elevated
+error is a property of that market rather than of how much New York the model has seen, which
+is what a reader of `RENT_ESTIMATE_MARKET_ERROR_ELEVATED` would otherwise be left guessing.
+And Los Angeles has the largest transfer cost, +19%, which is the one figure carrying a
+confound: LA is 42% of the corpus, so its fold trains on 58% of the data and blends market
+absence with a much smaller training set. Both effects push the same way, which is why the
+whole LOMO column is stated as an **upper bound** rather than an estimate.
+
+**The warning this entry has carried since OQ-12 was folded in is now load-bearing rather than
+hypothetical, and the script enforces it**: LOMO must not be substituted for the per-metro
+holdout breakdown the reports publish. Every market this system indexes is *in* the training
+set, so the shipped figure is the right one; LOMO answers a different question, and the two
+are printed side by side so they cannot be conflated. **Still open under this item:**
+hyperparameter tuning and feature engineering. Both change the shipped model and would force a
+re-record of every eval row — which is exactly why this half could be taken inside the freeze
+and those two cannot.
+
 ---
 
 ## Retrieval

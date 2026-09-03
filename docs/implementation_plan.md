@@ -260,9 +260,21 @@ If the schedule slips, shed scope in this order rather than improvising:
    - **Hyperparameter tuning** — the adopted form ships at library defaults, deliberately
      and on the record at `config.RENT_MODEL_ESTIMATOR`. Tuning is the classic way to
      spend a day buying a number that a 5-fold CV cannot distinguish from noise.
-   - **Leave-one-metro-out validation** — the transfer evidence OQ-12's first half asks
+   - ~~**Leave-one-metro-out validation**~~ — the transfer evidence OQ-12's first half asks
      for. It answers a question the holdout split cannot, and it is the one of the three
      worth regretting.
+
+     **TAKEN Sept 2, 2026, and the regret was correct — it cost a script and no re-record.**
+     `scripts/lomo_validation.py`: **$512/mo pooled against the cross-validated $452, a 13%
+     transfer cost, and the model beats a predict-the-average baseline in all nine held-out
+     markets.** New York's transfer cost is the *smallest* at +2% despite its largest absolute
+     error, so its elevated-error disclosure is about that market rather than about coverage.
+     **A fourth instance of this list's own pattern, and the first where the mis-pricing was
+     by grouping rather than by estimate**: it was cut in one breath with hyperparameter
+     tuning and feature engineering, which both change the shipped model and force a re-record
+     of 30 eval rows. This one fits models the pipeline never loads. **Three items priced
+     together are three items priced once** — and the cheapest was carried out on the most
+     expensive one's ticket.
 
    **Cut Aug 30, 2026 by the architect, and the reasoning is about what the model is
    for.** The anchor change (item 6, below) was the lever with a *measured* defect behind
