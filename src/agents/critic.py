@@ -843,11 +843,7 @@ def _cross_check_prompt(state: DealState, detail: RecommendationDetail) -> str:
 def cross_check(state: DealState, detail: RecommendationDetail) -> RecommendationDetail:
     """Ask a model for its own verdict on the same evidence. **It can never change one.**
 
-    **This is the system's second reasoning locus, and it exists because there was only
-    one** (OQ-22). The forecast's search is the only place a model exercises judgment —
-    #12's Critic half was retired on evidence at U7.7 — so a system described as agentic
-    rested its whole claim on one node. This is the cheapest place to add another, and it
-    lands where the reader is actually looking.
+    **This is the system's second reasoning locus, added as a result of OQ-22**. 
 
     **The rule always decides.** The model's verdict is stored beside the rule's, and the
     report shows the rule's; on a disagreement it adds a line saying an independent
