@@ -20,9 +20,17 @@ rather than leaving them to be eyeballed:
 A failure here means the topology drifted from the decision, which is a design defect
 surfaced before review rather than during it.
 
-Two files are written. The `.mmd` source is the authoritative artifact and is produced
-offline. The `.png` is a convenience for the report and the video and requires a network
-call to mermaid.ink; failure to render it is reported and does not fail the export.
+Four files are written: a top-down pair and a left-right pair. The `.mmd` sources are the
+authoritative artifacts and are produced offline. The `.png`s are a convenience for the
+report and the video and require a network call to mermaid.ink; failure to render one is
+reported and does not fail the export.
+
+**Why a second orientation exists.** LangGraph emits `graph TD`, which renders this
+eight-node pipeline as a 277x928 strip — correct, and unusable in a README or on a 16:9
+slide, where it becomes a thin column down the page. The left-right variant is the same
+graph with its flow direction rewritten (`_to_left_right`), so both files still derive
+from the compiled graph and neither can drift from it. That is the whole reason the
+orientation is a transform on generated text rather than a hand-drawn second diagram.
 """
 
 from __future__ import annotations
@@ -38,6 +46,13 @@ from graph import build_graph
 OUT_DIR = Path(__file__).resolve().parents[2] / "docs" / "diagrams"
 MMD_PATH = OUT_DIR / "deal_evaluator_graph.mmd"
 PNG_PATH = OUT_DIR / "deal_evaluator_graph.png"
+MMD_LR_PATH = OUT_DIR / "deal_evaluator_graph_lr.mmd"
+PNG_LR_PATH = OUT_DIR / "deal_evaluator_graph_lr.png"
+
+# What LangGraph emits, and what the wide variant rewrites it to. Kept as constants
+# because they are the only two strings that make the two files different.
+MERMAID_TOP_DOWN = "graph TD;"
+MERMAID_LEFT_RIGHT = "graph LR;"
 
 # The one loop-closing edge decision #9 (Planner topology) permits, as a (source, target) pair.
 EXPECTED_CYCLE = (nodes.CRITIC, nodes.PLANNER)
@@ -96,6 +111,49 @@ def _find_back_edges(edges: list[tuple[str, str]], start: str) -> set[tuple[str,
     return back_edges
 
 
+def _to_left_right(mermaid: str) -> str:
+    """The same diagram, flowing left to right.
+
+    A single-token rewrite of the flow-direction header, deliberately: everything else in
+    the file — nodes, edges, edge styles, the class definitions LangGraph emits — is
+    orientation-independent, so a transform that touched anything more would be editing
+    the topology rather than the layout of it.
+
+    Raises rather than silently returning the input if the header is not where it is
+    expected. A wide diagram that is quietly the tall one is exactly the drift this whole
+    script exists to prevent, and it would be invisible in review — the file would be
+    present, non-empty, and wrong.
+    """
+    if MERMAID_TOP_DOWN not in mermaid:
+        raise ValueError(
+            f"Expected {MERMAID_TOP_DOWN!r} in the generated mermaid source; LangGraph's "
+            f"emitted header has changed and the left-right rewrite no longer applies."
+        )
+    return mermaid.replace(MERMAID_TOP_DOWN, MERMAID_LEFT_RIGHT, 1)
+
+
+def _render_png(mermaid: str, path: Path) -> None:
+    """Render one mermaid source to PNG, reporting failure rather than raising.
+
+    Rendering calls mermaid.ink over the network. That makes it the one part of this
+    script that can fail for reasons having nothing to do with the graph, so it is
+    isolated here and treated as a convenience — the `.mmd` beside it is the artifact.
+
+    The import is local for the same reason the failure is caught: this helper is the
+    only thing in the export that depends on a LangChain rendering path, and a rename
+    upstream should degrade the PNG rather than take the topology check with it.
+    """
+    from langchain_core.runnables.graph_mermaid import draw_mermaid_png
+
+    try:
+        path.write_bytes(draw_mermaid_png(mermaid))
+        print(f"Wrote {path}")
+    except Exception as exc:  # noqa: BLE001 - rendering is a convenience, not the artifact
+        print(f"PNG render skipped for {path.name} ({type(exc).__name__}: {exc}).")
+        print("The .mmd source is the authoritative diagram; PNG rendering calls "
+              "mermaid.ink and needs network access.")
+
+
 def verify_topology(drawable) -> list[str]:
     """Check the compiled graph against decision #9 (Planner topology). Returns a list of violations."""
     edges = _edge_pairs(drawable)
@@ -151,16 +209,16 @@ def main() -> int:
     print(f"  branching nodes: {sorted(EXPECTED_BRANCHING_NODES)}")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    MMD_PATH.write_text(drawable.draw_mermaid())
-    print(f"\nWrote {MMD_PATH.relative_to(Path.cwd()) if MMD_PATH.is_relative_to(Path.cwd()) else MMD_PATH}")
+    top_down = drawable.draw_mermaid()
+    left_right = _to_left_right(top_down)
 
-    try:
-        PNG_PATH.write_bytes(drawable.draw_mermaid_png())
-        print(f"Wrote {PNG_PATH}")
-    except Exception as exc:  # noqa: BLE001 - rendering is a convenience, not the artifact
-        print(f"PNG render skipped ({type(exc).__name__}: {exc}).")
-        print("The .mmd source above is the authoritative diagram; PNG rendering calls "
-              "mermaid.ink and needs network access.")
+    print()
+    for path, source in ((MMD_PATH, top_down), (MMD_LR_PATH, left_right)):
+        path.write_text(source)
+        print(f"Wrote {path}")
+
+    for path, source in ((PNG_PATH, top_down), (PNG_LR_PATH, left_right)):
+        _render_png(source, path)
 
     return 0
 

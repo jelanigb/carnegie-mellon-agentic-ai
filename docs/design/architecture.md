@@ -109,6 +109,15 @@ Documented here Aug 24, 2026, as current state. The *decision* that produced it 
 [`../history/decision_log.md`](../history/decision_log.md#orchestration--control-flow); the
 topology is asserted on every diagram export by `scripts/export_graph_diagram.py`.
 
+![The compiled graph: start to planner, then extractor, comps_retrieval, valuation_rent, scenario_forecast, critic — which branches to human_review, back to planner, or straight to summarizer](../diagrams/deal_evaluator_graph_lr.png)
+
+*The export is a review instrument rather than an illustration: it fails if a second
+loop-closing edge appears, if a third node starts branching, or if a node declared in
+`nodes.ALL_NODES` is unreachable. So every claim in this section is checked on every export
+rather than eyeballed. Two orientations are written — this left-right one for documents and
+slides, and `deal_evaluator_graph.png` top-down — from one generated source, so neither can
+drift from the code or from each other.*
+
 **The pipeline is strictly sequential.** `graph.py` wires a static spine —
 Extractor → Comps → Valuation → Scenario → Critic — and that ordering is fixed by data
 dependency, not chosen at runtime: Valuation consumes `state.comps`, Scenario consumes

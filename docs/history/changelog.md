@@ -54,6 +54,23 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 3, 2026 — the reasoning inventory becomes a document
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 3, 2026 | maintenance | **New `docs/design/reasoning.md`: every place this system exercises judgment, and every place it deliberately does not.** Written because "agentic" is a claim a reviewer will test and the answer was scattered across four module docstrings and three decisions. Four model loci, seven calls on a full run (six where the Planner skips the Extractor), plus the three Reason/Act/Observe/Decide loops, which are framed on the property that actually distinguishes them — an agent reading the result of its own action and choosing the next from it — rather than on whether a model sits inside one. The Comps agent is written up as **adaptive RAG**: a hybrid query against the ChromaDB index (exact metadata filters for geography and bedroom count, embedding similarity over description text for ranking) re-run with adapted parameters on what the last query returned, which is the distinction from single-shot retrieval. **Three descriptions in circulation were wrong and are corrected here**: the Critic's model call does *not* decide escalation (that is a pure function; #12's Critic half was retired at U7.7) but reaches a second recommendation the rule can never adopt; the forecast's `_heuristic_scores` is a degradation path, not a rules-based comparison running in parallel; and the Summarizer's model writes the lede only, choosing nothing about what the report contains. The learned models are explicitly *outside* the boundary — the rent regressor and the comp embedder compute, they do not judge. Document added to §7's map | 7.1 |
+
+---
+
+## Sept 3, 2026 — the graph diagram gets a second orientation
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 3, 2026 | maintenance | **`scripts/export_graph_diagram.py` now writes a left-right pair beside the top-down one.** LangGraph emits `graph TD`, which renders this eight-node pipeline at 277×928 — correct, and unusable in a README or on a 16:9 slide, where it becomes a thin column. `_to_left_right` rewrites the flow-direction header on the generated source and nothing else, so both files still derive from the compiled graph and the orientation cannot become a hand-drawn second diagram that drifts. It **raises rather than falling back** if the expected header is absent: a wide diagram that is quietly the tall one would be present, non-empty, wrong, and invisible in review. PNG rendering moved to one helper used by both, so a mermaid.ink failure degrades each render independently and never takes the topology check with it. Output: 1558×155. Topology check unchanged and passing; the top-down PNG re-rendered byte-identical | 7.1 |
+| Sept 3, 2026 | maintenance | **The diagram is now shown rather than only cited.** `README.md` embeds it directly above the seven-agent list — the list is the diagram in prose, and a reader met it with no picture — and `design/architecture.md` embeds it under "Coordination and communication", where every claim it makes about the topology is one the export asserts. Both captions state that the file is generated and what the export checks, so the anti-drift property travels with the image rather than living in a bullet further down. README's evidence bullet repointed from the two filenames to `docs/diagrams/` | 7.1 |
+
+---
+
 ## Sept 3, 2026 — the New York disclosure's claim becomes a measurement
 
 | Date added | Unit | Work done | Related checkpoint |

@@ -11,6 +11,13 @@ evidence already lives (sample reports, evaluation results, the graph diagram).
 
 ## What it is
 
+![The compiled graph: start to planner, then extractor, comps_retrieval, valuation_rent, scenario_forecast, critic — which branches to human_review, back to planner, or straight to summarizer](docs/diagrams/deal_evaluator_graph_lr.png)
+
+*Generated from the compiled graph by `scripts/export_graph_diagram.py`, not drawn — dotted
+edges are conditional. The same script asserts the three properties the topology is committed
+to: exactly one loop-closing edge (`critic → planner`), exactly two branching nodes, and every
+declared node reachable.*
+
 A seven-agent pipeline, orchestrated as a [LangGraph](https://github.com/langchain-ai/langgraph)
 graph with an explicit human-in-the-loop pause:
 
@@ -72,9 +79,10 @@ rather than degrading its own confidence claim — see `agents/human_review.py` 
   flag-coverage census, and a sweep over the confidence-scoring weights. This is what a
   correctness or calibration claim in this project is actually measured against, and the
   inputs it runs on (`src/eval/data/`, `src/eval/cases.py`) are committed alongside it.
-- **`docs/diagrams/deal_evaluator_graph.mmd` / `.png`** — the graph topology, generated
-  directly from the compiled graph rather than drawn by hand
-  (`scripts/export_graph_diagram.py`), so it can't drift from the code.
+- **`docs/diagrams/`** — the graph topology shown above, generated directly from the
+  compiled graph rather than drawn by hand (`scripts/export_graph_diagram.py`), so it can't
+  drift from the code. Two orientations from one source: `_lr` for documents and slides,
+  the top-down pair for anywhere tall.
 - **`docs/implementation_plan.md`** — the plan of record: what was built, in what order,
   every architectural decision with its reasoning (§7), and a document map to everything
   else in `docs/`.
