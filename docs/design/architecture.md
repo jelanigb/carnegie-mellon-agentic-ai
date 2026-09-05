@@ -51,9 +51,12 @@ paid variants given an identical prompt. The capstone brief's *"freely available
 access"* is satisfiable on quality — the same models are available either way — but not
 on the ability to measure anything about them.
 
-**$10 spent of the $100 budget**, which buys 1,000 free-model requests per day and access
+**$10 spent on OpenRouter**, which buys 1,000 free-model requests per day and access
 to paid variants at roughly **$0.00015 per extraction** — about 6,700 extractions to the
-dollar. The full remaining build is expected to cost cents, not dollars. Decision #8 in
+dollar. The full remaining build is expected to cost cents, not dollars. (Project spend
+against the $100 budget totals **$50**: this $10 plus $40 of Claude usage credits for the
+build itself, which buys no runtime capability and is therefore not part of the stack
+accounting above.) Decision #8 in
 §7 carries the measurements; `tools/llm_cache.py` reduces repeat spend and, more usefully,
 makes evaluation runs reproducible.
 

@@ -141,16 +141,21 @@ report. Three things it does that the command line does not.
   an address-lookup outage, a stale market index. Each names itself in the report it
   produces, so a demonstration cannot be mistaken for a real incident.
 
-**A fresh clone cannot run this beyond the two commands above using recorded data**
-The trained rent model (`data/processed/rent_model.joblib`, ~140 KB) is committed, so
-scoring a listing works out of the box. Two things are not committed, both
-deliberately:
+**A fresh clone cannot run this beyond the two commands above using recorded data**, and
+**[`data/README.md`](data/README.md) is the guide to closing that gap** — every dataset,
+its source, its license, its size, and the command that consumes it.
 
-- **The source rental-listings corpus (Kaggle-licensed) and the ChromaDB comp index
-  built from it.** Rebuild with `scripts/build_comps_index.py` once the source CSV is in
-  place; `docs/design/data_sources.md` names where each dataset comes from.
-- **The rent model's training data.** The model itself ships trained; retrain from
-  scratch with `scripts/train_rent_model.py` if you have an alternate source corpus.
+The short version. The trained rent model (`data/processed/rent_model.joblib`, ~140 KB) is
+committed, so scoring a listing works out of the box. **Three files have to be fetched by
+hand**: the rental corpus ([Apartment for Rent Classified](https://archive.ics.uci.edu/dataset/555/apartment+for+rent+classified),
+UCI ML Repository, CC BY 4.0 — linked rather than vendored because it expands to 97 MB),
+Zillow's ZORI rent index, and a Redfin sale-price export. **Nothing else is a download:**
+the Census boundary layers fetch themselves on first use, HUD FMR caches from the API, and
+the 51 MB ChromaDB comp index is *built* from the corpus by
+`scripts/build_comps_index.py` rather than shipped — a derived binary artifact is coupled
+to the `chromadb` version that wrote it, so rebuilding is both smaller and safer than
+committing. The rent model's training data is likewise derived from the corpus rather than
+stored separately; `scripts/train_rent_model.py` reproduces it.
 
 `src/eval/` is the exception to both: its inputs (golden fixtures, recorded LLM
 responses, a geocode cache) are committed in full, so `eval.runner --tier golden` or
