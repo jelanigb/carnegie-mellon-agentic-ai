@@ -54,5 +54,11 @@
     "longitude": -87.659730062071,
     "matched_address": "4700 N RACINE AVE, CHICAGO, IL, 60640",
     "source": "census_geocoder"
+  },
+  "2800 N Kedzie Blvd, Chicago, IL, 60647": {
+    "latitude": 41.932542319484,
+    "longitude": -87.707520712726,
+    "matched_address": "2800 N KEDZIE AVE, CHICAGO, IL, 60618",
+    "source": "census_geocoder"
   }
 }
