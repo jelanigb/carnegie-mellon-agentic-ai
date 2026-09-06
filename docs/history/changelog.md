@@ -54,6 +54,14 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 6, 2026 — emphasis inside a disclosure's summary line
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 6, 2026 | U9 | **Markdown emphasis printed its own asterisks in the one line a reader sees first.** `agents/summarizer.py` — `_inline_html()` converts `*x*` and `**x**` to `<em>`/`<strong>` when building a disclosure's `<summary>` line. **A report bug rather than a surface one**, and it was in the committed evidence: `<summary>` is raw HTML, no markdown renderer parses inside one, so `forecast_branches_near_tied` rendered *"scored 0.00 \*above\* the one kept"* with the asterisks visible — on GitHub as much as in the app. Converting beats forbidding emphasis in flag text, because the same string is rendered as ordinary markdown in the body underneath, where the emphasis works and is wanted; underscores are deliberately left alone, since the only ones reaching this line are inside flag kind names already wrapped in `<code>`. The three sample reports were regenerated, and **the 30-case batch re-derived byte-identically five days after it was last run** — every verdict row unchanged, only the header date moving | 7.1 |
+
+---
+
 ## Sept 5, 2026 — the surface shows its work, and lets the report leave
 
 | Date added | Unit | Work done | Related checkpoint |

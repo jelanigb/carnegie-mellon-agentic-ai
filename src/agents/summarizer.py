@@ -36,6 +36,7 @@ Reason/Act/Observe/Decide:
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from typing import Optional
 
@@ -469,6 +470,31 @@ def _first_sentence(text: str) -> str:
     return head if head else text.strip()
 
 
+# Markdown emphasis, longest form first so `**` is not eaten by the `*` rule.
+_EMPHASIS = (
+    (re.compile(r"\*\*(.+?)\*\*"), r"<strong>\1</strong>"),
+    (re.compile(r"\*(.+?)\*"), r"<em>\1</em>"),
+)
+
+
+def _inline_html(text: str) -> str:
+    """Markdown emphasis converted for a raw-HTML context.
+
+    The `<summary>` line is HTML, and no markdown renderer parses inside one — not
+    GitHub's and not Streamlit's. A disclosure whose text used emphasis therefore printed
+    its asterisks literally, in the one line a reader sees before deciding whether to open
+    the entry.
+
+    Converting is better than forbidding emphasis in flag text, because the same string is
+    rendered as ordinary markdown in the body underneath, where the emphasis is wanted and
+    works. Underscores are deliberately left alone: the only ones that reach here are
+    inside flag kind names, which are already wrapped in `<code>`.
+    """
+    for pattern, replacement in _EMPHASIS:
+        text = pattern.sub(replacement, text)
+    return text
+
+
 def _disclosure_entry(flag: Flag, severity: Severity) -> list[str]:
     """One disclosure, collapsed or open according to whether a reader may skip it.
 
@@ -501,7 +527,7 @@ def _disclosure_entry(flag: Flag, severity: Severity) -> list[str]:
     body = [f"{flag.detail}", ""] if flag.detail.rstrip(". ") != head else []
     return [
         "<details>",
-        f"<summary><b><code>{flag.kind}</code></b> — {head}</summary>",
+        f"<summary><b><code>{flag.kind}</code></b> — {_inline_html(head)}</summary>",
         "",
         *body,
         f"*raised by:* `{flag.source_agent}`",
