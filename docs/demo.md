@@ -632,6 +632,12 @@ an address-lookup outage, a stale market index. Each names itself in the report 
 produces (*"[simulated failure, declared by 'los-angeles' — not a real outage]"*), so a
 demonstration cannot be mistaken for a real incident.
 
+**4. It shows its own work, and lets the report leave.** Each agent is named on screen as it
+finishes, and the sequence is kept afterwards — including on the pause screen, where it shows
+the six agents that completed before the graph declined to report. The report downloads as
+Markdown (which Google Docs and Word import directly) or as a self-contained page a browser
+prints to PDF.
+
 **What it deliberately does not do: lay out the evidence itself.** The report is rendered
 exactly as the Summarizer emitted it, split at its own headings so sections can collapse.
 The only place the surface reads state rather than text is the four-figure status strip,

@@ -1,0 +1,35 @@
+# Streamlit configuration for the demo surface (`app.py`).
+#
+# Committed so that `streamlit run app.py` is correct by default. Three of these
+# settings exist because the surface gets recorded: without them the plain launch
+# command prints this machine's public IP to the terminal, offers to collect usage
+# statistics, and follows the operating system into dark mode — where the report's
+# green section headings were chosen against a light ground.
+
+[theme]
+base = "light"
+
+# Roboto, with Streamlit's own bundled Source Sans behind it.
+#
+# **The family is named here; the font file is loaded in `app.py`.** Streamlit's
+# `font` setting only declares which family to ask for — pointing it at a Google
+# Fonts URL was tried and the stylesheet was never fetched, leaving the page
+# rendering in the default font while the config claimed otherwise. `_page_style()`
+# imports the face directly, which is verifiable in the browser.
+#
+# If the network is unavailable the import fails and the page renders in Source Sans:
+# a different font, not a broken page.
+font = "Roboto, sans-serif"
+headingFont = "Roboto, sans-serif"
+codeFont = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+
+[server]
+# Suppresses the Network and External URL lines, so the machine's public IP address
+# cannot reach a screen recording.
+address = "localhost"
+# Do not auto-open a browser: the tab is opened by hand, already sized and zoomed.
+# Also the setting that skips Streamlit's first-run email prompt.
+headless = true
+
+[browser]
+gatherUsageStats = false

@@ -61,6 +61,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
 import config
+import nodes
 from demo_deals import DEMO_DEALS
 from graph import build_graph, state_serde
 from state import RECOMMENDATION_LABEL, DealState, DealTerms, Severity
@@ -138,8 +139,14 @@ _RECORDED: frozenset[tuple[str, bool, Optional[Fault]]] = frozenset(
 _HEADING_GREEN = "#188038"
 
 
-def _heading_colour() -> None:
-    """Colour the report's structural headings, and only those.
+def _page_style() -> None:
+    """The page's own stylesheet: the typeface, and the report's structural headings.
+
+    **The typeface is loaded here rather than by `config.toml`.** Streamlit's `theme.font`
+    setting names a family but does not fetch one; pointing it at a Google Fonts URL was
+    tried and quietly fetched nothing, leaving the page in the default face while the
+    config claimed Roboto. The `@import` below is what actually loads it, and it is the
+    first rule in the sheet because an `@import` anywhere else is ignored.
 
     **The colour lives here and not in the report, and that is forced rather than
     preferred.** The report is a Markdown file committed to a public repository and
@@ -161,6 +168,11 @@ def _heading_colour() -> None:
     st.markdown(
         f"""
         <style>
+          /* The typeface itself. `config.toml` names Roboto as the family; this is
+             what actually fetches it. An @import has to be the first rule in the
+             sheet, and if it fails the page falls back to Streamlit's Source Sans. */
+          @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
+
           /* The report title, and this app's own title above it. */
           h1, [data-testid="stMarkdownContainer"] h1 {{ color: {_HEADING_GREEN}; }}
           /* Section headings, which reach the reader as expander labels. */
@@ -205,6 +217,70 @@ def is_recorded(spec: RunSpec) -> bool:
     if spec.deal_key is None:
         return False
     return (spec.deal_key, spec.retrieval, spec.fault) in _RECORDED
+
+
+# What each agent does, in the order the graph runs them. Plain language, because this
+# reaches a demo audience rather than a reader with the repository open.
+_NODE_WORK = {
+    nodes.PLANNER: ("Planner", "Inspects the deal and decides which steps it needs"),
+    nodes.EXTRACTOR: ("Extractor", "Parses the listing into typed terms, geocodes the address, and states what it assumed"),
+    nodes.COMPS_RETRIEVAL: ("Retrieval", "Searches 3,880 real rentals for comparables, relaxing one criterion at a time when matches are thin"),
+    nodes.VALUATION_RENT: ("Valuation", "Estimates rent against the market index for this property's own ZIP, and cross-checks it against the comparables"),
+    nodes.SCENARIO_FORECAST: ("Forecast", "Searches rent and price scenarios, scoring and pruning candidates"),
+    nodes.CRITIC: ("Critic", "Checks consistency across agents, scores confidence, and decides report, rework or escalate"),
+    nodes.HUMAN_REVIEW: ("Human review", "The graph pauses and waits for a person"),
+    nodes.SUMMARIZER: ("Summarizer", "Writes the report, carrying every disclosure into it"),
+}
+
+_GRAPH_DIAGRAM = config.REPO_ROOT / "docs" / "diagrams" / "deal_evaluator_graph_lr.png"
+
+
+def _how_it_works() -> None:
+    """The pipeline, explained once, for a reader meeting it for the first time.
+
+    The diagram is the one generated from the compiled graph, not a drawing of it, so it
+    cannot describe a pipeline the code does not have.
+    """
+    with st.expander("How this works — seven agents, in order", expanded=False):
+        if _GRAPH_DIAGRAM.exists():
+            st.image(str(_GRAPH_DIAGRAM), use_container_width=True)
+            st.caption(
+                "Generated from the compiled graph. Dotted arrows are conditional: the "
+                "Critic can send a deal back for one bounded round of rework, stop it for "
+                "human review, or release it straight to the report."
+            )
+        for name, (label, work) in _NODE_WORK.items():
+            st.markdown(f"**{label}** — {work}")
+
+
+def report_markdown(text: str) -> str:
+    """Report text adjusted for Streamlit's renderer rather than GitHub's.
+
+    Two differences between the two renderers are silent failures on screen, and both were
+    visible in this surface before this function existed.
+
+    1. **Dollar amounts became equations.** Streamlit renders LaTeX inside markdown, so a
+       line holding two dollar signs is read as math delimited by them: the figures come
+       back as italic symbols run together, and any bold markers caught between them are
+       swallowed into the expression instead of making text bold. Replacing each dollar
+       sign with its HTML entity puts the same character on screen and leaves the math
+       parser nothing to match.
+    2. **The disclosure blocks are real HTML.** The report wraps each disclosure in
+       `<details>`/`<summary>` so it collapses when read on GitHub. Streamlit escapes HTML
+       by default and printed the tags as text; callers below render it instead.
+
+    **Neither is a change to the report.** The file committed to the repository is exactly
+    what the Summarizer wrote — this function is the lens, not the artifact, which is the
+    same reason the surface splits the report's text rather than re-laying-out its evidence.
+
+    TODO(security): rendering HTML means a `<script>` in report text would execute. Every
+    committed report is machine-generated from templates and every demo run replays from a
+    fixed recording, so the only reachable path is a pasted listing steering the one
+    model-written paragraph into emitting markup, on a surface that runs locally for one
+    person. Accepted here; a served deployment would need the report sanitized first, or
+    the `<details>` blocks converted to native expanders before rendering.
+    """
+    return text.replace("$", "&#36;")
 
 
 def split_report(markdown: str) -> tuple[str, list[tuple[str, str]]]:
@@ -287,6 +363,60 @@ def _graph():
     return build_graph(checkpointer=SqliteSaver(connection, serde=state_serde()))
 
 
+def _agents_ran(ran: list[str], *, working: bool) -> None:
+    """The nodes that have finished, in the order they finished."""
+    for name in ran:
+        label, work = _NODE_WORK.get(name, (name, ""))
+        st.markdown(f"✅ &nbsp;**{label}** — {work}", unsafe_allow_html=True)
+    if working:
+        st.markdown("⏳ &nbsp;*working…*", unsafe_allow_html=True)
+
+
+def _stream_run(payload, invoke_config: dict, spec: RunSpec) -> dict:
+    """Run the graph a node at a time, so the pipeline is visible while it works.
+
+    `invoke()` hands back only the finished state, which on a replayed run means a few
+    seconds of spinner and then a report — the seven agents do all of their work
+    invisibly, and the one thing a viewer most wants to see is the one thing not shown.
+
+    **Both stream modes are requested at once, and each answers a different question.**
+    `updates` names the node that just finished, which is what drives the list on screen.
+    `values` carries the whole state after it, so the last one received *is* the finished
+    state — there is no second read afterwards that could disagree with what ran.
+
+    Which nodes appear is the path this deal actually took, not a fixed checklist: the
+    Planner can skip the Extractor, and `human_review` only appears when a deal is
+    stopped. A checklist would have to show steps that will never complete.
+    """
+    ran: list[str] = list(st.session_state.get("nodes_run", []))
+    latest: dict = {}
+    interrupt = None
+    panel = st.empty()
+
+    with run_environment(spec):
+        for mode, chunk in _graph().stream(
+            payload, invoke_config, stream_mode=["updates", "values"]
+        ):
+            if mode == "values":
+                latest = chunk
+                continue
+            for name in chunk:
+                if name == "__interrupt__":
+                    interrupt = chunk[name]
+                    continue
+                ran.append(name)
+                with panel.container():
+                    _agents_ran(ran, working=True)
+
+    panel.empty()
+    st.session_state["nodes_run"] = ran
+
+    result = dict(latest)
+    if interrupt is not None:
+        result["__interrupt__"] = interrupt
+    return result
+
+
 def _invoke(spec: RunSpec, listing_text: str, coords) -> tuple[dict, str]:
     """Run one deal and return `(result, thread_id)`.
 
@@ -299,11 +429,74 @@ def _invoke(spec: RunSpec, listing_text: str, coords) -> tuple[dict, str]:
     if coords is not None:
         terms.latitude, terms.longitude = coords
 
-    with run_environment(spec):
-        result = _graph().invoke(
-            DealState(raw_listing_text=listing_text, deal_terms=terms), invoke_config
-        )
+    st.session_state["nodes_run"] = []
+    result = _stream_run(
+        DealState(raw_listing_text=listing_text, deal_terms=terms), invoke_config, spec
+    )
     return result, thread_id
+
+
+def report_html(markdown_text: str, title: str) -> str:
+    """The report as one self-contained HTML file, for saving or printing.
+
+    **This is the PDF path.** No PDF library is installed and adding one costs a system
+    dependency for a document a browser already prints well: open this file and print it
+    to PDF. The stylesheet is print-first for that reason.
+
+    Rendered with the markdown parser Streamlit already depends on, so nothing new is
+    installed. HTML in the source is passed through, which is what keeps each disclosure
+    a real collapsible block; `open` on every one so nothing is hidden in a printout.
+    """
+    from markdown_it import MarkdownIt
+
+    body = MarkdownIt("commonmark", {"html": True}).enable("table").render(markdown_text)
+    body = body.replace("<details>", "<details open>")
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>{title}</title>
+<style>
+  body {{ max-width: 46rem; margin: 3rem auto; padding: 0 1.5rem;
+         font: 16px/1.6 Roboto, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+         color: #1a1a1a; }}
+  h1, h2, h3, h4 {{ color: #188038; line-height: 1.25; }}
+  h1 {{ font-size: 1.9rem; }} h2 {{ font-size: 1.35rem; margin-top: 2.2rem; }}
+  blockquote {{ border-left: 4px solid #188038; margin: 1.4rem 0; padding: .2rem 0 .2rem 1.1rem;
+                color: #22331f; background: #f4f9f5; }}
+  table {{ border-collapse: collapse; width: 100%; margin: 1.2rem 0; font-size: .92rem; }}
+  th, td {{ border: 1px solid #ddd; padding: .45rem .6rem; text-align: left; vertical-align: top; }}
+  th {{ background: #f4f4f2; }}
+  code {{ background: #f2f2ef; padding: .1rem .3rem; border-radius: 3px; font-size: .9em; }}
+  details {{ margin: .6rem 0; }}
+  summary {{ cursor: pointer; }}
+  @media print {{ body {{ margin: 0; max-width: none; font-size: 11pt; }}
+                  h2 {{ page-break-after: avoid; }} details {{ page-break-inside: avoid; }} }}
+</style></head><body>
+{body}
+</body></html>
+"""
+
+
+def _download_row(result: dict) -> None:
+    """Take the report away: as markdown, or as a page a browser can print to PDF.
+
+    Two formats rather than three. Markdown is the report exactly as it was written and
+    imports into Google Docs and Word directly. The HTML is the print path — browsers
+    make good PDFs and a PDF library would be a system dependency for no gain.
+    """
+    report = result.get("report_markdown")
+    if not report:
+        return
+    stem = (st.session_state.get("spec").label if st.session_state.get("spec") else "report")
+    left, right, _ = st.columns([1, 1, 3])
+    left.download_button(
+        "Download as Markdown", report, file_name=f"{stem}-evaluation.md",
+        mime="text/markdown", width="stretch",
+        help="The report exactly as written. Google Docs and Word both import Markdown directly.",
+    )
+    right.download_button(
+        "Download as a printable page", report_html(report, f"Deal Evaluation — {stem}"),
+        file_name=f"{stem}-evaluation.html", mime="text/html", width="stretch",
+        help="Opens in any browser. Print it (Cmd-P) and choose Save as PDF.",
+    )
 
 
 def _status_strip(result: dict) -> None:
@@ -353,17 +546,23 @@ def _render_report(result: dict) -> None:
         return
 
     top, sections = split_report(report)
-    st.markdown(top)
+    st.markdown(report_markdown(top), unsafe_allow_html=True)
     _status_strip(result)
+    _download_row(result)
+
+    ran = st.session_state.get("nodes_run") or []
+    if ran:
+        with st.expander(f"The agents that ran — {len(ran)} steps, in order", expanded=False):
+            _agents_ran(ran, working=False)
 
     for heading, body in sections:
         if heading == "Summary":
             # The lede is the one section a reader should meet without deciding to.
             st.markdown(f"##### {heading}")
-            st.markdown(body)
+            st.markdown(report_markdown(body), unsafe_allow_html=True)
             continue
         with st.expander(heading, expanded=heading.startswith(_OPEN_BY_DEFAULT)):
-            st.markdown(body)
+            st.markdown(report_markdown(body), unsafe_allow_html=True)
 
 
 def _resume(note: str) -> None:
@@ -376,8 +575,24 @@ def _resume(note: str) -> None:
     """
     spec: RunSpec = st.session_state["spec"]
     invoke_config = {"configurable": {"thread_id": st.session_state["thread_id"]}}
-    with run_environment(spec):
-        st.session_state["result"] = _graph().invoke(Command(resume=note), invoke_config)
+    st.session_state["result"] = _stream_run(Command(resume=note), invoke_config, spec)
+
+
+def _listing_panel(listing: str, *, expanded: bool) -> None:
+    """The text the pipeline was actually given, shown alongside what it produced.
+
+    Without this the surface goes straight from a dropdown label to a finished report,
+    and a reader never sees the input the whole evaluation is about. Every figure below
+    is derived from these few sentences, and the Extractor's stated assumptions only read
+    as assumptions once you have seen what it had to work from.
+
+    Open before a run, collapsed after one — at that point the report is what the reader
+    came for, and the listing is something to check against rather than to read first.
+    """
+    if not listing or not listing.strip():
+        return
+    with st.expander("The listing, as the system received it", expanded=expanded):
+        st.markdown(report_markdown(f"> {listing.strip()}"), unsafe_allow_html=True)
 
 
 def _review_panel(payload: dict) -> None:
@@ -417,13 +632,25 @@ def _review_panel(payload: dict) -> None:
     if flags:
         st.markdown(f"**What caused it — {len(flags)} at warn or critical**")
         for flag in flags:
-            st.markdown(f"- `{flag['severity']}` · **{flag['kind']}** — {flag['detail']}")
+            st.markdown(
+                report_markdown(
+                    f"- `{flag['severity']}` · **{flag['kind']}** — {flag['detail']}"
+                ),
+                unsafe_allow_html=True,
+            )
+
+    ran = st.session_state.get("nodes_run") or []
+    if ran:
+        with st.expander(
+            f"What ran before it stopped — {len(ran)} steps", expanded=False
+        ):
+            _agents_ran(ran, working=False)
 
     questions = payload.get("unanswered_questions") or []
     if questions:
         st.markdown("**Unanswered questions**")
         for question in questions:
-            st.markdown(f"- {question}")
+            st.markdown(report_markdown(f"- {question}"), unsafe_allow_html=True)
 
     note = st.text_area(
         "Reviewer note — travels into the report verbatim",
@@ -516,7 +743,7 @@ def _sidebar() -> tuple[Optional[RunSpec], Optional[str], Optional[tuple], bool]
 
 def main() -> None:
     st.set_page_config(page_title="Deal Evaluator", page_icon="🏘️", layout="wide")
-    _heading_colour()
+    _page_style()
     st.title("Multi-family deal evaluator")
     st.caption(
         "Seven agents evaluate a small multi-family listing and disclose every point at "
@@ -532,6 +759,7 @@ def main() -> None:
     # captured and was not is worse than no trace. Cached so the status line renders
     # once per session rather than on every Streamlit rerun.
     _tracing_status()
+    _how_it_works()
 
     with st.sidebar:
         spec, listing, coords, run_clicked = _sidebar()
@@ -545,14 +773,26 @@ def main() -> None:
             except LlmError as exc:
                 st.error(f"The model could not be reached, so this live run was not started: {exc}")
                 return
-        with st.spinner(f"Running '{spec.label}'…"):
+        with st.spinner(f"Running '{spec.label}' through the graph…"):
             result, thread_id = _invoke(spec, listing, coords)
-        st.session_state.update(result=result, thread_id=thread_id, spec=spec)
+        st.session_state.update(
+            result=result, thread_id=thread_id, spec=spec, listing=listing
+        )
 
     result = st.session_state.get("result")
     if result is None:
-        st.info("Choose a listing in the sidebar and press **Run**.")
+        # Nothing has been run yet. Show whatever is selected rather than an empty
+        # page, so the input is on screen before the output exists.
+        if listing and listing.strip():
+            _listing_panel(listing, expanded=True)
+            st.caption("Press **Run** in the sidebar to evaluate this listing.")
+        else:
+            st.info("Choose a listing in the sidebar and press **Run**.")
         return
+
+    # The listing that produced what is on screen — not whatever the sidebar now
+    # points at, which may have been changed without pressing Run.
+    _listing_panel(st.session_state.get("listing", ""), expanded=False)
 
     if "__interrupt__" in result:
         _review_panel(result["__interrupt__"][0].value)
