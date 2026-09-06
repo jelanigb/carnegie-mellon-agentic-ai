@@ -54,6 +54,15 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 6, 2026 — the surface: one agent panel, and the listing kept on screen
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 6, 2026 | U9 | **The seven agents were explained twice, in two places, neither of which was the useful one.** `app.py` — `_how_it_works()` removed and its graph diagram folded into `_agents_ran()`, so the picture of the pipeline and the record of which steps *this deal* reached are now one panel rather than a static explainer above the report and a bare checklist below it. The diagram still shows nodes a given run never reached, deliberately: it is the compiled graph rather than a trace, the conditional edges are the point, and a deal that stopped at review reads more clearly against the whole shape than against a picture cropped to the part it used. Rendering is skipped while a run is in flight — re-drawing an image on every node update buys nothing and costs a flicker at the moment the list is worth watching | 7.1 |
+| Sept 6, 2026 | U9 | **The listing is a permanent box under the title rather than a disclosure.** `app.py` — `_listing_panel()` drops its expander and its `expanded` argument. Every figure in the report derives from those few sentences, so a reader checking a number against its source should not have to remember the source is one click away | 7.1 |
+
+---
+
 ## Sept 6, 2026 — emphasis inside a disclosure's summary line
 
 | Date added | Unit | Work done | Related checkpoint |

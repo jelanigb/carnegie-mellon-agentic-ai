@@ -235,24 +235,6 @@ _NODE_WORK = {
 _GRAPH_DIAGRAM = config.REPO_ROOT / "docs" / "diagrams" / "deal_evaluator_graph_lr.png"
 
 
-def _how_it_works() -> None:
-    """The pipeline, explained once, for a reader meeting it for the first time.
-
-    The diagram is the one generated from the compiled graph, not a drawing of it, so it
-    cannot describe a pipeline the code does not have.
-    """
-    with st.expander("How this works — seven agents, in order", expanded=False):
-        if _GRAPH_DIAGRAM.exists():
-            st.image(str(_GRAPH_DIAGRAM), use_container_width=True)
-            st.caption(
-                "Generated from the compiled graph. Dotted arrows are conditional: the "
-                "Critic can send a deal back for one bounded round of rework, stop it for "
-                "human review, or release it straight to the report."
-            )
-        for name, (label, work) in _NODE_WORK.items():
-            st.markdown(f"**{label}** — {work}")
-
-
 def report_markdown(text: str) -> str:
     """Report text adjusted for Streamlit's renderer rather than GitHub's.
 
@@ -364,7 +346,30 @@ def _graph():
 
 
 def _agents_ran(ran: list[str], *, working: bool) -> None:
-    """The nodes that have finished, in the order they finished."""
+    """The pipeline: the graph it runs on, and which of its steps this deal reached.
+
+    **One place, not two.** The diagram and the per-agent descriptions used to sit in a
+    separate explainer above the report, which meant a reader met the seven agents twice
+    and in neither place could see which of them this particular deal had actually used.
+    Here the picture and the record are the same panel.
+
+    **The diagram shows nodes this run did not reach, and that is deliberate.** It is the
+    graph, generated from the compiled pipeline, not a trace — the conditional edges are
+    the point, and a deal that stopped at review is easier to understand against the whole
+    shape than against a picture cropped to the part it used. The ticks below say which
+    steps ran.
+
+    Skipped while the run is in flight: re-rendering an image on every node update buys a
+    reader nothing and costs a flicker at exactly the moment the list is worth watching.
+    """
+    if not working and _GRAPH_DIAGRAM.exists():
+        st.image(str(_GRAPH_DIAGRAM), use_container_width=True)
+        st.caption(
+            "The compiled graph. Dotted arrows are conditional: the Critic can send a deal "
+            "back for one bounded round of rework, stop it for human review, or release it "
+            "straight to the report — so not every run reaches every node."
+        )
+
     for name in ran:
         label, work = _NODE_WORK.get(name, (name, ""))
         st.markdown(f"✅ &nbsp;**{label}** — {work}", unsafe_allow_html=True)
@@ -578,21 +583,18 @@ def _resume(note: str) -> None:
     st.session_state["result"] = _stream_run(Command(resume=note), invoke_config, spec)
 
 
-def _listing_panel(listing: str, *, expanded: bool) -> None:
-    """The text the pipeline was actually given, shown alongside what it produced.
+def _listing_panel(listing: str) -> None:
+    """The text the pipeline was given, kept on screen beside whatever it produced.
 
-    Without this the surface goes straight from a dropdown label to a finished report,
-    and a reader never sees the input the whole evaluation is about. Every figure below
-    is derived from these few sentences, and the Extractor's stated assumptions only read
-    as assumptions once you have seen what it had to work from.
-
-    Open before a run, collapsed after one — at that point the report is what the reader
-    came for, and the listing is something to check against rather than to read first.
+    Always visible, and not behind a disclosure. Every figure in the report is derived
+    from these few sentences, so a reader checking a number against its source should not
+    have to remember that the source is one click away.
     """
     if not listing or not listing.strip():
         return
-    with st.expander("The listing, as the system received it", expanded=expanded):
-        st.markdown(report_markdown(f"> {listing.strip()}"), unsafe_allow_html=True)
+    st.markdown("##### The Listing")
+    with st.container(border=True):
+        st.markdown(report_markdown(listing.strip()), unsafe_allow_html=True)
 
 
 def _review_panel(payload: dict) -> None:
@@ -759,7 +761,6 @@ def main() -> None:
     # captured and was not is worse than no trace. Cached so the status line renders
     # once per session rather than on every Streamlit rerun.
     _tracing_status()
-    _how_it_works()
 
     with st.sidebar:
         spec, listing, coords, run_clicked = _sidebar()
@@ -784,7 +785,7 @@ def main() -> None:
         # Nothing has been run yet. Show whatever is selected rather than an empty
         # page, so the input is on screen before the output exists.
         if listing and listing.strip():
-            _listing_panel(listing, expanded=True)
+            _listing_panel(listing)
             st.caption("Press **Run** in the sidebar to evaluate this listing.")
         else:
             st.info("Choose a listing in the sidebar and press **Run**.")
@@ -792,7 +793,7 @@ def main() -> None:
 
     # The listing that produced what is on screen — not whatever the sidebar now
     # points at, which may have been changed without pressing Run.
-    _listing_panel(st.session_state.get("listing", ""), expanded=False)
+    _listing_panel(st.session_state.get("listing", ""))
 
     if "__interrupt__" in result:
         _review_panel(result["__interrupt__"][0].value)
