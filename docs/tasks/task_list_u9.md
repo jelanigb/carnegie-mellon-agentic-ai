@@ -1176,6 +1176,135 @@ unanchored number at the centre of the recommendation. No flag, no threshold and
 capital and hold period, and setting one here would invent a criterion and attribute it to
 the data.
 
+### U9.12 ⬜ — Docstrings and comments, rewritten for a human grader *(planned Sept 5, 2026; runs before U9.9)*
+
+**The architect's call, Sept 5:** the graders confirmed that day that they will read the code.
+The code is written for the next Claude — decision history in module headers, `§` and `#`
+citations, instructions to a future implementer — and after Monday there is no next Claude.
+**That prose now costs a reader more than it pays**, and it is the last thing standing between a
+grader and a codebase they can skim.
+
+**This is a reversal of a project standard, stated as one.** `engineering_standards.md` §8 says
+*"Docstrings carry the reasoning… Match that density."* That was right while the repository was
+a working surface with an amnesiac collaborator. It is wrong for a frozen artifact read once by
+a stranger. **The standard changes with the audience, and the standard document changes with
+it** — U9.12c.
+
+**Runs before U9.9** so the screenshots and any code shown on camera are of the code that ships.
+
+#### What comes out, and where it goes
+
+| | Category | Disposition |
+| --- | --- | --- |
+| 1 | **Decision history** — "this changed from X to Y at U7.5", "U8.0 found the anchor drifting", "this docstring previously said…" | **Migrate to [`../history/decision_log.md`](../history/decision_log.md)** if the reasoning is not already there; delete if it is. Most is already there — that file is 1,922 lines |
+| 2 | **`implementation_plan.md` citations** — `§2`, `§6 cut-list item 4`, "per §8" | **Delete.** The code is the implementation; a reader with the file open does not need a section number to understand a function |
+| 3 | **Decision numbers** — `decision #13`, `#19`, `(#15)` | **Delete from prose.** 226 sites. Where the decision is load-bearing, state the *reason* in a clause instead of citing a number a grader cannot resolve |
+| 4 | **Unit and open-question tags** — `U9.7's pre-flight`, `OQ-17`, "built at U9.4" | **Delete.** Same argument |
+| 5 | **Instructions to a future implementer** — "a reader coming from this docstring to the code should not have to discover it", "the alternative was…", "kept for when this is revisited" | **Delete outright** |
+| 6 | **The long module headers** — 3,057 lines across 84 files, up to 83 in one file | **Trim to what a reader needs to use the module**: what it is, what it produces, and any non-obvious invariant. The `app.py` header's "Streamlit mechanics, named because they are how these demos break" survives; its "decision #3, §6 cut-list item 4, built at U9.7" opening line does not |
+| 7 | **Reasoning that genuinely helps** — why the comp index never chunks, why the rent target is a ratio, why the checkpointer needs a fresh thread id | **Keep.** Restate without the citation if it carries one |
+
+**The test for every passage: would a competent stranger reading this file for the first time be
+helped by it?** Category 7 passes. Categories 1–5 fail — they help someone reconstructing the
+build, and nobody will be.
+
+#### Scope — everything except `scripts/`
+
+Set by the architect Sept 5. Measured Sept 5: **84 files, 29,585 lines, of which 8,324 are
+docstring lines and 3,956 are comment lines.** 74 files carry at least one citation of the kind
+above; 240 `§` references and 226 decision-number references in all.
+
+| In scope | Files | Note |
+| --- | --- | --- |
+| `agents/` | 8 | The densest and the most likely to be opened first |
+| `tools/` (incl. `tools/model/`) | ~20 | |
+| `graph.py`, `state.py`, `config.py`, `main.py`, `app.py`, `mcp_server.py`, `demo_deals.py`, `nodes.py` | 8 | |
+| `eval/` | 3 | `cases.py`, `runner.py`, `data/golden_fixtures.py` — the harness is named as the differentiator in the report, so a grader may well open it |
+| `tests/` | 6 | `test_flag_propagation.py` alone carries 578 docstring lines |
+
+| Out of scope | Files | Why |
+| --- | --- | --- |
+| `scripts/` | 42 (~7,000 lines) | One-off evidence scripts. Lowest chance of being read, highest volume, and their headers *are* their reasoning — several are the only record of how a number was produced |
+
+#### ⛔ The one hard hazard — four docstring lines that are prompt text
+
+**`agents/scenario_forecast.py:_evidence_surface()` builds the Forecast evaluator's tool menu
+from `mcp_server.server.list_tools()`, taking `(spec.description or "").strip().split("\n")[0]`
+— the *first line* of each `@server.tool` docstring — into the model's prompt.** The LLM cache
+key is a SHA-256 over model, system, prompt and temperature (`tools/llm_cache.CacheKey`).
+
+**Editing the first line of any of the four tool docstrings in `mcp_server.py` therefore
+invalidates every committed forecast recording**, which breaks the 30-row eval batch, the three
+sample reports, and the Streamlit surface's replay default — four days before submission, with
+no budget to re-record.
+
+**Rule: in `mcp_server.py`, the first line of `list_available_metros`, `get_fmr`,
+`get_growth_bands` and `get_appreciation_history` is frozen. Everything below each first line is
+free**, because only `[0]` is read. The module header is free. Put a one-line comment at each
+site saying so, since the constraint is invisible from the file.
+
+**A second, softer constraint: two module docstrings are CLI help text.** `main.py:174` uses
+`__doc__.splitlines()[0]` and `eval/runner.py:470` uses the whole `__doc__` as its
+`argparse` description. Neither reaches a model, so nothing breaks — but both are **reader-facing
+output**, so they get rewritten well rather than deleted, under §8's no-internal-vocabulary rule.
+(`main.py`'s already had one pass at U9.M for its *"the U4 ablation"* line.)
+
+Every other docstring and comment in the repository is behaviorally inert. **That is a claim to
+verify, not to trust** — see the check below.
+
+#### The subsections, one commit each
+
+- **U9.12a — `mcp_server.py` first, alone.** The riskiest file, landed by itself so the eval
+  batch either reproduces or does not with nothing else in the change set. Header trimmed, four
+  first lines untouched, a comment at each site recording why.
+- **U9.12b — `agents/` (8 files).** The largest single reader-facing surface. `critic.py` (390
+  docstring + 229 comment lines), `scenario_forecast.py` (283 + 125) and `valuation_rent.py`
+  (296 + 108) are the three that carry most of it.
+- **U9.12c — `engineering_standards.md` §8 and the docstring standard.** Rewrite the "Docstrings
+  carry the reasoning" rule to say what is now true: reasoning that helps a reader stays,
+  reasoning that reconstructs the build moved to `decision_log.md` at the freeze. **A doc that
+  contradicts the code is worse than either alone**, and a grader reads both.
+- **U9.12d — `tools/` and `tools/model/`.**
+- **U9.12e — the roots**: `graph.py`, `state.py`, `config.py`, `main.py`, `app.py`,
+  `demo_deals.py`, `nodes.py`. `config.py` needs care — its comments are parameter rationale,
+  which is category 7 and stays; only its citations go.
+- **U9.12f — `eval/` and `tests/`.**
+- **U9.12g — `README.md`: add the directory-structure diagram.** ⬜ **Requested by the architect
+  Sept 5.** The README is what a grader reads first and it has no map of the repository. A
+  fenced tree of `src/` and `docs/` down two levels, one line of gloss per entry, placed above
+  "Where the evidence already lives." **Generate it from the filesystem rather than typing it**,
+  so it is right. Carries a `TODO` at the site until it lands.
+- **U9.12h — the migration commit.** Whatever category-1 reasoning turned out not to be in
+  `decision_log.md` already, appended there under one dated heading. **Written last**, because
+  what needs migrating is only known once a–f have been done. May be empty, and empty is a fine
+  outcome to record.
+
+#### The check, run after every subsection
+
+Docstring edits cannot change behavior **except** through the four frozen lines. Both of these
+prove it rather than assuming it:
+
+```bash
+.venv/bin/python -m pytest tests/ -q          # 107 tests
+.venv/bin/python -m eval.runner               # 30 rows; expect byte-identical results.md
+git diff --stat src/eval/results/             # expect: no change
+```
+
+**Any diff in `results.md` means a prompt moved.** Stop, find it, revert that hunk — the most
+likely cause is a `mcp_server.py` first line.
+
+#### The honest risk statement
+
+**This is the largest change set of the project by files touched, four days before submission,
+on code that is otherwise frozen and working.** It is also almost entirely deletion, verified by
+two suites that already exist, and the failure mode is loud rather than silent.
+
+**Review throughput is the constraint** (§6). Eight commits against a Saturday is more than the
+six-to-seven a normal unit gets, and every one is skimmable — a diff of removed prose reviews far
+faster than a diff of changed logic. **If the day runs short, the cut order is: h, f, d, then
+stop.** U9.12a and U9.12b are where a grader actually looks, and U9.12g is a direct answer to
+"is the repository organized and understandable to someone outside this program."
+
 ### U9.9 ⬜ — Capture: live runs, traces, diagram, screenshots *(absorbed U8.9)*
 
 Dropped from U8 on Aug 30 with no successor. Runs last: LangSmith free-tier traces expire
@@ -1469,6 +1598,7 @@ the file from its `# Deal Evaluation` heading onward, which is how the three in
 | ✅ | **U9.7T** scenario table: content-named rows, an honest ledger | Done Sept 2, 2026 — three commits; 30 eval rows byte-identical, no re-record |
 | | *✂️ cut line* | |
 | ✅ | **U9.8** gross rent multiplier | Done Sept 2, 2026 — one commit; LA 15.3×, Staten Island 9.2× against its ZIP's 11.0×; 30 rows byte-identical, no re-record |
+| ⬜ | **U9.12** docstrings and comments for a human grader | Planned Sept 5, 2026 — eight commits; runs **before** U9.9 so the capture shows the code that ships |
 | ⬜ | **U9.9** capture: runs, traces, diagram, screenshots | Never sheds |
 | ✅ | **U9.10** OQ-5 / OQ-10 / OQ-14 written up | Done Sept 2, 2026 — OQ-10 and OQ-14 close at U9.11; OQ-5 stays open on an unmet condition, with U9.7T's 51% measurement added |
 | ✅ | **U9.M** maintenance | Done Sept 2, 2026 — three commits; the recording blockers first (they gate U9.9), then M2 and M4–M7, then M8 |
