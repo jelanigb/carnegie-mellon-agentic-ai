@@ -3,8 +3,8 @@
 # Multi-Family Residential Deal Evaluator
 
 **Author:** Jelani Gould-Bailey  
-**GenAI Research Assistance:** Anthropic Claude Opus 5  
-**Coding Assistance:** Claude Code  
+**GenAI Research Assistance:** Anthropic Claude Opus 5, Google Gemini Flash 3.6  
+**GenAI Coding Assistance:** Anthropic Claude Code  
 **Last Major Update:** Sept 5, 2026
 
 ## 1\. Project Title
@@ -20,18 +20,18 @@ One challenge today is that the small multi-family segment has far less availabl
 ### User Base:
 
 1. **The Investor** — reads the final report and decides whether to invest. They are the end customer; clean reports go to them without edits.  
-2. **The Real Estate Agent** — presents the report to the Investor. Certain flags route the draft to the Agent for human review, to decide how to frame the findings and disclosures.  
+2. **The Real Estate Agent** — presents the report to the Investor. Certain flags route the report to the Real Estate Agent for human review, to decide how to frame the findings and disclosures and if they will forward the report to the Investor.  
 3. **The IT Specialist** — supports the Real Estate Agent, and steps in when system-generated errors during report generation require a closer look.
 
 Why an agent and not a spreadsheet? Because the arithmetic isn't the hard part. The hard part is what to do when the evidence runs thin. Widen the comparable search, or report that you couldn't? Trust the listing's stated rent, or the model's? Those are sequential decisions where each one changes the next — and every one of them needs to be disclosed.
 
 ## 3\. System goal and scope
 
-The system ingests a text-based multi-family listing and generates a report for The Investor. Success is a complete report with the property's data and suitable comparables, a rent-growth forecast, a value-appreciation forecast, and transparent disclosure of anything noteworthy or difficult encountered along the way. Depending on the nature and number of disclosures, the report may be flagged for closer review by the Real Estate Agent or the IT Specialist.
+The system ingests a text-based multi-family listing and generates a report for The Investor. Success is a complete report with the property's data and suitable comparables, a rent-growth forecast, a price-appreciation forecast, and transparent disclosure of anything noteworthy or difficult encountered along the way. Depending on the nature and number of disclosures, the report may be flagged for closer review by the Real Estate Agent or the IT Specialist.
 
-The report must answer 2 distinct questions: ***"Can the system stand behind its own numbers?"*** and ***"Is this a good deal?"***
+The report must answer 2 distinct questions: ***"Given the evidence, how confident is the system in its outlook?"*** and ***"Is this a good deal?"***
 
-**Scope:** 2-4 unit residential properties in Chicago, Los Angeles, Cleveland, and NYC (comp index only). No properties \> 4 units. The agentic system provides decision support without write access or execution capabilities (cannot make purchases).
+**Scope:** 2-4 unit residential properties. Comp retrieval and sale benchmarks cover Chicago, Los Angeles, Cleveland, and NYC (other markets still run, with disclosures). No properties \> 4 units. The agentic system provides decision support without tool write access or execution capabilities (cannot make purchases).
 
 ## 4\. Final system architecture
 
@@ -41,9 +41,10 @@ A seven-agent pipeline orchestrated via a [LangGraph](https://github.com/langcha
 
 *Generated from the compiled graph, not drawn. Dotted edges are conditional.*
 
+
 ### Agents
 
-1. **Planner** — Inspects deals pre-flight, determines steps, and manages graph routing.  
+1. **Planner** — Inspects deals pre-flight, determines steps, and produces the routing plan used by the graph.  
 2. **Extractor** — Parses listings into typed terms, geocodes addresses, and logs all assumptions.  
 3. **Retrieval** — RAG over a rental corpus in a vector store; progressively relaxes search criteria when sparse, flagging along the way.  
 4. **Valuation** — Custom gradient-boosted rent model anchored to ZIP-level market indices and cross-checked against comps.  
@@ -70,9 +71,9 @@ The system is a hybrid system which combines deterministic logic with LLMs. Full
 
 ### Core architectural principles
 
-**Transparent Degradation, enforced structurally.** An agent proceeding on incomplete or relaxed evidence attaches a named, severity-graded flag defined in an enum, making coverage of the failure modes countable. An append-only reducer makes disclosure loss impossible.
+**Transparent Degradation, enforced structurally:** An agent proceeding on incomplete or relaxed evidence attaches a named, severity-graded flag defined in an enum, making coverage of the failure modes countable. An append-only reducer makes disclosure loss impossible.
 
-**Independent Decision Axes.** Confidence scoring (system numbers) and deal quality (investment merit) are computed separately; a deal can require human review while remaining viable.
+**Independent Decision Axes:** Confidence scoring (evidence quality) and deal quality (investment merit) are computed separately; a deal can require human review due to evidence flags while still remaining viable.
 
 **Rule-Gated AI:** every model call sits upstream of a rule or beside one, never as the last word.
 
@@ -105,7 +106,7 @@ The project is written in Python 3.13 using a single virtualenv.
 | **LLM** | `nvidia/nemotron-3-nano-30b-a3b` via OpenRouter's OpenAI-compatible SDK, temperature 0 | Chosen empirically over 7 candidates scored on schema-valid extraction, field accuracy, latency and cost. |
 | **Retrieval** | ChromaDB (persistent, cosine) \+ `sentence-transformers/all-MiniLM-L6-v2`, local | 3,880 listings, one document each, never chunked. Bedroom count and geography run as exact metadata filters and are deliberately kept **out** of the embedded text, so the model cannot return a 3-bedroom as a near-match for a 2-bedroom. Embeddings rank only free text — "renovated", "garden level" — which no structured column captures |
 | **Rent model** | scikit-learn `GradientBoostingRegressor`, pandas/numpy | Three structural features and **no market identifier by design**, so location enters only through the anchor — the Zillow/HUD index reading for the target property's own ZIP. The target is a rent-to-anchor *ratio*, which lets a model trained on 2018–19 listings apply to today's index. Zillow's per-ZIP series has different start dates, so a training row whose ZIP had no reading at its own listing month falls back to a county median; only 0.3% of rows end up with no anchor at all and are dropped. |
-| **Rent data** | HUD Fair Market Rent API; Zillow ZORI | The hybrid anchor: ZORI for market level at the target property's ZIP, HUD for the bedroom step |
+| **Rent data** | HUD Fair Market Rent API; Zillow Observed Rent Index (ZORI) | The hybrid anchor: ZORI for market level at the target property's ZIP, HUD for the bedroom step |
 | **Price data** | Redfin Data Center (2–4 unit listings); NYC and Cook County assessor open data | Metro appreciation series, and ZIP-level sale benchmarks |
 | **Geography** | Census Geocoder; Census TIGER boundaries via `geopandas` | Address → coordinates with a corpus-centroid fallback; coordinate → ZIP and county by point-in-polygon join |
 | **Tool protocol** | MCP (`mcp_server.py`) — four read-only tools | Serves the Forecast evaluator in-process and any external MCP host, from one definition |
@@ -124,7 +125,7 @@ The project is written in Python 3.13 using a single virtualenv.
 
 ### LLM Coding Agent
 
-I acted as the system architect and chief data scientist, guiding system design and key implementation decisions. Anthropic's Claude Code executed most of the coding under rigorous review, feedback, and approval. This arrangement allowed for greater scalable execution vs. me writing all code firsthand (especially given the 7-week project window). 
+I acted as the system architect and chief data scientist, guiding system design and key implementation decisions. Anthropic's Claude Code executed most of the coding under rigorous review, feedback, and approval. This arrangement allowed for greater scalable execution vs. me writing all code firsthand (especially given the 7-week project window).
 
 ## 7\. Evaluation and results
 
@@ -148,7 +149,7 @@ I acted as the system architect and chief data scientist, guiding system design 
 
 ## 8\. Safety and reliability considerations
 
-**The system's entire risk surface is the report**, as it lacks write access or action capabilities. The primary risk is presenting plausible but ungrounded errors confidently.
+**The system's entire risk surface is the report**, as it lacks tool write access or action capabilities. The primary risk is presenting plausible but ungrounded errors confidently.
 
 **System-level guardrails:** Agents operate independently, returning partial state updates to an append-only disclosure log. Cycles are bounded by explicit state counters rather than framework recursion limits. Exceeding a counter terminates the loop, logs the exhausted resource, and routes the deal to human review with a full report. The MCP tool surface is strictly read-only.
 

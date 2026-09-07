@@ -703,6 +703,19 @@ def recommend(state: DealState) -> RecommendationDetail:
     # the reading the escalation banner was already producing, reintroduced one line
     # lower. It reports **Proceed** on axis 2 and **escalated** on axis 1, and the
     # distance between those two lines is the point.
+    # TODO(eval): no fixture reaches this branch — `DO_NOT_PROCEED` is exercised only in
+    # `tests/test_report_verdict.py`, on hand-built state. Measured Sept 6, 2026 across
+    # all eight demo deals: `overpriced` is the nearest, past the reject premium at +55%
+    # and held at caution solely because its rents corroborate. The branch is also close
+    # to unreachable on a *clean* run, because both ordinary routes to
+    # `corroborated is False` cost confidence — the divergence flag is WARN, and a comp
+    # set thin enough to skip the cross-check trips `SPARSE_COMPS` (WARN below
+    # `config.MIN_QUALIFYING_COMPS`, CRITICAL at zero, which escalates). One silent route
+    # survives: eight or more comps retrieved, so no sparsity flag, but fewer than
+    # `config.RENT_COMP_CROSSCHECK_MIN_COMPS` surviving normalization, where `_cross_check`
+    # returns `[]` and the shortfall is rendered as prose rather than raised as a flag.
+    # Closing this wants a golden fixture engineered on that route. **Deferred on timeline,
+    # not on merit** — judged an edge case against the Sept 7 deadline.
     if over_reject and corroborated is False:
         verdict = Recommendation.DO_NOT_PROCEED
     elif over_caution:

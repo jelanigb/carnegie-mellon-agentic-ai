@@ -60,5 +60,11 @@
     "longitude": -87.707520712726,
     "matched_address": "2800 N KEDZIE AVE, CHICAGO, IL, 60618",
     "source": "census_geocoder"
+  },
+  "1234 N Kedzie Blvd, Chicago, IL, 60647": {
+    "latitude": 41.903813271648,
+    "longitude": -87.706896517126,
+    "matched_address": "1234 N KEDZIE AVE, CHICAGO, IL, 60651",
+    "source": "census_geocoder"
   }
 }
