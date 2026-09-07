@@ -1278,6 +1278,17 @@ verify, not to trust** — see the check below.
   `decision_log.md` already, appended there under one dated heading. **Written last**, because
   what needs migrating is only known once a–f have been done. May be empty, and empty is a fine
   outcome to record.
+- **U9.12i — regenerate the project stats.** ⬜ Independent of the a–h docstring sweep; ordered
+  last because docstring deletion changes the line counts it needs to read. `docs/project_stats.md`
+  was computed at commit `4037df6` (2026-09-03) and is now stale — **16 commits landed since**
+  (the per-agent diagrams, the Streamlit report fixes, the LangSmith span wrapper), so LOC, the
+  `.py`/`.md` file counts, the commit total, the active span and the changelog row/entry counts
+  have all moved. Re-run every "*Method:*" recipe in that file against `HEAD`, update it, then
+  refresh the **### Project stats** table in
+  [`../final_capstone_report_jelani_gould_bailey.md`](../final_capstone_report_jelani_gould_bailey.md)
+  from it — the report table quotes four of those figures and three are already wrong
+  (`14,894 across 84 files`, `165 · 27 days`; `30 · 107` and `$50` still hold, and cost is
+  dashboard-only, not repo-derivable). Prose/data only, no code.
 
 #### The check, run after every subsection
 
@@ -1598,7 +1609,7 @@ the file from its `# Deal Evaluation` heading onward, which is how the three in
 | ✅ | **U9.7T** scenario table: content-named rows, an honest ledger | Done Sept 2, 2026 — three commits; 30 eval rows byte-identical, no re-record |
 | | *✂️ cut line* | |
 | ✅ | **U9.8** gross rent multiplier | Done Sept 2, 2026 — one commit; LA 15.3×, Staten Island 9.2× against its ZIP's 11.0×; 30 rows byte-identical, no re-record |
-| ⬜ | **U9.12** docstrings and comments for a human grader | Planned Sept 5, 2026 — eight commits; runs **before** U9.9 so the capture shows the code that ships |
+| ⬜ | **U9.12** docstrings and comments for a human grader | Planned Sept 5, 2026 — eight commits, plus U9.12i to regenerate the stale project stats; runs **before** U9.9 so the capture shows the code that ships |
 | ⬜ | **U9.9** capture: runs, traces, diagram, screenshots | Never sheds |
 | ✅ | **U9.10** OQ-5 / OQ-10 / OQ-14 written up | Done Sept 2, 2026 — OQ-10 and OQ-14 close at U9.11; OQ-5 stays open on an unmet condition, with U9.7T's 51% measurement added |
 | ✅ | **U9.M** maintenance | Done Sept 2, 2026 — three commits; the recording blockers first (they gate U9.9), then M2 and M4–M7, then M8 |
