@@ -54,6 +54,14 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 6, 2026 — a download button's label named an action it doesn't take
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 6, 2026 | U9 | **A download button's label described printing, which it does not do.** `app.py` — `_download_row()`: "Download as a printable page" renamed to "Download printable HTML". The button hands over a self-contained HTML file; opening it and printing to PDF is a separate step the user takes, already spelled out in the button's help text. The new label names what is downloaded, matching the sibling "Download as Markdown". No behavior change — same file, same `Content-Disposition` filename `<deal>-evaluation.html` with the extension present (verified against the running server; macOS's save panel hides known extensions but the saved file keeps them) | 7.1 |
+
+---
+
 ## Sept 6, 2026 — live LLM calls become LangSmith spans
 
 | Date added | Unit | Work done | Related checkpoint |

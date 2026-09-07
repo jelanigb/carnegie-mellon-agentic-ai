@@ -498,7 +498,7 @@ def _download_row(result: dict) -> None:
         help="The report exactly as written. Google Docs and Word both import Markdown directly.",
     )
     right.download_button(
-        "Download as a printable page", report_html(report, f"Deal Evaluation — {stem}"),
+        "Download printable HTML", report_html(report, f"Deal Evaluation — {stem}"),
         file_name=f"{stem}-evaluation.html", mime="text/html", width="stretch",
         help="Opens in any browser. Print it (Cmd-P) and choose Save as PDF.",
     )
