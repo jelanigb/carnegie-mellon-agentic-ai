@@ -1257,7 +1257,10 @@ RETRIEVAL_ENABLED = True
 # --------------------------------------------------------------------------
 
 LANGSMITH_PROJECT = "deal-evaluator"
-LANGSMITH_ENABLED = os.environ.get("LANGSMITH_TRACING", "").lower() == "true"
+# Case-sensitive `== "true"`, the exact test LangSmith's own `tracing_is_enabled()`
+# applies — `LANGSMITH_TRACING=True` or `=1` activates nothing, so nothing here may
+# report otherwise. Reasoning in `tools/tracing.py`.
+LANGSMITH_ENABLED = os.environ.get("LANGSMITH_TRACING") == "true"
 
 # Third-party library logging — off by default, and "off" here means *restoring* the
 # root logger rather than silencing anything. Nothing in this project logs; the ~190

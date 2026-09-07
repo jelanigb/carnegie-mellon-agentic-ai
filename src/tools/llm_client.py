@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Optional, TypeVar
 
 import requests
+from langsmith.wrappers import wrap_openai
 from openai import APIError, OpenAI
 from pydantic import BaseModel, ValidationError
 
@@ -202,12 +203,27 @@ class LlmClient:
         token: Optional[str] = None,
         cache: Optional[ResponseCache] = None,
     ):
-        self._client = OpenAI(
+        client = OpenAI(
             base_url=BASE_URL,
             api_key=token or _load_token(),
             timeout=config.LLM_TIMEOUT_SECONDS,
             max_retries=config.LLM_MAX_RETRIES,
         )
+        # With LangSmith tracing on, route completions through langsmith's OpenAI
+        # wrapper: each `chat.completions.create` below then emits a child span under
+        # whichever graph node is running — the prompt, the completion text, the
+        # resolved model id, token counts and latency — where before a node span showed
+        # only its state delta. The wrapper is a transparent passthrough (return type
+        # and behaviour unchanged) and a no-op per call when tracing is off, so guarding
+        # on the flag is about intent, not safety: it keeps this a deliberate opt-in.
+        #
+        # **What that opt-in costs:** prompt and completion text then leave the machine
+        # for LangSmith's hosted service. This project's own runs are synthetic/public
+        # listings over template-built prompts, so the exposure is low here — but anyone
+        # running under their own key and their own listings is shipping that text
+        # off-box (free-tier traces are deleted after 14 days). Recorded as a standing
+        # risk in `docs/history/changelog.md` (Sept 6, 2026) and flagged in the README.
+        self._client = wrap_openai(client) if config.LANGSMITH_ENABLED else client
         # Injectable so an evaluation run can point at the committed recordings in
         # `src/eval/data/` while ordinary runs use the gitignored development cache,
         # without either needing to mutate config.

@@ -54,6 +54,15 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 6, 2026 — live LLM calls become LangSmith spans
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 6, 2026 | U9 | **The OpenRouter client is wrapped so each live completion traces as a child span.** `tools/llm_client.py` — `LlmClient.__init__` now routes its `openai` client through `langsmith.wrappers.wrap_openai` when `config.LANGSMITH_ENABLED`, so a traced run shows the prompt, completion, resolved model id, token counts and latency of every `chat.completions.create` nested under the agent that made it — where a node span previously showed only its state delta, and the model calls between input and output were invisible. Passthrough and per-call no-op when tracing is off; guarded on the flag for intent, not safety. Motivated by the demo including at least one live escalating run, and by the schema-retry loop (`call_with_schema`) only being legible as sibling spans. Replayed runs are unaffected — the cache short-circuits before the client is touched, so the committed demos and the `golden`/`replay` eval tiers trace no prompt text | 5.1, 7.1 |
+| Sept 6, 2026 | U9 | **Standing risk recorded: enabling tracing transmits prompt and completion text to LangSmith's hosted service.** Before this change only state deltas left the machine; a wrapped client also ships full prompts and model outputs off-box, retained on the free tier for 14 days. Acceptable here — this project's runs are synthetic and public listings over template-built prompts — but a real exposure for anyone cloning the repo and running under their own key against their own listings. Flagged in `README.md` ("Running it") and in the `tools/llm_client.py` construction comment. Future work if a served deployment is ever considered: gate the wrapper on an explicit second opt-in, or scrub prompt/response bodies before they are sent | 5.1, 7.1 |
+
+---
+
 ## Sept 6, 2026 — per-agent internal logic diagrams
 
 | Date added | Unit | Work done | Related checkpoint |

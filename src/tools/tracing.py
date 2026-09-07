@@ -6,9 +6,10 @@ behaviour. Both hold. Neither is a reason to make the pipeline refuse to run wit
 an account.
 
 So tracing is **switched on by the environment, not by the code**. LangSmith activates
-itself when `LANGSMITH_TRACING=true` and a key are set — the LangChain runtime reads
-`LANGSMITH_API_KEY` directly, and no call in this repo turns tracing on. What this
-module adds is the three things that would otherwise be silent:
+itself when `LANGSMITH_TRACING=true` — matched exactly, so `True`, `TRUE` and `1` count
+for nothing — and a key are set. The LangChain runtime reads `LANGSMITH_API_KEY`
+directly, and no call in this repo turns tracing on. What this module adds is the three
+things that would otherwise be silent:
 
 1. It sets the project name from `config.LANGSMITH_PROJECT`, so traces land in one
    named project instead of "default", which matters once several units' runs are
@@ -16,9 +17,11 @@ module adds is the three things that would otherwise be silent:
 2. It supplies the key from the same on-disk fallback the other two credentials use
    (`_load_key` below), because the switch and the credential are different questions
    and only the switch should have to be typed.
-3. It reports, once, whether tracing is on. A trace you believed was being captured and
-   was not is worse than no trace, and that is exactly the failure that surfaces at the
-   end of a run rather than the start.
+3. It reports, once, whether tracing is on — with the same case-sensitive `== "true"`
+   test LangSmith itself applies, so the report can never say "tracing" while the
+   runtime stays dark. A trace you believed was being captured and was not is worse
+   than no trace, and that is exactly the failure that surfaces at the end of a run
+   rather than the start.
 
 **The switch is deliberately not given a file fallback.** A key on disk means *this
 machine can trace*; `LANGSMITH_TRACING=true` means *this run should be traced*. Folding
@@ -69,7 +72,14 @@ def configure_tracing(verbose: bool = True) -> bool:
     Called for its side effect at the start of a run. Safe to call when tracing is
     disabled, and safe to call more than once.
     """
-    enabled = os.environ.get("LANGSMITH_TRACING", "").lower() == "true"
+    # Case-sensitive, matching LangSmith's own gate exactly: `langsmith/utils.py`
+    # `tracing_is_enabled()` ends in `var_result == "true"` with no lowercasing, so
+    # `LANGSMITH_TRACING=True` (or `=1`) activates nothing. This test used to be
+    # `.lower() == "true"`, which accepted those spellings — the surface then reported
+    # a trace the runtime was not taking, the silent-capture failure the docstring
+    # above says this module exists to prevent. The status line and the tracer now
+    # answer the same way.
+    enabled = os.environ.get("LANGSMITH_TRACING") == "true"
 
     if enabled:
         os.environ.setdefault("LANGSMITH_PROJECT", config.LANGSMITH_PROJECT)
