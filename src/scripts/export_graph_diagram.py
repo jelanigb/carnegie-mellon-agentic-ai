@@ -25,6 +25,13 @@ authoritative artifacts and are produced offline. The `.png`s are a convenience 
 report and the video and require a network call to mermaid.ink; failure to render one is
 reported and does not fail the export.
 
+**Why the emitted colours are rewritten.** LangGraph's `draw_mermaid()` hard-codes a
+purple palette into the `classDef` lines it emits. The demo surface is a green-and-white
+theme (`app.py`'s `_HEADING_GREEN`, `#188038`), so `_apply_theme` swaps those fills for
+greens drawn from the same palette before either file is written. Like `_to_left_right`
+it is a transform on generated text that touches only presentation — never a node or an
+edge — so both files still derive from the compiled graph and cannot drift from it.
+
 **Why a second orientation exists.** LangGraph emits `graph TD`, which renders this
 eight-node pipeline as a 277x928 strip — correct, and unusable in a README or on a 16:9
 slide, where it becomes a thin column down the page. The left-right variant is the same
@@ -132,6 +139,37 @@ def _to_left_right(mermaid: str) -> str:
     return mermaid.replace(MERMAID_TOP_DOWN, MERMAID_LEFT_RIGHT, 1)
 
 
+# LangGraph emits these two `classDef` lines with a purple palette. The demo surface is
+# green and white, so each is rewritten to a green from that theme: the light-green
+# ground the report's blockquotes use for `default`, a mid green for the `__end__` node,
+# and `#188038` — the report's heading green — as the stroke on both. The `first`
+# (`__start__`) classDef is `fill-opacity:0` and carries no colour, so it is left alone.
+_CLASSDEF_REWRITES = {
+    "classDef default fill:#f2f0ff,line-height:1.2":
+        "classDef default fill:#f4f9f5,stroke:#188038,line-height:1.2",
+    "classDef last fill:#bfb6fc":
+        "classDef last fill:#8fd0a5,stroke:#188038",
+}
+
+
+def _apply_theme(mermaid: str) -> str:
+    """Recolour LangGraph's emitted `classDef` lines to the green-and-white demo theme.
+
+    Raises rather than silently returning the input if neither default line is present:
+    a diagram that is quietly still purple is exactly the drift this script exists to
+    catch, and it would pass unnoticed in review — the file present, non-empty, wrong.
+    """
+    if not any(old in mermaid for old in _CLASSDEF_REWRITES):
+        raise ValueError(
+            "Neither of LangGraph's default classDef lines was found in the generated "
+            "mermaid source; the emitted palette has changed and the green re-theme in "
+            "_apply_theme no longer applies."
+        )
+    for old, new in _CLASSDEF_REWRITES.items():
+        mermaid = mermaid.replace(old, new)
+    return mermaid
+
+
 def _render_png(mermaid: str, path: Path) -> None:
     """Render one mermaid source to PNG, reporting failure rather than raising.
 
@@ -209,7 +247,7 @@ def main() -> int:
     print(f"  branching nodes: {sorted(EXPECTED_BRANCHING_NODES)}")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    top_down = drawable.draw_mermaid()
+    top_down = _apply_theme(drawable.draw_mermaid())
     left_right = _to_left_right(top_down)
 
     print()

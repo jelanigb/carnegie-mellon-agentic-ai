@@ -54,6 +54,14 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 6, 2026 — the graph diagrams recolored to the demo theme
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 6, 2026 | U9 | **The generated graph diagrams were purple; the demo surface is green and white.** `scripts/export_graph_diagram.py` — `_apply_theme()` rewrites the two `classDef` lines LangGraph's `draw_mermaid()` hard-codes with a purple palette: node fill to `#f4f9f5` (the report's light-green blockquote ground), the `__end__` node to a mid green, and `#188038` — the report's heading green — as the stroke on both. A transform on generated text in the same spirit as `_to_left_right`, touching presentation only, so both files still derive from the compiled graph; it raises rather than silently passing if neither default line is present. Both `.mmd` sources and both `.png`s regenerated | 7.1 |
+
+---
+
 ## Sept 6, 2026 — the surface: one agent panel, and the listing kept on screen
 
 | Date added | Unit | Work done | Related checkpoint |
