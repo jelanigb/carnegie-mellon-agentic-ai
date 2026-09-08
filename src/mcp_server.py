@@ -1,51 +1,34 @@
-"""MCP server exposing this project's read-only reference data (decision #13 — MCP adoption).
+"""MCP server exposing this project's read-only reference data.
 
-**What this is for, and — just as importantly — what it is not for.**
+Two consumers:
 
-Two consumers motivated this server, and neither of them is the pipeline itself:
-
-1. **The U6 Tree-of-Thought evaluator.** Scoring a candidate forecast branch means
-   pulling evidence that depends on the branch: a hypothesis claiming aggressive
-   appreciation warrants the observed historical distribution, one implying rent well
-   above market warrants the FMR record. Which checks are worth running is a property of
-   the branch, not a fixed battery, so the evaluator selects its own evidence from the
-   tool descriptions below. Those descriptions are load-bearing — they are what an LLM
-   reads to decide whether a tool applies — and are written for that reader.
-2. **A human, during U8 evaluation and the Week 7 demonstration.** Any MCP host can now
-   interrogate the same reference layer the pipeline uses, which replaces writing a
-   one-off script every time a number needs checking.
-
-**The honest accounting, per §7 decision #13 (MCP adoption): the pipeline does not require this.**
-`tools/hud_fmr.py` and `tools/redfin_data.py` are in-process Python functions, and
-LangChain's `@tool` decorator would give the evaluator dynamic tool selection with no
-protocol hop. What MCP adds is portability and that second consumer — a real benefit and
-a modest one. Recording it that way is deliberate: the alternative was overstating a
-tool's necessity to satisfy a rubric, which is the error Transparent Degradation exists
-to prevent, one level up (§8).
+1. **The Forecast agent's evaluator.** Scoring a candidate forecast means pulling evidence
+   that depends on the candidate: a hypothesis claiming aggressive appreciation warrants the
+   observed historical distribution, one implying rent well above market warrants the FMR
+   record. Which checks are worth running is a property of the hypothesis, not a fixed
+   battery, so the evaluator selects its own evidence from the tool descriptions below.
+   **Those descriptions are load-bearing** — they are what an LLM reads to decide whether a
+   tool applies — and are written for that reader.
+2. **A person, from any MCP host.** The same reference layer the pipeline uses can be
+   interrogated directly, which replaces writing a one-off script every time a number needs
+   checking.
 
 **This server is strictly read-only.** Every tool is annotated `readOnlyHint=True`, and
 nothing here writes to state, the Chroma index, or any cache the pipeline depends on for
-correctness. That is a deliberate boundary rather than an accident of scope: an agent
-surface that can mutate the evidence base is a different security proposition than one
-that can only read it, and this project's evidence base is what its credibility rests on.
+correctness. An agent surface that can mutate the evidence base is a different security
+proposition than one that can only read it, and this project's evidence base is what its
+credibility rests on.
 
 **Transparent Degradation applies to tool returns as much as to agent outputs.** No tool
-here raises on a flag-worthy condition or silently substitutes a fallback. Each returns
-the provenance a caller would need to disclose what it got — whether an FMR record fell
-back to the MSA-level entry, whether a growth band rests partly on the 2020–2022 anomaly,
-how many observations a band was computed from. A caller that wants to ignore that has to
-ignore it explicitly.
+here raises on a flag-worthy condition or silently substitutes a fallback. Each returns the
+provenance a caller would need to disclose what it got — whether an FMR record fell back to
+the MSA-level entry, whether a growth band rests partly on the 2020–2022 anomaly, how many
+observations a band was computed from. A caller that wants to ignore that has to ignore it
+explicitly.
 
 Run it directly for stdio transport:
 
     .venv/bin/python mcp_server.py
-
-**No `query_comps` tool.** A U6 TODO deferred one pending a Critic rent-vs-comp check
-that might need it. That check was never built in the Critic — Q1 (U7) resolved that the
-Critic consumes `RENT_DIVERGES_FROM_COMPS` from `agents/valuation_rent.py` rather than
-re-deriving it, and U7.7 retired decision #1 (LangGraph)2's Critic ToT half entirely on evidence: the
-checks that shipped are pure functions over `state.flags`, with no LLM evaluator to call
-a tool in the first place. `docs/history/decision_log.md` #12.
 """
 
 from __future__ import annotations
@@ -106,6 +89,9 @@ def _get_fmr_client() -> HudFmrClient:
     return _fmr_client
 
 
+# The first line of this docstring is frozen: the Forecast evaluator's tool menu is
+# built from it, and the LLM response cache is keyed on the prompt that menu goes into.
+# Editing it invalidates every recorded forecast. Everything below the first line is free.
 @server.tool(annotations=_READ_ONLY)
 def list_available_metros() -> dict[str, Any]:
     """List the metros with multi-family appreciation data available.
@@ -124,6 +110,9 @@ def list_available_metros() -> dict[str, Any]:
     }
 
 
+# The first line of this docstring is frozen: the Forecast evaluator's tool menu is
+# built from it, and the LLM response cache is keyed on the prompt that menu goes into.
+# Editing it invalidates every recorded forecast. Everything below the first line is free.
 @server.tool(annotations=_READ_ONLY)
 def get_fmr(
     county_fips: str,
@@ -182,6 +171,9 @@ def get_fmr(
     }
 
 
+# The first line of this docstring is frozen: the Forecast evaluator's tool menu is
+# built from it, and the LLM response cache is keyed on the prompt that menu goes into.
+# Editing it invalidates every recorded forecast. Everything below the first line is free.
 @server.tool(annotations=_READ_ONLY)
 def get_growth_bands(
     metro: str,
@@ -242,6 +234,9 @@ def get_growth_bands(
     }
 
 
+# The first line of this docstring is frozen: the Forecast evaluator's tool menu is
+# built from it, and the LLM response cache is keyed on the prompt that menu goes into.
+# Editing it invalidates every recorded forecast. Everything below the first line is free.
 @server.tool(annotations=_READ_ONLY)
 def get_appreciation_history(
     metro: str,
