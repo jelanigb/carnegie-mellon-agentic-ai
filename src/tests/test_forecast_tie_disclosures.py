@@ -1,4 +1,4 @@
-"""What the forecast search's scores say, and where its cut line fell (U8.6c).
+"""What the forecast search's scores say, and where its cut line fell.
 
 Kept out of `test_flag_propagation.py` for the same reason
 `test_stated_rent_disclosure.py` is: nothing here decides anything. The cut-boundary
@@ -87,7 +87,7 @@ def test_a_cut_taken_inside_a_tie_group_records_a_non_positive_margin():
 
 
 def test_a_candidate_cut_from_a_tie_group_is_not_recorded_as_outscored():
-    """The ledger's third prune reason, added at U9.7T.
+    """The ledger's third prune reason.
 
     **The defect it closes was an attribution, not an omission.** A candidate the
     conservatism preference cut recorded `Scored 0.80, outside the top 3 at this level`
@@ -125,7 +125,7 @@ def test_a_cut_line_inside_the_tie_threshold_is_disclosed():
     # The reader is told what is at stake at this line specifically, which is what
     # separates it from a tie between two scenarios that both appear in the report.
     assert "which pairings are shown at all" in flags[0].detail
-    # And it states the bound rather than the measured gap (U9.7T): at one epsilon the
+    # And it states the bound rather than the measured gap: at exactly one epsilon the
     # figure renders as the threshold itself and the sentence contradicts itself.
     assert "separated by less than 0.05" in flags[0].detail
 
@@ -138,10 +138,10 @@ def test_a_cut_the_tie_break_decided_says_so_rather_than_claiming_a_margin():
     0.050, inside the 0.05 threshold" would be self-contradictory *and* would understate
     what happened.
 
-    **Two decimal places since U9.7T, not three.** The margin is the difference of two
-    two-place evaluator scores, so three places only ever exposed float representation —
-    which is what made the positive branch print "separated by 0.050, inside the 0.05
-    threshold" about a value of 0.04999999999999993.
+    **Two decimal places, not three.** The margin is the difference of two two-place
+    evaluator scores, so three places only expose float representation — which is what
+    makes a positive branch print "separated by 0.050, inside the 0.05 threshold" about a
+    value of 0.04999999999999993.
     """
     result = tot.SearchResult(cut_boundary_gap_by_depth={2: -0.05})
 
@@ -162,13 +162,12 @@ def test_a_decisive_cut_line_says_nothing():
 
 
 def test_each_scenario_reports_the_score_it_was_judged_on_and_how_it_got_in():
-    """The field was populated and carried on state since U6 and rendered nowhere, so the
-    search's own judgment of each surviving hypothesis was invisible to the reader.
+    """The search's own judgment of each surviving hypothesis, rendered where a reader
+    meets it.
 
-    **U9.7T moved the score out of the bullets and into the table, beside the mechanism
-    that selected the row** — a score on its own let a reader infer "it scored highest"
-    about rows the tie-break had actually chosen, which is 51% of recorded pairing
-    levels."""
+    **The score sits in the table beside the mechanism that selected the row**, not on its
+    own — a score alone lets a reader infer "it scored highest" about rows the tie-break
+    actually chose, which is 51% of recorded pairing levels."""
     state = DealState(
         raw_listing_text="irrelevant to a rendering test",
         deal_terms=DealTerms(),
@@ -204,16 +203,14 @@ def test_each_scenario_reports_the_score_it_was_judged_on_and_how_it_got_in():
     # case is shown whatever it scored.
     assert "level with 2 other pairings, kept as the more cautious" in text
     assert "the neutral case, always shown" in text
-    # The two cautions the score is useless without. **The first one's wording changed at
-    # U9.7T and so did its subject.** It used to say the labels do not come from the
-    # scores, which was worth saying while a label was a rank; content names cannot be
-    # mistaken for a ranking, so the caution that remains is the one that outlived it —
-    # a score measures how well *evidenced* a combination is, never how likely.
+    # The two cautions the score is useless without. A score measures how well *evidenced*
+    # a combination is, never how likely it is — and row names are content rather than
+    # ranks, so nothing here can be read as an ordering.
     assert "not how likely it is" in text
     assert "repeat runs measurably vary" in text
 
     # The bands reach the reader in the same words the series table uses, not as the
-    # internal band names (U9.7T finding 1).
+    # internal band names.
     assert "long-run average" in text and "weakest stretch" in text
     assert "(base)" not in text and "(pessimistic)" not in text
 

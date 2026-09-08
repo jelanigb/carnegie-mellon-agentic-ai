@@ -1,4 +1,4 @@
-"""Axis 2 — the recommendation, its cross-check, and the report's two verdict lines (U9.4).
+"""Axis 2 — the recommendation, its cross-check, and the report's two verdict lines.
 
 Unit tests over a pure function plus a rendering pass, kept out of
 `test_flag_propagation.py` for the reason `test_critic_interactions.py` gives: that suite
@@ -110,7 +110,7 @@ def test_a_premium_past_the_caution_threshold_warns():
 
 
 def test_an_uncorroborated_rent_alone_does_not_reach_caution():
-    """**The regression for U9.4's own defect, and the reason it is the third test here.**
+    """**The regression for the rule's own hardest defect, and why it is third here.**
 
     Whether the comp cross-check could run is largely a statement about data coverage in
     a market — `state.scope_of` classifies the sparse-comp disclosure as market-scoped for
@@ -311,10 +311,10 @@ def test_the_summary_is_absent_when_the_switch_is_off():
 
 
 def test_a_failed_summary_renders_a_sentence_and_never_a_flag(monkeypatch):
-    """**Q1, answered Aug 31.** A 31st `FlagKind` would break U8's 30-of-30 coverage
-    census unless some declared fault could reach it, and every other flag in this system
-    propagates — one raised in the terminal node has no consumer but the report already
-    printing it.
+    """A failed summary is a sentence, never a flag. A new `FlagKind` would break the
+    evaluation harness's full coverage census unless some declared fault could reach it,
+    and every other flag in this system propagates — one raised in the terminal node has
+    no consumer but the report already printing it.
     """
     monkeypatch.setattr(config, "SUMMARY_NARRATIVE_ENABLED", True)
 
@@ -347,7 +347,7 @@ def test_a_summary_that_returns_nothing_is_treated_as_a_failure(monkeypatch):
 
 
 def test_the_summary_prompt_quotes_no_raw_float(monkeypatch):
-    """OQ-18's fragility, kept out rather than added to a second time.
+    """A recorded prompt's fragility, kept out rather than added to.
 
     A full-precision float in a prompt is a cache key that moves whenever an upstream
     computation shifts in its last decimal place. Everything the prompt carries is a

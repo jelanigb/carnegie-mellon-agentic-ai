@@ -1,4 +1,4 @@
-"""The eval harness's batch runner and its two outputs (U8.1).
+"""The evaluation harness's batch runner and its two outputs.
 
 Runs every case in `eval/cases.py` through the **real compiled graph** — the same
 `build_graph()` `main.py` uses, not a rearrangement of it — and produces two artifacts in
@@ -7,7 +7,7 @@ Runs every case in `eval/cases.py` through the **real compiled graph** — the s
 1. **The results table**, a row per case: comps, confidence, disclosures by severity,
    outcome, the recommendation, whether the flag the case targets actually fired, and
    whether the outcome matched the verdict declared before the run. **Outcome and
-   recommendation are the two axes** (U9.4) and the table keeps them apart: the first says
+   recommendation are the two axes** and the table keeps them apart: the first says
    whether the system can stand behind its numbers, the second whether the property is
    worth buying, and a row can escalate while recommending that a buyer proceed.
 2. **The coverage census**, `set(FlagKind)` minus the union of every case's raised kinds.
@@ -15,8 +15,8 @@ Runs every case in `eval/cases.py` through the **real compiled graph** — the s
    rather than a set of string constants, and it is what upgrades the report's claim from
    "flags fire" to "every degradation path this system defines is exercised".
 
-**What the census could return, stated because a census that cannot fail proves nothing**
-(§8). It could report full coverage; it could report gaps that are real and fixable by a
+**What the census could return, stated because a census that cannot fail proves nothing.**
+It could report full coverage; it could report gaps that are real and fixable by a
 new case; or it could report gaps that *no* case can close, which is a different finding
 and is why `UNREACHABLE_BY_ANY_CASE` below exists. Counting a kind nothing can raise as an
 uncovered gap would misstate the harness's own reach in the pessimistic direction, exactly
@@ -29,11 +29,10 @@ Run:
     .venv/bin/python -m eval.runner --record        # re-record, deliberately
     .venv/bin/python -m eval.runner --case los-angeles --live   # what a fresh run does
 
-**Every tier replays by default as of U9.5**, demo deals included. Reaching a model is now
+**Every tier replays by default**, demo deals included, so reaching a model is always
 something someone typed — `--record` to freeze a run into the committed store, `--live` to
-see what an unfrozen one does without writing it. Before that the demo rows fell through
-to a gitignored development cache, so the seven figures the report quoted from them could
-not be re-derived from a clone; `_case_environment` carries what that cost.
+see what an unfrozen one does without writing it. `_case_environment` carries why that
+matters more than it sounds.
 """
 
 from __future__ import annotations
@@ -73,10 +72,9 @@ RESULTS_DIR = Path(__file__).resolve().parent / "results"
 # excluded from a coverage claim the report makes, and an exclusion without a reason is
 # indistinguishable from a case nobody got round to writing.
 # **Empty, and that is the correct end state rather than an unused mechanism.** Its first
-# run held one entry — `LLM_RENT_FALLBACK_USED`, unraisable because §6's cut list item 3
-# was taken and the estimator was never built. Rather than caveat the census permanently,
-# the member was deleted (U8.1b), on the rule `state.FlagKind` already wrote down when it
-# retired `COUNTY_FROM_PRINCIPAL_COUNTY`: a kind nothing can raise corrupts the coverage
+# run held one entry — a flag kind for an LLM rent fallback that was descoped and never
+# built. Rather than caveat the census permanently, the member was deleted from
+# `state.FlagKind`, on that enum's own rule: a kind nothing can raise corrupts the coverage
 # comparison, so it should leave the enum rather than be excused in the report.
 #
 # The table stays because the *next* such member will be found the same way, and because
@@ -104,7 +102,7 @@ class CaseResult:
     def recommendation_cell(self) -> str:
         """Axis 2 for the table — the verdict, and whether a second reading split from it.
 
-        **Reported, never scored, and that is a deliberate limit on this column** (U9.5).
+        **Reported, never scored, and that is a deliberate limit on this column.**
         A case's declared `verdict` is axis 1; nothing in `cases.py` declares an expected
         recommendation, so this column records what the rule produced rather than checking
         it against anything. Authoring 21 expected verdicts *after* the rule exists would
@@ -114,8 +112,8 @@ class CaseResult:
         the same recordings is a real change in the rule and nothing else.
 
         The disagreement marker earns its place for the same reason the `†`/`‡` markers
-        do — it is the only visible evidence that the second reasoning locus (OQ-22) ran
-        at all, and a batch where nothing ever disagrees would say the cross-check is
+        do — it is the only visible evidence that the model's independent second reading
+        ran at all, and a batch where nothing ever disagrees would say the cross-check is
         inert.
         """
         if self.recommendation is None:
@@ -144,14 +142,14 @@ class CaseResult:
         """Escalated while the confidence score alone would have let it report.
 
         The one row shape worth calling out by name. `agents/critic.critic_agent`
-        escalates on **three** independent grounds (U8.5/OQ-16 added the third) — an
+        escalates on **three** independent grounds — an
         accumulated score below `config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD`, a single
         critical-severity disclosure, or a retryable objection that survives
         `config.MAX_REWORKS` reworks unresolved — and on almost every deal all of them
         agree, which makes the other two indistinguishable from the first in a results
         table. A row where they *disagree* is the only direct evidence that a given rule
-        does anything on its own, and U8.6 has to be able to see it before deciding
-        whether any of them could be collapsed. `has_critical`/`budget_exhausted` say
+        does anything on its own, and nothing can decide whether two of them could be
+        collapsed without seeing one. `has_critical`/`budget_exhausted` say
         *which* ground fired; this says only that the score alone would not have.
         """
         return (
@@ -196,52 +194,44 @@ def _case_environment(case: EvalCase, record: bool, live: bool = False) -> Itera
     rather than the command-line switch it is in `main.py`, so the ungrounded run is a row
     in the same table as every grounded one.
 
-    **2. The response cache (U8.2; every tier since U9.5).** All three tiers point at the
-    *committed* recordings in `config.EVAL_RECORDINGS_DIR` and replay them. Passing
-    `live=True` is the only way to reach a model, and it is a typed flag rather than a
-    property of the tier.
+    **2. The response cache, on every tier.** All three tiers point at the *committed*
+    recordings in `config.EVAL_RECORDINGS_DIR` and replay them. Passing `live=True` is the
+    only way to reach a model, and it is a typed flag rather than a property of the tier.
 
-    **This used to be true of `golden` and `replay` only, and the exception was a
-    reproducibility hole rather than a feature.** `live` rows fell through to whatever the
-    environment said — in practice `LLM_CACHE_MODE=read_write` against the *gitignored*
-    development cache — so a demo row was served from a developer's working store when it
-    happened to be warm and called the model when it was not. Two things followed, and
-    both were found at U9.5 rather than designed:
+    **Pinning every tier, rather than only the ones that obviously need it, closes a
+    reproducibility hole.** A tier that falls through to whatever the environment says gets
+    served from a developer's *gitignored* working store when it happens to be warm and
+    calls the model when it does not. Two consequences, both observed here before this was
+    wired:
 
-    - **The seven demo rows could not be reproduced from a fresh clone**, by construction,
-      against this harness's own standard that a figure a clone cannot re-derive is an
-      assertion rather than evidence (`eval/README.md`). They are unscored baselines, so
-      it was defensible; it was nowhere stated, which is the part that was not.
-    - **The published `staten-island` row said 1 comp where the build produces 0** — a
-      stale extraction in that development cache, surviving in the results table as a
-      number nothing could re-derive.
+    - **Rows that a fresh clone could not reproduce**, by construction, against this
+      harness's own standard that a figure a clone cannot re-derive is an assertion rather
+      than evidence (`eval/README.md`).
+    - **A published row saying 1 comp where the build produces 0** — a stale extraction in
+      that development cache, surviving in the results table as a number nothing could
+      re-derive.
 
-    Pinning every tier retires the class rather than the instance. What is lost is that no
-    row now exercises a live call by default, so the batch stops being an incidental check
-    that the model is reachable; `--live` restores that deliberately, and
-    `tools/diagnostics.verify_models_live()` was always the thing actually testing it.
+    What is lost is that no row exercises a live call by default, so the batch is not an
+    incidental check that the model is reachable; `--live` restores that deliberately, and
+    `tools/llm_client.verify_models_live()` is the thing actually testing it.
 
-    This wiring is what makes the tier property in `eval/README.md` true rather than
-    aspirational, and it was **not** true before U8.2 — a fact worth recording, because the
-    claim read as settled and was not. `agents/scenario_forecast._make_scorer` builds an
-    `LlmClient` and calls it twice per Tree-of-Thought level on *every* run, tier
-    regardless: a golden fixture skips the Extractor's model call, not the pipeline's. So
-    every golden row was a live, quota-dependent, ~30-second call that a fresh clone could
-    not reproduce — and `config.EVAL_RECORDINGS_DIR` had been defined since U3 with nothing
-    in the repository reading it. Measured while writing U8.2's cases: two Los Angeles
-    subjects differing only in bed/bath/floor-area returned an ordinary appreciation
-    disclosure on one run and a **critical** `forecast_unavailable` on the other, decided
-    inside the branch scorer. A verdict declared in advance cannot sit on top of that.
+    **A golden fixture skips the Extractor's model call, not the pipeline's**, which is the
+    detail that makes pinning every tier necessary rather than tidy:
+    `agents/scenario_forecast._make_scorer` builds an `LlmClient` and calls it twice per
+    Tree-of-Thought level on *every* run, tier regardless. Unpinned, every golden row is a
+    live, quota-dependent, ~30-second call. Measured: two Los Angeles subjects differing
+    only in bed/bath/floor-area returned an ordinary appreciation disclosure on one run and
+    a **critical** `forecast_unavailable` on the other, decided inside the branch scorer. A
+    verdict declared in advance cannot sit on top of that.
 
     `--record` flips the mode to `read_write` so the recordings can be made deliberately.
     Nothing writes to the committed store by accident: without the flag a missing
     recording raises `CacheMiss`, which is the honest failure — it means a prompt drifted
     since the batch was recorded, and re-recording is a decision rather than a fallback.
 
-    **3. Declared fault injection (U8.2, extended U8.3, extended U8.5/OQ-16) — the
-    mechanism moved out at U9.7a and this is now a delegation.** `tools/faults.py` owns
-    the three patches and the reasoning behind each; `Fault` moved there with them. What
-    stays here is the *call*, because the harness is only one of three callers now: the
+    **3. Declared fault injection, delegated.** `tools/faults.py` owns the three patches
+    and the reasoning behind each, and `Fault` lives there. What stays here is the *call*,
+    because the harness is only one of three callers: the
     demo surface and `main.py --fault` declare the same failures against a `DemoDeal`, and
     a fault that behaved differently in the demo than in the evaluation would invalidate
     both at once.
@@ -384,7 +374,7 @@ def _results_table(results: list[CaseResult]) -> str:
             f"{config.MAX_REWORKS} rework(s) unresolved, while the confidence score "
             f"alone ({config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD:.2f} threshold) would "
             f"have let the deal report. Direct evidence that the rework-budget rule "
-            f"does something the score alone would not (U8.5/OQ-16).",
+            f"does something the score alone would not.",
         ]
     if any(r.recommendation is not None for r in results):
         lines += [
@@ -404,7 +394,7 @@ def _results_table(results: list[CaseResult]) -> str:
         lines += [
             "",
             "⚖ An independent model reading of the same evidence reached a *different* "
-            "verdict, which the report discloses rather than resolves (U9.4, OQ-22). The "
+            "verdict, which the report discloses rather than resolves. The "
             "rule always decides; the cross-check can only annotate. The marker is the "
             "only place a batch shows that second reasoning locus ran at all.",
         ]
@@ -430,7 +420,7 @@ def _census_section(results: list[CaseResult]) -> str:
 
 
 def _scoring_summary(results: list[CaseResult]) -> str:
-    """Verdict agreement over PREDICTED cases only — U8.6's actual instrument."""
+    """Verdict agreement over PREDICTED cases only — the harness's scoring instrument."""
     scored = [r for r in results
               if r.case.verdict_source is VerdictSource.PREDICTED and not r.error]
     baseline = [r for r in results
@@ -439,16 +429,16 @@ def _scoring_summary(results: list[CaseResult]) -> str:
     if scored:
         agree = sum(1 for r in scored if r.verdict_agrees)
         lines.append(f"**Verdict agreement (predicted cases only): {agree}/{len(scored)}.** "
-                     f"This is the figure U8.6 tunes against.")
+                     f"This is the figure the thresholds are read against.")
     else:
-        lines.append("**No predicted cases yet** — U8.2 supplies them. Until then this "
-                     "batch measures coverage and regression, not threshold placement.")
+        lines.append("**No predicted cases in this batch.** Without them it measures "
+                     "coverage and regression, not threshold placement.")
     if baseline:
         agree = sum(1 for r in baseline if r.verdict_agrees)
         lines.append("")
         lines.append(f"Regression against published baselines: {agree}/{len(baseline)} "
-                     f"match the U7.8 table. A mismatch means either this build changed "
-                     f"behaviour or that table has gone stale.")
+                     f"match the published table. A mismatch means either this build "
+                     f"changed behaviour or that table has gone stale.")
     return "\n".join(lines)
 
 
@@ -481,8 +471,8 @@ def main() -> None:
                         help="Record model responses into the committed store instead "
                              "of replaying them. Makes live calls; commit the result "
                              "deliberately.")
-    # Every tier replays by default since U9.5, so reaching a model is now something
-    # someone typed. Kept separate from --record because the two want opposite things:
+    # Every tier replays by default, so reaching a model is something someone typed.
+    # Kept separate from --record because the two want opposite things:
     # --record makes live calls in order to *freeze* them, this one makes them in order
     # to see what an unfrozen run does. Asking for both is a contradiction rather than a
     # combination, so it is rejected rather than silently resolved in some order.

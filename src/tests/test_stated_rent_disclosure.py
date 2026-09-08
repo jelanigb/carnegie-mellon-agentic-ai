@@ -1,7 +1,7 @@
 """The report's one comparison between what the seller claims and what the system derived.
 
 Kept out of `test_flag_propagation.py` because nothing here raises a flag — this is a
-Summarizer disclosure, not a check (U7 Q4). Nothing about it reaches confidence, routing
+Summarizer disclosure, not a check. Nothing about it reaches confidence, routing
 or the rework cycle, so a failure here means the report says something wrong, never that
 the pipeline decided something wrong.
 
@@ -42,12 +42,12 @@ def test_the_stated_rents_and_the_estimate_both_reach_the_reader():
 def test_the_caveat_follows_the_direction_of_the_gap():
     """The explanation for a low stated rent must not be printed over a high one.
 
-    **The reason the caveat is direction-dependent changed at U11.3; that it must be
-    did not.** It used to be a structural offset — the estimate was anchored to a
-    40th-percentile benchmark, so it leaned high by construction and stated rents below
-    it said nothing. The anchor is a market index now and that offset is gone; what
-    remains is that a sitting tenant's rent lags the market while an above-market claim
-    does not have a benign default explanation. Either way, printing the low-side
+    **Why it is direction-dependent:** a sitting tenant's rent lags the market, so a
+    stated rent below the estimate has a benign default explanation, while an
+    above-market claim does not. Note this is *not* an artifact of the anchor — anchoring
+    to a 40th-percentile benchmark would make the estimate lean high by construction and
+    the low side would say nothing at all, which is one reason the anchor is a market
+    index. Either way, printing the low-side
     reassurance over a high-side gap would excuse the one case worth questioning, which
     is what this asserts.
     """
@@ -81,8 +81,8 @@ def test_fewer_stated_rents_than_units_is_disclosed():
 
 def test_the_divergence_threshold_gates_the_emphasis(monkeypatch):
     """`RENT_CLAIM_DIVERGENCE_DISCLOSURE_THRESHOLD` ships as `None`, so this branch is
-    unreachable in the shipped configuration. Exercised here rather than left to U8 to
-    discover: a branch nothing can enter is not a branch, and the whole reason the
+    unreachable in the shipped configuration. Exercised here rather than left for an
+    evaluation run to discover: a branch nothing can enter is not a branch, and the reason
     constant is `None` is that the number needs evidence this project does not yet have.
     """
     emphasis = "larger than this report treats as ordinary"

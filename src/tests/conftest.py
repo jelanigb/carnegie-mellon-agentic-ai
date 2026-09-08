@@ -22,7 +22,7 @@ import config  # noqa: E402  — the path insert above has to run first
 
 @pytest.fixture(autouse=True)
 def offline_report_calls(monkeypatch):
-    """Turn off the two model calls U9.4 added, for every test in every file.
+    """Turn off the report's two model calls, for every test in every file.
 
     **In `conftest.py` rather than beside the tests that touch them, and autouse rather
     than opt-in**, for the reason `test_flag_propagation.offline_scenario_evaluator`

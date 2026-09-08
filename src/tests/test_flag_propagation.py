@@ -1,10 +1,10 @@
-"""The one test that must never fail (§8).
+"""The one test that must never fail.
 
 Transparent Degradation is this system's central design principle: a flag raised
 anywhere must survive every downstream node and appear in the rendered report. A silent
 flag loss would invalidate every output the system produces *while leaving it looking
 correct*, which is the worst failure shape available — a wrong answer that discloses
-nothing about being wrong. §6's cut list protects this file explicitly.
+nothing about being wrong. This file is protected from every scope cut in the project.
 
 The suite is deliberately structured around the specific ways that guarantee could
 break, rather than around the modules that implement it:
@@ -17,23 +17,22 @@ break, rather than around the modules that implement it:
   3. The reducer annotation is still on the field. This one guards against a future
      edit rather than against current behaviour, because removing it breaks nothing
      visible until two agents happen to flag on the same run.
-  4. The Summarizer renders every flag's full detail text, not a count. §1 requires
-     flags be surfaced "prominently, not just bottom-line numbers", and a report saying
+  4. The Summarizer renders every flag's full detail text, not a count. Flags must be
+     surfaced prominently rather than as bottom-line numbers, and a report saying
      "3 warnings" satisfies propagation while defeating its purpose.
   5. The rework cycle terminates and discloses that it did. An unbounded cycle would
      hang; a bounded one that escalated silently would lose the reason.
-  6. Each of U3's extraction and geography degradation paths reaches the report — added
-     when the Extractor became real, since every one of them is a *new* way for a flag
-     to be raised and therefore a new way for one to be lost.
-  7. The Critic's *own* flags reach the report (U7). Every case above raises its flag
+  6. Each of the Extractor's extraction and geography degradation paths reaches the
+     report — every one of them is a *new* way for a flag to be raised and therefore a
+     new way for one to be lost.
+  7. The Critic's *own* flags reach the report. Every case above raises its flag
      upstream of the Critic, so all of them would still pass if nothing the Critic
-     itself raised ever survived — and until U7.4 that was literally true of
-     escalation, where `has_critical` read only the inherited list and a CRITICAL the
-     Critic raised set no route. A flag raised by the last node before the Summarizer
-     travels the shortest path in the system, which is exactly why it is the one nobody
-     checks.
+     itself raised ever survived — and that was once literally true of escalation, where
+     `has_critical` read only the inherited list and a CRITICAL the Critic raised set no
+     route. A flag raised by the last node before the Summarizer travels the shortest
+     path in the system, which is exactly why it is the one nobody checks.
 
-**Why these tests make no network calls, and how (U3).** A must-never-fail test should
+**Why these tests make no network calls, and how.** A must-never-fail test should
 fail only when the thing it tests is broken. The real Extractor has three outbound
 dependencies — an OpenRouter call, the Census geocoder, and a 12 MB county boundary file
 — and the real Comps agent needs a built Chroma index and a downloadable embedding
@@ -42,7 +41,7 @@ propagation, and a test that cries wolf stops being consulted.
 
 So `offline_extractor` below stubs the Extractor's three boundaries for *every* test in
 this file, and individual cases override the stubs to force the specific degradation
-they are about. This is the §8 split between hermetic tests and live verification: the
+they are about. This is the project's split between hermetic tests and live verification: the
 real extraction path is exercised against live services by
 `scripts/extraction_evidence.py`, where a failure means the service is down and that is
 the finding. Note what is *not* stubbed — `extractor_agent` itself, every flag it
@@ -50,8 +49,8 @@ constructs, the graph, the reducers, the routers, and the Summarizer. Only the e
 leaving the process are faked.
 
 The one exception is a grounded Los Angeles run that uses the real Chroma corpus and
-skips cleanly when the index is absent. Its role is the same one §2 gives the LA row in
-the retrieval evidence: a suite where every case is degraded cannot show that the
+skips cleanly when the index is absent. Its role is the same one the Los Angeles row
+plays in the retrieval evidence: a suite where every case is degraded cannot show that the
 degradation signals mean anything.
 """
 
@@ -98,10 +97,8 @@ from tools.llm_client import LlmClient, LlmError, SchemaValidationExhausted
 from tools.model import rent_model
 
 # The listing text is now inert — the stubbed model call decides what comes back, so the
-# text is here for readability rather than for parsing. That is a deliberate improvement
-# over the U2 fixture, where the tested behaviour depended on a regex happening to miss
-# the price and on coordinates happening to be withheld: each flag below is now forced
-# on purpose rather than obtained as a side effect.
+# text is here for readability rather than for parsing. Each flag below is forced on
+# purpose rather than obtained as a side effect of a parser happening to miss something.
 LISTING_MISSING_PRICE = (
     "For sale: 1234 Sunset Ridge Ave, Los Angeles, CA 90026. Charming 2-unit duplex "
     "in Echo Park, 2 bed / 1 bath, approx 950 sq ft. Price on application."
@@ -159,11 +156,10 @@ def offline_extractor(monkeypatch):
     """Stub the Extractor's three outbound calls for every test in this file.
 
     Autouse rather than opt-in, so a case added later cannot reach the network by
-    forgetting to ask not to. The defaults produce the U2 fixture's shape — a listing
-    missing its price, and no resolvable coordinates — which keeps the propagation and
-    accumulation tests below testing exactly what they always did: a flag from the first
-    node, plus a flag from Comps short-circuiting on missing coordinates, with no Chroma
-    query in between.
+    forgetting to ask not to. The defaults produce a listing missing its price and with no
+    resolvable coordinates, which is what the propagation and accumulation tests below
+    want: a flag from the first node, plus a flag from Comps short-circuiting on missing
+    coordinates, with no Chroma query in between.
     """
     monkeypatch.setattr(
         extractor_module,
@@ -181,7 +177,7 @@ def offline_extractor(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def offline_scenario_evaluator(monkeypatch):
-    """Keep U6's Tree-of-Thought evaluator off the network, for every test here.
+    """Keep the Tree-of-Thought evaluator off the network, for every test here.
 
     Same reasoning as `offline_extractor` above, and the same autouse posture so a case
     added later cannot reach out by forgetting to opt in. The Scenario agent scores each
@@ -191,12 +187,11 @@ def offline_scenario_evaluator(monkeypatch):
 
     Forcing the constructor to raise routes the agent down its documented fallback: a
     deterministic scorer that prefers whichever pairing claims least, scoring a candidate
-    by how far it departs from the neutral case. **Not a scorer over the rent/price
-    correlation, which is what this docstring said until U9.7T** — decision #21 (forecast rent source) retired
-    that correlation as a basis for preferring any pairing, and rewrote the fallback to
-    the one thing a scorer with no model can defend. That path is worth exercising on its
-    own account, since it is what a real run degrades to when the model is unreachable. The evaluator's live behaviour belongs to
-    `scripts/forecast_evidence.py`, which runs it against real services.
+    by how far it departs from the neutral case — **not** a scorer over the rent/price
+    correlation, which nothing measured supports. That path is worth exercising on its own
+    account, since it is what a real run degrades to when the model is unreachable. The
+    evaluator's live behaviour belongs to `scripts/forecast_evidence.py`, which runs it
+    against real services.
     """
 
     def _refuse(*args, **kwargs):
@@ -223,7 +218,7 @@ def priced_cleanly(monkeypatch) -> None:
     """Make the Extractor raise nothing at all, so the case owns its own flag list.
 
     The autouse fixture withholds the price on purpose — most cases here want a real
-    upstream flag to follow through the pipeline. The U7 interaction cases want the
+    upstream flag to follow through the pipeline. The Critic interaction cases want the
     opposite: their whole subject is the confidence score, and an extra warn from the
     Extractor moves a deliberately-two-warn deal to three and escalates it on the score
     before the rule under test is reached. Found by measuring, not by reading: the case
@@ -241,14 +236,13 @@ LOS_ANGELES_COUNTY = "0603799999"
 
 # The market-rent level the stubbed ZORI panel reports for the current month. Set equal
 # to the fake county 2BR schedule so the composed anchor — market level times the
-# schedule's bedroom step — comes out at exactly that figure for a two-bedroom subject,
-# which is what the pre-U11.3 anchor was. Cases that assert on the anchor's magnitude
-# therefore keep asserting the same number, and the ones that care about the *tier* still
-# exercise the ZIP-versus-county branch.
+# schedule's bedroom step — comes out at exactly that figure for a two-bedroom subject.
+# Cases that assert on the anchor's magnitude therefore assert one number, and the ones
+# that care about the *tier* still exercise the ZIP-versus-county branch.
 FAKE_ZORI_LEVEL = 2_903.0
 
 # The same index at the corpus's 2018-19 vintage — the fake 2019 county 2BR schedule
-# times the 1.186 ZORI-to-FMR ratio U8.0 measured for that year, so the synthetic market
+# times the 1.186 index-to-schedule ratio measured for that year, so the synthetic market
 # read sits above the 40th-percentile schedule the way a real one does. A comp listed
 # then normalizes against this; the subject's estimate is anchored to the current level
 # above. Today's level cancels out of `divergence_pct`, so this constant alone decides
@@ -259,11 +253,11 @@ FAKE_ZORI_VINTAGE = 1_791.0 * 1.186
 class FakeFmrClient:
     """A HUD client that answers from fixed schedules instead of over the network.
 
-    U5 gave this suite its first agent that *must* reach an external API to do its job at
-    all, which is a new problem for a file whose whole premise is that it fails only when
-    flag propagation is broken. Stubbed for the same reason as the Extractor's three
-    boundaries: a HUD outage turning the must-never-fail suite red would teach a reader
-    to stop trusting it. `scripts/pull_fmr_sample.py` exercises the real client, and
+    The Valuation agent *must* reach an external API to do its job at all, which is a
+    problem for a file whose whole premise is that it fails only when flag propagation is
+    broken. Stubbed for the same reason as the Extractor's three boundaries: a HUD outage
+    turning the must-never-fail suite red would teach a reader to stop trusting it.
+    `scripts/pull_fmr_sample.py` exercises the real client, and
     `scripts/valuation_evidence.py` runs the whole agent against it.
 
     **The numbers are real Los Angeles County schedules, not invented ones**, pulled from
@@ -388,7 +382,7 @@ def offline_valuation(
         gated["report"] = report
         monkeypatch.setattr(valuation_module.rent_model, "load", lambda: gated)
 
-    # **The anchor reads the ZORI panel on every estimate since U11.3**, which is a
+    # **The anchor reads the market rent index panel on every estimate**, which is a
     # re-fetchable ~10 MB data file rather than a service. Stubbed here for the same
     # reason the FMR client is: left live, a machine without the file would flip outcomes
     # in tests that never mention the anchor, and `tests/` is meant to be hermetic.
@@ -532,17 +526,15 @@ def test_every_flag_is_rendered_in_full_not_counted():
 def test_the_build_status_banner_still_renders_when_a_node_is_stubbed():
     """A reader must be able to tell 'unbuilt' from 'nothing to report'.
 
-    **Rewritten Aug 30, 2026 (U8.6d), and the rewrite is the interesting part.** This
-    asserted `"Provisional build" in report` on an ordinary run, which passed for four
-    units because `agents/critic.py` had never stopped declaring itself a stub — so the
-    test was asserting a defect. Its companion assertion, `nodes.VALUATION_RENT in
-    report`, was satisfied by the string appearing in a flag's `raised by:` line rather
-    than in the banner at all.
+    **Asserted against a hand-built state rather than against an ordinary run**, and the
+    difference matters. Asserting `"Provisional build" in report` on an ordinary run
+    passes only while some agent is still declaring itself a stub — so the test would be
+    asserting a defect, and it would go green for months after every agent was finished.
+    That is exactly what happened here once.
 
-    Every agent is built now, so the mechanism has nothing to report on an ordinary run.
-    It is still load-bearing for anything stubbed later, so it is exercised directly
-    against a state that declares one, rather than being deleted along with the defect
-    that was keeping it green.
+    Every agent is built, so the mechanism has nothing to report on an ordinary run. It is
+    still load-bearing for anything stubbed later, so it is exercised directly against a
+    state that declares one.
     """
     state = DealState(raw_listing_text="[stub banner]", stub_nodes=["some_future_agent"])
     report = summarizer_agent(state)["report_markdown"]
@@ -555,8 +547,9 @@ def test_no_agent_still_reports_itself_as_a_stub():
     """The other half, and the reason the test above could sit wrong for four units.
 
     `test_the_extractor_no_longer_reports_itself_as_a_stub` below checks one agent by
-    name, which is why the Critic's stale declaration survived U7's completion of it.
-    This checks the set, so the next agent to finish cannot leave the claim behind.
+    name, which is how the Critic's stale declaration once survived the Critic being
+    finished. This checks the set, so the next agent to finish cannot leave the claim
+    behind.
     """
     result = run_deal()
     assert result["stub_nodes"] == [], (
@@ -566,7 +559,7 @@ def test_no_agent_still_reports_itself_as_a_stub():
 
 
 def test_the_extractor_no_longer_reports_itself_as_a_stub():
-    """U3's completion, asserted rather than assumed.
+    """The Extractor's completion, asserted rather than assumed.
 
     The build-status disclosure is only informative while it is accurate. An agent that
     kept announcing itself as a stub after being built would erode the one signal a
@@ -577,7 +570,7 @@ def test_the_extractor_no_longer_reports_itself_as_a_stub():
 
 
 def test_critical_flags_appear_before_the_findings():
-    """Disclosure-first ordering (§1: flags surfaced prominently, not as a footnote)."""
+    """Disclosure-first ordering: flags surfaced prominently, not as a footnote."""
     report = run_deal()["report_markdown"]
     assert report.index("## Disclosures") < report.index("## Findings")
 
@@ -608,8 +601,8 @@ def test_confidence_does_not_decay_across_rework_laps():
     carrying two warn flags scored 0.70, then 0.40 on the first lap and 0.10 on the
     second — escalating on collapsed confidence before `MAX_REWORKS` was reached, which
     made `REWORK_LIMIT_REACHED` unreachable. The cycle was still bounded, but by an
-    arithmetic accident rather than by the explicit counter §3 requires, and the two
-    agreeing is what would have kept it hidden.
+    arithmetic accident rather than by the explicit counter this design requires, and the
+    two agreeing is what would have kept it hidden.
 
     A deal does not get worse because the pipeline looked at it twice.
     """
@@ -647,9 +640,9 @@ def test_distinct_observations_of_one_kind_are_each_charged():
 def test_rework_cycle_terminates_and_discloses_that_it_did(monkeypatch):
     """Drive the cycle to exhaustion through the real graph.
 
-    The Critic's consistency checks are U7 work and return nothing today, so the
+    The Critic's consistency checks return nothing on this fixture, so the
     objection is injected at that one seam — which is why `_consistency_objections`
-    exists as a real function rather than being omitted until U7.
+    exists as a single named function rather than being inlined.
 
     Every escalation route is disabled for the duration so none can pre-empt the rework
     path, which is the only thing under test here — each has its own test above. The
@@ -658,28 +651,25 @@ def test_rework_cycle_terminates_and_discloses_that_it_did(monkeypatch):
     no-ops. Substituting a node is what `graph.NODE_FUNCTIONS` exists as a mapping for;
     `build_graph` reads it at call time.
 
-    **Valuation joined that list in U5, and the reason is worth recording.** Under this
-    file's autouse stubs the subject resolves to no county, so the real agent raises a
-    critical `rent_anchor_unavailable` — which escalates immediately and leaves this
-    test measuring zero rework passes instead of two. That is the agent behaving
-    correctly and the test asking about something else. Stubbing it out is the same move
-    already made for retrieval, for the same reason, rather than a symptom worked around.
+    **Valuation is on that list for a reason worth recording.** Under this file's autouse
+    stubs the subject resolves to no county, so the real agent raises a critical
+    `rent_anchor_unavailable` — which escalates immediately and leaves this test measuring
+    zero rework passes instead of two. That is the agent behaving correctly and the test
+    asking about something else.
 
-    **Scenario joined in U6 for exactly the same reason, which is what makes the pattern
-    worth naming.** With no county there is no FMR history to difference, and with
-    Valuation stubbed there is no resolved metro, so the forecast has neither side and
-    raises a critical `forecast_unavailable`. Three agents have now pre-empted this test
-    by correctly reporting a degradation, so the rule is general: a test that isolates
-    one route has to silence every *other* route that can escalate, and the list grows as
-    the pipeline learns to disclose more.
+    **Scenario is on it for exactly the same reason**, which is what makes the pattern
+    worth naming. With no county there is no rent history to difference, and with Valuation
+    stubbed there is no resolved metro, so the forecast has neither side and raises a
+    critical `forecast_unavailable`. Three agents can pre-empt this test by correctly
+    reporting a degradation, so the rule is general: a test that isolates one route has to
+    silence every *other* route that can escalate, and the list grows as the pipeline learns
+    to disclose more.
 
-    **The injected objection gained `retryable=True` in U7.4**, and the change is
-    deliberate rather than mechanical. `critic_rejected` stopped meaning "an objection
-    exists" and started meaning "another pass could fix this", because a rework re-runs
-    the whole pipeline and most objections a second pass cannot change — a thin market
-    stays thin. A non-retryable objection now escalates instead of looping, so injecting
-    one here would test the escalation route this test exists to exclude. The guarantee
-    under test is unchanged: the cycle is bounded and says so when it ends.
+    **The injected objection carries `retryable=True` deliberately.** `critic_rejected`
+    means "another pass could fix this" rather than "an objection exists", because a rework
+    re-runs the whole pipeline and most objections a second pass cannot change — a thin
+    market stays thin. A non-retryable objection escalates instead of looping, so injecting
+    one here would test the escalation route this test exists to exclude.
     """
     monkeypatch.setattr(
         critic_module,
@@ -715,10 +705,10 @@ def test_rework_cycle_terminates_and_discloses_that_it_did(monkeypatch):
         f"Expected exactly {config.MAX_REWORKS} rework passes, got "
         f"{result['rework_count']}."
     )
-    # Decision #9's stated invariant, asserted rather than read off a trace.
+    # The Planner's stated invariant, asserted rather than read off a trace.
     assert result["planner_invocations"] == 1 + result["rework_count"]
 
-    # Through `assert_reaches_report` rather than a substring check on the kind (U7.8):
+    # Through `assert_reaches_report` rather than a substring check on the kind:
     # the kind is a label the Summarizer prints from the enum, while the *detail* is the
     # only place the reader learns how many passes were spent and that the loop stopped
     # deliberately. A report that names the kind and drops the sentence would satisfy
@@ -736,10 +726,10 @@ def test_a_downed_geocoder_makes_a_rework_re_plan_extraction():
     """The rework path only means something if the step that could change the answer runs.
 
     `REQUIRED_DEAL_FIELDS` holds no coordinate, so a deal whose address, price and unit
-    count were extracted on pass one is "complete" forever after. Before U7.4b that
-    skipped extraction on every rework lap — so the one objection the Critic marks
-    retryable, justified as re-attempting a Census call, re-attempted nothing and burned
-    the budget arriving back with the same objection.
+    count were extracted on pass one is "complete" forever after. Without
+    `_geocode_is_worth_retrying` that skips extraction on every rework lap — so the one
+    objection the Critic marks retryable, justified as re-attempting a Census call,
+    re-attempts nothing and burns the budget arriving back with the same objection.
     """
     settled = DealTerms(
         full_address="123 Real St, Los Angeles, CA",
@@ -758,7 +748,7 @@ def test_a_downed_geocoder_makes_a_rework_re_plan_extraction():
 
 
 def test_an_unresolvable_address_does_not_re_plan_extraction():
-    """The other half of the U7.1b split, and the reason it was worth splitting.
+    """The other half of the geocode-failure split, and the reason it was worth splitting.
 
     An address with no street number resolves no better on the fifth attempt than on the
     first, so re-planning extraction for it would spend the rework budget on a certainty.
@@ -780,11 +770,11 @@ def test_an_unresolvable_address_does_not_re_plan_extraction():
 
 
 def test_a_geocoder_outage_two_laps_ago_no_longer_re_plans_extraction():
-    """U8.5/OQ-15's fix to `_geocode_is_worth_retrying`, asserted directly.
+    """`_geocode_is_worth_retrying`'s pass scoping, asserted directly.
 
-    Before U8.5 this read the *accumulated* flags, so a `GEOCODER_SERVICE_UNAVAILABLE`
-    from a pass that already retried and moved on would still trigger another re-plan on
-    every later lap. Pass 1's outage is stale by the time pass 2 has already completed —
+    Read against the *accumulated* flags, a `GEOCODER_SERVICE_UNAVAILABLE` from a pass that
+    already retried and moved on still triggers another re-plan on every later lap. Pass
+    1's outage is stale by the time pass 2 has completed —
     the flag is stamped `planner_invocations=1` while `state.planner_invocations=2`,
     i.e. two passes have run since — so this must not re-plan extraction a third time.
     """
@@ -819,16 +809,16 @@ def test_planner_invocation_invariant_holds_on_a_clean_run():
 
 
 def test_a_single_critical_flag_escalates_regardless_of_score():
-    """Regression test for a defect the U2 demo runs exposed.
+    """Regression test for a defect an early demo run exposed.
 
     One critical flag costs 0.40, putting confidence at exactly 0.60 — and
     `0.60 < 0.60` is false, so a deal with zero comparables reported as a normal
     result. A report is not entitled to present an estimate as ordinary when the
     system has itself said that estimate should not be relied on.
 
-    Asserted at the boundary deliberately: the arithmetic that produced the defect is
-    a property of the *provisional* U7 weights, so this test states the guarantee
-    (a critical flag escalates) rather than the numbers that currently satisfy it.
+    Asserted at the boundary deliberately: the arithmetic that produced the defect is a
+    property of the current severity weights, so this test states the guarantee (a critical
+    flag escalates) rather than the numbers that currently satisfy it.
     """
     state = DealState(
         raw_listing_text="x",
@@ -845,7 +835,7 @@ def test_a_single_critical_flag_escalates_regardless_of_score():
 
     assert update["confidence_score"] >= config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD, (
         "This test is only meaningful while a lone critical flag still scores at or "
-        "above the threshold. If the U7 weights changed, re-derive the case."
+        "above the threshold. If the severity weights changed, re-derive the case."
     )
     assert update["needs_human_review"] is True
 
@@ -873,18 +863,18 @@ def test_human_review_pauses_and_surfaces_the_grounds_for_escalation():
 
 
 # --------------------------------------------------------------------------
-# 6. U3 — the Extractor's own degradation paths
+# 6. The Extractor's own degradation paths
 #
-# Each case forces one path and asserts the flag survives to the report. Together they
-# are also the coverage U8 will assert against `set(FlagKind)` for this agent, built
-# here rather than there because these are propagation claims first.
+# Each case forces one path and asserts the flag survives to the report. Together they are
+# also this agent's share of the coverage the evaluation harness asserts against
+# `set(FlagKind)`, built here rather than there because these are propagation claims first.
 # --------------------------------------------------------------------------
 
 
 def test_an_inferred_field_is_disclosed_as_an_assumption(monkeypatch):
     """A value read from a term of art rather than stated must say so.
 
-    This is the flag Checkpoint 2.1 calls "proceed with a flagged assumption": the
+    This is the "proceed with a flagged assumption" path: the
     extraction is *better* for resolving "2-flat" into two units, and the report is only
     trustworthy if it distinguishes that from a listing that said "2 units" outright.
     """
@@ -966,8 +956,8 @@ def test_a_transport_failure_becomes_an_error_the_agent_can_flag(monkeypatch):
     letting an SDK exception escape — because between them lies the real failure mode:
     a `RateLimitError` is not an `LlmError`, so before this it would have propagated out
     of the node and crashed the graph instead of degrading. Not hypothetical. The free
-    tier's daily cap (50 requests, account-wide) was hit during the U3 bake-off, which
-    is how the gap was found.
+    tier's account-wide daily cap was hit during a model bake-off, which is how the gap
+    was found.
     """
     def rate_limited(**kwargs):
         raise APIError(
@@ -1042,7 +1032,7 @@ def test_an_unreachable_geocoder_is_disclosed_as_distinct_from_a_bad_address(mon
 
 
 def test_supplied_coordinates_conflicting_with_the_address_escalate(monkeypatch):
-    """The U3 conflict path.
+    """The coordinate-conflict path.
 
     The system cannot tell whether the caller meant this address or those coordinates,
     so it escalates instead of choosing silently. The address wins for the purpose of
@@ -1075,7 +1065,7 @@ def test_supplied_coordinates_close_to_the_address_raise_nothing(monkeypatch):
     """The negative case, and the reason the one above means anything.
 
     A tolerance that fired on every supplied coordinate would be indistinguishable from
-    a tolerance of zero — the §2 argument about a signal that is always on, applied to a
+    a tolerance of zero — a signal that is always on conveys nothing, applied to a
     threshold rather than to a search radius.
     """
     monkeypatch.setattr(extractor_module, "geocode", lambda *a, **k: parcel_at(*LOS_ANGELES))
@@ -1145,15 +1135,15 @@ def test_grounded_run_reaches_the_report_with_real_comps(monkeypatch):
 
     The counterpart to everything above. Those tests prove flags survive; this one
     proves a *clean* run stays clean — no relaxation flag, no geography flag, and real
-    comps rendered with their citable source. §2 makes this argument about the evidence
-    scripts and it applies here too: a suite where every case is degraded cannot show
+    comps rendered with their citable source. The same argument applies to the evidence
+    scripts: a suite where every case is degraded cannot show
     that the degradation signals mean anything.
 
-    **Extended in U5 to keep meaning what it says.** Without a county the real Valuation
-    agent raises a critical flag, so this case would have quietly become another degraded
-    one — still passing its own assertions while no longer demonstrating the thing it
-    exists to demonstrate. `offline_valuation` gives it a county and an FMR schedule, so
-    the run now produces an actual rent figure and the "clean" claim is true end to end.
+    **`offline_valuation` is what keeps it meaning what it says.** Without a county the
+    real Valuation agent raises a critical flag, so this case would quietly become another
+    degraded one — still passing its own assertions while no longer demonstrating the thing
+    it exists to demonstrate. Giving it a county and an FMR schedule means the run produces
+    an actual rent figure and the "clean" claim is true end to end.
     """
     extraction = EXTRACTION_MISSING_PRICE.model_copy(
         deep=True, update={"price": 1_150_000.0}
@@ -1164,7 +1154,7 @@ def test_grounded_run_reaches_the_report_with_real_comps(monkeypatch):
 
     result = run_deal()
 
-    assert result["comps"], "Expected comps in a market measured as dense in §2."
+    assert result["comps"], "Expected comps in a market this corpus covers densely."
     assert not flags_of_kind(result, FlagKind.SPARSE_COMPS)
     assert not flags_of_kind(result, FlagKind.GEOCODING_UNAVAILABLE)
     assert not flags_of_kind(result, FlagKind.RENT_ANCHOR_UNAVAILABLE)
@@ -1213,7 +1203,7 @@ def test_a_comp_set_drawn_from_one_place_is_disclosed(monkeypatch):
 def test_an_adequately_spread_comp_set_raises_nothing(monkeypatch):
     """The negative case, and the suite does not accept the flag without it.
 
-    §8's standard applied to a threshold: a check that fired on every comp set would be
+    The standard applied to every threshold here: a check that fired on every comp set would be
     indistinguishable from a check with no threshold at all, and would tell a reader
     nothing when it appeared. The Los Angeles subject clears
     COMP_MIN_DISTINCT_LOCATIONS exactly, so this case also pins the boundary — if the
@@ -1228,7 +1218,7 @@ def test_an_adequately_spread_comp_set_raises_nothing(monkeypatch):
 
     result = run_deal()
 
-    assert result["comps"], "Expected comps in a market measured as dense in §2."
+    assert result["comps"], "Expected comps in a market this corpus covers densely."
     assert not flags_of_kind(result, FlagKind.COMPS_SPATIALLY_CONCENTRATED)
 
 
@@ -1237,7 +1227,7 @@ def test_an_adequately_spread_comp_set_raises_nothing(monkeypatch):
     reason="Chroma index not built; run scripts/build_comps_index.py",
 )
 def test_comps_admitted_by_a_relaxed_search_are_disclosed(monkeypatch):
-    """A comp set that came back *unlike* the subject must say so (U7.3).
+    """A comp set that came back *unlike* the subject must say so.
 
     Chicago is the case, and it is a real one rather than a constructed one: the corpus
     is dense enough there to return a full eight comps but not dense enough to return
@@ -1297,7 +1287,7 @@ def test_comps_carry_their_location_precision_and_vintage(monkeypatch):
     Both fields landed in the Aug 22, 2026 re-index. `location_precision` is what lets
     the report distinguish eight located comparables from eight city-area points;
     `listed_date` is what lets each comp be normalized against the FMR for its own
-    fiscal year rather than one assumed vintage (§2). Asserted on the comps themselves
+    fiscal year rather than one assumed vintage. Asserted on the comps themselves
     rather than through the report, because rendering them is the Summarizer's concern
     while this is the retrieval contract.
     """
@@ -1309,7 +1299,7 @@ def test_comps_carry_their_location_precision_and_vintage(monkeypatch):
 
     result = run_deal()
     comps = result["comps"]
-    assert comps, "Expected comps in a market measured as dense in §2."
+    assert comps, "Expected comps in a market this corpus covers densely."
 
     for c in comps:
         assert c.location_precision in {LocationPrecision.ADDRESS, LocationPrecision.AREA}, (
@@ -1318,7 +1308,7 @@ def test_comps_carry_their_location_precision_and_vintage(monkeypatch):
         )
         assert c.listed_date is not None, (
             f"Comp {c.listing_id} has no listed_date, so it cannot be normalized "
-            "against the FMR for its own fiscal year (§2)."
+            "against the reference rent for its own fiscal year."
         )
         assert c.listed_date.year in (2018, 2019), (
             f"Comp {c.listing_id} is dated {c.listed_date.year}; the corpus spans "
@@ -1327,16 +1317,15 @@ def test_comps_carry_their_location_precision_and_vintage(monkeypatch):
 
 
 # --------------------------------------------------------------------------
-# 7. Valuation (U5) — every path that produces a rent figure, and every one that
-#    refuses to. Added when the Valuation agent became real: each is a new way for a
-#    flag to be raised and therefore a new way for one to be lost.
+# 7. Valuation — every path that produces a rent figure, and every one that refuses to.
+#    Each is a way for a flag to be raised and therefore a way for one to be lost.
 # --------------------------------------------------------------------------
 
 
 def test_no_county_means_no_rent_figure_at_all():
-    """The invariant §2 exists to protect, asserted at the place it could break.
+    """The invariant the anchoring exists to protect, asserted where it could break.
 
-    A subject with no county has no FMR to anchor against. The tempting behaviour is to
+    A subject with no county has no reference rent to anchor against. The tempting behaviour is to
     average the retrieved comps instead and report that — a plausible-looking figure in
     one line. It would also be a 2019 dollar amount printed in a 2026 report with
     nothing marking it as one, which is the exact failure the whole rent-anchoring
@@ -1358,7 +1347,7 @@ def test_no_county_means_no_rent_figure_at_all():
 
 
 def test_the_valuation_agent_no_longer_reports_itself_as_a_stub():
-    """U5's completion, expressed as a property of the output rather than of the diff.
+    """The Valuation agent's completion, expressed as a property of the output.
 
     The report's provisional-build banner names every node that ran as a placeholder.
     While the Valuation agent was a stub it appeared there, and a reader was told the
@@ -1374,8 +1363,8 @@ def test_a_rent_estimate_discloses_the_anchor_it_was_built_from(monkeypatch):
     """An estimate on the model path must show its working, not just its result.
 
     `rent_anchored_to_market_index` is `INFO` and fires on every single estimate, which usually
-    makes a signal worthless — §2's own argument against always-on flags. It earns its
-    place by carrying content rather than existing as a marker: the ratio, the FMR, and
+    makes a signal worthless. It earns its
+    place by carrying content rather than existing as a marker: the ratio, the anchor, and
     the fiscal year are all in the detail text, so a reader can multiply the two numbers
     themselves and see that this is a modelled figure rather than an observed rent.
     """
@@ -1386,7 +1375,7 @@ def test_a_rent_estimate_discloses_the_anchor_it_was_built_from(monkeypatch):
 
     assert result.get("rent_estimate") is not None
     assert result.get("rent_estimate_source") == RentEstimateSource.REGRESSION_MODEL
-    # The anchoring arithmetic itself, asserted rather than assumed: since U11.3 the
+    # The anchoring arithmetic itself, asserted rather than assumed: the
     # estimate is the ratio times the composed anchor and nothing else, so a correction
     # applied on the way out without being disclosed would show up here.
     assert result["valuation_detail"].anchor_index_month is not None, (
@@ -1407,8 +1396,8 @@ def test_a_rent_estimate_discloses_the_anchor_it_was_built_from(monkeypatch):
     raised = assert_reaches_report(result, FlagKind.RENT_ANCHORED_TO_MARKET_INDEX)
     assert raised.severity == Severity.INFO
     # The disclosure names the month the market index was read at, not a fiscal
-    # year: since U11.3 the level comes from a monthly series, and "FY2026" would
-    # describe only the bedroom step.
+    # year — the level comes from a monthly series, and a fiscal year would describe only
+    # the bedroom step.
     assert "2026-07-31" in raised.detail
     assert "90026" in raised.detail
 
@@ -1486,9 +1475,9 @@ def test_a_feature_the_listing_never_stated_blocks_the_estimate(monkeypatch):
 @pytest.mark.skipif(not _corpus_available(), reason="Chroma index not built")
 @pytest.mark.skipif(not _rent_model_available(), reason="rent model not trained")
 def test_the_comp_cross_check_stays_silent_when_the_model_and_comps_agree(monkeypatch):
-    """The negative case, and §8 requires it: a flag that fired always would say nothing.
+    """The negative case, which is required: a flag that fired always would say nothing.
 
-    Los Angeles is the market this must hold on, and not by luck. Measured Aug 22, 2026,
+    Los Angeles is the market this must hold on, and not by luck. Measured,
     its retrieved comps sit +7.9% against the metro's own 2-bedroom population, while
     Chicago's and Cleveland's sit +70.4% and +73.1% — LA is the one inference market
     whose comp set is genuinely representative, so it is the one where agreement is the
@@ -1551,13 +1540,13 @@ def test_an_implausible_prediction_is_refused_rather_than_reported(monkeypatch):
     five bedrooms without resizing it, and the agent declined to produce an estimate —
     which looked like a bug and was not.
 
-    **What it asserts changed at U11.1, and the reason is the point.** Until then the
-    refusal came from the *output* side: the shipped LinearRegression's `bedrooms`
-    coefficient was negative (HUD's schedule climbs with bedroom count faster than real
-    rents do), so a high bedroom count on a small footprint drove the predicted ratio
-    below the plausible band and the agent refused. That made this test hostage to a
-    fitted coefficient — the inputs had to be re-chosen once already, when ZIP-resolution
-    anchoring shrank the coefficient from -0.44 to -0.33 and the original 5bd/950sqft
+    **It asserts an input-domain refusal, not an output-side one, and that is the point.**
+    Refusing from the *output* side depends on a fitted coefficient: under a linear model
+    `bedrooms` comes out negative (the federal schedule climbs with bedroom count faster
+    than real rents do), so a high bedroom count on a small footprint drives the predicted
+    ratio below the plausible band and the agent refuses. That makes a test hostage to the
+    fit — the inputs here had to be re-chosen once already, when ZIP-resolution anchoring
+    shrank the coefficient from -0.44 to -0.33 and the original 5bd/950sqft
     fixture started predicting a low-but-legal 0.34.
 
     Gradient boosting has no such coefficient and, more to the point, **cannot produce an
@@ -1590,8 +1579,8 @@ def test_an_implausible_prediction_is_refused_rather_than_reported(monkeypatch):
 def test_an_oversized_footprint_is_refused_at_the_other_tail(monkeypatch):
     """The same guard from above, at the end a per-feature range cannot reach.
 
-    Added with U11.1 because the domain check has two tails and the case above only
-    exercises one. This end is the one a naive guard misses: **5,000 sqft is comfortably
+    The domain check has two tails and the case above only exercises one. This end is the
+    one a naive guard misses: **5,000 sqft is comfortably
     inside the corpus's own 130-9,175 range**, so a per-feature min/max check waves this
     subject through. What is abnormal is the combination — two bedrooms across 5,000 sqft
     is 2,500 square feet per bedroom against a corpus median of 574.
@@ -1640,12 +1629,13 @@ def test_a_county_without_small_area_fmr_says_the_anchor_is_coarse(monkeypatch):
 
 
 # --------------------------------------------------------------------------
-# 8. U7 — the Critic's own flags
+# 8. The Critic's own flags
 #
 # Everything above raises its flag upstream of the Critic and asks whether it survives.
-# These ask the narrower question the U7 checks introduced: a flag raised by the *last*
-# node before the Summarizer travels the shortest path in the system, and until U7.4
-# nothing the Critic raised could even trigger the Critic's own escalation.
+# These ask a narrower question: a flag raised by the *last* node before the Summarizer
+# travels the shortest path in the system, and that path is the easiest one to leave
+# broken — nothing the Critic raises can trigger the Critic's own escalation unless it
+# reads the flags it is returning as well as the ones it inherited.
 # --------------------------------------------------------------------------
 
 
@@ -1662,9 +1652,8 @@ def test_an_interaction_objection_reaches_the_report_and_escalates(monkeypatch):
     **The confidence score is what makes this case worth running through the graph.**
     Two warns land at 0.70, which *clears* the 0.60 threshold — so the deal escalates on
     the critical-flag rule alone, over a flag the Critic raised in the same pass. That
-    path existed only on paper until U7.4: `has_critical` read `state.flags` and not the
-    flags being returned, so a CRITICAL objection set no route and reported as a normal
-    result.
+    path exists only on paper if `has_critical` reads `state.flags` and not the flags being
+    returned: a CRITICAL objection then sets no route and reports as a normal result.
 
     The two upstream flags are injected at the node boundary rather than obtained from
     the real agents, for this file's usual reason — the combination needs a corpus, a
@@ -1694,7 +1683,7 @@ def test_an_interaction_objection_reaches_the_report_and_escalates(monkeypatch):
         nodes.VALUATION_RENT,
         lambda state: {
             # The median as well as the flag: I1 and I3 are statements *about* the comp
-            # cross-check, so since U8.6 they require it to have produced a verdict —
+            # cross-check, so they require it to have produced a verdict —
             # a stub that raised the divergence flag without one would describe a
             # comparison the real agent never wrote down.
             "valuation_detail": ValuationDetail(comp_implied_rent_median=2_000.0),
@@ -1739,7 +1728,7 @@ def test_a_report_carries_no_objection_when_the_disclosures_do_not_combine(monke
     """The negative case, without which the flag above proves nothing.
 
     Same two-warn shape, same score of 0.70, one difference: the divergence flag is
-    absent, so there is no cross-check whose readability could be in question. §8's
+    absent, so there is no cross-check whose readability could be in question. The
     standard for a threshold applies to an interaction as well — a check that fired on
     any two disclosures would be indistinguishable from no check, and would tell a reader
     nothing when it appeared.

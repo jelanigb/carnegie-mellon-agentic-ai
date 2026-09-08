@@ -5,12 +5,12 @@ These are unit tests over a pure function, deliberately kept out of
 downstream node and reaches the report; these prove a *combination* of flags is read
 correctly in the first place. Different guarantee, different failure mode, and mixing
 them would make the propagation suite fail for reasons that have nothing to do with
-propagation. The propagation cases for these arrive in U7.4, once the checks are wired.
+propagation. The propagation half lives in that file; this is the arithmetic half.
 
 Each test constructs the flag set directly rather than driving the pipeline to produce
 it. That is the point of the design: an interaction check reads accumulated state and
 nothing else, so it needs no LLM, no network, no corpus and no trained model to exercise
-— which is precisely what the checks U7 originally planned could not offer.
+— which is exactly what makes the interaction family worth having as its own layer.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ def _messages(objections: list[Objection]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# What each check requires (revised U8.6, Aug 30 2026)
+# What each check requires
 #
 # I1 and I3 need the comp cross-check to have produced a median; I2 additionally needs
 # that median to have disagreed with the estimate. See `_interaction_objections`'
@@ -53,11 +53,11 @@ def _messages(objections: list[Objection]) -> str:
 
 
 def test_a_degraded_comp_set_objects_even_where_the_numbers_agreed():
-    """The U8.6 change, asserted directly.
+    """The ungated checks, asserted directly.
 
     Agreement between an estimate and a median built on the wrong units, or around the
-    wrong location, is a coincidence rather than a confirmation. The divergence gate used
-    to read exactly that coincidence as "nothing to report".
+    wrong location, is a coincidence rather than a confirmation. Gated on divergence,
+    these checks would read exactly that coincidence as "nothing to report".
     """
     assert len(_interaction_objections(_state(FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA))) == 1
     assert len(_interaction_objections(_state(FlagKind.COORDINATES_FROM_CITY_CENTROID))) == 1
@@ -123,7 +123,7 @@ def test_a_relaxed_radius_alone_is_not_a_relaxed_attribute():
 
 
 def test_relaxation_without_measured_drift_is_not_an_objection():
-    """The repointing in U7.3, asserted.
+    """The concession-versus-consequence distinction, asserted.
 
     `RELAXED_MATCH_CRITERIA` says the retrieval loop dropped a filter. It does not say
     the comps that came back were unlike the subject — dropping a band permits that
@@ -173,7 +173,7 @@ def test_centroid_fallback_with_divergence_is_warn_not_critical():
 
 
 def test_an_unreachable_geocoder_makes_the_same_objection_retryable():
-    """The U7.1b split earning its keep: same consequence, different cause, and only
+    """The geocode-failure split earning its keep: same consequence, different cause, and only
     this cause is worth spending a rework pass on."""
     objections = _interaction_objections(
         _state(
@@ -218,10 +218,10 @@ def test_independent_reasons_accumulate_rather_than_collapsing():
 
 
 # ---------------------------------------------------------------------------
-# Pass-scoped flags (U8.5/OQ-15)
+# Pass-scoped flags
 #
-# The eval batch contains no rework lap (OQ-16), so this is the only place the
-# guarantee `critic._kinds` exists for can be asserted right now. Each case builds
+# The evaluation batch contains no rework lap, so this is the only place the
+# guarantee `critic._kinds` exists for can be asserted. Each case builds
 # `state.plan`/`planner_invocations` directly rather than driving the graph, for the
 # same reason every other test in this file does: `_interaction_objections` is a pure
 # function over accumulated state, and these three cases are about how it reads a

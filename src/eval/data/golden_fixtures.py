@@ -1,4 +1,4 @@
-"""The golden `DealTerms` fixtures the engineered cases run on (U8.2).
+"""The golden `DealTerms` fixtures the engineered cases run on.
 
 Separate from `eval/cases.py` for the same reason `demo_deals.py` is separate from
 `main.py`: a fixture is *data with a provenance*, and a case is a *claim about it*. Keeping
@@ -22,8 +22,8 @@ requires of them.
 
 **The asking prices are not anchored to a benchmark, and that is a deliberate difference
 from `demo_deals.py`.** Those listings exist to produce a worked example a reader takes
-seriously, so #11 anchored every figure to a market source. These exist to trip a named
-degradation path, and only one of them (`chicago-five-bedroom`) has an asking price that
+seriously, so every figure in them is anchored to a market source. These exist to trip a
+named degradation path, and only one of them (`chicago-five-bedroom`) has an asking price that
 matters to its target at all. Anchoring the rest would spend calibration effort on figures
 no case reads, and would imply a market claim the fixture is not making. Each price is
 stated as plausible-for-the-metro and labelled as such rather than sourced.
@@ -38,19 +38,17 @@ from, and `scripts/` can re-derive the pair whenever anyone wants to check it. T
 same arrangement `tools/county_crosswalk.py` uses for its FIPS codes.
 
 `county_fips` is deliberately **not** carried. It is resolved from the coordinates by a
-local point-in-polygon join (U8.1b), which is network-free, so leaving it out costs nothing
+local point-in-polygon join, which is network-free, so leaving it out costs nothing
 and keeps one derived value from being hand-copied into a place it could go stale.
 
 Why these three metros and not one
 ------------------------------------
-Los Angeles, Chicago and Cleveland are §2's inference trio, and the fixtures are spread
-across them on purpose. `agents/critic.confidence_from_flags` recorded that three of the
-six demo deals share one county's rent-anchor warning — a fact about the demo set reusing
-one county, not about deals in general — and that the eval batch is what would show whether
-that skew is an artifact. A batch sited in one county would reproduce the artifact instead
-of measuring it. **Answered at U8:** the skew did not have to be adjudicated, because #19's
-hybrid anchor resolves at ZIP tier in every indexed market and that warning became rare —
-it now co-occurs with the elevated market-error flag on 0 of 21 cases.
+Los Angeles, Chicago and Cleveland are the system's inference metros, and the fixtures are
+spread across them on purpose. Three of the demo deals share one county's rent-anchor
+warning — a fact about the demo set reusing one county, not about deals in general — and a
+batch sited in one county would reproduce that artifact instead of measuring it. Spread
+across three, the warning turns out to be rare: it co-occurs with the elevated market-error
+flag on 0 of 21 cases.
 
 The consequence shows up immediately and is worth stating rather than leaving as a
 coincidence: Cook County publishes Small Area (ZIP-level) FMRs and Los Angeles and Cuyahoga
@@ -58,11 +56,11 @@ do not, so a Chicago fixture carries one fewer warn-severity flag than an otherw
 identical Los Angeles one, before anything about the deal is considered. Two fixtures below
 sit either side of that line.
 
-A fourth metro, added for a different reason (U8.4)
+A fourth metro, added for a different reason
 -----------------------------------------------------
 The New York fixture below is not part of the three-metro skew check above — it exists to
-test `FlagKind.RENT_ESTIMATE_MARKET_ERROR_ELEVATED` (OQ-3) on a listing with a real,
-non-empty comp set. The `staten-island` demo deal already trips that flag, but it does so
+test `FlagKind.RENT_ESTIMATE_MARKET_ERROR_ELEVATED` on a listing with a real, non-empty
+comp set. The `staten-island` demo deal already trips that flag, but it does so
 by accident: that deal escalates on zero comps, so the market-error disclosure is invisible
 against a report that was already going to a human reviewer for an unrelated reason. This
 fixture sits in a part of New York the corpus covers densely, so the flag fires on a report
@@ -101,13 +99,12 @@ def _terms(**kwargs) -> DealTerms:
 # Los Angeles — 1200 S Hoover St, 90006 (Pico-Union). Los Angeles County, 06037.
 # Census geocode Aug 28, 2026: 34.049278, -118.284093.
 #
-# **This block used to say every LA fixture carries a county-level anchoring warn, and
-# that stopped being true on Aug 30, 2026 (U11.3).** HUD published no Small Area FMR for
-# LA County at the corpus's vintage, so under the old anchor every subject here was
-# county-anchored unconditionally and the control scored 0.85 rather than 1.00. The
-# anchor is now Zillow's market index at the subject's own ZIP, which covers 90006 — so
-# the warn is gone and the control scores clean. Left as a note rather than deleted,
-# because a stale *baseline* is how a batch quietly stops measuring what it claims to.
+# **The control here scores a clean 1.00, and it is worth knowing why that is not
+# guaranteed.** HUD published no Small Area FMR for LA County at the corpus's vintage, so
+# an FMR-anchored build county-anchors every subject here unconditionally and the control
+# scores 0.85. The shipped anchor is the market index at the subject's own ZIP, which
+# covers 90006. A stale *baseline* is how a batch quietly stops measuring what it claims
+# to, so the dependency is stated.
 # --------------------------------------------------------------------------
 
 _LA = dict(
@@ -167,11 +164,8 @@ LA_THREE_BEDROOM = _add(GoldenFixture(
 
 
 # --------------------------------------------------------------------------
-# Chicago — Cook County, 17031. Was "the one demo-adjacent county with Small Area FMRs,
-# so these fixtures anchor at ZIP resolution and carry one fewer warn than their LA
-# counterparts" — true until U11.3, and no longer a distinction: the market-index anchor
-# resolves at ZIP tier in all four markets. What Chicago still gives the batch is the
-# market where the re-anchoring moved the *estimate* most (metro MAE $454 → $343).
+# Chicago — Cook County, 17031. What Chicago gives the batch is the market where anchoring
+# at the subject's own ZIP moves the *estimate* most (metro MAE $454 → $343).
 # --------------------------------------------------------------------------
 
 _CHI_UPTOWN = dict(
@@ -262,9 +256,9 @@ CHI_FIVE_BEDROOM = _add(GoldenFixture(
 
 
 # --------------------------------------------------------------------------
-# Cleveland — Cuyahoga County, 39035. §2's thin-but-real market: the comp corpus places
-# 92% of its rows on city-area placeholder coordinates, and Cleveland is the extreme —
-# measured Aug 22, 2026, eight comps from a single point.
+# Cleveland — Cuyahoga County, 39035. The thin-but-real market: the comp corpus places 92%
+# of its rows on city-area placeholder coordinates, and Cleveland is the extreme — measured
+# at eight comps from a single point.
 # --------------------------------------------------------------------------
 
 _CLE = dict(
@@ -317,8 +311,8 @@ CLE_DIVERGENCE_UNDER = _add(GoldenFixture(
 
 
 # --------------------------------------------------------------------------
-# New York (Brooklyn) — Kings County, 36047. Added U8.4, for a different reason than the
-# three above: see "A fourth metro, added for a different reason" in the module docstring.
+# New York (Brooklyn) — Kings County, 36047. Here for a different reason than the three
+# above: see "A fourth metro, added for a different reason" in the module docstring.
 # Census geocode Aug 29, 2026: 40.672786, -73.950302. Sited in Bedford-Stuyvesant, one of
 # the corpus's densest New York clusters (`scripts/retrieval_evidence.py`'s module
 # docstring measured 38 comps within 3 miles here), specifically so this fixture returns a
@@ -354,11 +348,11 @@ NY_BEDSTUY_ORDINARY = _add(GoldenFixture(
 
 
 # --------------------------------------------------------------------------
-# New York, the other two sitings (U8.6b's straddle pairs). Both are the same borough
-# system and the same market-level disclosures as Bed-Stuy above; what differs is how the
-# corpus is distributed under them, which is the quantity two of U8.6b's thresholds are
-# compared against. **Geography is the engineering here, so no property attribute had to
-# be bent** — which is what makes these the cleanest straddles in the batch.
+# New York, the other two sitings — the straddle pairs. Both share the borough system and
+# the market-level disclosures of Bed-Stuy above; what differs is how the corpus is
+# distributed under them, which is the quantity two thresholds are compared against.
+# **Geography is the engineering here, so no property attribute had to be bent** — which is
+# what makes these the cleanest straddles in the batch.
 # Census geocodes Aug 30, 2026.
 # --------------------------------------------------------------------------
 

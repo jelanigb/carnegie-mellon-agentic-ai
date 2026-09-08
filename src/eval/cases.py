@@ -1,4 +1,4 @@
-"""The eval harness's case type, and the case set (U8.1).
+"""The evaluation harness's case type, and the case set.
 
 A case is a listing plus **a claim about what the system should do with it**, written
 before the system is run on it. That second half is what separates this from a fixture
@@ -6,10 +6,10 @@ directory, and it is the whole reason the harness can be used to tune anything.
 
 Why the declared verdict exists, and why it is written first
 --------------------------------------------------------------
-U8.6 tunes decision #6's confidence threshold and severity weights, and the instrument
-problem it faces is the one that disqualified the demo deals: **they were calibrated to
-run clean, so fitting a threshold to them would measure this repository's own fixtures.**
-An engineered eval batch has the same defect with the sign reversed — it is calibrated to
+The confidence threshold and the severity weights are read against this batch, and the
+instrument problem that creates is the one that disqualifies the demo deals: **they are
+calibrated to run clean, so fitting a threshold to them would measure this repository's own
+fixtures.** An engineered batch has the same defect with the sign reversed — it is calibrated to
 *fail*, and a threshold fitted to it is fitted to fixtures just the same.
 
 The way out is to score the threshold against what each case was *supposed* to do rather
@@ -25,14 +25,14 @@ agreement and prove nothing. Hence `VerdictSource` below.
 
 Two kinds of verdict, which must not be pooled
 ------------------------------------------------
-The six demo deals and the U4 ablation join this batch (U8.1) so the demo evidence is a row
-set in the evaluation rather than a separate pass. But those six outcomes are already
-*measured* and published — `history/decision_log.md` carries the U7.8 table. Declaring those as
-"intended verdicts" would hand U8.6 seven free agreements that were transcribed from the
-answer key, quietly inflating any threshold's score.
+The demo deals and the retrieval ablation join this batch so the demo evidence is a row set
+in the evaluation rather than a separate pass. But the older demo outcomes are already
+*measured* and published. Declaring those as "intended verdicts" would hand any threshold
+several free agreements that were transcribed from the answer key, quietly inflating its
+score.
 
 So a verdict carries its provenance. `PREDICTED` is a claim made before any run and is the
-only kind that counts toward U8.6's agreement score. `BASELINE` is a previously measured
+only kind that counts toward the agreement score. `BASELINE` is a previously measured
 outcome, which makes the case a **regression check** — valuable, and evidence of a
 different thing. `scoring_cases()` returns the first kind only.
 
@@ -42,7 +42,7 @@ Most flag kinds are raised downstream of extraction, so routing those cases thro
 model would make them slower, non-reproducible and no more truthful (`eval/README.md`).
 
   * `GOLDEN` — a complete `DealTerms` is supplied and the Extractor is skipped. This needs
-    no new mechanism: the pre-flight Planner (#9) already routes past extraction when
+    no new mechanism: the pre-flight Planner already routes past extraction when
     `deal_terms_are_complete()` holds, so a fixture is a deal that arrives already
     extracted.
   * `REPLAY` — extraction actually runs, against recorded responses (`LLM_CACHE_MODE=replay`).
@@ -60,11 +60,11 @@ from demo_deals import DEMO_DEALS
 from eval.data import golden_fixtures
 from state import DealTerms, FlagKind
 
-# `Fault` moved to `tools/faults.py` at U9.7a, with its mechanism, so the demo surface
-# and `main.py` can declare the same three failures without importing the eval package —
-# nothing in `tools/` may import from `eval/`. Re-exported here because every case
-# definition below names it, and because `cases.Fault` is what the rest of the harness,
-# its docstrings and `eval/README.md` have always called it.
+# `Fault` lives in `tools/faults.py` with its mechanism, so the demo surface and `main.py`
+# can declare the same three failures without importing the eval package — nothing in
+# `tools/` may import from `eval/`. Re-exported here because every case definition below
+# names it, and because `cases.Fault` is what the rest of the harness and `eval/README.md`
+# call it.
 from tools.faults import Fault  # noqa: F401  (re-exported for the case definitions)
 
 
@@ -78,7 +78,7 @@ class Verdict(StrEnum):
 class VerdictSource(StrEnum):
     """Where a verdict came from — see the module docstring on why this is not cosmetic."""
 
-    # A claim written before the case was ever run. Counts toward U8.6's agreement score.
+    # A claim written before the case was ever run. Counts toward the agreement score.
     PREDICTED = "predicted"
     # A previously measured outcome, making the case a regression check. Excluded from
     # the agreement score, because agreeing with a transcribed answer is not evidence.
@@ -92,10 +92,9 @@ class Tier(StrEnum):
 
 
 # Faults whose seam lives inside the Extractor, and which a golden fixture therefore
-# skips. Scoped to these two rather than applied to every fault (U11.3): the check was
-# written when both faults were extraction-path ones, and `STALE_RENT_INDEX` patches the
-# market index the *Valuation* agent reads, which every case reaches whatever its tier.
-# Left unscoped, the guard would reject the only kind of case that can cover it.
+# skips. Scoped to these two rather than applied to every fault: `STALE_RENT_INDEX` patches
+# the market index the *Valuation* agent reads, which every case reaches whatever its tier,
+# so an unscoped guard would reject the only kind of case that can cover it.
 _EXTRACTION_PATH_FAULTS = frozenset({Fault.GEOCODER_OUTAGE, Fault.LLM_UNAVAILABLE})
 
 
@@ -120,14 +119,14 @@ class EvalCase:
     terms: Optional[DealTerms] = None
 
     supplied_coords: Optional[tuple[float, float]] = None
-    # The U4 ablation switch. A case rather than a command-line flag, so the ungrounded
+    # The retrieval-ablation switch. A case rather than a command-line flag, so the ungrounded
     # run is a row in the same table as every grounded one.
     retrieval_enabled: bool = True
     # An external failure the harness simulates for this case, or None. See `Fault`.
     injects: Optional[Fault] = None
-    # OQ-16, meaningful only alongside `injects=Fault.GEOCODER_OUTAGE`: where the centroid
+    # Meaningful only alongside `injects=Fault.GEOCODER_OUTAGE`: where the centroid
     # fallback lands, overriding the real corpus-wide (city, state) average `geocode()`
-    # would otherwise compute. U8.2's search over 9 markets x 16 configurations found the
+    # would otherwise compute. A search over 9 markets x 16 configurations found the
     # real city-wide centroid never both diverges from the rent estimate *and* stays clear
     # of a critical or a third warn — divergence and comp dispersion trade off directly,
     # since both are driven by how thin the matching supply is at whatever point the
@@ -145,8 +144,8 @@ class EvalCase:
         if self.terms is not None:
             self._check_golden_fixture()
         if self.injects in _EXTRACTION_PATH_FAULTS and self.terms is not None:
-            # A fixture supplies its terms directly, so U8.1b's geography path takes the
-            # county-only branch and the Extractor never calls the model or the geocoder
+            # A fixture supplies its terms directly, so the Extractor's geography-only
+            # path takes the county branch and never calls the model or the geocoder
             # at all — either injection would be a silent no-op and the case would report
             # a clean pass for a failure that never happened. Rejected at import for the
             # same reason `_check_golden_fixture` is: the run would still produce a
@@ -168,7 +167,7 @@ class EvalCase:
 
         `config.REQUIRED_DEAL_FIELDS` decides whether the Planner skips extraction, and
         it does **not** include coordinates — reasonably, since a listing that reaches
-        the Extractor gets them from `tools/geocoding.py` as an ordinary step (U3). But a
+        the Extractor gets them from `tools/geocoding.py` as an ordinary step. But a
         golden fixture never reaches the Extractor, so nothing derives them. A fixture
         supplying the three required fields and no coordinates therefore skips extraction
         *and* arrives at retrieval with nowhere to search, and the run degrades on
@@ -197,51 +196,47 @@ class EvalCase:
 
 
 # --------------------------------------------------------------------------
-# The demo deals, as cases (the U10 absorption)
+# The demo deals, as cases
 # --------------------------------------------------------------------------
 #
-# §6 folded U10 into U8 so the demo evidence and the evaluation evidence come from one
-# code path and cannot disagree. This is where that happens: the same listings
-# `main.py --deal` runs, plus the ablation, entering the batch as rows.
+# The demo evidence and the evaluation evidence come from one code path and therefore
+# cannot disagree. This is where that happens: the same listings `main.py --deal` runs,
+# plus the ablation, entering the batch as rows.
 #
-# **Two tables below, not one.** The six deals that predate U8 carry `BASELINE` verdicts
-# transcribed from the U7.8 table; deals added afterwards carry `PREDICTED` ones derived
-# from the escalation rule. `_DEMO_PREDICTIONS`' header carries the reasoning.
+# **Two tables below, not one.** The deals whose outcomes were already measured and
+# published carry `BASELINE` verdicts transcribed from that publication; deals added
+# afterwards carry `PREDICTED` ones derived from the escalation rule.
+# `_DEMO_PREDICTIONS`' header carries the reasoning.
 #
-# **Their verdicts are BASELINE, not PREDICTED**, and every one is transcribed from the
-# U7.8 re-measurement in `history/decision_log.md` rather than guessed. That makes them
-# regression checks on a published table — if a row moves, either this build changed
-# behaviour or that table is stale, and both are worth knowing. What they are not is
-# evidence that a confidence threshold is well placed.
+# A transcribed verdict makes a case a **regression check** on a published table — if a row
+# moves, either this build changed behaviour or that table is stale, and both are worth
+# knowing. What it is not is evidence that a confidence threshold is well placed.
 
 _DEMO_BASELINES: dict[str, tuple[Verdict, str]] = {
-    "los-angeles": (Verdict.REPORTS, "Dense market, full comp set. U7.8: 0.70, reports. "
-                                     "0.85 since U8.6c demoted the pairing near-tie to "
-                                     "info; verdict unchanged."),
-    # **Re-baselined Aug 29, 2026 (U8.6c), and the reason is a deliberate severity change
-    # rather than drift.** U7.8 measured 0.55 / escalates on three deal-specific warns,
-    # one of which was `forecast_branches_near_tied` at the *pairing* level. U8.6c demoted
-    # that variant to INFO on the finding that both tied pairings appear in the reported
-    # scenario set regardless, so nothing a reader sees turned on it. Chicago now carries
-    # two warns and reports at 0.70. Recorded here rather than left as a standing
-    # mismatch, because the old row is no longer the behaviour this build has — but note
-    # what it cost: this was the demo set's one "escalates on accumulated warns alone,
-    # nothing broken" case, and the set no longer has one.
-    "chicago": (Verdict.REPORTS, "U7.8: 0.55, escalated on three warns. Re-baselined at "
-                                 "U8.6c: 0.70, reports — the third warn was the pairing "
-                                 "near-tie, now info-severity."),
-    "staten-island": (Verdict.ESCALATES, "§2's real-thinness case: zero comps. U7.8: 0.00."),
+    "los-angeles": (Verdict.REPORTS, "Dense market, full comp set. Reports at 0.85."),
+    # **Re-baselined once, on a deliberate severity change rather than on drift.** This
+    # deal used to score 0.55 and escalate on three deal-specific warns, one of which was
+    # `forecast_branches_near_tied` at the *pairing* level. That variant was demoted to
+    # INFO on the finding that both tied pairings appear in the reported scenario set
+    # regardless, so nothing a reader sees turned on it. Chicago now carries two warns and
+    # reports at 0.70. Worth noting what the demotion cost: this was the demo set's one
+    # "escalates on accumulated warns alone, nothing broken" case, and the set no longer
+    # has one.
+    "chicago": (Verdict.REPORTS, "Was 0.55 and escalated on three warns; reports at 0.70 "
+                                 "since the third warn — the pairing near-tie — became "
+                                 "info-severity."),
+    "staten-island": (Verdict.ESCALATES, "The real-thinness case: zero comps. Scores 0.00."),
     "no-geography": (Verdict.ESCALATES, "Address neither geocoder nor centroid can place. "
-                                        "U7.8: 0.00."),
+                                        "Scores 0.00."),
     "overpriced": (Verdict.REPORTS, "Deliberate premium to the benchmark, so the "
-                                    "asking-price disclosure says something. U7.8: 0.70."),
+                                    "asking-price disclosure says something. 0.70."),
     "coord-conflict": (Verdict.ESCALATES, "Supplied coords disagree with the address's "
-                                          "geocode. U7.8: 0.05."),
+                                          "geocode. Scores 0.05."),
 }
 
 
-# **Demo deals added after the U7.8 table, and therefore `PREDICTED` rather than
-# `BASELINE`** (U9.6, architect's call Sept 1, 2026).
+# **Demo deals added after those outcomes were published, and therefore `PREDICTED` rather
+# than `BASELINE`.**
 #
 # The distinction the two labels draw is **not** "was the outcome knowable in advance" —
 # it is where the verdict came from. `BASELINE` is for a case **whose own outcome was
@@ -268,12 +263,11 @@ _DEMO_BASELINES: dict[str, tuple[Verdict, str]] = {
 _DEMO_PREDICTIONS: dict[str, tuple[Verdict, str]] = {
     "chicago-uptown": (
         Verdict.REPORTS,
-        "OQ-21's sixth deal, and **the first demo listing whose axis-2 verdict is read "
-        "against a benchmark it was not derived from.** #11 set every other asking price "
-        "from a Redfin metro median, and Los Angeles has no ZIP tier at all, so "
-        "`los-angeles` is compared against the very figure it was calibrated from and "
-        "reads 0% by construction (OQ-20). This one is calibrated to ZIP 60640's own "
-        "median, from 148 recorded county-assessor sales.\n\n"
+        "**The first demo listing whose axis-2 verdict is read against a benchmark it was "
+        "not derived from.** Every other asking price was set from a metro median, and "
+        "Los Angeles has no ZIP tier at all, so `los-angeles` is compared against the very "
+        "figure it was calibrated from and reads 0% by construction. This one is "
+        "calibrated to ZIP 60640's own median, from 148 recorded county-assessor sales.\n\n"
         "**Verdict derived from the expected disclosures' severity and the shipped "
         "escalation rule, and from nothing else.** An Uptown two-flat at 1,100 sq ft is "
         "an ordinary property in a market this corpus covers densely: the comp search is "
@@ -294,13 +288,13 @@ _DEMO_PREDICTIONS: dict[str, tuple[Verdict, str]] = {
     "los-angeles-current": (
         Verdict.REPORTS,
         "**The shadow of `los-angeles`: the same property with its stated rents declared "
-        "against the anchor the system actually uses (#19) instead of the one #11 "
-        "calibrated it to.** Everything else is byte-identical — address, description, "
+        "against the anchor the system actually uses instead of the federal schedule it "
+        "was calibrated to.** Everything else is byte-identical — address, description, "
         "asking price, price basis.\n\n"
         "**The prediction is a claim about this system's architecture, and the run can "
         "falsify it.** No flag in this build reads a stated rent: `deal_terms.unit_rents` "
         "is written by the Extractor and read only by `summarizer._stated_rent_section`, "
-        "and #20 holds the stated-versus-modelled comparison as a disclosure with "
+        "and the stated-versus-modelled comparison ships as a disclosure with "
         "`RENT_CLAIM_DIVERGENCE_DISCLOSURE_THRESHOLD` left at `None`. So re-basing two "
         "rent figures should change **no flag, no confidence contribution and no "
         "verdict** — this deal should raise exactly what `los-angeles` raises and "
@@ -315,7 +309,7 @@ _DEMO_PREDICTIONS: dict[str, tuple[Verdict, str]] = {
 
 
 def demo_cases() -> list[EvalCase]:
-    """The demo deals plus the U4 ablation, as LIVE cases.
+    """The demo deals plus the retrieval ablation, as LIVE cases.
 
     Two tables rather than one, because the verdicts have different provenance and
     `scoring_cases()` treats them differently — see each table's header.
@@ -343,7 +337,7 @@ def demo_cases() -> list[EvalCase]:
             verdict=Verdict.ESCALATES,
             verdict_source=VerdictSource.BASELINE,
             note=(
-                "The U4 ablation. U7.8: lands at exactly 0.60 with one critical flag — "
+                "The retrieval ablation. Lands at exactly 0.60 with one critical flag — "
                 "the score does not escalate it and the critical-flag rule does, which "
                 "is the only live case for that rule. Not reachable by any listing."
             ),
@@ -356,17 +350,17 @@ def demo_cases() -> list[EvalCase]:
 
 
 # --------------------------------------------------------------------------
-# The engineered cases (U8.2)
+# The engineered cases
 # --------------------------------------------------------------------------
 #
-# Written against U8.1's *measured* coverage gap rather than an assumed one, which is why
-# the harness was built before the cases. The list the plan first carried was written from
-# assumption and was wrong in both directions — it named a kind the demo set already
-# covers and missed six it does not.
+# Written against the harness's *measured* coverage gap rather than an assumed one, which
+# is why the harness was built before the cases. A list written from assumption was wrong
+# in both directions — it named a kind the demo set already covers and missed six it does
+# not.
 #
 # **How each verdict was derived, and why that is not the same as having run the case.**
-# Q1 requires the verdict to be a claim made in advance, because reading the system's
-# output and recording it as the intention produces a perfect score and proves nothing.
+# A verdict has to be a claim made in advance, because reading the system's output and
+# recording it as the intention produces a perfect score and proves nothing.
 # The fixtures below *were* run while they were being designed — that is what it takes to
 # confirm a case trips the kind it targets at all — so "written before the run" needs to
 # mean something more precise than a promise.
@@ -448,10 +442,9 @@ ENGINEERED_CASES: list[EvalCase] = [
         note=(
             "Two bedrooms across 5,000 sq ft puts the subject outside the range of "
             "properties the model learned from, so the estimate is refused rather "
-            "than reported. **Note corrected at U8.10**: it described the refusal as "
-            "the *output* ratio band, and U11.1 moved the guard to the model's "
-            "*input* domain — same flag kind, different sentence to the reader. The "
-            "declared verdict and target are untouched. Escalates because the refusal is "
+            "than reported. The refusal is an *input-domain* check rather than a bound on "
+            "the predicted ratio — see `config.RENT_MODEL_DOMAIN_PERCENTILES` for why the "
+            "distinction matters. Escalates because the refusal is "
             "critical-severity: there is no rent figure, and a report without one is not "
             "an ordinary result."
         ),
@@ -480,17 +473,16 @@ ENGINEERED_CASES: list[EvalCase] = [
         verdict_source=VerdictSource.PREDICTED,
         targets=(),
         note=(
-            "**Built to close the open question about whether anything still trips the "
-            "rent-comp divergence check, and it stopped doing so on Aug 30, 2026 — kept, "
-            "retargeted, and the history recorded rather than the fixture re-engineered.** "
-            "Nothing about this property is engineered: an ordinary two-bedroom duplex "
-            "whose comps match it on bedrooms and floor area. It measured +46.6% "
-            "divergence under the FMR anchor and measures **−6.1%** under the market-index "
-            "anchor U11.3 adopted — a 53-point move on an unchanged listing, which is the "
-            "clearest single statement in this batch of what the anchor change did.\n\n"
-            "Re-engineering the property to make the flag fire again would have destroyed "
-            "the one thing the case was worth: that nothing about it is bent. So it "
-            "becomes the batch's **second control**, in a different market from "
+            "**The batch's second control, and the clearest single measurement in it of "
+            "what the anchor choice does.** Nothing about this property is engineered: an "
+            "ordinary two-bedroom duplex whose comps match it on bedrooms and floor area. "
+            "It measures +46.6% rent-comp divergence under a pure-FMR anchor and **−6.1%** "
+            "under the shipped market-index anchor — a 53-point move on an unchanged "
+            "listing.\n\n"
+            "It was built to trip the divergence check and no longer does. Re-engineering "
+            "the property to make the flag fire again would destroy the one thing the case "
+            "is worth: that nothing about it is bent. So it is a control instead, in a "
+            "different market from "
             "`la-ordinary-duplex`. The divergence kind stays covered — "
             "`chicago-uptown-oversized` (+80.0%), `cleveland-triplex` (−36.4%) and the "
             "`cleveland-divergence-over` straddle below all raise it — so the coverage "
@@ -499,9 +491,9 @@ ENGINEERED_CASES: list[EvalCase] = [
         terms=golden_fixtures.CHI_UPTOWN_ORDINARY.terms,
     ),
 
-    # --- U8.6b's straddle pairs -------------------------------------------
+    # --- The straddle pairs -----------------------------------------------
     #
-    # **What these are for, and why they are pairs.** U8.6's sensitivity sweep found the
+    # **What these are for, and why they are pairs.** The sensitivity sweep found the
     # confidence threshold and the severity weights sit in a dead zone: the scores are
     # quantized to multiples of the warn weight, so nothing in this batch distinguishes a
     # threshold anywhere in (0.40, 0.70] from the shipped 0.60. The lines that actually
@@ -539,11 +531,11 @@ ENGINEERED_CASES: list[EvalCase] = [
             "raises the drift disclosure. Predicted to report anyway: one warn does not "
             "reach the escalation threshold, so this pair measures the *flag's* "
             "brittleness rather than the verdict's. "
-            "**Measured after U8.6e's ungate (Aug 30, 2026): the prediction above is "
-            "wrong and stays as written.** Ungating the Critic's first interaction "
-            "check made `comps_outside_match_criteria` draw a critical objection, so "
-            "this side escalates and the row is a MISMATCH. The pair now flips the "
-            "*verdict* on 200 sq ft, which makes it the sharpest instrument in the "
+            "**Measured: the prediction above is wrong and stays as written.** The "
+            "Critic's comp-drift interaction check is not gated on divergence, so "
+            "`comps_outside_match_criteria` draws a critical objection here, this side "
+            "escalates, and the row is a MISMATCH. The pair therefore flips the *verdict* "
+            "on 200 sq ft, which makes it the sharpest instrument in the "
             "batch. The declared verdict is not edited to match — that is what "
             "`VerdictSource.PREDICTED` exists to prevent, and the same rule kept "
             "`la-three-bedroom-comp-drift` honest when it failed in the other "
@@ -592,11 +584,10 @@ ENGINEERED_CASES: list[EvalCase] = [
             "one coordinate, this returns eight on five. Same city, same borough system, "
             "same elevated-market-error disclosure; only the corpus's own distribution "
             "differs.\n\n"
-            "It also re-measures New York's standing-warn floor, which U8.6 held as "
-            "policy at three and U8.4c reduced to two. Under the market-index anchor the "
-            "county-level anchoring warn is gone here too, so this deal carries **one**. "
-            "Predicted to report, and that prediction is the point: the floor U8.6 "
-            "reasoned about has moved twice since it was set."
+            "It also re-measures New York's standing-warn floor, which has moved twice: "
+            "held at three, then two, and under the market-index anchor the county-level "
+            "anchoring warn is gone here as well, so this deal carries **one**. Predicted "
+            "to report, and that prediction is the point."
         ),
         terms=golden_fixtures.NY_MANHATTAN_DISPERSED.terms,
     ),
@@ -624,7 +615,7 @@ ENGINEERED_CASES: list[EvalCase] = [
         terms=golden_fixtures.NY_WAKEFIELD_SEVEN_COMPS.terms,
     ),
 
-    # --- Critic interaction checks (U7.2's I1 and I3) ----------------------
+    # --- Critic interaction checks (I1 and I3) ----------------------------
     #
     # Two cases rather than one, because the Critic's interaction checks are three
     # separate judgments and a single case would exercise whichever fired first. These
@@ -656,9 +647,8 @@ ENGINEERED_CASES: list[EvalCase] = [
             "what `VerdictSource.PREDICTED` exists to prevent, and this mismatch is real "
             "signal: a comp set 6-of-8 outside the band, priced by a model that cannot "
             "see the difference, arguably still warrants a human. Whether the "
-            "divergence gate should stay in front of I1 is a design question for the "
-            "architect (see `task_list_u8.md` U8.6), not something to paper over by "
-            "re-declaring the answer."
+            "divergence gate should stay in front of I1 is a design question, not "
+            "something to paper over by re-declaring the answer."
         ),
         terms=golden_fixtures.LA_THREE_BEDROOM.terms,
     ),
@@ -677,16 +667,15 @@ ENGINEERED_CASES: list[EvalCase] = [
             "dragging the score down. This listing was engineered so the deal cleared "
             "the threshold comfortably (measured 0.70 at design, 0.55 once recorded) and "
             "escalated on the critical alone.\n\n"
-            "Since U8.4b/U8.4c it measures **0.30**: the drift-corrected rent changed the "
-            "scoring prompt and the Tree-of-Thought search now empties its beam at depth "
-            "2, adding a second, *critical* `forecast_unavailable` — so the score is far "
-            "below threshold and the two escalation grounds agree again. The case still "
-            "passes (its target fires, verdict `escalates`), but it is no longer evidence "
-            "for the rule's independence. **`chicago--no-retrieval` still carries that "
-            "evidence** — it is the row the results table marks with †, landing at exactly "
-            "0.60 with one critical — so the batch has not lost the property, only this "
-            "listing-reachable demonstration of it. U7.8's request for a *deal* that "
-            "isolates the rule is therefore open again, and is U8.6's to re-site."
+            "It now measures **0.30**: an anchor change moved the scoring prompt, the "
+            "Tree-of-Thought search empties its beam at depth 2, and a second *critical* "
+            "`forecast_unavailable` appears — so the score is far below threshold and the "
+            "two escalation grounds agree again. The case still passes (its target fires, "
+            "verdict `escalates`), but it is no longer evidence for the rule's "
+            "independence. **`chicago--no-retrieval` still carries that evidence** — it is "
+            "the row the results table marks with †, landing at exactly 0.60 with one "
+            "critical — so the batch has not lost the property, only this "
+            "listing-reachable demonstration of it."
         ),
         terms=golden_fixtures.CHI_UPTOWN_OVERSIZED.terms,
     ),
@@ -713,13 +702,13 @@ ENGINEERED_CASES: list[EvalCase] = [
         targets=(FlagKind.RENT_ESTIMATE_MARKET_ERROR_ELEVATED,
                  FlagKind.COMPS_SPATIALLY_CONCENTRATED),
         note=(
-            "The market-error disclosure (OQ-3), tripped by a listing with a real comp "
+            "The market-error disclosure, tripped by a listing with a real comp "
             "set rather than by the `staten-island` demo's zero-comp accident, where the "
             "flag is invisible against a report already escalating for an unrelated "
             "reason. Both targets are warn-severity, so the mechanical rule declares "
-            "`reports`; New York's other standing warn (county-level FMR anchoring) "
-            "stacks with them, which is itself the sort of thing U8.6's tuning run "
-            "should see rather than a case defect to fix."
+            "`reports`; New York's other standing warn (county-level anchoring) stacks "
+            "with them, which is itself the sort of thing a tuning run should see rather "
+            "than a case defect to fix."
         ),
         terms=golden_fixtures.NY_BEDSTUY_ORDINARY.terms,
     ),
@@ -744,17 +733,15 @@ ENGINEERED_CASES: list[EvalCase] = [
             "**A simulated address-lookup outage, declared by the case rather than "
             "waiting for a real one.** The address is never tested, so comparables are "
             "drawn around the fallback coordinates instead. The override lands the "
-            "fallback at the address's own real Census geocode (verified live, U8.2) "
+            "fallback at the address's own real Census geocode, verified live, "
             "rather than Chicago's corpus-wide average, so this case isolates the "
             "*outage* — only the ability to verify the address is removed, not the "
             "geography a working geocoder would have found anyway.\n\n"
-            "**Closes `rework_limit_reached`, the one kind U8.2 and U8.3 left uncovered "
-            "(U8.5/OQ-16).** That subsection found the real corpus-wide centroid never "
-            "both diverges and stays clear of a critical or a third warn, and this case "
-            "was originally recorded against it — landing exactly there, and the second "
-            "target was withdrawn. `geocoder_fallback_override` was built to place the "
-            "fallback somewhere already known to diverge instead of leaving it to the "
-            "corpus average.\n\n"
+            "**Closes `rework_limit_reached`, which no other case reaches.** The real "
+            "corpus-wide centroid never both diverges and stays clear of a critical or a "
+            "third warn, so `geocoder_fallback_override` exists to place the fallback "
+            "somewhere already known to diverge instead of leaving it to the corpus "
+            "average.\n\n"
             "**Building it surfaced a second, real defect, fixed alongside it: "
             "`extractor._supplied_coordinates` was reading a *previous pass's* "
             "centroid fallback as if a caller had deliberately supplied it.** On the "
@@ -790,17 +777,15 @@ ENGINEERED_CASES: list[EvalCase] = [
             "found clean across three replay runs; it carries no significance beyond "
             "that. Once recorded, replay is exact — the non-determinism only affects a "
             "fresh live call, never a committed recording.\n\n"
-            "**Re-sited Aug 30, 2026, because U11.3 silently switched this case off.** "
+            "**Re-sited once, and the reason is worth knowing before moving it again.** "
             "The override used to sit at the address's own real geocode (41.975320, "
-            "-87.656463), so the case isolated the *outage* and nothing else. That "
-            "worked only because the rent estimate diverged from the comps there: every "
-            "objection in `critic._interaction_objections` — the retryable one included "
-            "— is gated behind `rent_diverges_from_comps`. The hybrid anchor moved that "
-            "deal from diverging to −6.1%, the gate closed, no retryable objection was "
-            "raised, and this case quietly returned **0 reworks and a clean report** "
-            "while still passing every assertion except its own target. The batch lost "
-            "its only coverage of the bounded-retry path and said so in one line of the "
-            "census.\n\n"
+            "-87.656463), so the case isolated the *outage* and nothing else. That worked "
+            "only because the rent estimate happened to diverge from the comps there, and "
+            "the retryable objection was gated behind `rent_diverges_from_comps`. An "
+            "anchor change moved that deal to −6.1% divergence, the gate closed, no "
+            "retryable objection was raised, and this case quietly returned **0 reworks "
+            "and a clean report** while still passing every assertion except its own "
+            "target — costing the batch its only coverage of the bounded-retry path.\n\n"
             "The override now sits at 41.900000, -87.740000 (Hermosa / Belmont Cragin), "
             "found by sweeping a 49-point Chicago grid for a fallback that diverges "
             "**and raises nothing else**: 8 comps, 3 distinct locations, ZIP-tier "
@@ -820,13 +805,11 @@ ENGINEERED_CASES: list[EvalCase] = [
         ),
     ),
 
-    # --- Recorded extractions (U8.3): the kinds that genuinely originate in the ------
-    # --- Extractor or in geography resolution, so the model or the geocoder has to ---
-    # --- actually run rather than being skipped by a golden fixture. -----------------
+    # --- Recorded extractions: the kinds that genuinely originate in the Extractor ---
+    # --- or in geography resolution, so the model or the geocoder has to actually ----
+    # --- run rather than being skipped by a golden fixture. --------------------------
     #
-    # Five of the six kinds U8.2's census routed here; the sixth, geocoder_service_
-    # unavailable, closed in U8.2 itself via Fault.GEOCODER_OUTAGE and needed no further
-    # case. See eval/README.md's "Recording and replaying" section for the mechanics.
+    # See eval/README.md's "Recording and replaying" section for the mechanics.
     EvalCase(
         key="la-unpriced-triplex",
         tier=Tier.REPLAY,
@@ -839,7 +822,7 @@ ENGINEERED_CASES: list[EvalCase] = [
             "about it. Predicted to report: `unit_count` is given as '3-unit', which "
             "the extraction system prompt's rule 3a treats as stated rather than "
             "inferred, so this case does not also trip `assumed_field_value`.\n\n"
-            "**Measured `escalates` since U8.4b, and kept as a declared mismatch rather "
+            "**Measured `escalates`, and kept as a declared mismatch rather "
             "than re-sited.** The prediction stands on the mechanical rule — a lone WARN "
             "target reports — but ZIP 90089 is a USC campus ZIP that Zillow's rent index "
             "does not cover, so the deal also pays `rent_anchor_index_stale`, "
@@ -847,9 +830,9 @@ ENGINEERED_CASES: list[EvalCase] = [
             "fired, so the triage rule fixed in advance classes this a **tuning signal**. "
             "Re-siting to a covered ZIP was considered and rejected: it would make the "
             "batch systematically avoid the ZIPs where the system degrades, which is the "
-            "same 'calibrated to run clean' failure the demo deals are criticized for. "
-            "See U8.6's finding on market-structural warns stacking on deal-specific "
-            "targets. **Sited in Los Angeles rather "
+            "same 'calibrated to run clean' failure the demo deals are criticized for — "
+            "market-structural warns stacking on a deal-specific target is a real finding "
+            "rather than noise. **Sited in Los Angeles rather "
             "than Cleveland deliberately** — a first attempt at Cleveland reproduced "
             "(across three re-runs, so structural rather than a network flake) the same "
             "comp-concentration critical objection `cleveland-triplex` already "
@@ -874,7 +857,7 @@ ENGINEERED_CASES: list[EvalCase] = [
             "prompt's rule 3 requires the model to infer unit_count=2 and record the "
             "basis rather than read it. Predicted to report on the mechanical rule: a "
             "lone WARN target costs 0.15.\n\n"
-            "**Measured `escalates` since U8.4b, and kept as a declared mismatch** for "
+            "**Measured `escalates`, and kept as a declared mismatch** for "
             "the same reason as `la-unpriced-triplex` a few blocks over: ZIP 90007's "
             "rent-index coverage begins 31 months after the training vintage — too late "
             "to anchor a before/after comparison — so `rent_anchor_index_stale` "
@@ -935,7 +918,8 @@ ENGINEERED_CASES: list[EvalCase] = [
         verdict_source=VerdictSource.PREDICTED,
         targets=(FlagKind.COORDINATES_FROM_CITY_CENTROID,),
         note=(
-            "**The one U8.3 case that keeps a real network dependency on every run.** "
+            "**The one case in this set that keeps a real network dependency on every "
+            "run.** "
             "`coordinates_from_city_centroid` fires when the Census geocoder runs and "
             "cleanly finds no match — a naturally-reachable path, unlike the outage "
             "cases above, so `Fault` (reserved for paths nothing else can reach) does "
@@ -961,7 +945,7 @@ def all_cases() -> list[EvalCase]:
 
 
 def scoring_cases(cases: Optional[list[EvalCase]] = None) -> list[EvalCase]:
-    """The cases whose verdicts U8.6 may legitimately score a threshold against.
+    """The cases whose verdicts a threshold may legitimately be scored against.
 
     `BASELINE` verdicts are excluded by construction — see the module docstring. This
     function exists so that exclusion is applied in one place and cannot be forgotten at
