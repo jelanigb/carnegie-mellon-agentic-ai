@@ -1,4 +1,4 @@
-"""Streamlit demo surface — decision #3 (demo surface), §6 cut-list item 4, built at U9.7.
+"""Streamlit demo surface.
 
     .venv/bin/streamlit run app.py        # from src/
 
@@ -10,10 +10,9 @@ prints, arranged for a screen instead of a terminal.
 Replay by default, and the surface says which mode it is in
 -------------------------------------------------------------
 Every demo deal, the retrieval ablation and all three declared faults run from committed
-recordings — instant, deterministic, no quota. That default is a direct answer to OQ-17,
-which measured this model returning different Tree-of-Thought scores for an identical
-prompt at `temperature=0`, at roughly 1 in 15-20 live attempts, on the `los-angeles` deal
-specifically. **A demo that replays cannot drift mid-presentation**, and the alternative
+recordings — instant, deterministic, no quota. The reason is measured: this model returns
+different forecast scores for an identical prompt at `temperature=0`, at roughly 1 in 15-20
+live attempts. **A demo that replays cannot drift mid-presentation**, and the alternative
 is discovering that in front of an audience.
 
 A pasted listing has no recording by construction, so it runs live. The surface states
@@ -27,8 +26,7 @@ each section can collapse. The app never re-lays-out the evidence from state, an
 place it reads typed state — the status strip — displays figures the report also prints
 rather than deriving new ones.
 
-That is deliberate and it is the design U9.4 declined on timeline, taken here for a
-different reason: two renderings of the same evidence drift the first time either is
+That is deliberate: two renderings of the same evidence drift the first time either is
 edited, and the report is the artifact under review. Progressive detail is bought
 mechanically, by splitting text, rather than by re-authoring it.
 
@@ -72,14 +70,14 @@ from tools.llm_cache import CacheMode
 
 CHECKPOINT_DB = config.DATA_DIR / "processed" / "checkpoints.sqlite"
 
-# Sections rendered open. Everything else collapses, which is the progressive-detail
-# rule from U9.4's template: the recommendation and the written summary first, the
+# Sections rendered open. Everything else collapses, which is the report template's own
+# progressive-detail rule: the recommendation and the written summary first, the
 # evidence a click away. `Summary` is not here because it is not an expander at all —
 # it renders inline above the strip, since it is the one section a reader is meant to
 # meet without deciding to.
 _OPEN_BY_DEFAULT = ("Disclosures",)
 
-# Plain language for each simulated failure. §8: reader-facing text carries no internal
+# Plain language for each simulated failure. Reader-facing text carries no internal
 # vocabulary, and a demo audience cannot resolve `STALE_RENT_INDEX`. The enum member is
 # what the code declares; this is what a person is offered.
 _FAULT_LABEL = {
@@ -508,9 +506,9 @@ def _status_strip(result: dict) -> None:
     """Recommendation, confidence, disclosures, comps — the two axes and their evidence.
 
     **Read from typed state, not parsed back out of the report.** This is the only place
-    the surface touches state rather than text, and it is also the first caller anywhere
-    in this project to read a typed field off a *resumed* run — which is how U9.7's
-    pre-flight found `graph.state_serde()`'s allowlist missing `RecommendationDetail`.
+    the surface touches state rather than text, and it is the only caller anywhere in this
+    project that reads a typed field off a *resumed* run — see `graph.state_serde` for why
+    that combination is the one that exposes a gap in the deserialization allowlist.
     """
     recommendation = result.get("recommendation")
     flags = result.get("flags", [])
@@ -607,11 +605,10 @@ def _review_panel(payload: dict) -> None:
     second invoke resumes this node rather than re-running the pipeline — but only here
     is the human actually in the loop.
 
-    **The note replays, which was measured before this was built** (U9.7's pre-flight).
-    It reaches no model prompt: the Summarizer renders it directly and
-    `_lede_prompt` never reads it. Had it reached a prompt, this box would have forced a
-    live call and the surface would have had to choose between honest oversight and a
-    deterministic demo.
+    **The note replays, which was measured rather than assumed.** It reaches no model
+    prompt: the Summarizer renders it directly and `_lede_prompt` never reads it. Had it
+    reached a prompt, this box would force a live call and the surface would have to choose
+    between honest oversight and a deterministic demo.
     """
     st.subheader("⏸ Paused — this deal was escalated to human review")
     st.caption(

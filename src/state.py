@@ -1,15 +1,12 @@
 """Shared state for the deal-evaluation graph.
 
-Design notes: docs/implementation_plan.md §5.
+Two decisions here are load-bearing and worth stating at the point of implementation:
 
-Two decisions here are load-bearing and worth stating at the point of implementation
-rather than only in the design document:
-
-1. **Pydantic, not dataclasses.** The Extractor's clarification loop (Checkpoint 2.1,
-   Loop 1) must observe *how* a parse was malformed and reformulate its next attempt.
-   A Pydantic ValidationError is structured, human-readable text that can be fed
-   directly back into a retry prompt. A dataclass raises TypeError or silently accepts
-   malformed input, giving the loop nothing to reason about.
+1. **Pydantic, not dataclasses.** The Extractor's clarification loop must observe *how* a
+   parse was malformed and reformulate its next attempt. A Pydantic `ValidationError` is
+   structured, human-readable text that can be fed directly back into a retry prompt. A
+   dataclass raises `TypeError` or silently accepts malformed input, giving the loop
+   nothing to reason about.
 
 2. **`flags` carries an `operator.add` reducer.** Without it, any node returning
    {"flags": [...]} would *overwrite* the accumulated list, and Transparent Degradation
@@ -46,14 +43,15 @@ class FlagKind(StrEnum):
     A `StrEnum` rather than a class of string constants, for three reasons specific to
     this project:
 
-    1. **It makes §8's review rule structural.** The engineering standards require that
-       flag kinds be "drawn from a defined set, not ad-hoc strings." As bare constants
-       that was a rule a reviewer had to remember; typing `Flag.kind` as this enum makes
-       Pydantic reject an unknown kind at construction instead. This is the same
-       reasoning that justified an `operator.add` reducer on `DealState.flags` — an
-       invariant the design depends on should be enforced by the type, not by vigilance.
-    2. **It makes the set enumerable, which U8 depends on.** The eval harness can
-       iterate every member and assert that some test case triggers it. That upgrades
+    1. **It makes a review rule structural.** Flag kinds must be drawn from a defined set
+       rather than written as ad-hoc strings. As bare constants that is a rule a reviewer
+       has to remember; typing `Flag.kind` as this enum makes Pydantic reject an unknown
+       kind at construction instead. Same reasoning as the `operator.add` reducer on
+       `DealState.flags` — an invariant the design depends on should be enforced by the
+       type, not by vigilance.
+    2. **It makes the set enumerable, which the evaluation harness depends on.** The
+       harness can iterate every member and assert that some test case triggers it. That
+       upgrades
        the claim from "flags fire" to "every degradation path this system defines is
        exercised" — which is what the evaluation section of the report needs.
     3. **It costs nothing at the boundary.** `StrEnum` members *are* `str`, so JSON
@@ -79,7 +77,7 @@ class FlagKind(StrEnum):
     RELAXED_SEARCH_RADIUS = "relaxed_search_radius"
     RELAXED_MATCH_CRITERIA = "relaxed_match_criteria"
     SPARSE_COMPS = "sparse_comps"
-    RETRIEVAL_DISABLED = "retrieval_disabled"  # U4 ablation path
+    RETRIEVAL_DISABLED = "retrieval_disabled"  # the ungrounded-run ablation path
     # A comp set can satisfy MIN_QUALIFYING_COMPS while representing far fewer
     # *places* than listings — see Comp.location_precision. Measured Aug 22, 2026:
     # the Cleveland demo returns 8 comps from a single coordinate. Distinct from
@@ -95,14 +93,13 @@ class FlagKind(StrEnum):
 
     # Geography resolution
     #
-    # COUNTY_FROM_PRINCIPAL_COUNTY existed here through Aug 15, 2026, for the old
-    # county_crosswalk.py's "principal county" approximation for multi-county cities.
-    # Retired along with that table: the crosswalk's replacement resolves the exact
-    # county for a subject's actual coordinates rather than approximating one from its
-    # city name, so there is no longer an approximation on this path to disclose. Not
-    # kept as a permanently-unraisable member — U8's coverage check compares raised
-    # kinds against the full enum, and a kind nothing can ever raise would corrupt that
-    # comparison rather than merely go unexercised.
+    # There is no "principal county" kind here, and its absence is deliberate. A city-name
+    # lookup table has to approximate a county for a multi-county city and would need to
+    # disclose that; `tools/county_crosswalk.py` resolves the exact county for the
+    # subject's actual coordinates, so there is no approximation on this path. The kind is
+    # not kept as a permanently-unraisable member either: the coverage check compares
+    # raised kinds against the full enum, and a kind nothing can ever raise corrupts that
+    # comparison rather than merely going unexercised.
     COORDINATES_FROM_CITY_CENTROID = "coordinates_from_city_centroid"
     # Same centroid fallback as above, but reached because the Census *request* failed
     # rather than because the address had nothing to resolve to. A distinct kind rather
@@ -121,15 +118,13 @@ class FlagKind(StrEnum):
 
     # Valuation
     #
-    # **These three were named for FMR until Aug 30, 2026 (U11.3), and the rename is the
-    # point rather than tidiness.** The anchor stopped being a Fair Market Rent: it is
-    # now Zillow's market rent index at the subject's own ZIP for the *level*, and the
-    # HUD schedule only for the *bedroom step*. Members called `FMR_*` would have gone on
-    # naming a source that no longer supplies the number, which is the class of quiet
-    # staleness §2 exists to prevent — and enum names are what a future reader trusts
-    # when the message and the member disagree. `FMR_BEDROOM_CAP_EXCEEDED` keeps its
-    # name deliberately: the four-bedroom ceiling really is a property of the federal
-    # schedule, which the hybrid anchor still uses.
+    # **These are named for the market index rather than for Fair Market Rent, and the
+    # naming is load-bearing.** The anchor takes its *level* from Zillow's market rent
+    # index at the subject's own ZIP and uses the HUD schedule only for the *bedroom
+    # step*. Members called `FMR_*` would name a source that does not supply the number,
+    # and an enum name is what a reader trusts when the message and the member disagree.
+    # `FMR_BEDROOM_CAP_EXCEEDED` keeps its name deliberately: the four-bedroom ceiling
+    # really is a property of the federal schedule, which the anchor still uses.
     #
     # Disclosed on every estimate that is produced: the figure is a modelled ratio times
     # a local market reference, not an observed rent for this property. INFO rather than
@@ -143,82 +138,70 @@ class FlagKind(StrEnum):
     # reads from. Distinct from RENT_ANCHOR_UNAVAILABLE, which means no anchor at all:
     # this one means the estimate exists but cannot see below the county line.
     RENT_ANCHOR_COUNTY_LEVEL = "rent_anchor_county_level"
-    # LLM_RENT_FALLBACK_USED lived here until Aug 28, 2026 (U8.1b). Removed on the same
-    # rule that retired COUNTY_FROM_PRINCIPAL_COUNTY above, and found by the mechanism
-    # that rule was written for: U8.1's coverage census reported it as the one kind no
-    # case can raise, because §6's cut list item 3 was taken and the fallback estimator
-    # was never built. A member nothing can raise corrupts the census in the pessimistic
-    # direction — it reads as a degradation path the harness failed to exercise, when it
-    # is a path the build does not have.
+    # There is no `LLM_RENT_FALLBACK_USED` kind, for the same reason there is no principal-
+    # county kind above: the LLM fallback estimator was descoped and never built, so no
+    # case can raise it, and a member nothing can raise corrupts the coverage census in the
+    # pessimistic direction — it reads as a degradation path the harness failed to
+    # exercise, when it is a path the build does not have.
     #
     # `RentEstimateSource.LLM_FALLBACK` deliberately stays: that seam is typed-and-unused
-    # on purpose (see agents/valuation_rent.py), and it is a different enum, read for
-    # provenance rather than compared against a coverage claim. Re-add this member with
-    # the estimator if item 3 is ever un-taken.
+    # on purpose (see `agents/valuation_rent.py`), and it is a different enum, read for
+    # provenance rather than compared against a coverage claim. Add this member back
+    # alongside the estimator if the fallback is ever built.
     # The rent estimate could not be produced at all, for a reason that is not the
     # county lookup. One kind rather than three (no trained model / features the
     # Extractor never resolved / a predicted ratio outside the plausible band) because
     # the reader's response to all three is identical — there is no rent figure and the
-    # message says why. RENT_ANCHOR_UNAVAILABLE stays separate because §2 specifies
-    # it by name and because it points at a fixable data gap rather than at this run.
+    # message says why. RENT_ANCHOR_UNAVAILABLE stays separate because it points at a
+    # fixable data gap rather than at something about this run.
     RENT_ESTIMATE_UNAVAILABLE = "rent_estimate_unavailable"
     # The modelled rent and the comp set disagree. Raised by the Valuation agent about
     # its own two inputs, which is what makes it distinct from CRITIC_INCONSISTENCY:
-    # that one is the Critic comparing *different agents'* conclusions (U7). This is an
+    # that one is the Critic comparing *different agents'* conclusions. This is an
     # agent observing that the evidence it was handed does not support the number it
     # just produced, which is the Observe step of its own loop.
     RENT_DIVERGES_FROM_COMPS = "rent_diverges_from_comps"
     # The rent model's own historical error is measurably worse in the subject's market
-    # than the batch it is normally scored against (U8.4, OQ-3). Distinct from every
+    # than the batch it is normally scored against. Distinct from every
     # other rent flag: RENT_ANCHORED_TO_MARKET_INDEX discloses the mechanism on every estimate,
     # RENT_DIVERGES_FROM_COMPS is two of this run's own inputs disagreeing, and
     # RENT_ANCHOR_COUNTY_LEVEL is about spatial resolution. This one says the estimate is
     # the system's ordinary output, produced the ordinary way, and this particular
     # market's holdout residual has historically run well above the figure quoted
     # elsewhere in the report as "the" error band. New York is the standing case: it is
-    # in the training set (so this is not a transfer question — see OQ-12), just
-    # measurably harder to price.
+    # in the training set, so this is not a question of the model never having seen the
+    # market — it is measurably harder to price.
     RENT_ESTIMATE_MARKET_ERROR_ELEVATED = "rent_estimate_market_error_elevated"
-    # The estimate (and the comp-implied figures compared against it — both carry the
-    # same construction, so both carry the same drift) was multiplied by the subject
-    # ZIP's measured market-vs-schedule drift factor (U8.4b, from U8.0's finding that
     # The market-rent index this estimate is anchored to has not been observed recently
     # enough for the figure to be called current. Zillow publishes ZORI on a lag and a
+    # enough for the figure to be called current. The index is published on a lag and a
     # thin ZIP's series can end earlier still, so this is measured per subject against
     # `config.RENT_ANCHOR_MAX_STALENESS_MONTHS` rather than per file.
     #
-    # **Replaces `RENT_DRIFT_CORRECTION_UNAVAILABLE`, and the kind it replaced is gone
-    # (U11.3).** That flag disclosed that a measured FMR-versus-market bias could not be
-    # removed from this estimate. The anchor is now a market index read at the same month
-    # on both ends, so the bias is divided out where it arises and there is nothing left
-    # for a correction to fail at. What survives is the narrower and still-true statement:
-    # an estimate is only as current as the market read behind it.
+    # There is deliberately no kind for "the drift correction could not be applied": the
+    # anchor is a market index read at the same month on both ends, so any
+    # schedule-versus-market bias divides out where it arises and no correction exists to
+    # fail. What remains is the narrower statement this kind makes — an estimate is only as
+    # current as the market read behind it.
     RENT_ANCHOR_INDEX_STALE = "rent_anchor_index_stale"
 
     # Forecast
     APPRECIATION_SOURCE = "appreciation_source"
     ANOMALOUS_PERIOD_INCLUDED = "anomalous_period_included"
     # No forecast at all on at least one side. Both halves fail independently and for
-    # unrelated reasons — a Staten Island subject has a full FMR history and no Redfin
-    # metro; a subject with no resolvable county has the reverse — so the message names
+    # unrelated reasons — a Staten Island subject has a full rent history and no metro
+    # price series; a subject with no resolvable county has the reverse — so the message names
     # which side is missing rather than reporting a blanket absence.
     FORECAST_UNAVAILABLE = "forecast_unavailable"
     # Which series the rent bands were measured on, and at what geography. The rent-side
     # counterpart to APPRECIATION_SOURCE, and INFO like it: this describes how the system
     # works rather than a degradation of the run.
     #
-    # **This member was `RENT_GROWTH_COHORT_SHIFT_SCREENED` until decision #21 (forecast rent source)**, and the
-    # change of subject is the point rather than the rename. That flag disclosed which
-    # fiscal years HUD's cohort screen had held out of the rent bands — a fact with no
-    # referent once the bands stopped coming from HUD. The alternative was to delete it,
-    # under the rule this enum already wrote down twice (see COORDINATES_FROM_CITY_CENTROID
-    # and the runner's `UNREACHABLE_BY_ANY_CASE`): a kind nothing can raise corrupts U8's
-    # coverage census and should leave rather than be excused. It is repurposed instead
-    # because #21 created a disclosure the system genuinely owes and did not have — the
+    # **This is a disclosure the system genuinely owes**, and it is easy to overlook: the
     # rent estimate is anchored at the subject's ZIP while its growth is measured at the
-    # subject's county, and on 38% of covered counties the series is short enough that the
-    # published schedule serves instead, under a different band construction. A reader
-    # cannot discount any of that unless the report says it.
+    # subject's county, and on 38% of covered counties the index series is short enough
+    # that the published federal schedule serves instead, under a different band
+    # construction. A reader cannot discount any of that unless the report says it.
     RENT_GROWTH_SOURCE = "rent_growth_source"
     # The top two branches scored within `config.TOT_TIE_EPSILON` of each other while
     # implying materially different outcomes, so the winner was near-arbitrary. Raised
@@ -259,7 +242,7 @@ class RentEstimateSource(StrEnum):
 
 
 class FlagScope(StrEnum):
-    """Whether a disclosure is about *this deal* or about *our data in its market* (U8.6d).
+    """Whether a disclosure is about *this deal* or about *our data in its market*.
 
     **This exists because the confidence score could not distinguish "this deal has
     problems" from "our data is thin where this property is," and a reader needs both.**
@@ -269,9 +252,8 @@ class FlagScope(StrEnum):
     reports asked for very different things from a reviewer and said the same thing.
 
     **What this is not: a second score.** Splitting confidence into `deal_confidence` and
-    `market_coverage` with independent floors was proposed, measured, and rejected by the
-    architect — the reasoning is in `tasks/task_list_u8.md` U8.6d and is worth restating
-    because it constrains what this enum may be used for. Market coverage is not a parallel
+    `market_coverage` with independent floors was proposed, measured, and rejected, and the
+    reasoning constrains what this enum may be used for. Market coverage is not a parallel
     kind of doubt that can be set aside; **it propagates into the deal's own numbers.**
     Elevated market error doubles this estimate's error bar. A county-tier anchor means the
     figure describes a county whose rents span roughly 2x. A stale index means the market
@@ -318,7 +300,7 @@ def scope_of(kind: FlagKind) -> FlagScope:
 
 
 class ReviewDesk(StrEnum):
-    """Which desk a human-review escalation is waiting on (U9.2).
+    """Which desk a human-review escalation is waiting on.
 
     Not the same split as `FlagScope` above — that is about a disclosure's *subject*
     (this property vs. this market); this is about who can act on it. A geocoder outage
@@ -355,7 +337,8 @@ class ReviewDesk(StrEnum):
 # bathrooms or floor area" (arguably REAL_ESTATE_AGENT, since UNRESOLVED_FIELD covers that
 # cause under its own kind). Classified at the kind level anyway, matching `scope_of`'s
 # own precedent, because a per-message classification would need to parse the flag text
-# rather than read its type — exactly the fragility §3's flag vocabulary exists to avoid.
+# rather than read its type — exactly the fragility a closed flag vocabulary exists to
+# avoid.
 _INFRASTRUCTURE_KINDS: frozenset[FlagKind] = frozenset({
     # The extraction model could not be reached at all.
     FlagKind.EXTRACTION_UNAVAILABLE,
@@ -381,10 +364,10 @@ def desk_of(kind: FlagKind) -> ReviewDesk:
 
 
 class ConfidenceBreakdown(BaseModel):
-    """What the confidence score was made of (U8.6d).
+    """What the confidence score was made of.
 
-    The score has always been a sum, and a reader could always see both the flags and the
-    result — but never the arithmetic connecting them. This carries it, so a report can say
+    The score is a sum, and a reader can see both the flags and the result — but not the
+    arithmetic connecting them. This carries it, so a report can say
     *"0.45 deducted: 0.45 from data coverage in this market, 0.00 from this property"*
     rather than only *"confidence 0.55"*.
 
@@ -406,6 +389,14 @@ class ConfidenceBreakdown(BaseModel):
         return self.deducted_market + self.deducted_deal
 
 
+# **This enum's docstring is frozen. Do not edit it.**
+#
+# `agents/critic.cross_check` validates the model's second opinion against a Pydantic
+# schema whose `$defs` include this enum, Pydantic copies a class docstring into the JSON
+# schema as `description`, and `tools/llm_client.call_with_schema` puts that schema into
+# the system prompt. The response cache is keyed on the prompt, so any edit here
+# invalidates every committed recording of that call. The same applies to
+# `agents/extractor.ListingExtraction` and `FieldAssumption`.
 class Recommendation(StrEnum):
     """Axis 2 — whether the property is worth buying. **New at U9.4.**
 
@@ -439,7 +430,7 @@ class Recommendation(StrEnum):
 
 # Reader-facing text for each verdict. Here rather than in the Summarizer because the
 # lede prompt quotes the same words the report prints, and two spellings of one verdict
-# in one document is the defect §8's single-home rule exists to prevent.
+# in one document is exactly the drift that a single home for a value prevents.
 RECOMMENDATION_LABEL = {
     Recommendation.PROCEED: "Proceed",
     Recommendation.PROCEED_WITH_CAUTION: "Proceed with caution",
@@ -457,8 +448,8 @@ class RecommendationDetail(BaseModel):
     that can disagree — the mistake `_consistency_objections`' first check exists to
     avoid, where two agents derived one fact independently.
 
-    `reasons` is reader-facing prose (§8): it is printed under the verdict line verbatim,
-    so it carries no flag names, thresholds or config constants.
+    `reasons` is reader-facing prose: it is printed under the verdict line verbatim, so it
+    carries no flag names, thresholds or config constants.
     """
 
     verdict: Recommendation
@@ -478,7 +469,7 @@ class RecommendationDetail(BaseModel):
     # no rent estimate existed to corroborate, which is not the same as a failed check.
     rent_corroborated: Optional[bool] = None
 
-    # The cross-check (U9.4, OQ-22). The model reads the same state and reaches its own
+    # The independent cross-check. The model reads the same state and reaches its own
     # verdict; it can never move `verdict`, only annotate it. `None` when the call was
     # not made or did not return — a missing second opinion is not a disagreement, and
     # rendering it as one would manufacture a finding out of an outage.
@@ -515,7 +506,7 @@ class Flag(BaseModel):
     detail: str
     severity: Severity
     # Which pass raised this (`DealState.planner_invocations` at the moment it was
-    # constructed) — U8.5/OQ-15. `DealState.flags` is append-only across rework laps so
+    # constructed). `DealState.flags` is append-only across rework laps so
     # the raw run history stays inspectable, which means nothing else on a Flag says
     # whether it still describes the deal or only described it on an earlier lap. The
     # default of 0 is a sentinel for flags built outside the pass mechanism (a
@@ -536,7 +527,7 @@ class DealTerms(BaseModel):
       a misparse is a silent error unless the observed original is retained to check
       against, which is why `full_address` is kept rather than reconstructed.
     - **Derived** — produced by a lookup rather than read from the listing at all.
-      `latitude`/`longitude` (decision #10 — geocoding source, `tools/geocoding.py`) carry known
+      `latitude`/`longitude` (`tools/geocoding.py`) carry known
       approximation error and raise a flag when it's material: a parcel-accurate geocode
       raises nothing, but the city-centroid fallback is a coarser approximation and is
       disclosed as one. `county_fips` (`tools/county_crosswalk.py`, rewritten Aug 15,
@@ -573,7 +564,7 @@ class DealTerms(BaseModel):
 
     # --- Geography: derived by lookup, never read from the listing ---
     # county_fips comes from tools/county_crosswalk.py keyed on (city, state); the
-    # source data carries no county or ZIP column at all (§2, "Two data gaps").
+    # source data carries no county or ZIP column at all.
     county_fips: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -583,12 +574,12 @@ class DealTerms(BaseModel):
 
         Lives on the type rather than in an agent because two agents now ask it — the
         Planner, to decide whether extraction is needed at all, and the Extractor, to
-        decide whether it needs the *model* or only the geocoder (U8.1b). Putting it in
+        decide whether it needs the *model* or only the geocoder. Putting it in
         one of them would have made the other import an agent, inverting the dependency
         the graph's topology sets up.
 
         The field list stays in `config` precisely so "what counts as complete" is
-        tunable without touching an agent (§8). Names are looked up by `getattr`, so a
+        tunable without touching an agent. Names are looked up by `getattr`, so a
         typo in the config tuple surfaces here at the first run rather than as a
         silently-always-incomplete deal.
 
@@ -614,11 +605,11 @@ class DealTerms(BaseModel):
         no county** is a caller who knows where the property is but not which HUD entity
         prices it — a lookup key rather than a location.
 
-        Both were silent until U8.1b: `config.REQUIRED_DEAL_FIELDS` covers neither, so a
-        complete-looking deal skipped extraction and reached the Valuation agent with no
-        FMR anchor — disclosing `RENT_ANCHOR_UNAVAILABLE` as though HUD published no
-        schedule for the county, rather than as though nobody had looked one up. Those
-        read the same in a report and mean entirely different things.
+        Both gaps are silent without this check: `config.REQUIRED_DEAL_FIELDS` covers
+        neither, so a complete-looking deal skips extraction and reaches the Valuation
+        agent with no anchor — disclosing `RENT_ANCHOR_UNAVAILABLE` as though no schedule
+        existed for the county, rather than as though nobody had looked one up. Those read
+        the same in a report and mean entirely different things.
 
         Here rather than in either agent for the same reason as `is_complete()` above:
         the Planner asks it to route, the Extractor asks it to decide which geography
@@ -635,9 +626,9 @@ class DealTerms(BaseModel):
 class Comp(BaseModel):
     """A retrieved comparable listing.
 
-    Checkpoint 2.1 justifies retrieval on the grounds that it "constrains the comp set
-    to records that demonstrably exist and allows the report to cite which ones were
-    used." `listing_source` is what makes that citation complete — an id alone says a
+    Retrieval earns its place by constraining the comp set to records that demonstrably
+    exist and letting the report cite which ones were used. `listing_source` is what makes
+    that citation complete — an id alone says a
     record exists somewhere, while an id plus its originating site says where a reader
     could go to check it.
 
@@ -671,9 +662,9 @@ class Comp(BaseModel):
     # things downstream need the coordinate itself, and neither can be served by a
     # distance. Counting how many distinct places a comp set represents requires the
     # points, not their distances from a subject (two buildings equidistant in opposite
-    # directions are two places). And §2's invariant that every rent figure passes
-    # through FMR normalization means any comp-derived rent must be normalized by *that
-    # comp's* county FMR, which `county_crosswalk` resolves from coordinates.
+    # directions are two places). And the invariant that every rent figure passes through
+    # anchor normalization means any comp-derived rent must be normalized against *that
+    # comp's own* area, which `county_crosswalk` resolves from coordinates.
     #
     # `vector_store.query_comps` already read both from Chroma metadata to compute the
     # haversine distance and then discarded them, so this costs no re-index.
@@ -681,11 +672,10 @@ class Comp(BaseModel):
     longitude: Optional[float] = None
 
     # Populated from the corpus `time` column (Unix timestamp, Dec 2018 - Dec 2019).
-    # Per-comp vintage matters for valuation: §2's FMR anchoring normalizes by the FMR
-    # for *the year a row was recorded*, and this corpus straddles a federal fiscal-year
-    # boundary, so a comp set spanning both needs per-row dates rather than a single
-    # assumed vintage. Closed the U5 TODO on Aug 22, 2026 in the same re-index that
-    # added `location_precision`.
+    # Per-comp vintage matters for valuation: the anchoring normalizes each row by the
+    # rent level for *the month it was recorded*, and this corpus straddles a federal
+    # fiscal-year boundary, so a comp set spanning both needs per-row dates rather than a
+    # single assumed vintage.
     listed_date: Optional[datetime] = None
 
     # How well this comp's coordinate identifies an actual place.
@@ -713,10 +703,10 @@ class ValuationDetail(BaseModel):
     Separate from the five top-level valuation fields on `DealState` rather than merged
     into them, and the split is by **consumer**, not by tidiness. `rent_estimate`,
     `rent_anchor_used` and their siblings are the *result*: what a downstream agent reads
-    and computes with — U6's forecast projects from `rent_estimate`. Everything here is
+    and computes with — the forecast projects from `rent_estimate`. Everything here is
     *provenance*: what the report has to disclose so a reader can weigh that result, and
-    nothing downstream calculates from it. Keeping the two apart means U6 depends on a
-    stable five-field contract while this object stays free to grow as the disclosure
+    nothing downstream calculates from it. Keeping the two apart means the forecast depends
+    on a stable five-field contract while this object stays free to grow as the disclosure
     surface does.
 
     Every field is Optional because every one of them describes a step that can fail
@@ -729,15 +719,15 @@ class ValuationDetail(BaseModel):
 
     # --- Rent-model provenance -------------------------------------------------
     # Carried so the report can print an error band beside the estimate. A point
-    # estimate with no spread is the shape §1 objects to: it reads as more precise than
-    # the thing that produced it. Read from the persisted model bundle rather than
+    # estimate with no spread reads as more precise than the thing that produced it.
+    # Read from the persisted model bundle rather than
     # recomputed, so the figure quoted is the one the shipped model actually scored.
     model_mae_dollars: Optional[float] = None
     model_mae_ratio: Optional[float] = None
     model_trained_at: Optional[datetime] = None
     model_training_rows: Optional[int] = None
 
-    # Per-metro holdout error for the subject's own market (U8.4, OQ-3), from
+    # Per-metro holdout error for the subject's own market, from
     # `TrainingReport.mae_dollars_by_metro`. Separate from `model_mae_dollars`
     # above rather than replacing it: the report states both, always — "±$518 overall,
     # ±$1,065 in New York" — so a reader in a good market can see what good looks like.
@@ -747,7 +737,7 @@ class ValuationDetail(BaseModel):
     subject_metro_mae_dollars: Optional[float] = None
     subject_metro_mae_n: Optional[int] = None
 
-    # --- Drift correction provenance (U8.4b) -------------------------------------
+    # --- Anchor provenance ------------------------------------------------------
     # How old the market index's newest observation was when this estimate was built,
     # and which month it came from. Carried whether or not the staleness flag fired, so
     # the report can state the anchor's vintage rather than only complain about it.
@@ -755,11 +745,10 @@ class ValuationDetail(BaseModel):
     anchor_index_staleness_months: Optional[int] = None
 
     # Which HUD fiscal-year schedule supplied the *bedroom step* — how much a
-    # three-bedroom is worth relative to a two-bedroom in this county. Since U11.3 the
-    # schedule no longer sets the rent level (the market index does), and its own level
-    # divides out of the shape, so this dates the shape and nothing else. Still carried:
-    # §2's whole design is that the number is dated, and a shape read from a stale
-    # schedule is a disclosure even when the level beside it is current.
+    # three-bedroom is worth relative to a two-bedroom in this county. The schedule does
+    # not set the rent level — the market index does — and its own level divides out of
+    # the shape, so this dates the shape and nothing else. Still carried, because a shape
+    # read from a stale schedule is a disclosure even when the level beside it is current.
     fmr_shape_year: Optional[int] = None
 
     # Which spatial resolution the anchor's *level* came from: "zip" where the market
@@ -778,7 +767,7 @@ class ValuationDetail(BaseModel):
     # comparison fair: it re-expresses "what this comp rented for, where it is, in 2019"
     # as "what a unit like it would rent for, here, today," which is the same question
     # the model answered. A raw comp mean would compare a 2019 dollar to a 2026 one —
-    # the exact vintage error §2 exists to prevent.
+    # the exact vintage error the anchoring exists to prevent.
     comp_implied_rent_median: Optional[float] = None
     comp_implied_rent_p25: Optional[float] = None
     comp_implied_rent_p75: Optional[float] = None
@@ -803,7 +792,7 @@ class ValuationDetail(BaseModel):
     # property's condition, so it is a reference the asking price can be read against
     # and the report labels it as one.
     #
-    # **Two tiers since U8.8, and `benchmark_tier` says which one produced the headline
+    # **Two tiers, and `benchmark_tier` says which one produced the headline
     # figure.** The ZIP tier comes from county-assessor sale records
     # (`tools/sale_benchmarks.py`); the metro tier is Redfin's pre-aggregated extract,
     # one median per metro-period, which describes a 2-unit duplex and a 4-unit building
@@ -818,9 +807,9 @@ class ValuationDetail(BaseModel):
     benchmark_tier: Optional[str] = None
     # The ZIP tier's own figures, kept beside the headline rather than replacing it:
     # when the ZIP tier wins, the metro median stays in `benchmark_metro_median_sale_price`
-    # so the report can show the local figure against the wide one. That contrast is
-    # what makes #11's demo calibration visible — those asking prices were set *from*
-    # the metro median, so every one of them reads cheap against its own ZIP.
+    # so the report can show the local figure against the wide one. That contrast is what
+    # makes the demo set's own calibration visible — the older asking prices were set
+    # *from* the metro median, so each of them reads cheap against its own ZIP.
     benchmark_zip: Optional[str] = None
     benchmark_zip_n_sales: Optional[int] = None
     benchmark_zip_window_start: Optional[str] = None
@@ -831,22 +820,22 @@ class ValuationDetail(BaseModel):
     # with the figure rather than being averaged away.
     benchmark_zip_definition: Optional[str] = None
     benchmark_metro_median_sale_price: Optional[float] = None
-    # Why there is no benchmark at all, in words, for the metros Redfin's extract never
-    # reached — New York is the standing case (§2). Absence stated rather than omitted.
+    # Why there is no benchmark at all, in words, for the metros the sale-price extract
+    # never reached. Absence stated rather than omitted.
     benchmark_unavailable_reason: Optional[str] = None
     # Why there is no *local* benchmark, when a metro one exists. Distinct from the
     # field above: "we have a wide figure and not a narrow one" is a different fact from
     # "we have nothing", and collapsing them would make a degraded report look empty.
     benchmark_local_unavailable_reason: Optional[str] = None
 
-    # --- Gross rent multiplier (U9.8) -------------------------------------------
+    # --- Gross rent multiplier ---------------------------------------------------
     # Asking price divided by annual gross rent. **The computable subset of investor
     # criteria, and the boundary is where this project's data actually stops.** Cap rate
     # is the figure an investor would rather have and it needs NOI, which needs operating
     # expenses — taxes, insurance, vacancy, maintenance, management — none of which this
     # system models. Assuming an expense ratio would put an unanchored number at the
-    # centre of the investment recommendation, which is what §2's invariants forbid. GRM
-    # needs nothing this system does not already have.
+    # centre of the investment recommendation, which this project's data discipline
+    # forbids. GRM needs nothing this system does not already have.
     #
     # **Built on the modelled rent, not the listing's stated rents**, so it is available
     # on a listing that states none, and so the multiple describes the rent this system
@@ -874,24 +863,22 @@ class ValuationDetail(BaseModel):
 class Scenario(BaseModel):
     """One reported forecast path: a rent band paired with a price band, projected out.
 
-    **The pairing is the reasoning, not a formatting choice** — and the reason it gives
-    for existing changed at decision #21 (forecast rent source). This docstring used to argue that the diagonal
-    pairings (optimistic with optimistic, and so on) describe a market behaving in a way
-    it usually has not, because rent and price growth are *negatively* correlated across
-    the inference trio at pooled r = -0.309. **That measurement did not survive
-    re-derivation.** `scripts/growth_correlation.py` gives -0.317 against the HUD
-    schedule, -0.197 once HUD's two national step-up years are removed, and **+0.222
-    against market rent** — the series this system has anchored to since #19 — with r²
-    never above 0.10 in any pass. The sign is a property of the rent series, not of the
-    market.
+    **The pairing is the reasoning, not a formatting choice**, and what the pairing level
+    may claim is narrower than it looks. It is tempting to argue that the diagonal
+    pairings (optimistic with optimistic, and so on) describe a market behaving in a way it
+    usually has not, on the grounds that rent and price growth move opposite each other.
+    **That does not survive measurement.** `scripts/growth_correlation.py` gives r = -0.317
+    against the federal rent schedule, -0.197 once its two nationwide administrative
+    increases are removed, and **+0.222 against market rent** — the series this system
+    anchors to — with r² never above 0.10 in any pass. The sign is a property of the rent
+    series, not of the market.
 
     So the level has **no directional prior at all**: it does not prefer the diagonal and
     does not prefer its opposite, and the nine candidates are scored on this deal's own
-    evidence — the flags raised upstream, how wide each band is, and how many
-    observations sit behind it. That is honest and it is thin. **OQ-22 closed Sept 2, 2026
-    with the level shipping as it is** — what changed is that the report now discloses the
-    thinness rather than carrying it silently; `docs/design/evaluator.md` holds the
-    redesign as future work.
+    evidence — the flags raised upstream, how wide each band is, and how many observations
+    sit behind it. That is honest and it is thin, and the report discloses the thinness
+    rather than carrying it silently. `docs/design/evaluator.md` holds the redesign as
+    future work.
 
     Every rate here is an observed figure from `tools/rent_growth.py` or
     `tools/redfin_data.py` - never a model's invention. The search selects among
@@ -902,12 +889,12 @@ class Scenario(BaseModel):
     # hold". A deterministic lookup on the two bands below
     # (`scenario_forecast._row_name`), not chosen by the evaluator and **not a rank**.
     #
-    # **It was a rank until U9.7T**, holding "optimistic" | "base" | "pessimistic"
-    # assigned from the survivors' ordering, and that is why this field and the two below
-    # could contradict each other in the same row: the label named the combined outcome
-    # while the bands named what each series drew from, so a row called "Optimistic"
-    # routinely carried the base rent band. Same three words, two meanings, one row. The
-    # name now comes *from* the bands, so the two can no longer disagree.
+    # **Not a rank.** Naming a row "optimistic" | "base" | "pessimistic" from the
+    # survivors' ordering makes this field and the two below contradict each other in the
+    # same row: the label would name the combined outcome while the bands name what each
+    # series drew from, so a row called "Optimistic" routinely carries the base rent band.
+    # Same three words, two meanings, one row. The name comes *from* the bands, so the two
+    # cannot disagree.
     name: str
 
     # Which band each side contributes. Still carried separately from `name` — the name
@@ -922,8 +909,8 @@ class Scenario(BaseModel):
 
     # Projected levels at `ForecastDetail.horizon_years`. Rent projects from
     # `DealState.rent_estimate`; price projects from the **asking price**, which is an
-    # observed fact about this property rather than an estimate - decision #15 (no value estimate) leaves
-    # `value_estimate` null, and §7 assigned this choice to U6.
+    # observed fact about this property rather than an estimate — `value_estimate` is
+    # permanently null, for the reasons `agents/valuation_rent.py` gives.
     projected_monthly_rent: Optional[float] = None
     projected_price: Optional[float] = None
 
@@ -933,26 +920,27 @@ class Scenario(BaseModel):
     evaluator_score: Optional[float] = None
 
     # **Why this row is in the report at all** — `outright`, `tie:<group size>`, or
-    # `reserved`, from `tot.SearchResult.selection_basis_by_id`. Added at U9.7T, and it
-    # is the survivor's half of a disclosure that only ever had the other half: the
-    # branch ledger said why each *discarded* hypothesis lost, and nothing said whether
-    # a reported one had won on score, been kept by the conservatism tie-break, or been
-    # reserved as the neutral case. On this project's own recordings the tie-break
-    # decides 51% of depth-2 levels, so "it scored highest" was the wrong inference to
-    # leave a reader to draw about half the rows they were reading.
+    # `reserved`, from `tot.SearchResult.selection_basis_by_id`. It is the survivor's half
+    # of a disclosure whose other half is the branch ledger: the ledger says why each
+    # *discarded* hypothesis lost, and without this nothing says whether a reported one won
+    # on score, was kept by the conservatism tie-break, or was reserved as the neutral
+    # case. On this project's own recordings the tie-break decides 51% of depth-2 levels,
+    # so "it scored highest" is the wrong inference to leave a reader to draw about half
+    # the rows they are reading.
     #
-    # A short code rather than a sentence, because the sentence is reader-facing text
-    # and belongs with the rest of it in the Summarizer (§8) — and because the count in
-    # `tie:<n>` has to be arithmetic on the way out, not prose to re-parse.
+    # A short code rather than a sentence, because the sentence is reader-facing text and
+    # belongs with the rest of it in the Summarizer — and because the count in `tie:<n>`
+    # has to be arithmetic on the way out, not prose to re-parse.
     selection_basis: Optional[str] = None
 
 
 class BranchLedgerEntry(BaseModel):
-    """One hypothesis the search considered, surviving or discarded (decision #14 — ToT branch persistence).
+    """One hypothesis the search considered, surviving or discarded.
 
     **Pruning that leaves no trace is the failure mode this project has already had
-    once.** In U2 a single critical flag cost 0.40, landed confidence at exactly 0.60,
-    and `0.60 < 0.60` is false, so a zero-comparable deal reported as ordinary. An
+    once.** In an early build a single critical flag cost 0.40, landed confidence at
+    exactly 0.60, and `0.60 < 0.60` is false, so a zero-comparable deal reported as
+    ordinary. An
     evaluator that systematically undervalues a correct-but-unusual branch produces
     confident, well-formed, wrong forecasts and looks identical to one working properly.
     So every branch writes a row here whether it survived or not, and the Summarizer can
@@ -960,15 +948,15 @@ class BranchLedgerEntry(BaseModel):
 
     This is the compact ledger, which is what disclosure needs. The full tree - every
     generated hypothesis with its evidence - goes to `EVAL_RESULTS_DIR` during eval runs
-    only, behind `config.TOT_PERSIST_FULL_TREE`, because only that lets U8 reconstruct
-    why the evaluator scored what it did.
+    only, behind `config.TOT_PERSIST_FULL_TREE`, because only that lets an evaluation run
+    reconstruct why the evaluator scored what it did.
     """
 
     id: str
     parent: Optional[str] = None
     depth: int = 0
-    # Which node produced it. Present so the Critic's own search (U7, decision #12 (ToT scope)) can
-    # append to the same ledger rather than needing a second one.
+    # Which node produced it. Present so a second searching agent could append to the same
+    # ledger rather than needing one of its own.
     agent: str = ""
     summary: str = ""
     score: Optional[float] = None
@@ -1002,11 +990,11 @@ class ForecastDetail(BaseModel):
     projection_base_source: Optional[str] = None
     projection_base_rent: Optional[float] = None
 
-    # --- Rent side (Zillow ZORI county median; HUD FMR schedule as fallback) ----
-    # Reworked at decision #21 (forecast rent source), which re-sourced this side. The FMR-shaped fields that
-    # stood here - the cohort panel's baseline, its area count, the fiscal years it found
-    # moving together, this area's deviation from them - described a screen the forecast
-    # no longer runs, and are gone rather than carried empty.
+    # --- Rent side (market rent index, county median; federal schedule as fallback) ----
+    # There are deliberately no fields here for the federal schedule's cohort screen — its
+    # baseline, its area count, the fiscal years it found every area moving together. The
+    # forecast does not run that screen on any path a deal reaches, and a field carried
+    # empty describes a mechanism the system does not have.
     rent_growth_source: Optional[str] = None
     rent_growth_source_description: Optional[str] = None
     rent_growth_area_name: Optional[str] = None
@@ -1075,16 +1063,16 @@ class DealState(BaseModel):
     # inputs
     raw_listing_text: str
 
-    # planning (written by the Planner; see decision #9 (Planner topology) in §7)
+    # planning (written by the Planner)
     # The Planner runs pre-flight rather than as a supervisor, so its decision about
     # which optional steps run is recorded here rather than recomputed inside a router.
-    # §3 requires routing to be state-encoded: a conditional edge reads this list, it
-    # does not re-derive it. No reducer — exactly one node writes it, and a rework
+    # Routing is state-encoded throughout this graph: a conditional edge reads this list,
+    # it does not re-derive it. No reducer — exactly one node writes it, and a rework
     # re-entry *replaces* the plan rather than extending it.
     plan: list[str] = Field(default_factory=list)
 
-    # Makes decision #9's stated invariant — "the Planner runs at most 1 + rework_count
-    # times per deal" — assertable from state rather than only observable in a trace.
+    # Makes the invariant "the Planner runs at most 1 + rework_count times per deal"
+    # assertable from state rather than only observable in a trace.
     planner_invocations: int = 0
 
     # extraction
@@ -1106,9 +1094,9 @@ class DealState(BaseModel):
     # this project is Redfin's pre-aggregated extract: one median per metro-period,
     # zero individual sales, no property attributes to adjust by. Writing that median
     # here would have state assert a property-level value it does not have. The figure
-    # is carried instead as `ValuationDetail.benchmark_median_sale_price` and rendered
-    # as a market reference. Kept as a field because U6 may yet choose a projection
-    # base for it; that decision belongs to U6, where the appreciation evidence is.
+    # is carried instead as `ValuationDetail.benchmark_median_sale_price` and rendered as
+    # a market reference. Kept as a field so a future forecast could project from a real
+    # value estimate if one ever exists.
     value_estimate: Optional[float] = None
     rent_estimate_source: Optional[RentEstimateSource] = None
 
@@ -1119,38 +1107,37 @@ class DealState(BaseModel):
     # forecast
     # Which series the appreciation figures came from, in the words the report uses -
     # `tools/redfin_data.SERIES_DESCRIPTION`. A plain string rather than the
-    # `AppreciationTier` enum this held until U6: the tier ladder it belonged to was
-    # measured down to a single rung (`zip_multifamily` closed on sample size,
-    # `metro_all_residential` closed by decision - see §7), and a three-member type
-    # advertising fallbacks the build cannot reach describes a design rather than a
-    # system. A description also tells a reader more than a tier label does.
+    # tier enum it might have been: the ladder such an enum would belong to has a single
+    # rung — a ZIP-level multi-family tier is closed on sample size and an all-residential
+    # tier by decision — and a three-member type advertising fallbacks the build cannot
+    # reach describes a design rather than a system. A description also tells a reader more
+    # than a tier label does.
     appreciation_source: Optional[str] = None
 
-    # The reported forecast paths, and the provenance behind them. `scenarios` was an
-    # untyped dict through U5 because nothing wrote it; U6 gives it the same
-    # result/provenance split `ValuationDetail` uses - see `Scenario` and
-    # `ForecastDetail` above for why the pairing of bands is the reasoning rather than a
-    # presentation choice.
+    # The reported forecast paths, and the provenance behind them — the same
+    # result/provenance split `ValuationDetail` uses. See `Scenario` and `ForecastDetail`
+    # above for why the pairing of bands is the reasoning rather than a presentation
+    # choice.
     scenarios: list[Scenario] = Field(default_factory=list)
     forecast_detail: Optional[ForecastDetail] = None
 
-    # Every hypothesis the Tree-of-Thought search considered, surviving or pruned
-    # (decision #14 — ToT branch persistence). Carries a reducer because the Critic's own search appends to it in
-    # U7, and because a rework pass re-runs the Scenario node - the raw history stays
-    # inspectable and the Summarizer de-duplicates at render time, matching `stub_nodes`.
+    # Every hypothesis the Tree-of-Thought search considered, surviving or pruned. Carries
+    # a reducer because a second searching agent could append to it, and because a rework
+    # pass re-runs the Scenario node — the raw history stays inspectable and the Summarizer
+    # de-duplicates at render time, matching `stub_nodes`.
     branch_ledger: Annotated[list[BranchLedgerEntry], operator.add] = Field(
         default_factory=list
     )
 
     # review
     confidence_score: Optional[float] = None
-    # The same number, itemized (U8.6d). Carried beside the score rather than replacing it
+    # The same number, itemized. Carried beside the score rather than replacing it
     # because `confidence_score` is what routing reads and what every prior artifact
     # recorded; this is what the *report* reads, so a reader can see the arithmetic that
     # connects the flags above it to the number.
     confidence_detail: Optional[ConfidenceBreakdown] = None
     needs_human_review: bool = False
-    # Axis 2 (U9.4). Deliberately a sibling of `needs_human_review` rather than derived
+    # Axis 2. Deliberately a sibling of `needs_human_review` rather than derived
     # from it: the two answer different questions and the report renders them as two lines
     # that never merge. `None` only before the Critic has run.
     recommendation: Optional[RecommendationDetail] = None
@@ -1165,7 +1152,7 @@ class DealState(BaseModel):
     # output
     report_markdown: Optional[str] = None
 
-    # build provenance (walking skeleton, U2)
+    # build provenance
     #
     # Names of nodes that ran as stubs during this run, so the report can disclose that
     # a section is unbuilt rather than merely empty. Deliberately *not* a Flag, for two
@@ -1173,12 +1160,11 @@ class DealState(BaseModel):
     #
     #   1. A flag describes a degradation of the system as designed — something the
     #      deal or the data did. A stub describes the state of the build. Routing the
-    #      second through FlagKind would corrupt what U8's coverage check means, since
-    #      it compares raised kinds against `set(FlagKind)` to claim every *designed*
+    #      second through FlagKind would corrupt what the coverage check means, since it
+    #      compares raised kinds against `set(FlagKind)` to claim every *designed*
     #      degradation path is exercised.
-    #   2. A stub flag would fire on every run of this build, and §2 already establishes
-    #      the principle: a signal that is always on conveys nothing. That argument
-    #      drove the X=2.0 tuning; it applies here unchanged.
+    #   2. A stub flag would fire on every run of this build, and a signal that is always
+    #      on conveys nothing.
     #
     # Carries a reducer because several nodes contribute. A node re-run by the rework
     # cycle appends its name again; the Summarizer de-duplicates at render time rather
@@ -1209,7 +1195,7 @@ class DealState(BaseModel):
 
     def flag(self, source_agent: str, kind: FlagKind, detail: str, severity: Severity = Severity.INFO) -> Flag:
         """Bound convenience constructor for the common case: a node raising a flag
-        against its own already-in-scope `state` (U8.5/OQ-15).
+        against its own already-in-scope `state`.
 
         Every node function, and most of the helpers they call, already hold `state` —
         this stamps `planner_invocations` from it automatically rather than making
@@ -1230,7 +1216,7 @@ def flag(
     """Convenience constructor for a helper that has no `DealState` to call
     `state.flag()` on.
 
-    `planner_invocations` has no default here, deliberately (U8.5/OQ-15): a helper that
+    `planner_invocations` has no default here, deliberately: a helper that
     forgets to thread it through fails loudly at the call site instead of silently
     stamping every flag it raises with the sentinel 0, which would make the Critic treat
     a live pass's finding as if it belonged to no pass at all.

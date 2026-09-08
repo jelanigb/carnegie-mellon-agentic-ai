@@ -1,12 +1,12 @@
 """StateGraph assembly — nodes, edges, routing, compile.
 
-This module is *only* wiring. Every decision it expresses was made elsewhere: the
-topology in §7 decision #9 (Planner topology), the state schema in §5, the node names in `nodes.py`. If a
-piece of reasoning shows up here, it is in the wrong file — a specialist's logic
-belongs in `agents/`, and a routing rule belongs in a `route_*` function beside the
-Planner (§3, "agents communicate only through shared state").
+This module is *only* wiring. Every decision it expresses was made elsewhere: the state
+schema in `state.py`, the node names in `nodes.py`, the routing rules beside the Planner.
+If a piece of reasoning shows up here, it is in the wrong file — a specialist's logic
+belongs in `agents/`, and a routing rule belongs in a `route_*` function in
+`agents/planner.py`, because agents communicate only through shared state.
 
-**The topology** (decision #9 — pre-flight Planner, not a supervisor):
+**The topology** — a pre-flight Planner, not a supervisor:
 
     START → Planner → [Extractor] → Comps → Valuation → Scenario → Critic
                                                                      ├→ Summarizer → END
@@ -25,7 +25,7 @@ from the compiled object:
    data dependency and is not the Planner's to choose.
 3. **The cycle is bounded by `rework_count` in state**, never by `recursion_limit`.
    Hitting the framework's limit raises an opaque exception; the counter escalates to
-   human review instead, which is the behaviour Checkpoint 2.1 specified.
+   human review instead.
 
 **Why a checkpointer is always present.** `interrupt()` has nowhere to persist a paused
 run without one, so `human_review` would fail rather than pause. The default is
@@ -87,44 +87,25 @@ def state_serde() -> JsonPlusSerializer:
     explicit allowlist switches that to deny-by-default, and these are everything the
     graph actually persists.
 
-    **Four names were missing from it until Aug 22, 2026, and how that surfaced is the
-    reason to record it.** `DealStatus`, `LocationPrecision`, `RentEstimateSource` and
-    `AppreciationTier` (removed in U6) are all `StrEnum`, and a `StrEnum` member *is* a
-    `str`, so a
-    blocked deserialization degraded to the bare string, which Pydantic then coerced
-    straight back to the enum on the next validation. Nothing broke and no output was
-    ever wrong. The gap was visible only as a log line, and it took a U5 test asserting
-    on a resumed run to put that line somewhere anyone would read it. A deny-by-default
-    list whose omissions are silent is a list that drifts, which is what happened here
-    across three units.
+    **The rule: every type reachable from `DealState` belongs here, enums included,
+    whether or not omitting it currently appears to matter.** This list has drifted twice
+    in the life of this project and both times the omission was silent, so the rule is
+    stated rather than left to be inferred from the list.
 
-    So the rule this docstring is really stating: **every type reachable from
-    `DealState` belongs here, enums included, whether or not omitting it currently
-    appears to matter.** `ValuationDetail` joined in U5 as a genuinely new type; the
-    four enums joined because they should have been here all along.
+    **Why an omission is silent, and why silence is worse than it sounds.** An omitted
+    `StrEnum` degrades to the bare string it already is, which Pydantic coerces straight
+    back to the enum on the next validation — nothing breaks and no output is wrong, and
+    the only trace is a log line nobody reads. An omitted `BaseModel` is worse: a blocked
+    deserialization yields a plain **`dict`**. Measured on a resumed run, every field value
+    survives and Pydantic re-validates the dict back into the model at the node boundary,
+    so the rendered report is still right — but `graph.invoke`'s **return value** carries
+    the raw dict, and any caller that reaches into it gets an `AttributeError` rather than
+    a verdict.
 
-    **It drifted again across three more units, and was caught Sept 1, 2026 the same
-    way — by reading a log line nobody was reading.** `ConfidenceBreakdown` (U7),
-    `FlagScope` (U8.5), `Recommendation` and `RecommendationDetail` (U9.4) were all
-    reachable from `DealState` and all absent. **The recurrence is the finding, not the
-    omission:** the rule above was already written, in this docstring, by the pass that
-    learned it — and stating a rule next to the list does not keep the list current,
-    because the person adding a state field is not reading the serializer.
-
-    **This time the degradation is one level worse than the enum case, which is why it
-    matters more than it looks.** `ConfidenceBreakdown` and `RecommendationDetail` are
-    `BaseModel`, not `StrEnum`, so a blocked deserialization yields a plain **`dict`**,
-    not a string. Measured on a resumed `staten-island` run: every field value survived
-    and Pydantic re-validated the dict back into the model at the node boundary, so the
-    rendered report was never wrong — but `graph.invoke`'s **return value** carries the
-    raw dict, and any caller that reaches into it gets an `AttributeError` rather than a
-    verdict.
-
-    **Nothing had that caller until U9.7.** `main.py` reads only `report_markdown`, a
-    `str`, and the eval runner reads `recommendation` off a *non*-resumed invoke — the
-    round trip happens on resume, and the harness never resumes. The Streamlit surface is
-    the first consumer to read a typed field out of a resumed run, which is precisely the
-    escalated-deal path it exists to demonstrate. A defect that is invisible until the
+    That last failure reaches exactly one consumer: the Streamlit surface, which is the
+    only caller that reads a typed field out of a *resumed* run, on the escalated-deal path
+    it exists to demonstrate. `main.py` reads only `report_markdown`, a `str`, and the eval
+    runner reads `recommendation` off a non-resumed invoke. A defect invisible until the
     one path a demo is built around is the argument for the rule, restated.
 
     Note the constructor argument rather than the more obvious
@@ -210,8 +191,8 @@ def build_graph(checkpointer: Optional[object] = None):
         _checked_mapping(nodes.EXTRACTOR, nodes.COMPS_RETRIEVAL),
     )
 
-    # The pipeline spine. Static, because decision #9 (Planner topology) established that this ordering is
-    # fixed by data dependency and is not something the Planner decides.
+    # The pipeline spine. Static, because this ordering is fixed by data dependency and is
+    # not something the Planner decides.
     builder.add_edge(nodes.EXTRACTOR, nodes.COMPS_RETRIEVAL)
     builder.add_edge(nodes.COMPS_RETRIEVAL, nodes.VALUATION_RENT)
     builder.add_edge(nodes.VALUATION_RENT, nodes.SCENARIO_FORECAST)

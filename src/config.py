@@ -1,19 +1,18 @@
 """Single source of truth for tunable parameters.
 
-Per docs/implementation_plan.md §8, no agent may hardcode any value that appears here.
-These get tuned across U4-U7, and a value buried inside an agent function is a value
-that cannot be tuned without a code change.
+**No agent may hardcode any value that appears here.** A value buried inside an agent
+function is a value that cannot be tuned without a code change, and this file is where a
+reader should be able to see every knob the system has at once.
 
-Values marked PROVISIONAL are initial guesses awaiting empirical tuning; the unit that
-tunes each one is named alongside it.
+Each constant states how its value was arrived at, in one of three forms:
 
-**Reconciled Aug 31, 2026 (U8.M), because that convention had quietly decayed.** Seven
-constants still named U4 or U8 as their tuning owner after both units had closed — two of
-them settled by decision #5 (retrieval X/Y/Z) three units earlier — which reads as scheduled work and is
-really unowned work. Every value that U8 measured now states *what* was measured and that
-it is **held** rather than tuned; every value nothing measured says so plainly and names no
-unit. The one PROVISIONAL block left is the Tree-of-Thought group, retargeted to U9 with
-its condition unchanged (OQ-5). Grep `PROVISIONAL` at unit close alongside `TODO(`.
+- **Measured** — a number derived from data, with the measurement summarized beside it and
+  a script named where one reproduces it.
+- **HELD** — measured, and the measurement supports keeping the value rather than moving
+  it. A sweep that cannot separate two settings is evidence of robustness, not of
+  optimality, and these say which they are.
+- **PROVISIONAL** — an initial judgment nothing has measured yet, said plainly. The
+  Tree-of-Thought group below is the block where these remain.
 """
 
 from __future__ import annotations
@@ -27,12 +26,12 @@ SRC_DIR = Path(__file__).resolve().parent
 
 
 # --------------------------------------------------------------------------
-# Comps retrieval loop — the X / Y / Z parameters from Checkpoint 2.1, Loop 2
+# Comps retrieval loop — the radius / threshold / iteration-cap parameters
 # --------------------------------------------------------------------------
 
 # X: initial search radius. Widened on each relaxation pass.
 #
-# Tuned in U4 against measured comp density per market (comps within radius, 2BR exact):
+# Tuned against measured comp density per market (comps within radius, 2BR exact):
 #
 #     market        0.5mi   1mi   2mi   3mi   5mi
 #     Los Angeles       7    50+   50+   50+   50+
@@ -45,32 +44,28 @@ SRC_DIR = Path(__file__).resolve().parent
 # X=2.0 lets the two dense markets clear the threshold on the first pass, so a
 # relaxation flag now means something specific happened rather than being routine.
 INITIAL_SEARCH_RADIUS_MILES = 2.0
-# **Never tuned, and no unit owns tuning it — stated Aug 31, 2026 rather than left
-# naming a unit that closed.** U4 tuned the *initial* radius against measured density
-# curves (1.0 -> 2.0 mi) and set this multiplier by inspection alongside it. Doubling
-# reaches the 15-mile ceiling in three expansions, which is the property that was
-# wanted; whether a gentler factor would return better comps before giving up has not
-# been measured.
+# **Never tuned, and nothing is scheduled to tune it.** The *initial* radius above was set
+# against measured density curves; this multiplier was set by inspection alongside it.
+# Doubling reaches the 15-mile ceiling in three expansions, which is the property that was
+# wanted; whether a gentler factor would return better comps before giving up has not been
+# measured.
 RADIUS_EXPANSION_FACTOR = 2.0
 MAX_SEARCH_RADIUS_MILES = (
     15.0  # hard ceiling; beyond this a "comp" is not comparable
 )
 
-# Y: exit condition. The loop stops once this many qualifying comps are found.
-# Also the number of results retrieved, which Checkpoint 3.1 asks to be stated
-# explicitly as a design decision rather than left implicit.
-# **Settled as decision #5's Y at U4** — the label here read PROVISIONAL until Aug 31,
-# 2026, three units after the decision that closed it. U8.6b added a second measurement
-# and it is a negative one: a 144-point grid across the four indexed markets returned
-# exactly 8 comps at 98 points, 0 at 30, and 7 at **none**, so this line cannot be
-# straddled on its own — reaching 7 requires the loop to exhaust its radius expansions
-# and match relaxations first, each of which raises its own flag.
+# Y: exit condition. The loop stops once this many qualifying comps are found, and it is
+# also the number of results retrieved.
+#
+# **Settled, with a negative second measurement worth stating:** a 144-point grid across
+# the four indexed markets returned exactly 8 comps at 98 points, 0 at 30, and 7 at
+# **none**, so this line cannot be straddled on its own — reaching 7 requires the loop to
+# exhaust its radius expansions and match relaxations first, each of which raises its own
+# flag.
 MIN_QUALIFYING_COMPS = 8
 
 # Z: iteration cap. On exhaustion the loop exits with a sparse-comps flag rather
 # than returning a silently weak result.
-# **Settled as decision #5's Z at U4**; the PROVISIONAL label here was stale from U4's
-# close until Aug 31, 2026.
 MAX_RETRIEVAL_ITERATIONS = 4
 
 # Hard match criteria, relaxed in order as the loop widens its search.
@@ -85,10 +80,10 @@ MAX_RETRIEVAL_ITERATIONS = 4
 # from 2, Cleveland 8 from **1**.
 #
 # 3 is therefore the value that separates the case that is arguably fine (LA) from the
-# two that need saying out loud, rather than a bar every metro clears — per §2's tuning
-# principle, a signal that never fires conveys nothing.
+# two that need saying out loud, rather than a bar every metro clears: a signal that never
+# fires conveys nothing.
 #
-# **HELD Aug 30, 2026 (U8.6b).** The corpus's own distribution supplies both sides of
+# **HELD.** The corpus's own distribution supplies both sides of
 # this line without any fixture engineering: a Bed-Stuy subject returns 8 comps on **1**
 # coordinate, a Hell's Kitchen subject 8 on **5**. A threshold that real geography
 # straddles unaided is discriminating; 3 is kept.
@@ -101,14 +96,14 @@ COMP_MIN_DISTINCT_LOCATIONS = 3
 COMP_DISTANCE_DECIMALS = 1
 
 COMP_MATCH_BEDROOM_TOLERANCE = 0  # exact bed match before relaxation
-# **Never tuned, and no unit owns tuning it (Aug 31, 2026).** Set by inspection at U4.
+# **Never tuned, and nothing is scheduled to tune it.** Set by inspection.
 # It is more load-bearing than it looks: `COMP_MAX_OUTSIDE_MATCH_SHARE` measures drift
 # *against this band*, so widening it would quiet the drift disclosure without changing
 # a single comp — which is why the two should be re-read together if either moves.
 COMP_MATCH_SQFT_TOLERANCE_PCT = 0.25
 
 # Share of the returned comp set that may fall outside the *unrelaxed* match criteria
-# above before the drift is disclosed (U7.3).
+# above before the drift is disclosed.
 #
 # The relaxation loop already flags each concession it makes, but a concession is not the
 # same thing as a consequence: dropping the square-footage band permits dissimilar comps,
@@ -124,14 +119,14 @@ COMP_MATCH_SQFT_TOLERANCE_PCT = 0.25
 #
 # 0.25 admits one outlier in a set of eight and discloses two.
 #
-# **HELD Aug 30, 2026 on the straddle pair U8.6b built, rather than tuned.** Chicago
-# Uptown at 1,100 sq ft returns 2 of 8 outside the band (0.25, clears) and at 1,300
-# sq ft returns 3 of 8 (0.38, fires) — the same building, 200 sq ft apart. Since
-# U8.6e ungated the Critic's first interaction check, that difference decides the
-# **verdict** and not only the disclosure, which makes this the most brittle line in
-# the system and the reason the pair is published rather than only measured
-# (`eval/results/results.md`, `chicago-uptown-band-under` / `-over`). Nothing in the
-# batch argues for a different value; the brittleness is disclosed instead.
+# **HELD on a straddle pair, rather than tuned.** Chicago Uptown at 1,100 sq ft returns 2
+# of 8 outside the band (0.25, clears) and at 1,300 sq ft returns 3 of 8 (0.38, fires) —
+# the same building, 200 sq ft apart. The Critic's comp-drift interaction check is not
+# gated on divergence, so that difference decides the **verdict** and not only the
+# disclosure, which makes this the most brittle line in the system and the reason the pair
+# is published rather than only measured (`eval/results/results.md`,
+# `chicago-uptown-band-under` / `-over`). Nothing in the batch argues for a different
+# value; the brittleness is disclosed instead.
 COMP_MAX_OUTSIDE_MATCH_SHARE = 0.25
 
 
@@ -140,17 +135,17 @@ COMP_MAX_OUTSIDE_MATCH_SHARE = 0.25
 # --------------------------------------------------------------------------
 
 # Below this confidence, the deal routes to human review instead of the Summarizer.
-# **HELD Aug 30, 2026 (#6)** — not tuned. Through this point the threshold moves
+# **HELD, not tuned.** Through this point the threshold moves
 # 0.30-0.70 without changing a verdict in the 21-case eval batch, and no case argues
 # it is wrong; `eval/results/sensitivity.md` publishes the region and says why that is
 # a robustness claim rather than an optimum.
 HUMAN_REVIEW_CONFIDENCE_THRESHOLD = 0.60
 
-# Bounds the Critic -> Planner rework cycle. §3 requires every cycle to be bounded by
-# an explicit counter in state rather than by LangGraph's recursion_limit, so that
-# exhaustion escalates gracefully instead of raising.
+# Bounds the Critic -> Planner rework cycle. Every cycle in this system is bounded by an
+# explicit counter in state rather than by LangGraph's recursion_limit, so that exhaustion
+# escalates gracefully instead of raising.
 #
-# **SWEPT Aug 31, 2026 (U8.M) and held at 2 — the budget is behaviorally inert across
+# **SWEPT and held at 2 — the budget is behaviorally inert across
 # 1, 2 and 3.** `scripts/rework_budget_sweep.py` runs the replay tier at each value;
 # **no verdict changes at any of them.** Only one case in the batch reworks at all
 # (`chicago-geocoder-outage`), it spends exactly whatever budget it is given, and it
@@ -166,17 +161,15 @@ HUMAN_REVIEW_CONFIDENCE_THRESHOLD = 0.60
 # it needs a fault that lifts partway through a run, which the harness's `Fault`
 # mechanism does not currently express.
 #
-# **A consequence for §6's cut list, which priced this without measuring it.** Item 5
-# is "reduce the rework depth to `MAX_REWORKS = 1`". On this batch that cut costs
-# **nothing measurable** — same verdicts, same confidence, same escalation ground. It
-# would cost the *demonstration* rather than the behavior: at 1, the bounded cycle is
-# still exercised but only once, so the case stops showing that the counter survives a
-# second lap.
+# **What reducing this to 1 would cost, measured rather than guessed:** on this batch,
+# **nothing** — same verdicts, same confidence, same escalation ground. It would cost the
+# *demonstration* rather than the behavior: at 1 the bounded cycle is still exercised but
+# only once, so the case stops showing that the counter survives a second lap.
 MAX_REWORKS = 2
 
 # Severity weights used when aggregating flags into a confidence score.
 #
-# **HELD on measurement Aug 30, 2026 (#6), not tuned.** `scripts/confidence_sensitivity.py`
+# **HELD on measurement, not tuned.** `scripts/confidence_sensitivity.py`
 # swept these against the 21-case eval batch: 63 of 160 grid points decide it identically
 # to the shipped values, and holding the threshold at 0.60 every warn weight from 0.100 to
 # 0.200 changes no verdict. Zero cases argue the shipped numbers are wrong — which is a
@@ -184,21 +177,21 @@ MAX_REWORKS = 2
 # is saying it has no evidence either way. **The critical weight is inert across its whole
 # range including 0.00**: every deal carrying a critical escalates on the independent rule
 # at `critic.escalation_decision` regardless. Before re-pricing, read that sweep and the
-# note at `critic.confidence_from_flags` — the "two-warn floor" this comment used to cite
-# was measured false at U7.6.
+# note at `critic.confidence_from_flags`, which measures that there is no "two-warn floor"
+# every deal pays.
 FLAG_SEVERITY_PENALTY = {
     "info": 0.0,
     "warn": 0.15,
     "critical": 0.40,
-}  # HELD Aug 30, 2026 (#6) — see the note above
+}  # HELD — see the note above
 
 
 # --------------------------------------------------------------------------
 # Extraction loop
 # --------------------------------------------------------------------------
 
-# Bounded retries before the Extractor escalates rather than looping (Checkpoint 2.1,
-# Loop 1). Each retry re-prompts with the Pydantic ValidationError text.
+# Bounded retries before the Extractor escalates rather than looping. Each retry
+# re-prompts with the Pydantic ValidationError text.
 MAX_EXTRACTION_RETRIES = 3
 
 # Fields without which downstream valuation is not meaningful. Missing ones become
@@ -207,7 +200,7 @@ MAX_EXTRACTION_RETRIES = 3
 REQUIRED_DEAL_FIELDS = ("full_address", "price", "unit_count")
 
 # How far a caller-supplied coordinate may sit from the geocode of the listing's own
-# address before the two are treated as describing different places (U3).
+# address before the two are treated as describing different places.
 #
 # The conflict is escalated rather than resolved, because the system cannot tell which
 # input the caller meant: the address with its correct coordinates, or the coordinates
@@ -220,21 +213,17 @@ REQUIRED_DEAL_FIELDS = ("full_address", "price", "unit_count")
 # precision: INITIAL_SEARCH_RADIUS_MILES is 2.0, so a half-mile displacement moves a
 # meaningful share of the comp set.
 #
-# One measurement exists, and it argues the line is tight rather than loose. U2's Chicago
-# demo carried hand-picked "Logan Square" coordinates that sit 0.54 mi from the Census
-# parcel geocode of the address in its own listing text — i.e. a neighbourhood-level
-# coordinate chosen by a careful person trips this. Read either way: the threshold
-# catches a real discrepancy, or it fires on inputs nobody would call wrong. Left at 0.5
-# because the flag escalates rather than blocks, and because a threshold wide enough to
-# never fire is the failure mode §2 warns about in the search-radius tuning.
+# **One measurement exists, and it argues the line is tight rather than loose.** A
+# hand-picked "Logan Square" coordinate sits 0.54 mi from the Census parcel geocode of the
+# address in the same listing text — that is, a neighborhood-level coordinate chosen by a
+# careful person trips this. Read either way: the threshold catches a real discrepancy, or
+# it fires on inputs nobody would call wrong.
 #
-# **Still one data point, and U8 did not supply a second — stated Aug 31, 2026 rather
-# than left naming a closed unit.** The eval batch reaches this threshold through a
-# single case (`coord-conflict`, a demo baseline), so it has no more volume here than
-# U2 did. Settling it needs listings carrying deliberately-offset coordinates at a
-# range of distances, which no fixture supplies. Held at 0.5 on the reasoning above:
-# the flag escalates rather than blocks, and a threshold wide enough never to fire is
-# the failure mode §2 warns about.
+# **Still one data point.** The eval batch reaches this threshold through a single case
+# (`coord-conflict`). Settling it needs listings carrying deliberately-offset coordinates
+# at a range of distances, which no fixture supplies. Held at 0.5 because the flag
+# escalates rather than blocks, and because a threshold wide enough never to fire conveys
+# nothing.
 COORDINATE_CONFLICT_THRESHOLD_MILES = 0.5
 
 
@@ -242,16 +231,16 @@ COORDINATE_CONFLICT_THRESHOLD_MILES = 0.5
 # Data layer
 # --------------------------------------------------------------------------
 
-# Inference metros (§2). Settled after the density check in
-# scripts/verify_metro_selection.py overturned the original NY/Chicago/Philadelphia
-# hypothesis.
+# The metros the system admits subjects from. Settled by the density check in
+# `scripts/verify_metro_selection.py`, which overturned an earlier
+# New York / Chicago / Philadelphia hypothesis.
 INFERENCE_METROS = ("Chicago", "Los Angeles", "Cleveland")
 
 # Redfin: drop implausible medians before any aggregation. The raw extract contains
 # non-arm's-length transfers ($1, $101, $500) that would corrupt a median or a YoY
 # calculation.
 #
-# Resolved to $10,000 — the low end of §2's proposed $10-20k range — on measured
+# Resolved to $10,000 — the low end of a proposed $10-20k range — on measured
 # evidence: 63 of 58,863 non-null rows (0.107%) fall below $10k, and 90.5% of those
 # report HOMES SOLD == 1, the signature of a single non-market transfer. A $20k floor
 # would drop 294 rows (0.499%) instead, and in the $10-20k band the single-sale share
@@ -263,8 +252,8 @@ INFERENCE_METROS = ("Chicago", "Los Angeles", "Cleveland")
 # fallback and future metro additions, not a fix to a defect in the current pipeline.
 REDFIN_MIN_MEDIAN_SALE_PRICE = 10_000
 
-# The extract on disk is Monthly; §2 specifies a rolling window computed locally
-# rather than re-downloading a Rolling-3-Months extract.
+# The extract on disk is monthly; the rolling window is computed locally rather than
+# re-downloading a rolling-3-month extract, which keeps the width a tunable.
 REDFIN_ROLLING_WINDOW_PERIODS = 3
 
 # Interest rates near zero pushed price growth well above trend in this window.
@@ -273,13 +262,13 @@ REDFIN_ROLLING_WINDOW_PERIODS = 3
 ANOMALOUS_PERIOD = ("2020-01-01", "2022-12-31")
 
 # --------------------------------------------------------------------------
-# Sub-metro sale-price benchmark (U8.8, OQ-7, #11)
+# Sub-metro sale-price benchmark
 # --------------------------------------------------------------------------
 #
-# The price-side counterpart to ZIP-resolution rent anchoring. Until U8.8 the market
-# benchmark was one Redfin median per *metro*, so every 2-4 unit property in Chicago was
-# read against the same number — §2's "location-blind below the county" limitation,
-# surviving on the price side after the rent side had fixed it.
+# The price-side counterpart to ZIP-resolution rent anchoring. Without it the market
+# benchmark is one median per *metro*, so every 2-4 unit property in Chicago is read
+# against the same number — the same location-blindness the rent side avoids by anchoring
+# at the subject's own ZIP.
 #
 # Built by `scripts/build_sale_benchmarks.py` into a committed table, so the pipeline
 # never makes a network call to render a benchmark. That script's docstring carries the
@@ -333,7 +322,7 @@ SALE_BENCHMARK_COOK_CLASS = "211"
 SALE_BENCHMARK_COOK_PARCEL_YEAR = "2025"
 
 # How many sales a ZIP needs before its median replaces the metro figure. **Set on the
-# measured distribution at U8.8, not provisional** — the reasoning is below.
+# measured distribution** — the reasoning is below.
 #
 # Measured over the window (`scripts/build_sale_benchmarks.py` re-prints it): New York
 # 164 ZIPs, min 1 / p10 8 / median 131 / max 659; Chicago 140 ZIPs, min 1 / p10 4 /
@@ -374,7 +363,7 @@ SALE_BENCHMARK_SOURCES: dict[str, dict] = {
 
 
 # ---------------------------------------------------------------------------
-# The recommendation (U9.4) — axis 2, "is this a good deal?"
+# The recommendation — axis 2, "is this a good deal?"
 # ---------------------------------------------------------------------------
 #
 # **Set at stated percentiles of real transactions, not at round numbers.** Measured by
@@ -413,45 +402,42 @@ RECOMMENDATION_METRO_REJECT_PREMIUM = 1.17   # p90 of Chicago metro-tier sales
 RECOMMENDATION_CAUTION_PERCENTILE = 0.80
 RECOMMENDATION_REJECT_PERCENTILE = 0.90
 
-# The model-proposes / rule-decides cross-check (OQ-22). Off makes the Critic skip its
+# The model-proposes / rule-decides cross-check. Off makes the Critic skip its
 # model call entirely; the rule's verdict is unaffected either way, which is the property
 # that makes the cross-check safe to disable in a hermetic test.
 RECOMMENDATION_CROSS_CHECK_ENABLED = True
 
-# The model-written lede above the report (U9.4). One switch for the tests, the eval
+# The model-written lede above the report. One switch for the tests, the eval
 # runner and the demo surface. Off renders no summary section at all — distinct from the
 # call failing, which renders a sentence saying so.
 SUMMARY_NARRATIVE_ENABLED = True
 
 
-# Kaggle: outlier bounds. The extract is 99.5% complete on core features, with only
+# Listing corpus: outlier bounds. The extract is 99.5% complete on core features, with only
 # 79 rows outside these bounds, so this trims noise rather than reshaping the data.
 KAGGLE_MIN_RENT = 300.0
 KAGGLE_MAX_RENT = 10_000.0
 
-# Training metros (§7 decision #4 (training metro shortlist), closed Aug 21, 2026). Distinct from INFERENCE_METROS
-# above, and deliberately a superset of it: the regression predicts a *ratio* to local
-# FMR rather than a dollar level, so it benefits from markets it will never be asked to
-# price, while comp retrieval needs density in the specific subject market.
+# Training metros. Distinct from INFERENCE_METROS above, and deliberately a superset of
+# it: the regression predicts a *ratio* to the local rent level rather than a dollar
+# level, so it benefits from markets it will never be asked to price, while comp retrieval
+# needs density in the specific subject market.
 #
-# Selected on Kaggle rent density alone — every metro in §2's density table at >=200
-# usable rows, minus Boston. The table's own verdict column fails Cincinnati on Redfin
-# sales volume; that bar is an *inference* requirement (an appreciation series) and the
-# rent model reads Redfin at no point, so Cincinnati is selected here with 798 usable
-# rows. Boston is excluded as blocked rather than unselected: county_crosswalk.py
-# returns None throughout New England (TODO(geography)), so its rows cannot be
-# anchor-normalized — the bedroom step is keyed on the county — and would drop
-# silently at training time.
+# Selected on listing-corpus rent density alone — every metro with >=200 usable rows,
+# minus Boston. Sale-price volume is an *inference* requirement (it buys an appreciation
+# series) and the rent model reads the sale-price extract at no point, so Cincinnati is
+# selected here on its 798 usable rows despite thin sales. Boston is excluded as blocked
+# rather than unselected: `county_crosswalk.py` returns None throughout New England
+# (TODO(geography)), so its rows cannot be anchor-normalized — the bedroom step is keyed
+# on the county — and would drop silently at training time.
 #
 # Keyed state -> city-name patterns, the shape tools/kaggle_data.filter_markets consumes.
 # Matching is word-boundary, not substring, so "Cleveland" rolls up "Cleveland Heights"
 # while "Queens" does not match "Queensbury" — both real cases in this data.
 #
-# Measured 5,717 usable rows (scripts/train_rent_model.py --dry-run re-derives it).
-# Note for anyone reconciling against §2: that section quotes 21,768 rows for a
-# candidate ~10-metro shortlist, which no metro-filtered count reproduces. The six
-# states these metros sit in hold 22,323 usable rows between them, so the older figure
-# is a state-level rollup. 5,717 is the metro-filtered number and the one to trust.
+# Measured 5,717 usable rows (`scripts/train_rent_model.py --dry-run` re-derives it). A
+# state-level rollup of the same six states gives 22,323, which is a different quantity —
+# 5,717 is the metro-filtered number and the one to trust.
 TRAINING_METROS: dict[str, list[str]] = {
     "CA": ["Los Angeles"],
     "OH": ["Cincinnati", "Cleveland"],
@@ -470,22 +456,20 @@ TRAINING_METROS: dict[str, list[str]] = {
 # docs/design/data_sources.md for all three side by side.
 #
 # The inference trio plus New York. New York is indexed **deliberately**, as the
-# sparse-comps case: §2 measured it as genuinely thin in Staten Island while dense in
-# central Brooklyn, which makes it the one market that exercises the relaxation loop to
-# exhaustion against real data. It is why the Staten Island demo returns no comps while
-# still producing a rent estimate. (Until U8.4c it also returned no market benchmark —
-# that turned out to be a stale filter, not a Redfin coverage fact; see
-# REDFIN_TARGET_METROS below.)
+# sparse-comps case: measured as genuinely thin in Staten Island while dense in central
+# Brooklyn, which makes it the one market that exercises the relaxation loop to exhaustion
+# against real data. It is why the Staten Island demo returns no comps while still
+# producing a rent estimate.
 #
 # New York rolls up its boroughs, which appear as separate `cityname` values. Matching is
 # word-boundary (tools/kaggle_data.city_matches): "Cleveland" must catch "Cleveland
 # Heights" while "Queens" must not catch "Queensbury" and "Bronx" must not catch
 # "Bronxville" — all real cases in this data.
 #
-# Lived in scripts/build_comps_index.py until Aug 22, 2026. Moved here because §8 makes
-# config.py the only home for a tunable parameter, and because a metro scope defined in a
-# script is a metro scope nobody finds when asking which markets the system covers —
-# which is exactly how it got missed.
+# Here rather than in `scripts/build_comps_index.py`, which is where it would otherwise
+# live: config.py is the only home for a tunable in this project, and a metro scope defined
+# inside a script is a metro scope nobody finds when asking which markets the system
+# covers.
 #
 # Changing this requires a re-index: .venv/bin/python scripts/build_comps_index.py
 INDEXED_MARKETS: dict[str, list[str]] = {
@@ -495,18 +479,18 @@ INDEXED_MARKETS: dict[str, list[str]] = {
     "NY": ["New York", "Brooklyn", "Queens", "Bronx", "Staten Island", "Manhattan"],
 }
 
-# Redfin `REGION NAME` per market — the sale-price series' reach (U8.4c).
+# Redfin `REGION NAME` per market — the sale-price series' reach.
 #
-# Lived in tools/redfin_data.py as a trio-only mapping from before New York entered the
-# demo, and was never revisited — so every "Redfin doesn't cover New York" statement
-# downstream was reporting this filter's output as a fact about Redfin. Checked against
-# the raw extract Aug 29, 2026: "New York, NY metro area" is present with 102
-# fully-populated months at 700-950 multi-family sales per month. Moved here (§8: config
-# is the only home for tunables; this one predates config.py and never migrated) and
-# keyed by the same market labels INDEXED_MARKETS produces, with the tie asserted below
-# so the price series' reach and the system's market list cannot drift apart again.
-# tools/redfin_data.load_redfin additionally asserts every region here exists in the
-# extract, so a silent absence becomes a loud one.
+# **Here rather than in `tools/redfin_data.py`, and the move is load-bearing.** As a
+# module-level constant this filter went stale — it named three metros after the system
+# had admitted a fourth — and every "the extract doesn't cover New York" statement
+# downstream was reporting *this filter's output* as a fact about the source. Checked
+# against the raw extract: "New York, NY metro area" is present with 102 fully-populated
+# months at 700-950 multi-family sales per month. Keyed by the same market labels
+# INDEXED_MARKETS produces, with the tie asserted below so the price series' reach and the
+# system's market list cannot drift apart again. `tools/redfin_data.load_redfin`
+# additionally asserts every region here exists in the extract, so a silent absence becomes
+# a loud one.
 REDFIN_TARGET_METROS: dict[str, str] = {
     "Chicago": "Chicago, IL metro area",
     "Los Angeles": "Los Angeles, CA metro area",
@@ -519,23 +503,22 @@ assert set(REDFIN_TARGET_METROS) == {
 }, (
     "REDFIN_TARGET_METROS and INDEXED_MARKETS name different market sets. They are two "
     "views of one scope — a market the system admits subjects from must name its Redfin "
-    "region (or be removed from both), or the price side silently regrows the stale "
-    "trio-only filter U8.4c removed."
+    "region (or be removed from both), or the price side silently regrows a stale "
+    "metro filter."
 )
 
 # --------------------------------------------------------------------------
-# Rent regression (U5 — tools/model/rent_model.py)
+# Rent regression (tools/model/rent_model.py)
 # --------------------------------------------------------------------------
-# The target is rent / anchor-for-that-row's-ZIP-and-month, not rent. §2's rent-anchoring
-# design in one line: a 2018-19 corpus cannot supply a 2026 dollar figure, but the
-# *ratio* of a unit's rent to its local market rent is a structural property that ages far
-# more slowly than the dollar level does. Training learns the ratio; prediction multiplies
-# it by today's market rent for the subject's own ZIP.
+# The target is rent / anchor-for-that-row's-ZIP-and-month, not rent. The anchoring design
+# in one line: a 2018-19 corpus cannot supply a 2026 dollar figure, but the *ratio* of a
+# unit's rent to its local market rent is a structural property that ages far more slowly
+# than the dollar level does. Training learns the ratio; prediction multiplies it by
+# today's market rent for the subject's own ZIP.
 #
-# **The anchor was county-and-fiscal-year FMR until Aug 30, 2026 (U11.3).** It is now
-# Zillow's ZORI at the row's own ZIP and own listing month, times the HUD schedule's ratio
-# between unit sizes — market level, administrative shape. The design above is unchanged;
-# only which reference it multiplies by moved. See `RENT_ANCHOR_*` below.
+# The anchor is the market rent index at the row's own ZIP and own listing month, times
+# the federal schedule's ratio between unit sizes — market level, administrative shape.
+# See `RENT_ANCHOR_*` below.
 
 RENT_MODEL_PATH = DATA_DIR / "processed" / "rent_model.joblib"
 
@@ -547,72 +530,68 @@ RENT_MODEL_PATH = DATA_DIR / "processed" / "rent_model.joblib"
 # these columns carry.
 RENT_MODEL_FEATURES = ("bedrooms", "bathrooms", "square_feet")
 
-# **A note kept because it explains why the competence check moved, not because the
-# coefficient still exists.** Under the LinearRegression this model shipped with until
-# Aug 30, 2026, `bedrooms` came out *negative* (-0.33 per bedroom; -0.44 before ZIP
-# anchoring). That was never a defect: the target is a ratio to FMR, and HUD's schedule
-# climbs with bedroom count faster than real rents do — LA's FY2026 4BR FMR is 1.41x its
-# 2BR while actual 4BR rents are not — so the ratio genuinely falls as bedrooms rise.
+# **Why the out-of-domain check is an input check rather than an output one.** Under a
+# linear estimator, `bedrooms` comes out *negative* against this target (-0.33 per
+# bedroom), and that is not a defect: the target is a ratio to a reference whose schedule
+# climbs with bedroom count faster than real rents do — Los Angeles's FY2026 4BR figure is
+# 1.41x its 2BR while actual 4BR rents are not — so the ratio genuinely falls as bedrooms
+# rise.
 #
-# It mattered operationally, though, and that is the part that changed. A high bedroom
-# count on a small footprint drove the *predicted ratio* below RENT_MODEL_MIN_RATIO, and
-# the Valuation agent refused the estimate. **A tree-based model cannot do that.** Its
-# prediction is an average of training targets already bounded to the plausible band, so
-# it clamps to the nearest leaf instead of extrapolating: measured Aug 30, 2026, a
-# 2bd / 100,000 sqft subject that LinearRegression prices at a ratio of 62.21 (refused)
-# is priced by gradient boosting at 2.20, and by a random forest at 3.00 — both entirely
-# reportable numbers for a property neither model has any basis to speak to.
+# It matters operationally. Under a linear model a high bedroom count on a small footprint
+# drives the *predicted ratio* below RENT_MODEL_MIN_RATIO and the Valuation agent refuses
+# the estimate. **A tree-based model cannot do that.** Its prediction is an average of
+# training targets already bounded to the plausible band, so it clamps to the nearest leaf
+# instead of extrapolating: measured, a 2bd / 100,000 sqft subject that a linear model
+# prices at a ratio of 62.21 (refused) is priced by gradient boosting at 2.20 and by a
+# random forest at 3.00 — both entirely reportable numbers for a property neither model has
+# any basis to speak to.
 #
-# So the refusal was fired by an artifact of one estimator's extrapolation rather than by
-# a deliberate check, and swapping the estimator would have retired it silently. It is now
-# an explicit **input-domain** check instead — see RENT_MODEL_DOMAIN_PERCENTILES below —
-# which asks whether the subject resembles anything in the training data at all, and is
-# the same question regardless of what form the estimator takes. Pinned by
+# So an output-side refusal fires on an artifact of one estimator's extrapolation rather
+# than on a deliberate check, and swapping the estimator retires it silently. The check is
+# an explicit **input-domain** one instead — see RENT_MODEL_DOMAIN_PERCENTILES below —
+# which asks whether the subject resembles anything in the training data at all, and is the
+# same question regardless of what form the estimator takes. Pinned by
 # tests/test_flag_propagation.py::test_an_implausible_prediction_is_refused_rather_than_reported.
 
-# The estimator. **Gradient boosting since U11.1 (Aug 30, 2026); a vanilla
-# LinearRegression before that**, which is what §6 cut-list item 1a deferred and what
-# `scripts/model_form_probe.py` reopened once k-fold cross-validation could replace the
-# single split OQ-4 objected to. Measured on 5 folds over the 5,686-row frame:
+# The estimator. **Gradient boosting**, reopened by `scripts/model_form_probe.py` once
+# k-fold cross-validation could replace a single train/test split.
+# Measured on 5 folds over the 5,686-row frame:
 #
 #     LinearRegression   CV MAE $513.67   fold sd 13.51   R² 0.263   train/holdout gap   $0.32
 #     RandomForest       CV MAE $428.83   fold sd  8.55   R² 0.454   train/holdout gap $140.41
 #     GradientBoosting   CV MAE $450.71   fold sd  7.29   R² 0.427   train/holdout gap  $18.34
 #
-# **Random forest wins on error and was not taken.** Its $140 train-vs-holdout gap against
-# the shipped model's $0.32 is the overfitting risk item 1a's deferral named, spent in one
-# go; gradient boosting takes 12.2% of the error for an $18 gap and the tightest fold
-# spread of the three. That is the architect's call (Aug 30, 2026), made on the balance of
-# error against variance rather than on the headline figure alone.
+# **Random forest wins on error and was not taken.** Its $140 train-versus-holdout gap
+# against the shipped model's $0.32 is exactly the overfitting this project cares about,
+# spent in one go; gradient boosting takes 12.2% of the error for an $18 gap and the
+# tightest fold spread of the three. Chosen on the balance of error against variance rather
+# than on the headline figure alone.
 #
-# **Library defaults, deliberately.** Tuning is U11.4's, on the form this selects. Tuning
-# inside the comparison would have made it a comparison of tuning effort.
+# **Library defaults, deliberately.** Tuning inside the comparison would have made it a
+# comparison of tuning effort rather than of model form.
 RENT_MODEL_ESTIMATOR = "gradient_boosting"
 
-# Cross-validation replaces the single 20% split, which closes the condition OQ-4 attached
-# to reopening model form at all. Two consequences beyond the headline number, both worth
-# having on their own: every row is scored exactly once by a model that never saw it, so
-# the per-metro slices below are thick enough to read (New York is n=264 rather than a
-# fifth of that); and the persisted artifact is refit on **all** the data afterwards,
-# where the single-split version shipped a model fit on 80% and threw the rest away.
+# Cross-validation replaces a single 20% split, and reopening model form at all depended on
+# it. Two consequences beyond the headline number, both worth having on their own: every
+# row is scored exactly once by a model that never saw it, so the per-metro slices below
+# are thick enough to read (New York is n=264 rather than a fifth of that); and the
+# persisted artifact is refit on **all** the data afterwards, where a single-split version
+# would ship a model fit on 80% and throw the rest away.
 RENT_MODEL_CV_FOLDS = 5
 
 # Holdout is random rather than by-metro. A by-metro split would answer a different and
 # more demanding question — does the model transfer to a market it never saw — which is
-# worth asking but is not the claim this build makes; §2 scopes the model to the three
-# inference metros, all of which are in the training set. Recorded because the weaker
-# split is a real limitation of the reported MAE and should be disclosed, not because it
-# is wrong for the purpose.
+# worth asking but is not the claim this build makes: the model is scoped to the three
+# inference metros, all of which are in the training set. Recorded because the weaker split
+# is a real limitation of the reported MAE and should be disclosed, not because it is wrong
+# for the purpose.
 #
-# **Superseded twice, and both halves are now settled.** U11.4 replaced the single split
-# with `RENT_MODEL_CV_FOLDS`-fold cross-validation plus a full-data refit, so this
-# fraction no longer governs the shipped artifact — it survives only as the
-# `train_test_split` some evidence scripts still use. And the leave-one-metro-out run this
-# TODO asked for was **cut to §6 cut-list 1a on Aug 30, 2026** by the architect, with the
-# transfer question left open and disclosed rather than answered (OQ-12). A k-fold holdout
-# structurally cannot answer it — every fold still contains all four markets — so the
-# report should say the question is open rather than let a cross-validated MAE imply it
-# was settled.
+# **This fraction no longer governs the shipped artifact** — cross-validation plus a
+# full-data refit does — and it survives only as the `train_test_split` some evidence
+# scripts still use. The transfer question stays open and disclosed rather than answered: a
+# k-fold holdout structurally cannot settle it, since every fold still contains all four
+# markets, so the report says the question is open rather than letting a cross-validated
+# MAE imply otherwise. `scripts/lomo_validation.py` is the instrument that does answer it.
 RENT_MODEL_HOLDOUT_FRACTION = 0.20
 RENT_MODEL_RANDOM_SEED = 42
 
@@ -629,14 +608,13 @@ RENT_MODEL_MIN_TRAINING_ROWS = 1_000
 RENT_MODEL_MIN_RATIO = 0.25
 RENT_MODEL_MAX_RATIO = 4.0
 
-# Input-domain check: does this subject resemble anything the model trained on? Added
-# U11.1 (Aug 30, 2026) — see the note on the retired bedrooms coefficient above for why
-# the output-side band above could no longer answer that on its own.
+# Input-domain check: does this subject resemble anything the model trained on? See the
+# note above for why the output-side band cannot answer that on its own.
 #
-# **The tunable half is here; the measured half travels with the artifact**, the same
-# split U8.4 settled for the per-metro error figure. These percentiles decide where the
-# line sits; the *values* it lands on are properties of the training frame and are stored
-# on `TrainingReport` so they cannot drift from the model that was fit on it.
+# **The tunable half is here; the measured half travels with the artifact**, the same split
+# the per-metro error figure uses. These percentiles decide where the line sits; the
+# *values* it lands on are properties of the training frame and are stored on
+# `TrainingReport` so they cannot drift from the model that was fit on it.
 #
 # **Guarded on square-feet-per-bedroom rather than on each feature alone, because a
 # per-feature range does not catch what actually goes wrong.** Measured on the frame:
@@ -653,11 +631,11 @@ RENT_MODEL_MAX_RATIO = 4.0
 RENT_MODEL_DOMAIN_PERCENTILES = (0.001, 0.999)
 
 # --------------------------------------------------------------------------
-# The anchor (U11.3 — the reference the model learns a ratio to)
+# The anchor — the reference the model learns a ratio to
 # --------------------------------------------------------------------------
-# **Zillow ZORI for the level and the location; HUD FMR for the bedroom shape.** Taken
-# Aug 30, 2026 by the architect on `scripts/anchor_probe.py`'s five-candidate comparison,
-# scored in dollars on the 5,671 rows every candidate can price:
+# **Zillow's rent index for the level and the location; HUD FMR for the bedroom shape.**
+# Chosen on `scripts/anchor_probe.py`'s five-candidate comparison, scored in dollars on the
+# 5,671 rows every candidate can price:
 #
 #     fmr    (status quo)                453.10   Chi 458  LA 451  Cle 372  NY 995
 #     zori   (zip -> county)             443.78   Chi 322  LA 494  Cle 361  NY 751
@@ -687,13 +665,11 @@ RENT_ANCHOR_SHAPE_REFERENCE_BEDROOMS = 2
 
 # How stale the market index's newest observation may be before the report says so.
 # Zillow publishes on a lag, and a thin ZIP's series can end earlier than the panel's
-# newest column, so this is measured per subject rather than per file. Replaces
-# RENT_DRIFT_MAX_ZORI_STALENESS_MONTHS, which asked the same question of the same series
-# for the correction that this anchor makes unnecessary.
+# newest column, so this is measured per subject rather than per file.
 RENT_ANCHOR_MAX_STALENESS_MONTHS = 6
 
 # Below this many ZIPs behind a county median, the county tier is a county median in name
-# only. Measured Aug 30, 2026 (`scripts/zori_county_tier.py`): median 8 ZIPs, p10 6,
+# only. Measured by `scripts/zori_county_tier.py`: median 8 ZIPs, p10 6,
 # **min 1**. None of the counties this system infers in are near the floor, so this guards
 # a path the demo set does not exercise rather than one it does.
 RENT_ANCHOR_MIN_COUNTY_ZIPS = 3
@@ -722,31 +698,29 @@ RENT_MODEL_FMR_FISCAL_YEAR_START_MONTH = 10
 RENT_MODEL_BACKCAST_ZIP_FMR = False
 
 # How much worse a market's own per-metro holdout MAE must be than the model's overall
-# holdout MAE before `FlagKind.RENT_ESTIMATE_MARKET_ERROR_ELEVATED` fires (U8.4, OQ-3).
-# A ratio to the overall figure rather than a fixed dollar amount, so the line does not
-# need re-tuning every time a retrain moves the headline MAE.
+# holdout MAE before `FlagKind.RENT_ESTIMATE_MARKET_ERROR_ELEVATED` fires. A ratio to the
+# overall figure rather than a fixed dollar amount, so the line does not need re-tuning
+# every time a retrain moves the headline MAE.
 #
-# First measured Aug 29, 2026 on the FMR anchor: overall $524.03, the trio within 1.1x,
-# New York at 2.00x. **Re-measured Aug 31, 2026 under #19's hybrid anchor and the gap
-# survives the anchor change**: overall $452.40; Chicago 0.76x, Cleveland 0.79x, Los
-# Angeles 1.13x, New York **1.89x**. Every figure moved and the shape did not.
+# Measured under the shipped anchor: overall $452.40; Chicago 0.76x, Cleveland 0.79x, Los
+# Angeles 1.13x, New York **1.89x**. Measured under the pure-FMR anchor the figures all
+# move and the shape does not — overall $524.03, the trio within 1.1x, New York at 2.00x.
 #
-# **HELD rather than tuned, and U8.6b measured why it cannot be tuned.** No listing can
-# straddle this line: it compares a *market's* error to the overall figure, and a
-# subject cannot move its own market's ratio. With markets sitting at <=1.13x and
-# 1.89x, any threshold between them decides identically — so the batch has no evidence
-# to choose within that interval, and 1.5 is kept as its midpoint rather than as a
-# tuned value. Published as a negative result in U8.6b's table.
+# **HELD rather than tuned, and it cannot be tuned.** No listing can straddle this line: it
+# compares a *market's* error to the overall figure, and a subject cannot move its own
+# market's ratio. With markets sitting at <=1.13x and 1.89x, any threshold between them
+# decides identically — so there is no evidence to choose within that interval, and 1.5 is
+# kept as its midpoint rather than as a tuned value. A negative result, published as one.
 RENT_MODEL_METRO_ERROR_RATIO_THRESHOLD = 1.5
 
 
 # --------------------------------------------------------------------------
-# Valuation agent (U5 — agents/valuation_rent.py)
+# Valuation agent (agents/valuation_rent.py)
 # --------------------------------------------------------------------------
 # The agent's Observe step re-expresses each retrieved comp's rent in the subject's
-# current dollars (rent / that comp's own county-and-year FMR, times the subject's
-# current FMR) and compares the model's estimate against the median of those. Both
-# constants below govern that comparison, not the model itself.
+# current dollars — the comp's rent divided by the anchor for its own area and month,
+# times the subject's own current anchor — and compares the model's estimate against the
+# median of those. Both constants below govern that comparison, not the model itself.
 
 # Below this many successfully normalized comps, the cross-check is not run at all and
 # the report says so. A "median" of one or two comps is a number, not a distribution,
@@ -759,7 +733,7 @@ RENT_COMP_CROSSCHECK_MIN_COMPS = 3
 # How far the modelled rent may sit from the comp median before the report says the two
 # disagree.
 #
-# Set against measured divergence rather than chosen. Five subjects, Aug 22, 2026 —
+# Set against measured divergence rather than chosen. Five subjects —
 # the three synthetic ones in scripts/valuation_evidence.py and the demo listings in
 # demo_deals.py, whose addresses geocode elsewhere in the same metros:
 #
@@ -778,41 +752,25 @@ RENT_COMP_CROSSCHECK_MIN_COMPS = 3
 # correct state: it is available to detect a genuine anomaly instead of reporting a
 # mechanism.
 #
-# **Confirmed against the eval batch, twice, and the second time is the more interesting
-# one.** U8.2 built `chicago-uptown-duplex` to answer this and it fired at +46.6%. After
-# U11.3's anchor change that same unmodified listing measures **−6.1%**, so the case
-# stopped tripping the flag and was retargeted as a control. The kind is still covered —
+# **Confirmed against the evaluation batch.** The kind is covered by
 # `chicago-uptown-oversized` (+80.0%), `cleveland-triplex` (−36.4%) and
-# `cleveland-divergence-over` (−30.8%) all raise it, and the last of those is a straddle
-# fixture sited a fraction of a point past this line on purpose (U8.6b).
+# `cleveland-divergence-over` (−30.8%), and the last of those is a straddle fixture sited a
+# fraction of a point past this line on purpose.
 #
-# **What that change also did, found only by re-deriving the batch:** every objection in
-# `critic._interaction_objections` is gated behind this flag, so making it rarer made the
-# Critic quieter — including on the one retryable objection that drives the rework cycle.
-# See `tasks/task_list_u8.md` U8.6e. Whether that gate is correctly placed is an open
-# design question, not a defect in this threshold.
-#
-# **What the flag is actually detecting, corrected Aug 22, 2026.** An earlier reading of
-# this held that the markets it fires on are the ones whose comp sets are unrepresentative.
+# **What the flag is actually detecting, which is easy to get wrong.** The tempting reading
+# is that the markets it fires on are the ones whose comp sets are unrepresentative.
 # Measured against the right baseline — the candidate pool at the same radius, rather than
-# the whole metro — that is wrong: semantic ranking moves the comp median only +2.7% /
+# the whole metro — that is false: semantic ranking moves the comp median only +2.7% /
 # +21.6% / +4.2%, while the neighborhood itself moves it +5.1% / +40.1% / +66.2%. The comps
 # are reporting real neighborhood premiums correctly.
 #
 # What diverges is the *model*, because RENT_MODEL_FEATURES excludes any market identifier
-# and the FMR anchor is county-level, so nothing in the pipeline represents sub-metro rent
-# variation. This threshold therefore currently fires on a known structural blind spot
-# rather than on an anomaly, which is a real limitation of the check and not a tuning
-# problem. §2, "The rent estimate is location-blind below the county."
+# and the anchor is the only channel through which location enters an estimate. Anchoring
+# at the subject's own ZIP is what keeps this from firing on a structural blind spot rather
+# than on an anomaly — measurable on one fixture, `chicago-uptown-duplex`, which reads +48%
+# against the comps under a county-grain anchor and **−6.1%** under the shipped one.
 #
-# **The revisit condition this comment set has since been met, and the paragraph above is
-# now history rather than current.** It said to revisit the whole check if a ZIP-level
-# anchor landed. #19 landed one (ZORI at the subject's own ZIP), so the model is no
-# longer blind to sub-metro rent variation and this threshold no longer fires on a
-# structural blind spot. The effect is measurable on one fixture: `chicago-uptown-duplex`
-# read +48% against the comps under the FMR anchor and reads **-6.1%** under the hybrid.
-#
-# **HELD at 0.30 Aug 30, 2026 on U8.6b's straddle pair, not tuned.** A Cleveland subject
+# **HELD at 0.30 on a straddle pair, not tuned.** A Cleveland subject
 # at 1,000 sq ft measures **-30.8%** (fires) and the same building at 1,050 sq ft
 # measures **-28.9%** (clears) — same coordinate, same eight comps, none out of band. A
 # 5% change in floor area flips it, which is the tightest line measured anywhere in this
@@ -825,47 +783,36 @@ RENT_COMP_DIVERGENCE_THRESHOLD_PCT = 0.30
 # calls the gap out rather than only reporting it. `None` means the comparison is always
 # rendered and never editorialized, which is the shipped state.
 #
-# **DECIDED Aug 30, 2026 as #20: hold at `None`, and do not delete the constant.** The
-# history below is kept because the reason changed twice and the second reason is the one
-# that holds. It was None rather than tuned because the gap measured on the demo listings was ~-29% on all three (Aug 24, 2026:
-# Los Angeles -28.8%, Chicago -29.0%, Staten Island -26.8%), and that offset was structural
-# rather than a property of any listing. FMR is a 40th-percentile rent; the corpus the rent
-# model learned from rented at ~1.40x FMR; #11 calibrated these listings to FMR itself. A
-# threshold placed against those three numbers would have been measuring this repository's
-# own fixtures, which is the error the three-question check in §8 exists to catch.
+# **Held at `None` on a measured reason, and deliberately not deleted.** The gap is
+# genuinely tunable: across the 13 evaluation fixtures carrying independently-set rents it
+# measures **mean -11.4%, median -9.7%, range -39.4% to +66.6%** — dispersed and
+# sign-varying, which is what a property of the deal looks like rather than a property of
+# the anchor.
 #
-# **Re-measured Aug 30, 2026, because U11.3 removed the premise.** The estimate is no
-# longer anchored to a 40th-percentile administrative figure — the anchor is Zillow's
-# market rent index — so the structural offset that made this untunable is gone. Across
-# the 13 eval fixtures carrying independently-set rents: **mean -11.4%, median -9.7%,
-# range -39.4% to +66.6%.** Dispersed and sign-varying, which is what a property of the
-# deal looks like rather than a property of the anchor.
+# **A second measurement then argued against tuning it.** `scripts/stated_rent_gap.py`
+# prints beside each fixture's gap the flags its report already raises. **Every fixture a
+# 20-35% threshold would fire on already carries a flag naming a more specific cause** —
+# comps matched outside the band, the bedroom cap, a market whose scored error is elevated
+# — 6 of 6 at 25%. So the emphasis would restate an existing disclosure in vaguer words and
+# attribute it to the listing's stated rent, which is the one thing in the comparison the
+# system did not derive.
 #
-# **So it became tunable, and a second measurement then argued against tuning it.**
-# `scripts/stated_rent_gap.py` prints beside each fixture's gap the flags its report
-# already raises. **Every fixture a 20-35% threshold would fire on already carries a flag
-# naming a more specific cause** — comps matched outside the band, the bedroom cap, a
-# market whose scored error is elevated — 6 of 6 at 25%. So the emphasis would restate an
-# existing disclosure in vaguer words and attribute it to the listing's stated rent, which
-# is the one thing in the comparison the system did not derive.
+# The constant stays rather than being removed, because the option is foreclosed by
+# evidence rather than by arithmetic, and the evidence could change: a fixture set whose
+# gaps are not already explained by a more specific flag would reopen it.
 #
-# **Hence #20: a disclosure, never a check, held on a measured reason rather than on the
-# expired one.** The constant stays at `None` and is **not deleted**, because the option is
-# now foreclosed by evidence rather than by arithmetic, and the evidence could change: a
-# fixture set whose gaps are not already explained by a more specific flag would reopen it.
-#
-# The demo deals cannot settle it either way: `demo_deals.DemoDeal.rent_basis` is
-# `hud_fmr:2`, so #11 set their stated rents from the old anchor and their gap measures the
-# schedule-versus-market spread. That is a finding about the demo set (#11's rent side needs
-# re-calibrating to the market index), not evidence about this threshold.
+# The demo deals cannot settle it either way. Four of them declare `hud_fmr:2` as their
+# rent basis, so their stated rents were set from the federal schedule and their gap
+# measures the schedule-versus-market spread rather than anything about the deal.
 RENT_CLAIM_DIVERGENCE_DISCLOSURE_THRESHOLD = None
 
-# --- ZORI comparison (U8.0, OQ-6) -----------------------------------------
+# --- Market-index comparison (scripts/zori_evidence.py) --------------------
 # The month read as "the corpus vintage" and the bedroom counts the mix-weighted FMR
 # denominator is built from. See tools/zori.py for why the denominator has to be
-# mix-weighted at all: ZORI is one figure per ZIP across unit types, FMR is per bedroom.
+# mix-weighted at all: the index is one figure per ZIP across unit types, FMR is per
+# bedroom.
 #
-# 2019-06 rather than the corpus's exact median listing date: ZORI is monthly and the
+# 2019-06 rather than the corpus's exact median listing date: the index is monthly and the
 # corpus spans ~2018-09 to 2019-09, so any single month is an approximation of a window.
 # Mid-window is chosen over an endpoint because the comparison is a level read, and an
 # endpoint would carry whatever trend ran through the year.
@@ -886,27 +833,27 @@ ZORI_MIN_CORPUS_ROWS_PER_ZCTA = 30
 # surge into the "before" figure and understate the drift being measured.
 ZORI_MAX_VINTAGE_SUBSTITUTION_MONTHS = 12
 
-# **The rent-drift correction was removed at U11.3.** U8.4b multiplied every estimate by
-# (ZORI/FMR today) / (ZORI/FMR at vintage) to remove a measured FMR-versus-market bias.
-# The anchor is now that market index itself, read at each row's own listing month, so
-# the bias is divided out where it arises rather than corrected afterwards.
-# RENT_DRIFT_FACTOR_MIN/MAX and RENT_DRIFT_MAX_ZORI_STALENESS_MONTHS went with it; the
-# staleness question survives as RENT_ANCHOR_MAX_STALENESS_MONTHS, asked of the anchor
-# rather than of the correction.
+# **There is deliberately no rent-drift correction here.** Multiplying every estimate by
+# (index/schedule today) / (index/schedule at vintage) removes a real schedule-versus-market
+# bias, and it is the wrong fix: anchoring to the market index itself, read at each row's
+# own listing month, divides the bias out where it arises rather than correcting for it
+# afterwards. The staleness question the correction also had to ask survives as
+# RENT_ANCHOR_MAX_STALENESS_MONTHS, asked of the anchor.
 
 
 # --------------------------------------------------------------------------
-# Scenario / Forecast agent (U6 - agents/scenario_forecast.py)
+# Scenario / Forecast agent (agents/scenario_forecast.py)
 # --------------------------------------------------------------------------
-# Two quantities, two sources, still not interchangeable — but the reason changed at
-# decision #21 (forecast rent source). Redfin drives price appreciation; **Zillow ZORI drives rent growth**,
-# with HUD FMR history as the fallback where ZORI has no county. #16 kept them apart on
-# a measured negative correlation (pooled r = -0.309); `scripts/growth_correlation.py`
-# re-derived that number and found it to be a property of the *rent series* rather than
-# of the market — -0.317 on FMR, -0.197 once HUD's two national step-up years are
-# removed, and **+0.222 on market rent** — with r-squared never above 0.10 in any pass.
-# They stay separate because they measure different things, which was always the better
-# half of the argument.
+# Two quantities, two sources, not interchangeable. The sale-price extract drives price
+# appreciation; **the market rent index drives rent growth**, with the federal schedule's
+# published history as the fallback where the index has no county deep enough to band.
+#
+# They stay separate because they measure different things. An apparent negative
+# correlation between the two is not a reason to keep them apart and not a reason to merge
+# them: `scripts/growth_correlation.py` finds it is a property of the *rent series* rather
+# than of the market — r = -0.317 against the federal schedule, -0.197 once its two
+# nationwide administrative increases are removed, and **+0.222 against market rent** —
+# with r² never above 0.10 in any pass.
 
 # How far the scenarios project. Five years is the standard multi-family hold period,
 # and it is long enough that the choice of framing is visible rather than academic: on
@@ -917,12 +864,10 @@ ZORI_MAX_VINTAGE_SUBSTITUTION_MONTHS = 12
 FORECAST_HORIZON_YEARS = 5
 
 # --- The shared band estimator (tools/growth_bands.py) ---------------------
-# These two were module constants in `tools/redfin_data.py` from U6, correctly: the
-# price series was the only series banded, so they described one series and belonged to
-# it. Decision #21 makes rent monthly as well and puts both sides through one estimator,
-# at which point a value read by two modules is a tunable with two homes - which is what
-# §8's "config.py is the only home for tunable parameters" rule exists to prevent. Moved
-# here on that rule rather than on preference.
+# Here rather than in `tools/redfin_data.py`, where they would naturally live if the price
+# series were the only one banded. Both sides of the forecast go through one estimator, so
+# a value read by two modules is a tunable with two homes — and config.py is the only home
+# for a tunable in this project.
 
 # Width of a "sustained stretch" when deriving optimistic/pessimistic bands, in periods.
 # One year. A single extreme month is sampling noise at these volumes; a band built on
@@ -931,13 +876,12 @@ FORECAST_HORIZON_YEARS = 5
 # market actually held, not its best and worst single prints.
 SUSTAINED_STRETCH_PERIODS = 12
 
-# The anomalous window §2 requires be flagged wherever it feeds an average. Near-zero
+# The anomalous window this project requires be flagged wherever it feeds an average. Near-zero
 # policy rates through this stretch pushed price growth well above trend; blending it
 # silently into a "base case" would describe an unusual few years as normal.
 #
-# ISO strings rather than timestamps so this module keeps its two-import surface -
-# `tools/growth_bands.py` parses them once. Applied to *both* series under #21, where
-# only the price side carried the exclusion before.
+# ISO strings rather than timestamps so this module keeps its two-import surface —
+# `tools/growth_bands.py` parses them once. Applied to *both* series.
 ANOMALOUS_PERIOD_START = "2020-01-01"
 ANOMALOUS_PERIOD_END = "2022-12-31"
 
@@ -960,19 +904,17 @@ ANOMALOUS_PERIOD_END = "2022-12-31"
 # whether a stretch ending 2018-12 is admitted, and nothing on the price side covers it.
 FORECAST_SERIES_WINDOW_START = "2018-01-01"
 
-# --- ZORI rent-growth series (tools/rent_growth.py) — decision #21 (forecast rent source) ---------
-# The forecast's rent bands come from Zillow's Observed Rent Index at the subject's
-# county, not from HUD's Fair Market Rent schedule. #16 chose FMR on an architectural
-# argument — "the rent estimate is `ratio x FMR`, so projecting the anchor forward
-# forecasts rent by the same mechanism that produced the estimate" — and that argument
-# now selects ZORI, because since #19 the estimate is `ratio x ZORI(ZIP) x FMR-bedroom
-# -step`. Following #16's own reasoning to where the system moved, rather than
-# overturning it. The four defects this closes are in `docs/design/evaluator.md`.
+# --- Market rent-growth series (tools/rent_growth.py) ----------------------
+# The forecast's rent bands come from Zillow's Observed Rent Index at the subject's county,
+# not from the federal rent schedule. The governing rule is that the forecast projects
+# forward *the same anchor the estimate was built on*, and the estimate is
+# `ratio × index(ZIP) × schedule-bedroom-step`. `docs/design/evaluator.md` works through
+# what projecting the schedule instead would cost.
 
 # The county tier, not the ZIP tier, and the reason is coverage rather than preference:
-#   - ZIP 10307 has no ZORI series at all, and it is the `staten-island` demo deal's own
-#     ZIP. That deal has no Redfin metro, so rent is the only side it gets — a ZIP-first
-#     design would turn a one-sided forecast into no forecast.
+#   - ZIP 10307 has no index series at all, and it is the `staten-island` demo deal's own
+#     ZIP. That deal has no metro price series either, so rent is the only side it gets —
+#     a ZIP-first design would turn a one-sided forecast into no forecast.
 #   - 65-95% of the ZIPs inside this project's own market counties start after 2018-01
 #     (median start 2021-2024), so a ZIP-first design falls back to county for most
 #     subjects anyway and varies the *history length* by ZIP.
@@ -983,12 +925,13 @@ FORECAST_SERIES_WINDOW_START = "2018-01-01"
 ZORI_GROWTH_RESOLUTION = "county"
 
 # How many distinct twelve-month stretches the outer rent bands must be chosen from
-# before ZORI is used at all. Below it the county falls through to the FMR schedule.
+# before the market index is used at all. Below it the county falls through to the federal
+# schedule.
 #
 # **Measured, and the first rule tried was not enough.** The obvious threshold is the
 # estimator's own requirement — at least one contiguous twelve-month run, or "the worst
 # sustained stretch" silently becomes "the worst single month". That is a genuine cliff
-# (62% of ZORI's 1,211 counties clear it, 38% do not, and a count-based test agrees to
+# (62% of the index's 1,211 counties clear it, 38% do not, and a count-based test agrees to
 # within four counties) and it is necessary. It is not sufficient: Adams County IL clears
 # it on 14 months of history and publishes a five-year projection banded
 # +9.18/+9.86/+10.51.
@@ -1015,17 +958,17 @@ ZORI_GROWTH_SERIES_DESCRIPTION = (
     "Zillow Observed Rent Index, county-level monthly median across all unit types"
 )
 
-# --- FMR rent-growth series (tools/fmr_history.py) — the fallback ----------
-# Kept, not retired: measured across ZORI's county table, only 1,211 counties are
-# covered at all and 62% of those can form a sustained stretch, so outside indexed
-# markets the FMR schedule is the common path rather than an edge case. It reaches any
-# county through the HUD API this project already caches.
+# --- Federal-schedule rent-growth series (tools/fmr_history.py) — the fallback ----
+# Not an edge case: measured across the market index's county table, only 1,211 counties
+# are covered at all and 62% of those can form a sustained stretch, so outside indexed
+# markets the schedule is the common path. It reaches any county through the HUD API this
+# project already caches.
 #
 # HUD publishes FY2017 onward, giving nine year-over-year observations. **The estimator
 # asymmetry survives here and only here**: nine annual points cannot carry a twelve-month
 # sustained window, so the fallback keeps single-fiscal-year extremes (FMR_BAND_* below)
-# while the primary path uses the shared monthly estimator. That is the asymmetry #21
-# closes on the path every demo deal takes, and discloses on the path none of them do.
+# while the primary path uses the shared monthly estimator. That asymmetry is closed on the
+# path every demo deal takes and disclosed on the path none of them do.
 FMR_HISTORY_FIRST_YEAR = 2017
 
 # The fiscal years the fallback holds out when the forecast's depth-1 search asks for the
@@ -1046,16 +989,16 @@ FMR_HISTORY_MIN_YOY_OBSERVATIONS = 5
 FMR_COHORT_PANEL_PATH = SRC_DIR / "tools" / "data" / "fmr_cohort_panel.json"
 
 # --- Cohort-shift screen ---------------------------------------------------
-# **No longer a forecast branch, and still load-bearing (decision #21 — forecast rent source).** The screen was
-# built to hold HUD's national step-ups out of the rent bands; the rent bands no longer
-# come from HUD on any path a demo deal takes, so the depth-1 rent fork is now the same
-# 2020-2022 question the price side is asked and this screen does not enter it.
+# **Not a forecast branch, and still load-bearing.** The screen holds HUD's nationwide
+# administrative step-ups out of a rent band built from the schedule. The rent bands do not
+# come from the schedule on any path a demo deal takes, so the forecast's rent fork is the
+# same 2020-2022 question the price side is asked and this screen does not enter it.
 #
-# It is kept because it is the *evidence that retired itself*. Removing FY2023-24 — the
-# two years this screen identifies — is what collapsed the rent/price correlation from
+# It is kept because it is the *evidence that retired itself*. Removing FY2023-24 — the two
+# years this screen identifies — is what collapses the measured rent/price correlation from
 # -0.317 to -0.197 in pass 2 of `scripts/growth_correlation.py`, and that pass is a third
-# of the argument for #21. Deleting the machinery would delete the reproduction of the
-# finding that justified deleting it.
+# of the case for not building the forecast's rent side on this schedule. Deleting the
+# machinery would delete the reproduction of the finding that justified deleting it.
 #
 # A fiscal year where *every* area in the panel moved together, well above the long-run
 # baseline. FY2023 (+5.10pp) and FY2024 (+7.48pp) are the two in the current panel.
@@ -1064,8 +1007,8 @@ FMR_COHORT_PANEL_PATH = SRC_DIR / "tools" / "data" / "fmr_cohort_panel.json"
 # and the rename is the point.** Whether HUD changed its methodology or the 2021-22
 # market surge reached an administrative series two years late is not determinable from
 # FMR alone - both produce a cohort-wide move. What IS observable is whether every area
-# moved at once, so that is what this measures and what the report says. Attribution
-# waits for Zillow ZORI, which is market-observed (decision #16 — rent-growth source).
+# moved at once, so that is what this measures and what the report says. Attribution needs
+# a market-observed series, and this one is not.
 #
 # Measured, not chosen: sorting the nine fiscal years by cohort excess leaves a 4.05pp
 # gap between the largest ordinary year (FY2021, +1.05pp) and the smallest shifted one
@@ -1083,7 +1026,7 @@ FMR_LOCAL_DEVIATION_PP = 8.0
 
 # --- Rent band construction ------------------------------------------------
 # **Bands are the worst and best fiscal years actually observed; the base case is the
-# geometric mean of the retained years.** Nine annual points cannot support Redfin's
+# geometric mean of the retained years.** Nine annual points cannot support the monthly
 # definition, where "optimistic" is the best sustained 12-observation stretch, so the
 # construction had to be chosen rather than copied. Four candidates were measured:
 #
@@ -1127,8 +1070,6 @@ FMR_IQR_UPPER_PERCENTILE = 75
 # Models (OpenRouter)
 # --------------------------------------------------------------------------
 #
-# Decision #8, closed Aug 16, 2026 — see §7 for the full table.
-#
 # **Paid variants, not `:free`.** The project constraint is to prefer free tools *where
 # their quality is good*, and on this axis the free tier failed a different test: its
 # `:free` variants are served from provider-shared pools, so two bake-off passes measured
@@ -1161,20 +1102,17 @@ FMR_IQR_UPPER_PERCENTILE = 75
 # the live catalogue and `main.py` calls it before building the graph, so a dead ID fails
 # loudly at launch instead.
 #
-# The four-way split remains structural. Only MODEL_EXTRACTION is exercised by a built
-# agent; the Critic and Summarizer make no LLM calls yet, so there is still nothing to
-# choose them against — the same reasoning §7 used to defer this decision originally,
-# now scoped to three roles instead of four. Revisit at U7 and U9.
+# The split by role is structural: every role currently resolves to the same model, and
+# the seam is where a future comparison happens. Naming it costs nothing now and means a
+# per-role change never has to hunt down call sites.
 
 MODEL_DEV = "nvidia/nemotron-3-nano-30b-a3b"
 MODEL_EXTRACTION = "nvidia/nemotron-3-nano-30b-a3b"
 MODEL_CRITIC = "nvidia/nemotron-3-nano-30b-a3b"
 MODEL_SUMMARIZER = "nvidia/nemotron-3-nano-30b-a3b"
-# Added in U6. The Scenario agent's evaluator scores enumerated hypotheses and selects
-# which evidence to pull for them; that is a judgement task rather than an extraction
-# task, so it gets its own role even though every role currently resolves to the same
-# model. Same reasoning as the original four-way split: the seam is where a future
-# bake-off happens, and naming it costs nothing now.
+# The Scenario agent's evaluator scores enumerated hypotheses and selects which evidence to
+# pull for them; that is a judgment task rather than an extraction task, so it gets its own
+# role.
 MODEL_SCENARIO = "nvidia/nemotron-3-nano-30b-a3b"
 
 LLM_TIMEOUT_SECONDS = 90
@@ -1190,10 +1128,9 @@ LLM_TEMPERATURE = 0.0  # deterministic everywhere
 # `LLM_CACHE_MODE=replay .venv/bin/python ...` is how an evaluation run pins itself to
 # recorded responses.
 #
-# Measured justification: a live call ran 9.9-23s per listing across the U3 bake-off,
-# against milliseconds for a local read. The cache is a latency and reproducibility
-# mechanism first; the free tier's 50/day cap is what prompted it, but paid inference
-# removes that pressure without removing either of the other two reasons.
+# Measured justification: a live call runs 9.9-23s per listing against milliseconds for a
+# local read. The cache is a latency and reproducibility mechanism; avoided cost is a
+# side effect rather than the reason.
 LLM_CACHE_MODE = os.environ.get("LLM_CACHE_MODE", "read_write")
 
 # Two stores, one mechanism, split by whether the contents belong in git.
@@ -1204,9 +1141,9 @@ LLM_CACHE_MODE = os.environ.get("LLM_CACHE_MODE", "read_write")
 #
 # `src/eval/data/` is the committed counterpart: the recordings an evaluation replays
 # have to travel with the repo, or a fresh clone cannot reproduce the results the report
-# quotes. U8 points at it explicitly; nothing writes there by accident.
+# quotes. The evaluation harness points at it explicitly; nothing writes there by accident.
 #
-# **Env-overridable as of U9.5, for the same reason `LLM_CACHE_MODE` above is.** The eval
+# **Env-overridable, for the same reason `LLM_CACHE_MODE` above is.** The eval
 # runner selects the store by assigning this constant, which serves the batch and nothing
 # else — but `main.py` renders a *report*, and the batch does not: an escalating case
 # pauses at `human_review` and the runner never resumes it, so no run of the harness ever
@@ -1214,14 +1151,14 @@ LLM_CACHE_MODE = os.environ.get("LLM_CACHE_MODE", "read_write")
 # `main.py`'s full path, resume and written summary included, and that needs a way to
 # point at the committed store without editing this file. `LLM_CACHE_MODE=replay
 # LLM_CACHE_DIR=src/eval/data/llm_recordings .venv/bin/python main.py --deal <key>` is a
-# reproducible demo run, which is what U9.7's replay-by-default surface rests on.
+# reproducible demo run, which is what the Streamlit surface's replay default rests on.
 LLM_CACHE_DIR = Path(os.environ["LLM_CACHE_DIR"]) if os.environ.get("LLM_CACHE_DIR") \
     else DATA_DIR / "processed" / "llm_cache"
 EVAL_DATA_DIR = SRC_DIR / "eval" / "data"
 EVAL_RESULTS_DIR = SRC_DIR / "eval" / "results"
 EVAL_RECORDINGS_DIR = EVAL_DATA_DIR / "llm_recordings"
 
-# Census Geocoder address→coordinate store (U8.6e, Aug 30, 2026).
+# Census Geocoder address→coordinate store.
 #
 # **Committed, unlike the LLM development cache above, and for the same reason
 # `EVAL_RECORDINGS_DIR` is committed.** A replayed eval case's forecast prompt embeds the
@@ -1241,14 +1178,14 @@ EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 CHROMA_PERSIST_DIR = DATA_DIR / "processed" / "chroma"
 CHROMA_COLLECTION = "rental_comps"
 
-# §2: each listing is embedded as one document rather than chunked. Listings are short,
+# Each listing is embedded as one document rather than chunked. Listings are short,
 # self-contained records whose fields are mutually dependent, so splitting one would
 # separate a rent figure from the context that makes it interpretable.
 CHUNK_LISTINGS = False
 
-# U4 ablation: when False, the retrieval node returns no comps, so the pipeline can be
-# run with and without grounding on identical inputs. Checkpoint 3.1 asks for evidence
-# that retrieval meaningfully influences output; this produces that comparison directly.
+# Retrieval ablation: when False, the retrieval node returns no comps, so the pipeline can
+# be run with and without grounding on identical inputs. That comparison is the evidence
+# that retrieval meaningfully influences output.
 RETRIEVAL_ENABLED = True
 
 
@@ -1264,8 +1201,8 @@ LANGSMITH_ENABLED = os.environ.get("LANGSMITH_TRACING") == "true"
 
 # Third-party library logging — off by default, and "off" here means *restoring* the
 # root logger rather than silencing anything. Nothing in this project logs; the ~190
-# lines that print before every report arrive because decision #1 (LangGraph)3's MCP reference
-# server reconfigures logging for the whole process when it is constructed. See
+# lines that print before every report arrive because the MCP reference server
+# reconfigures logging for the whole process when it is constructed. See
 # `tools/logging_setup.py` for the measurement and why the fix is shaped that way.
 #
 # `LIBRARY_LOGS=true` gets the chatter back for debugging a retrieval or an HTTP
@@ -1276,33 +1213,27 @@ LIBRARY_LOGS_ENABLED = os.environ.get("LIBRARY_LOGS", "").lower() == "true"
 
 
 # --------------------------------------------------------------------------
-# Tree-of-Thought reasoning (§7 decisions #12, #14 — U6)
+# Tree-of-Thought reasoning
 # --------------------------------------------------------------------------
-# Applied inside one node: Scenario/Forecast (U6). The rest of the pipeline is ordered
-# by data dependency, so there is nothing there to search over.
+# Applied inside one node: Scenario/Forecast. The rest of the pipeline is ordered by data
+# dependency, so there is nothing there to search over — and the Critic's cross-agent
+# checks, which look like a second consumer, are pure functions over `state.flags` with no
+# generated candidates to search.
 #
-# Decision #12 originally reserved a second consumer, the Critic's cross-agent
-# consistency checks (U7). **Retired on evidence, U7.7:** the checks that shipped in
-# U7.2/U7.3 (`agents/critic.py:_interaction_objections`, the comp-drift check in
-# `agents/comps_retrieval.py`) are pure functions over `state.flags` — no LLM call, no
-# generated candidates, nothing to search over. See `history/decision_log.md` #12.
-#
-# Every value below is PROVISIONAL. **Retargeted U8 -> U9 on Aug 30, 2026 (OQ-5): U8
-# planned no subsection for these and built none**, so naming U8 here overstated what was
-# scheduled. The condition is unchanged and unmet — tuning needs cases whose correct
-# branch is known by construction, and none exist.
+# **Every value below is PROVISIONAL**, and the condition for tuning them is unmet: tuning
+# needs cases whose correct branch is known by construction, and none exist.
 #
 # **Two measurements did land and are what is known about any of these.**
-# `TOT_TIE_EPSILON` is not meaningfully straddleable: the gap it compares is
-# noise-dominated (OQ-17), so a recorded straddle would measure the recording (U8.6b).
-# And U8.6c published the depth-2 **cut margin** — the line the beam width actually cuts
-# on — which across the golden batch is often zero or negative, meaning the discarded
-# pairing outscored the reported one and lost on `tot._rank`'s conservatism preference.
-# Tuning against the golden batch was considered and declined: those fixtures were
-# authored by the unit that would have tuned against them.
+# `TOT_TIE_EPSILON` is not meaningfully straddleable — the gap it compares is
+# noise-dominated by the evaluator's own call-to-call variance, so a recorded straddle
+# would measure the recording. And the depth-2 **cut margin** — the line the beam width
+# actually cuts on — is often zero or negative across the golden batch, meaning the
+# discarded pairing outscored the reported one and lost on `tot._rank`'s conservatism
+# preference. Tuning against the golden batch was considered and declined: those fixtures
+# were authored to exercise the code that would then be tuned against them.
 #
-# They are named here rather than inside the agent because a tunable hardcoded in an
-# agent is a defect (§8).
+# They are named here rather than inside the agent because a tunable hardcoded in an agent
+# is a defect.
 
 # Candidate hypotheses generated per expansion. Anchored to the Tree-of-Thought paper's
 # b=5 on Game of 24 (4% -> 74% over chain-of-thought), not yet to this project's data.
@@ -1333,8 +1264,8 @@ TOT_FRAMING_BEAM_WIDTH = 1
 # framing is rather than a loosened bar. A threshold asks "did this hypothesis survive
 # contact with the data?" — a real question about a band pairing, and a category error
 # about a framing, since framings are enumerated from the treatments the evidence
-# actually supports and are therefore all defensible by construction. Decision #12 says
-# as much: this fork is in the design precisely because it has no single correct answer.
+# actually supports and are therefore all defensible by construction. This fork is in the
+# design precisely because it has no single correct answer.
 #
 # **Also found by reading output.** With the uniform 0.40 applied, an evaluator applying
 # ordinary skepticism scored all four Los Angeles framings below it and emptied the beam
@@ -1349,7 +1280,7 @@ TOT_SCENARIO_DISTINCTNESS_PCT = 1.0
 
 # Branches scoring below this are discarded. Pruning is never silent: each discarded
 # branch writes {id, parent, depth, score, prune_reason} to the ledger on DealState so
-# the report can disclose what was considered and why it was dropped (decision #14 — ToT branch persistence).
+# the report can disclose what was considered and why it was dropped.
 TOT_PRUNE_THRESHOLD = 0.40
 
 # Scores within this distance are treated as tied, and resolved toward the more
@@ -1370,12 +1301,12 @@ TOT_MAX_EVIDENCE_CALLS = 3
 
 
 # --------------------------------------------------------------------------
-# MCP reference server (§7 decision #13 (MCP adoption) — mcp_server.py)
+# MCP reference server (mcp_server.py)
 # --------------------------------------------------------------------------
-# Read-only surface over tools/hud_fmr.py and tools/redfin_data.py. Consumed by the U6
-# ToT evaluator's per-branch evidence pulls, and by any MCP host during U8 evaluation and
-# the Week 7 demonstration. The pipeline itself does not require it — see the decision
-# log for the honest accounting of what it does and does not buy.
+# Read-only surface over tools/hud_fmr.py and tools/redfin_data.py. Consumed by the
+# forecast evaluator's per-branch evidence pulls, and by any MCP host. The pipeline itself
+# does not require it — see `mcp_server.py` for the honest accounting of what the protocol
+# does and does not buy.
 
 MCP_SERVER_NAME = "deal-evaluator-reference"
 

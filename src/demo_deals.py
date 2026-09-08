@@ -26,59 +26,47 @@ What is real and what is invented
   and the specific figures within the tolerances below. No listing here describes a real
   offer, and none should be read as one.
 
-Why FMR and not the corpus for rents
---------------------------------------
-The Kaggle corpus is 2018-19. These listings purport to be current, so calibrating their
-rents against a corpus median would embed a seven-year vintage gap in the demo — exactly
-the mismatch §2's FMR-anchoring design exists to remove. FMR is published annually and
-county-level, so it is the current-dollar figure already available to this project.
+Two rent bases, and the set carries both on purpose
+-----------------------------------------------------
+These listings purport to be current, so calibrating their rents against the 2018-19
+listing corpus would embed a seven-year vintage gap in the demo — the exact mismatch this
+system's rent anchoring exists to remove. Two current-dollar references are available.
 
-One property of FMR worth stating rather than discovering later: it is a 40th-percentile
-rent, not a market median, so a listing calibrated to it sits at the affordable end of
-its market by construction. That is acceptable for a demo and would not be acceptable for
-an accuracy benchmark, which is a separate job wanting a separate dataset (see the
-public-records item in §7).
+`hud_fmr:<beds>` calibrates against the HUD Fair Market Rent schedule: annual,
+county-level, and already fetched by this project. One property of it is worth stating
+rather than discovering later — it is a 40th-percentile rent, not a market median, so a
+listing calibrated to it sits at the affordable end of its market by construction.
 
-**That reasoning was superseded on Aug 30, 2026 (#19), and the figures were kept as
-committed anyway.** The rent estimate is no longer anchored to FMR at all — the anchor is
-Zillow's ZIP-level market rent index, and FMR is reduced to the bedroom step — so these
-listings are calibrated against a benchmark the system otherwise no longer uses. The
-consequence shows on one deal: `chicago`'s stated rents sit ~25% below Logan Square's own
-market index, because HUD's 40th percentile runs about a third under the market in that
-ZIP. Los Angeles, Staten Island and the mispriced Los Feliz listing are all within 10%.
+`market_anchor:<beds>` calibrates against the rent level the estimate is *actually* built
+on, which is Zillow's ZIP-level market index with the schedule supplying only the bedroom
+step.
 
-**A second basis exists as of U9.6 and the four original listings do not use it.**
-`market_anchor:<beds>` re-derives the figure the estimate is genuinely built on, and it is
-what any deal added after #19 declares. The four deals below stay on `hud_fmr:2` — that is
-the U8.7 decision immediately following, not an oversight — so the set now carries both
-bases deliberately, and `los-angeles-current` exists to show the same property under each.
+**The four original deals stay on `hud_fmr:2` and newer ones declare `market_anchor`.**
+That is a decision, not an oversight, and `los-angeles-current` exists to show the same
+property under each basis. The consequence shows on one deal: `chicago`'s stated rents sit
+~25% below Logan Square's own market index. Measured at FY2026 against the index at
+2026-07, the schedule runs **33.1% under** the market index in 60647, **13.8% under** in
+60640, and **7.3% over** it in 90026 — where the FMR lookup falls back to the metro entry,
+so the figure describes Los Angeles County from Malibu to Compton rather than Echo Park.
+The staleness is real in every market and its direction is not uniform.
 
-**One thing the per-deal measurement corrected in the paragraph above (Sept 1, 2026).**
-"HUD's 40th percentile runs about a third under the market" describes Logan Square and
-nothing else. Measured at FY2026 against the index at 2026-07, the schedule runs **33.1%
-under** the market index in 60647, **13.8% under** in 60640, and **7.3% over** it in
-90026 — where the FMR lookup returns `used_msa_fallback`, so the figure describes Los
-Angeles County from Malibu to Compton rather than Echo Park. The staleness is real in
-every market; its direction is not uniform, and the sentence generalized from one deal.
-
-Re-calibrating was measured at U8.7 and declined, on the same reasoning that kept
+**Re-calibrating the four was measured and declined**, on the same reasoning that keeps
 `staten-island`'s asking price: **nothing computes from a stated rent** — no flag, no
 confidence contribution, no verdict — so a stale basis here cannot make the system wrong,
-only make one listing less lifelike, and saying so is worth more than moving figures the
-write-up and the video quote. Two things would change that answer: an audience who would
-read Chicago's rents as implausible, or promoting the stated-rent comparison to a check,
-which U8.7 also declined. A third consideration cuts against re-calibrating outright —
-the estimate *is* that index times a modelled ratio, so calibrating stated rents to it
-would make every demo report's stated-versus-modelled section print the same figure. That
-is the defect `price_premium_to_basis` exists to prevent on the price side, and it would
-need the same device on this one.
+only make one listing less lifelike. Two things would change that answer: an audience who
+would read Chicago's rents as implausible, or promoting the stated-rent comparison to a
+check. A third consideration cuts against re-calibrating outright — the estimate *is* that
+index times a modelled ratio, so calibrating stated rents to it would make every demo
+report's stated-versus-modelled section print the same figure. That is the defect
+`price_premium_to_basis` exists to prevent on the price side, and it would need the same
+device on this one.
 
 The Staten Island exception, which is deliberate
 --------------------------------------------------
 Redfin's extract covers Chicago, Cleveland, and Los Angeles only, so the Staten Island
 deal has no price basis and its asking figure is unanchored. It is kept that way on
-purpose: §2 designates New York as the case grounded in real market thinness rather than
-constructed scarcity, and that thinness turns out to run deeper than comp density — no
+purpose: New York is this project's case of *real* market thinness rather than
+constructed scarcity, and that thinness runs deeper than comp density — no
 comps, no appreciation series, and no sale-price benchmark either. Labelling the gap is
 worth more than hiding it behind a number that looks like the others.
 """
@@ -122,21 +110,21 @@ class DemoDeal:
     # Island.
     #
     # **Two rent bases exist, and which one a deal declares is a claim about its
-    # vintage** (U9.6). Both name the bedroom count to look up against the county the
-    # listing's own address resolves to:
+    # vintage.** Both name the bedroom count to look up against the county the listing's
+    # own address resolves to:
     #
-    # - `hud_fmr:<beds>` — HUD's Fair Market Rent for that county. What #11 calibrated
-    #   the original four listings against, and the anchor #19 retired.
+    # - `hud_fmr:<beds>` — HUD's Fair Market Rent for that county. What the original four
+    #   listings are calibrated against.
     # - `market_anchor:<beds>` — the market rent index at the subject's own ZIP times
     #   FMR's bedroom step, which is what `agents/valuation_rent` actually anchors the
-    #   estimate to today. **A new deal declares this one**; OQ-21 is explicit that a deal
-    #   copying the existing basis ships stale on day one.
+    #   estimate to. **A new deal declares this one**; copying the older basis ships a deal
+    #   that is stale on day one.
     #
     # `scripts/verify_demo_calibration.py` re-derives either, and the market anchor goes
     # through `rent_model.anchor_for_row` — the same function the pipeline calls — rather
     # than a second copy of the formula.
     #
-    # **A deal should be calibrated to the benchmark its own report reads** (U9.4). The
+    # **A deal should be calibrated to the benchmark its own report reads.** The
     # Valuation agent prefers the ZIP tier and falls back to the metro median, so a deal
     # in a market with a local tier that is calibrated to the metro figure is being
     # checked against a number its report never prints.
@@ -148,8 +136,8 @@ class DemoDeal:
     #
     # This exists so a listing can be mispriced on purpose without the provenance
     # becoming a lie. Every other deal is priced at its metro median because that is the
-    # only defensible figure available; the consequence, recorded in U7's Q4, is that the
-    # report's asking-price-versus-benchmark disclosure reads 0% on every one of them — a
+    # only defensible figure available; the consequence is that the report's
+    # asking-price-versus-benchmark disclosure reads 0% on every one of them — a
     # real check this repository's own fixtures could not exercise. Stating the premium
     # keeps the price re-derivable from a live source while making the check mean
     # something.
@@ -195,11 +183,11 @@ DEMO_DEALS: dict[str, DemoDeal] = {
         price_basis="redfin_metro_median:Los Angeles",
         rent_basis="hud_fmr:2",
     ),
-    # **The shadow deal (U9.6).** `los-angeles` with its two stated rents re-based on the
-    # anchor the system actually uses, and nothing else touched — same address, same
-    # description, same asking price, same price basis. #19 was a decision about rent, so
-    # letting the asking price move with it would confound the one thing this deal exists
-    # to isolate.
+    # **The shadow deal.** `los-angeles` with its two stated rents re-based on the anchor
+    # the system actually uses, and nothing else touched — same address, same description,
+    # same asking price, same price basis. The rent basis is the only variable, so letting
+    # the asking price move with it would confound the one thing this deal exists to
+    # isolate.
     #
     # **One shadow rather than the five originally proposed.** Five would need five
     # calibrations, five sets of verification expectations and five new rows in a table
@@ -230,8 +218,8 @@ DEMO_DEALS: dict[str, DemoDeal] = {
         rent_basis="market_anchor:2",
         notes=(
             "The `los-angeles` listing with its stated rents declared against the market "
-            "anchor (#19) instead of HUD's schedule (#11). The original is deliberately "
-            "left untouched, so the pair shows what the anchor change means for a "
+            "anchor instead of HUD's schedule. The original is deliberately "
+            "left untouched, so the pair shows what the anchor choice means for a "
             "listing's own figures rather than asserting it. **The direction is the "
             "finding**: HUD's 40th-percentile schedule is usually described as running "
             "under the market, and in this ZIP it runs 7.3% over — the county-wide "
@@ -251,11 +239,10 @@ DEMO_DEALS: dict[str, DemoDeal] = {
         price_basis="redfin_metro_median:Chicago",
         rent_basis="hud_fmr:2",
         notes=(
-            "Stated rents predate the anchor change (#19) and sit ~25% below this ZIP's "
-            "market rent index: HUD's 40th-percentile schedule runs about a third under "
-            "the market in Logan Square, and these were calibrated to HUD. Retained as "
-            "committed per U8.7 — see the module docstring for why, and for what would "
-            "change the answer."
+            "Stated rents are calibrated to HUD's schedule and sit ~25% below this ZIP's "
+            "market rent index: the 40th-percentile schedule runs about a third under "
+            "the market in Logan Square. Retained as committed — see the module "
+            "docstring for why, and for what would change the answer."
         ),
     ),
     "staten-island": DemoDeal(
@@ -268,18 +255,17 @@ DEMO_DEALS: dict[str, DemoDeal] = {
         ),
         price=875_000,
         unit_rents=(2_850, 2_900, 2_975),
-        # Set without a market basis, and the reason recorded at the time — "Redfin's
-        # extract does not cover New York" — turned out to be false (U8.4c): the extract
-        # was fine; this build's trio-only filter was the gap. Now that the New York
-        # series is loaded, the committed $875,000 measures ~11% below the metro's
-        # multi-family median (~$981K, Jun 2026) — a plausible Staten Island discount
-        # the divergence check does not flag — so the figure stands as committed rather
-        # than being recalibrated, and the report benchmarks it like any other deal.
+        # Set without a market basis, because it was set before this build's price series
+        # reached New York. It does now, and the committed $875,000 measures ~11% below
+        # the metro's multi-family median (~$981K, Jun 2026) — a plausible Staten Island
+        # discount that the divergence check does not flag — so the figure stands as
+        # committed rather than being recalibrated, and the report benchmarks it like any
+        # other deal.
         price_basis=None,
         rent_basis="hud_fmr:2",
         notes=(
-            "Asking price predates the New York price benchmark (see U8.4c) and sits "
-            "~11% below the metro multi-family median. Retained as the sparse-comps "
+            "Asking price was set before the New York price benchmark existed here and "
+            "sits ~11% below the metro multi-family median. Retained as the sparse-comps "
             "case: zero comparables is the real, measured gap this deal exists to show."
         ),
     ),
@@ -312,17 +298,16 @@ DEMO_DEALS: dict[str, DemoDeal] = {
         ),
         price=1_345_000,
         unit_rents=(1_750, 1_800),
-        # **Re-sited from Los Feliz to Logan Square on Sept 1, 2026, and the reason is a
-        # measurement rather than a preference (U9.4).** This deal was
-        # `1801 N Vermont Ave, Los Angeles` at 55% above the Redfin *metro* median. Los
-        # Angeles has no ZIP-level sale benchmark at all — California publishes assessed
-        # value under Proposition 13, see `scripts/build_sale_benchmarks.py` — so the
-        # only reference available there is metro-wide, and
+        # **Sited in Chicago rather than Los Angeles, and the reason is a measurement
+        # rather than a preference.** Los Angeles has no ZIP-level sale benchmark at all —
+        # California publishes assessed value under Proposition 13, see
+        # `scripts/build_sale_benchmarks.py` — so the only reference available there is
+        # metro-wide, and
         # `scripts/sale_premium_distribution.py` measured what a premium against one of
         # those is worth: **55% over a metro median is the 78th percentile of actual
-        # sales.** An ordinary transaction. The deal documented as deliberately
-        # mispriced was, on the evidence, priced unremarkably, and U9.4's recommendation
-        # rule returned *Proceed* on it.
+        # sales.** An ordinary transaction — so a deal documented as deliberately
+        # mispriced would, on the evidence, be priced unremarkably, and the recommendation
+        # rule would return *Proceed* on it.
         #
         # Uptown has a local tier built from 148 recorded sales, where the same 55% is
         # around the 90th percentile — a premium the data can actually call unusual. The
@@ -361,24 +346,17 @@ DEMO_DEALS: dict[str, DemoDeal] = {
         ),
         price=869_000,
         unit_rents=(2_000, 2_050),
-        # **Added U9.6 for OQ-21, on a purpose restated after measurement.** That entry
-        # was raised when `chicago` began escalating and `los-angeles` "became the only
-        # demo deal reaching 1.00 and reporting clean". U9.4 re-sited `overpriced` to
-        # Uptown and it now reports at 1.00 too, so the set already shows a clean run
-        # twice on axis 1 and OQ-21's original wording is satisfied without this deal.
-        #
-        # What the set still lacks is a deal clean on **both** axes whose *Proceed* means
-        # something. `los-angeles` returns *Proceed* on a premium that is 0% because #11
-        # derived its asking price from the same metro median the report benchmarks it
-        # against, and Los Angeles has no ZIP tier at all — so that verdict is read
-        # against the very figure it was calibrated from (OQ-20). This deal is calibrated
-        # to **ZIP 60640's own median, built from 148 recorded county-assessor sales**,
-        # which is a benchmark #11 did not supply.
+        # **What this deal supplies that no other does: a clean run on both axes whose
+        # *Proceed* means something.** `los-angeles` also returns *Proceed*, on a premium
+        # that is 0% because its asking price was derived from the same metro median the
+        # report benchmarks it against — and Los Angeles has no ZIP tier at all, so that
+        # verdict is read against the very figure it was calibrated from. This deal is
+        # calibrated to **ZIP 60640's own median, built from 148 recorded county-assessor
+        # sales**, which is an independent benchmark.
         price_basis="zip_sale_benchmark:60640",
-        # **Rents declared against the anchor the system actually uses, and the first deal
-        # here to do so.** OQ-21: a new deal copying `hud_fmr:2` ships stale on day one,
-        # since #19 retired that anchor. The four older listings stay on it deliberately
-        # (U8.7) — see the module docstring — so the set now carries both bases on purpose.
+        # **Rents declared against the anchor the system actually uses**, unlike the four
+        # older listings, which stay on the HUD basis deliberately — see the module
+        # docstring — so the set carries both bases on purpose.
         rent_basis="market_anchor:2",
         # **Sited at the golden fixtures' own address rather than a second Uptown one.**
         # `chicago-uptown-duplex`, `-band-under`, `-band-over` and `-oversized` are all

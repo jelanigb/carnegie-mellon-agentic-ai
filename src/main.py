@@ -9,17 +9,16 @@
     .venv/bin/python main.py --deal chicago-uptown # clean on both axes; priced at its ZIP median
     .venv/bin/python main.py --deal los-angeles-current  # los-angeles, rents re-based on the current anchor
     .venv/bin/python main.py --file listing.txt --coords 34.0522,-118.2437
-    .venv/bin/python main.py --deal chicago --no-retrieval   # without the comp corpus (U4 ablation)
+    .venv/bin/python main.py --deal chicago --no-retrieval   # without the comp corpus
     .venv/bin/python main.py --fault llm-unavailable         # a declared, simulated outage
 
 The three market deals are the same density cases `scripts/retrieval_evidence.py`
 measures, reused here so end-to-end behaviour can be compared against the retrieval
 evidence directly rather than against a separate set of inputs.
 
-**Coordinates are derived from the listing, not supplied alongside it (U3).** The
-Extractor calls `tools/geocoding.py` as an ordinary step, so a listing arriving as text
-now reaches comp retrieval on its own — which was the point of closing decision #10 (geocoding source).
-Two consequences visible here:
+**Coordinates are derived from the listing, not supplied alongside it.** The Extractor
+calls `tools/geocoding.py` as an ordinary step, so a listing arriving as text reaches comp
+retrieval on its own. Two consequences visible here:
 
 - The demo listings carry **real street addresses**, because an invented one resolves to
   no parcel and falls back to the city centroid, raising a geography flag on every run.
@@ -217,7 +216,7 @@ def main() -> None:
 
     if args.no_retrieval:
         # Mutated here rather than read from an env var so the ablation stays a single
-        # documented switch (§6) rather than two ways of expressing the same thing.
+        # documented switch rather than two ways of expressing the same thing.
         config.RETRIEVAL_ENABLED = False
 
     if args.file:
