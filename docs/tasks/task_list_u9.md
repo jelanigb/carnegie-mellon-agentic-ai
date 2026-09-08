@@ -1514,23 +1514,31 @@ and neither had a plan.
 | | Deliverable | State |
 | --- | --- | --- |
 | **1** | **The capture** — traces, screenshots, the diagram, terminal recordings | Runbook above. Needs a live account and a screen |
-| **2** | **The 8–10 minute presentation video** | Slide outline, timing budget and a full script draft in [`../presentation.md`](../presentation.md) |
-| **3** | **The 1,000–1,500 word final report** | Section-by-section source map, same file. Every section already has its evidence in this repository |
+| **2** | **The 8–10 minute presentation video** | Slide outline, timing budget and a full script draft in `docs/presentation.md` — a working document, **deleted Sept 4, 2026** once the deck and script were drafted from it. Delivered Sept 7, 2026 |
+| **3** | **The 1,000–1,500 word final report** | Section-by-section source map, same file. Delivered Sept 7, 2026 as [`../final_capstone_report_jelani_gould_bailey.md`](../final_capstone_report_jelani_gould_bailey.md); every section's evidence was already in this repository |
 
 **The optional 90-second elevator pitch is a fourth**, ungraded, and it is the ticket to the
 final-session showcase — the facilitators pick six and the professor picks three, and all
 three deliverables must be submitted to be considered. Drafted in the same file.
 
-#### The presentation, the script and the report → [`../presentation.md`](../presentation.md)
+#### The presentation, the script and the report → `docs/presentation.md` *(deleted Sept 4, 2026)*
 
-**Split out Sept 2, 2026 by the architect.** The slide outline (timed to **9:30** against the
+**Split out Sept 2, 2026 by the architect**, and **deleted Sept 4, 2026** in the pre-freeze
+docs cleanup once it had done its job. It held the slide outline (timed to **9:30** against the
 10-minute limit), the ~1,150-word narration script, the five-beat demo sheet, the report's
-section-by-section source map and the elevator-pitch draft all live there now, along with the
-two reference capstones' lessons and the two decisions still open before recording.
+section-by-section source map and the elevator-pitch draft, along with the two reference
+capstones' lessons and the two decisions that were open before recording.
+
+**It was scaffolding, not a deliverable, and it has no surviving public counterpart** — the
+things it fed do. The report shipped as
+[`../final_capstone_report_jelani_gould_bailey.md`](../final_capstone_report_jelani_gould_bailey.md)
+and the deck and video shipped outside this repository. **All three deliverables landed
+Sept 7, 2026.** The links in this section are left naming the deleted file rather than
+repointed, because what they described was that document, not either of its outputs.
 
 **The capture runbook above stays here and is not duplicated there** — two copies of a command
-list diverge the first time either is edited. `presentation.md` points back at this section for
-the commands; this section points there for what to say over them.
+list diverge the first time either is edited. That file pointed back at this section for the
+commands; this section pointed there for what to say over them.
 
 ### U9.10 ✅ — OQ-5, OQ-10 and OQ-14 written up *(done Sept 2, 2026)*
 
