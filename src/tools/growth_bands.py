@@ -2,18 +2,15 @@
 
 Why this module exists
 ----------------------
-The band arithmetic lived inside `tools/redfin_data.py` from U6, because the price series
-was the only monthly series the forecast projected. Decision #21 re-sources rent growth
-from HUD's annual FMR schedule to Zillow's monthly ZORI index, which makes both sides of
-the forecast monthly and makes a single estimator possible — and `docs/design/evaluator.md`
-Defect 3 is the reason it is necessary rather than merely tidy.
+Both sides of the forecast — rent growth and price appreciation — are monthly series, and
+they must be banded by one estimator or their bands are not comparable.
 
-**Defect 3, in one line: the two bands were not comparable.** The rent side took extremes
-over *single fiscal years* and the price side over *twelve-month sustained stretches*, which
-made the rent band roughly 3x wider as an artifact of method rather than of market — 15.2
-points against 5.3 on Los Angeles. Every pairing the Tree-of-Thought search produced
-inherited that asymmetry, which is why rent appeared to outrun price under every combination
-the search could reach. Two series scored by one function cannot drift that way again.
+**The failure this prevents, in one line: bands built two ways cannot be paired.** Taking
+rent extremes over *single fiscal years* and price extremes over *twelve-month sustained
+stretches* makes the rent band roughly 3x wider as an artifact of method rather than of
+market — 15.2 points against 5.3 on Los Angeles. Every pairing the forecast search produces
+inherits that asymmetry, which makes rent appear to outrun price under every combination
+the search can reach. Two series scored by one function cannot drift that way.
 
 What this module is and is not
 ------------------------------
@@ -24,9 +21,9 @@ opinion about what the series measures, does not read a file, and does not const
 `redfin_data`'s own docstring gives: keeping the judgment here and the flag construction
 there is what stops a data module from importing `state.py`.
 
-Nothing in it is new. Every line was moved from `redfin_data.compute_growth_bands` and
-`_sustained_means` unchanged, and `compute_growth_bands` now delegates to it, so the price
-bands this project has published since U6 are byte-identical across the move.
+`redfin_data.compute_growth_bands` delegates to this module rather than duplicating it, so
+the price bands published by this project and the rent bands beside them come from one
+implementation.
 """
 
 from __future__ import annotations
@@ -141,7 +138,8 @@ def yoy_from_levels(levels: pd.Series) -> pd.Series:
 
 
 def is_in_anomalous_period(index: pd.DatetimeIndex) -> pd.Series:
-    """Which observations fall inside the 2020-2022 window §2 requires be flagged."""
+    """Which observations fall inside the 2020-2022 window this project requires be
+    disclosed wherever it feeds an average."""
     return pd.Series(
         (index >= ANOMALOUS_PERIOD_START) & (index <= ANOMALOUS_PERIOD_END),
         index=index,
@@ -176,8 +174,8 @@ def bands_from_yoy(
 ) -> Optional[SeriesBands]:
     """Derive optimistic / base / pessimistic bands from a year-over-year series.
 
-    The three bands follow §2's definitions directly: base is long-run average growth,
-    optimistic is the best sustained stretch actually observed, pessimistic the worst.
+    Base is long-run average growth, optimistic is the best sustained stretch actually
+    observed, and pessimistic is the worst.
     "Sustained" means the mean over `sustained_window_periods` consecutive year-over-year
     observations, so no band rests on a single month's print.
 

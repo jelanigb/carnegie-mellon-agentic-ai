@@ -1,51 +1,36 @@
-"""HUD FMR published history as a rent-growth series (§7 decision #16 (rent-growth source), U6).
+"""HUD FMR published history as a rent-growth series — the forecast's fallback rent source.
 
-Why this module exists
-----------------------
-The Scenario/Forecast agent needs a rent-growth rate, and §1 originally specified taking
-one from Redfin's sale-price series. Measured against this project's own data before U6
-was built, rent growth and price growth appeared **negatively** correlated across the
-inference trio (pooled r = -0.309), so that series would have pointed the forecast the
-wrong way. Rent growth needs a rent-native source, and HUD's published FMR history is
-the one this project already had: FY2017 onward through the client in `hud_fmr.py`,
-already cached, no new dependency.
+The forecast's rent growth normally comes from Zillow's rent index, through
+`tools/rent_growth.py`, because that is the series the rent estimate itself is anchored
+to. This module is the county-level fallback for the 46% of counties where that index has
+no series deep enough to band — see `tools/rent_growth.py` for how that line is drawn.
 
-**Both halves of that have since moved, and this module is now the fallback rather than
-the source — decision #21 (forecast rent source), U9.3.** The correlation was re-derived
-(`scripts/growth_correlation.py`) and is a property of the *rent series* rather than of
-the market: -0.317 on the HUD schedule, -0.197 with HUD's two national step-up years
-removed, and **+0.222 on market rent**, r² never above 0.10. And #19 moved this system's
-rent anchor to Zillow's ZORI index, so the architectural argument below — project forward
-the same anchor the estimate was built on — now selects ZORI. `tools/rent_growth.py` is
-the source; this module still earns its place as the county-level fallback where ZORI has
-no series deep enough to band.
-
-It is also the only candidate that is *architecturally* consistent. The rent estimate is
-`ratio x FMR` (§2), so projecting the FMR anchor forward while holding the structural
-ratio constant forecasts rent by the same mechanism that produced the estimate - no
-second normalization basis, no new vintage problem.
+Rent growth needs a rent-native source either way. Taking it from the sale-price series
+instead would be cheaper and is not defensible: the two move together weakly and
+inconsistently, and the apparent relationship changes sign depending on which rent series
+is used to measure it.
 
 Three things the measurement changed about the design
 -----------------------------------------------------
 Reproduce all three with `scripts/fmr_history_evidence.py`.
 
 1. **The anomalous window is not the same years on the two series.**
-   `config.ANOMALOUS_PERIOD` is calendar 2020-2022, which is correct for Redfin and
-   wrong here. On FMR those three fiscal years are ordinary (cohort medians 2.73 / 5.22
+   `config.ANOMALOUS_PERIOD` is calendar 2020-2022, which is correct for the sale-price
+   series and wrong here. On FMR those three fiscal years are ordinary (cohort medians 2.73 / 5.22
    / 3.09 against a 4.17% baseline); the surge lands in **FY2023 and FY2024**, because
    FMR is administrative and lags - the FY2024 schedules were published in Sept 2023 on
    2021-22 data. Applying the price window to this series would drop three normal years
    and keep both distorted ones. Hence a separate screen rather than a shared constant.
 
 2. **"Methodology jump" is an attribution this data cannot support, so it is not
-   claimed.** The plan named Chicago's +19.0% FY2024 as a HUD methodology change. All
-   ten areas in the panel moved that year (median 11.65%, minimum 6.5%); Chicago's move
+   claimed.** It is tempting to read Chicago's +19.0% FY2024 as a HUD methodology change.
+   All ten areas in the panel moved that year (median 11.65%, minimum 6.5%); Chicago's move
    is 61% cohort and 7.4pp local, and Los Angeles's +14.5% is mostly cohort. A
    cohort-wide shift is equally consistent with a methodology change and with the
    2021-22 market surge reaching an administrative series two years late. What is
    observable is *whether every area moved at once*, so that is what
-   `cohort_shift_years` measures and what the report says. Zillow ZORI, being
-   market-observed, is what could attribute it later (decision #16 — rent-growth source).
+   `cohort_shift_years` measures and what the report says. A market-observed series is
+   what could attribute it, and this one is not.
 
 3. **The growth rate is county-level even where the rent anchor is ZIP-level.** HUD's
    Small Area FMR history is too shallow to difference: the panel has nine years of ZIP
@@ -56,9 +41,8 @@ Reproduce all three with `scripts/fmr_history_evidence.py`.
    alternative is a growth rate for one metro and none for the other two.
 
 Flag-worthy conditions are **returned as data**, never printed or raised, exactly as in
-`redfin_data.py` and for the same reason: it keeps this module from importing
-`state.py`. `RentGrowthBands` carries everything the Scenario agent needs to construct
-its flags.
+`redfin_data.py` and for the same reason: it keeps this module from importing `state.py`.
+`RentGrowthBands` carries everything the Scenario agent needs to construct its flags.
 
 Run: .venv/bin/python tools/fmr_history.py
 """
@@ -414,17 +398,15 @@ def compute_rent_growth_bands(
 
     `exclude_years` holds out fiscal years the caller names. `tools/rent_growth.py` passes
     `config.FMR_ANOMALOUS_FISCAL_YEARS` through it, so the fallback path is asked the same
-    2020-2022 question the price side is asked, which is what decision #21 (forecast rent source) made the
-    depth-1 rent fork.
+    2020-2022 question the price side is asked — which is the forecast's rent fork.
 
     `exclude_cohort_shift_years` holds out the years *this panel* found every area moving
-    together in. It was the Scenario agent's fork through U8 and is no longer: the forecast
-    stopped reading the FMR schedule on any path a demo deal takes, so a screen for HUD's
-    administrative step-ups has nothing to screen there. It stays because
-    `scripts/growth_correlation.py` and `scripts/fmr_history_evidence.py` need it — removing
-    FY2023-24 is what collapsed the rent/price correlation from -0.317 to -0.197, and that
-    is a third of the evidence for #21. The machinery that retired itself is the machinery
-    that reproduces the retirement.
+    together in. The forecast no longer reads the FMR schedule on any path a demo deal
+    takes, so a screen for HUD's administrative step-ups has nothing to screen there. It
+    stays because `scripts/growth_correlation.py` and `scripts/fmr_history_evidence.py`
+    need it: removing FY2023-24 is what collapses the measured rent/price correlation from
+    -0.317 to -0.197, and that is a third of the evidence for not building the forecast on
+    this series in the first place.
     """
     yoy = series.yoy_by_year
     detected: tuple[int, ...] = ()

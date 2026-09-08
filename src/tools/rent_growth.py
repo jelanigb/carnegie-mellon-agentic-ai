@@ -1,32 +1,31 @@
-"""The forecast's rent-growth bands, and which series produced them (decision #21 — forecast rent source).
+"""The forecast's rent-growth bands, and which series produced them.
 
-Why this module exists
-----------------------
-Through U8 the forecast projected rent forward on HUD's Fair Market Rent schedule, chosen
-by decision #16 (rent-growth source) on an argument about mechanism rather than about data: *"the rent estimate
-is `ratio x FMR`, so projecting the anchor forward while holding the structural ratio
-constant forecasts rent by the same mechanism that produced the estimate."* That argument
-was right and it now points somewhere else. Since #19 the estimate is `ratio x ZORI(ZIP) x
-FMR-bedroom-step`, so projecting the anchor forward means projecting **ZORI**. This module
-follows #16's own reasoning to where the system moved.
+Why the series is Zillow's rent index and not the federal rent schedule
+-----------------------------------------------------------------------
+The governing principle is that the forecast projects forward *the same anchor the rent
+estimate was built on*, so the projection and the estimate move by one mechanism rather
+than two. The estimate is `ratio × market-index(ZIP) × federal-schedule bedroom step`, so
+the thing to project is the market index.
 
-What that fixed, measured rather than asserted — full workings in
-`docs/design/evaluator.md`, reproducible with `scripts/growth_correlation.py`:
+Projecting the federal schedule instead is the tempting alternative and it is wrong in
+three measurable ways — full workings in `docs/design/evaluator.md`, reproducible with
+`scripts/growth_correlation.py`:
 
-- **A false premise.** The Tree-of-Thought search preferred *anti-correlated* rent/price
-  pairings because this project measured rent and price growth moving opposite each other.
-  Re-derived, that is a property of the *rent series*, not of the market: pooled r = -0.317
-  against FMR, -0.197 once HUD's two national step-up years are removed, and **+0.222
-  against market rent**. r-squared never exceeds 0.10 in any pass, so the honest reading is
-  that no directional rule is supported in either direction.
-- **A ~2pp/yr overstatement.** U8.0 measured the FMR schedule rising +51.9% since the
-  corpus vintage against market rent's +33.5%. The Los Angeles demo projected rent at
-  **+7.26%/yr** against a price *falling* 0.80%/yr; on ZORI the same deal reads +2.51%
-  against +2.10%, which is the picture nobody had to be talked into.
-- **An estimator asymmetry.** FMR is annual, so its outer bands were single-fiscal-year
-  extremes while the price side used twelve-month sustained stretches — a rent band three
-  times wider as an artifact of method. Both series are monthly now and both go through
-  `tools/growth_bands.py`.
+- **It fabricates a directional relationship.** Measured against the federal schedule,
+  rent and price growth move opposite each other (pooled r = -0.317, or -0.197 once the
+  schedule's two nationwide administrative increases are removed), which is enough to make
+  a forecast search prefer anti-correlated rent/price pairings. Measured against market
+  rent it is **+0.222**. The apparent relationship is a property of the *series*, not of
+  the market, and with r² never above 0.10 in any pass no directional rule is supported in
+  either direction.
+- **It overstates rent growth by roughly 2pp/yr.** The schedule has risen +51.9% since the
+  listing corpus's vintage against market rent's +33.5%. On the schedule the Los Angeles
+  demo projects rent at **+7.26%/yr** against a price *falling* 0.80%/yr; on the market
+  index the same deal reads +2.51% against +2.10%.
+- **It makes the two sides of the forecast incomparable.** The schedule is annual, so its
+  outer bands are single-year extremes while the price side uses twelve-month sustained
+  stretches — a rent band three times wider as an artifact of method. Both series are
+  monthly here and both go through `tools/growth_bands.py`.
 
 The county tier, and why not the ZIP tier
 -----------------------------------------
@@ -34,24 +33,24 @@ The estimate is anchored at the subject's own ZIP and its growth is measured at 
 subject's county. That is a real inconsistency and it is disclosed rather than hidden,
 because the alternative is worse on the deals this system actually has:
 
-- **ZIP 10307 has no ZORI series at all**, and it is the `staten-island` demo deal's ZIP.
-  That deal resolves no Redfin metro, so rent is the only side of its forecast — a
-  ZIP-first design turns a one-sided forecast into no forecast.
+- **ZIP 10307 has no index series at all**, and it is the `staten-island` demo deal's ZIP.
+  That deal resolves no metro sale-price series either, so rent is the only side of its
+  forecast — a ZIP-first design turns a one-sided forecast into no forecast.
 - 65-95% of the ZIPs inside this project's market counties start after 2018-01, so a
   ZIP-first design falls back to county for most subjects anyway, and varies the length of
   history behind a band by which ZIP the subject sits in.
 - Where both tiers exist the answer barely moves: LA 90026 gives +0.68/+2.37/+3.86 against
   its county's +1.25/+2.51/+4.76.
 
-When the FMR fallback runs
---------------------------
-ZORI's county table covers 1,211 counties and the fallback carries 46% of them, for two
-reasons that were found in that order.
+When the federal-schedule fallback runs
+----------------------------------------
+The index's county table covers 1,211 counties and the fallback carries 46% of them, for
+two reasons.
 
 **38% cannot form a single contiguous twelve-month run** of year-over-year observations
 once the window and the 2020-2022 exclusion are applied, and below that line the shared
 estimator silently redefines its own outer bands from "worst sustained stretch" to "worst
-single month" — Defect 3 reappearing inside the change that closed it.
+single month" — the same method asymmetry described above, reappearing one level down.
 
 **A further 8% clear that bar and still cannot support a range.** Adams County IL passes
 on 14 months of history and bands a five-year projection at +9.18/+9.86/+10.51: the
@@ -62,10 +61,10 @@ worth of *distinct* stretches — see `config.ZORI_GROWTH_MIN_SUSTAINED_STRETCHE
 carries the measured distribution and records that this second threshold, unlike the
 first, sits on a smooth distribution and is a judgment rather than a cliff.
 
-The fallback keeps the FMR schedule's annual construction, because nine annual points
-cannot carry a twelve-month window. The asymmetry #21 closes therefore survives on the
-fallback path, which no demo deal and no eval case reaches, and `RENT_GROWTH_SOURCE`
-discloses it when it does.
+The fallback keeps the schedule's annual construction, because nine annual points cannot
+carry a twelve-month window. So the method asymmetry above survives on the fallback path —
+which no demo deal and no evaluation case reaches — and `RENT_GROWTH_SOURCE` discloses it
+when something does.
 
 Flag-worthy conditions are returned as data, never printed or raised — the same division
 `tools/redfin_data.py` keeps, and for the same reason: it is what stops a data module from

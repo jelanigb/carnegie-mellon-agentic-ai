@@ -1,47 +1,46 @@
-"""Zillow ZORI — the independent, market-observed rent series (decision #16 — rent-growth source, OQ-6).
+"""Zillow Observed Rent Index (ZORI) — the market-observed rent series this system anchors to.
 
 Why this module exists
 ------------------------
-Every rent figure this system produces is a ratio to HUD's Fair Market Rent, learned from
-a 2018-19 corpus and applied to today's FMR schedule. That design (§2) rests on one
-assumption it has never been able to test: **that rent-to-FMR structure is stable across
-the ~7 years between the corpus and now.** If the ratio has drifted, every rent estimate
-is wrong by the drift and nothing in the pipeline would say so.
+Two consumers, and both are load-bearing:
 
-FMR cannot test it — the ratio's denominator cannot also be its check. The corpus cannot
-test it either; it is one snapshot, and a snapshot cannot measure its own staleness. The
-test needs a *market-observed* series covering both ends of the gap, which is what #16
-adopted ZORI for and what stayed unbuilt through U6 and U7.
+1. **The rent anchor.** `tools/model/rent_model.py` learns rent as a ratio to the local
+   rent *level*, and this series supplies that level — at the row's own ZIP and its own
+   listing month during training, and at the subject's ZIP and the newest published month
+   at inference.
+2. **The forecast's rent growth.** `tools/rent_growth.py` differences the same series to
+   band rent growth, so the projection moves by the same mechanism that produced the
+   estimate.
+
+Using a market series for both is what keeps the corpus's 2018-19 vintage out of the
+output: the numerator and the denominator are read at the same month, so the vintage
+divides out where it arises rather than being corrected afterwards.
 
 What ZORI is, and what it is not
 ----------------------------------
 ZORI is Zillow's Observed Rent Index: a smoothed, repeat-listing measure of typical asked
-rent, published monthly per ZIP from 2015-01. Two properties matter here and both cut
-against a naive comparison:
+rent, published monthly per ZIP from 2015-01. Two properties matter here:
 
-1. **It is not bedroom-specific.** One number per ZIP per month, across unit types. FMR is
-   published per bedroom count, and the rent model anchors each row at its own bedroom
-   count. So a ZORI/FMR ratio needs a bedroom baseline chosen deliberately — see
-   `scripts/zori_evidence.py`, which weights FMR by the corpus's own bedroom mix so the
-   denominator describes the same mixture the numerator does.
+1. **It is not bedroom-specific.** One number per ZIP per month, across unit types. This is
+   why the anchor is a hybrid — the federal rent schedule supplies the step between bedroom
+   counts, with its own level divided out. See `rent_model.bedroom_shape`.
 2. **Its unit mix is not the corpus's.** ZORI covers single-family, condo and multifamily;
-   the Kaggle corpus is professionally-marketed apartment listings. The two populations
+   the listing corpus is professionally-marketed apartment listings. The two populations
    overlap without matching, and no weighting available here fixes that.
 
-**The consequence is worth stating precisely, because it decides what this data can
-settle.** The *level* comparison — is the corpus's ~1.40x FMR the market's ratio? — is
-exposed to both mismatches and can only ever be indicative. The *stability* comparison —
-has the ratio moved between the corpus vintage and today? — applies the identical
-construction at both ends, so a constant mix bias cancels out of the difference. **The
-question #16 actually asked is the stability one, and it is the one this data answers
-cleanly.** Reported that way rather than blended into a single headline number.
+**That second point decides what comparisons against this series can settle.** A *level*
+comparison — is the corpus's rent-to-schedule ratio the market's ratio? — is exposed to the
+mix mismatch and can only ever be indicative. A *stability* comparison — has the ratio moved
+between the corpus vintage and today? — applies the identical construction at both ends, so
+a constant mix bias cancels out of the difference. `scripts/zori_evidence.py` reports the
+two separately rather than blending them into one headline number.
 
 Source and licensing
 ----------------------
 Public research CSVs published by Zillow at files.zillowstatic.com, free to use with
-attribution. Downloaded to `data/` (gitignored) rather than committed: it is ~10 MB, it is
-re-fetchable from a stable URL, and §8's committed-inputs rule is about *derived* evidence
-being reproducible, which the evidence script's output satisfies on its own.
+attribution. Downloaded to `data/` (gitignored) rather than committed: it is ~10 MB and
+re-fetchable from a stable URL, and what this project commits is *derived* evidence, which
+the evidence scripts' outputs already carry.
 """
 
 from __future__ import annotations
@@ -198,8 +197,8 @@ def county_medians(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 def panel() -> Optional[pd.DataFrame]:
     """The ZORI panel, loaded once per process, or `None` if the file is absent.
 
-    ~10 MB, and since U11.3 **every rent estimate reads it** — the anchor the model
-    learns a ratio to is built from this series. `None` rather than an exception for the
+    ~10 MB, and **every rent estimate reads it** — the anchor the model learns a ratio to
+    is built from this series. `None` rather than an exception for the
     reason `rent_model.load` returns `None` for a missing model: an absent data file is a
     condition the Valuation agent discloses through the flag mechanism, not a crash, and
     the pipeline must still produce a report on a machine that has not downloaded it.

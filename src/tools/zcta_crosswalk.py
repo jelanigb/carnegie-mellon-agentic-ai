@@ -1,16 +1,16 @@
 """Coordinate → ZIP (ZCTA), so a rent figure can be anchored below the county.
 
-**Why this exists.** `tools/model/rent_model.py` learns rent as a ratio to the local HUD
-Fair Market Rent, and `agents/valuation_rent.py` multiplies that ratio by the FMR for the
-subject's own area. Until Aug 22, 2026 "local area" meant *county*, which put a hard floor
-under the estimate's spatial resolution: `config.RENT_MODEL_FEATURES` deliberately carries
-no market identifier, so the FMR anchor is the **only** channel through which location
-enters a rent estimate at all. A county-level anchor therefore meant the system could not
-represent neighborhood variation of any kind.
+**Why this exists.** `tools/model/rent_model.py` learns rent as a ratio to the local rent
+level, and `agents/valuation_rent.py` multiplies that ratio by the rent level for the
+subject's own area. Resolving "local area" as *county* would put a hard floor under the
+estimate's spatial resolution: `config.RENT_MODEL_FEATURES` deliberately carries no market
+identifier, so the anchor is the **only** channel through which location enters a rent
+estimate at all, and a county-level anchor means the system cannot represent neighborhood
+variation of any kind.
 
-That was measurable and large. HUD publishes Small Area FMRs (SAFMR) — a separate schedule
-per ZIP — for 9 of the 15 counties in the training set, covering 94.4% of its rows, and
-within a single county those ZIP schedules span roughly 2x:
+That gap is measurable and large. HUD publishes Small Area FMRs (SAFMR) — a separate
+schedule per ZIP — for 9 of the 15 counties in the training set, covering 94.4% of its
+rows, and within a single county those ZIP schedules span roughly 2x:
 
     Cook (Chicago)        370 ZIPs   $1,170-$2,670   vs county-wide $1,781
     Los Angeles           474 ZIPs   $2,070-$4,350   vs county-wide $2,903
@@ -41,7 +41,7 @@ with nearest-match misassigns every point near a boundary.
    cartographic boundaries after that release; GENZ2021-2023 have no ZCTA layer). ZCTA
    boundaries move slowly, but a ZIP created since 2020 will not resolve.
 3. **A coordinate is only as good as what produced it.** 92% of the rent corpus carries a
-   city-area placeholder rather than a street address (§2), so for those rows this resolves
+   city-area placeholder rather than a street address, so for those rows this resolves
    the *placeholder's* ZIP. That still adds real resolution inside a large county — a
    placeholder in Long Beach and one in Santa Monica land in different ZIPs — but it is not
    a claim about the individual property, and nothing downstream should treat it as one.
@@ -173,9 +173,7 @@ def resolve_subject_zip(
     *verifier* resolving it by a third rule would check a figure no report prints.
 
     Takes primitives rather than a `DealTerms` for exactly that last caller: the script
-    parses an address out of listing prose and has no state object to pass. Extracted from
-    `valuation_rent._resolve_subject_zip` at U9.6 (originally extracted within that agent
-    at U8.8, when it had two callers instead of three).
+    parses an address out of listing prose and has no state object to pass.
 
     The ZCTA fallback is a Census tabulation area rather than a postal ZIP; the two agree
     for the great majority of residential ZIPs, and the difference is not worth a second

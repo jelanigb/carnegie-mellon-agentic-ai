@@ -1,13 +1,9 @@
-"""Resolves `DealTerms.latitude/longitude` — decision #10 (geocoding source) in docs/implementation_plan.md §7.
+"""Resolves `DealTerms.latitude/longitude` for the subject property.
 
-Why this module exists
------------------------
-§5 lists `latitude`/`longitude` as DERIVED "by lookup," but until now no lookup existed:
-`tools/county_crosswalk.py` resolves county FIPS only, and `tools/vector_store.py`
-hard-requires coordinates to run a radius query at all. A subject property parsed from
-listing text — full address, city, state, ZIP — had no path to a point on the map, so
-comp retrieval degraded to zero regardless of extraction quality. See the decision-#10
-detail in the plan for the full accounting of how the gap sat unnoticed.
+Coordinates are derived by lookup rather than read from the listing, and this module is
+the lookup. Nothing downstream can proceed without them: `tools/vector_store.py`
+hard-requires a coordinate to run a radius query at all, so a subject with no point on the
+map degrades comp retrieval to zero regardless of extraction quality.
 
 Two-tier design, same shape as the county crosswalk
 -----------------------------------------------------
@@ -17,26 +13,26 @@ Two-tier design, same shape as the county crosswalk
    hit is accurate to the parcel, not the city.
 2. **Fallback: a corpus-derived city centroid** (`city_centroid`), used when the primary
    call fails outright or returns no match. Deliberately not a hand-maintained table —
-   the mean lat/lon of a city's own listings in the
-   Kaggle corpus is a better-fitted centroid than an arbitrary city-hall point (it sits
-   where the comp density actually is, which is what the radius search cares about), and
-   it costs no manual curation. It also naturally covers every city the corpus has
-   listings for, not just the 29 the county crosswalk hand-verifies. Its accuracy ceiling
+   the mean lat/lon of a city's own listings in the listing corpus is a better-fitted
+   centroid than an arbitrary city-hall point (it sits where the comp density actually is,
+   which is what the radius search cares about), and it costs no manual curation. It also
+   naturally covers every city the corpus has listings for, not just the 29 the county
+   crosswalk hand-verifies. Its accuracy ceiling
    is bounded by construction: this fallback exists only to unblock retrieval for a
    metro the corpus already covers, and if the corpus doesn't cover the subject's city,
    comp retrieval would return nothing useful even with a perfect geocode.
 
-   **Nothing here geocodes the corpus.** Every Kaggle row already carries real, original
-   `latitude`/`longitude` — scraped fields, present before this module exists, and
-   required by `kaggle_data.CORE_FIELDS` for a row to survive cleaning at all. The only
+   **Nothing here geocodes the corpus.** Every corpus row already carries real, original
+   `latitude`/`longitude` — scraped fields required by `kaggle_data.CORE_FIELDS` for a row
+   to survive cleaning at all. The only
    thing this module ever geocodes is the *subject* property, once per pipeline run.
    `_city_centroids()` merely averages coordinates the corpus already has, grouped by
    city/state, so `geocode()` has a real fallback location to hand back for the subject
    when Census can't place its street address.
 
 `geocode()` tries (1), then (2), and returns `None` only if both fail — no address text
-to work with, or a city absent from the corpus entirely. The caller (the Extractor, once
-wired — see the TODO in `agents/extractor.py`) is responsible for turning `.source` into
+to work with, or a city absent from the corpus entirely. The caller (`agents/extractor.py`)
+is responsible for turning `.source` into
 the right disclosure: a `census_geocoder` result raises no flag, the same asymmetry the
 crosswalk already applies to an unambiguous county match; a `city_centroid` result raises
 one of two warn-level flags depending on `.primary_unavailable` —
@@ -51,28 +47,25 @@ The two centroid flags are split because only one of them is worth retrying: a s
 outage may resolve on a later run, an address with no street number will not. The Critic's
 rework cycle branches on that.
 
-Caching, and why the original argument against it was right and still wrong
-----------------------------------------------------------------------------
-This module carried "no disk cache, unlike `tools/hud_fmr.py`" as a deliberate omission,
-reasoned entirely about **cost**: that client caches because a training pull hits the same
-(county, year) key thousands of times against a 60/minute throttle, while geocoding runs
-at most once per subject per pipeline run. There is no hot loop here, and on cost grounds
-a cache would have been the premature machinery §8 warns against.
+The disk cache exists for determinism, not for throughput
+-----------------------------------------------------------
+On cost grounds this module needs no cache: geocoding runs at most once per subject per
+pipeline run, so there is no hot loop of the kind that makes `tools/hud_fmr.py` cache.
 
-**A second reason arrived at U8 and the omission did not survive it: reproducibility.**
-The eval harness's replay tier records model responses so a case produces the same result
-every time. But `LLM_CACHE_MODE=replay` covers *model* calls, and this is an ordinary HTTP
-request — so when the Census times out, `geocode()` correctly falls through to the centroid
-and raises `GEOCODER_SERVICE_UNAVAILABLE`, that flag joins the set the forecast's evaluator
-prompt embeds, the prompt changes, and the recorded response for it no longer exists. The
-case fails with a `CacheMiss` that reads like a prompt drifted on purpose.
+**The reason is reproducibility.** The evaluation harness's replay tier records model
+responses so a case produces the same result every time — but that covers *model* calls,
+and this is an ordinary HTTP request. When the Census times out, `geocode()` correctly
+falls through to the centroid and raises `GEOCODER_SERVICE_UNAVAILABLE`; that flag joins
+the set the forecast evaluator's prompt embeds, the prompt changes, and the recorded
+response for it no longer exists. The case then fails with a cache miss that reads like a
+prompt drifted on purpose.
 
-Measured Aug 30, 2026: roughly one case per full batch run, and **a different case each
-time**, which is what sent the first investigation looking for state leakage between cases
-rather than for a network flake. The eval harness's central claim is that a replayed case
-is reproducible; a live dependency upstream of the recorded call quietly made that false.
+Measured at roughly one case per full batch run, and **a different case each time**, which
+is what sends an investigation looking for state leakage between cases rather than for a
+network flake. A live dependency upstream of a recorded call quietly falsifies the
+harness's central claim that a replayed case is reproducible.
 
-So the cache exists for determinism, not for throughput, and it is scoped to that: an
+So the cache is scoped to determinism: an
 address that resolved once resolves the same way forever. **A timeout is never cached** —
 only outcomes the Census actually returned, match or no-match — because caching a failure
 would freeze a transient outage into a permanent one and hide exactly the condition the
@@ -318,11 +311,9 @@ def geocode(
         # geocoder having run fine and found nothing. Those call for opposite responses
         # — one is an outage to retry, the other is an address to correct.
         #
-        # U3 logged the distinction here but let both cases raise the same flag, noting
-        # that "the resulting flag says the same thing either way". U7 needs them apart:
-        # the Critic's rework cycle is worth spending on an outage, because re-running
+        # The Critic's rework cycle is worth spending on an outage, because re-running
         # the Extractor re-attempts the call, and is worth nothing on an address that
-        # will never resolve. So the cause now rides on the result.
+        # will never resolve. So the cause rides on the result.
         diagnostics.log_exception(
             "geocoding.geocode: the Census request failed (as distinct from running "
             "and finding no match); falling through to the corpus city centroid",

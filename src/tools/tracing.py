@@ -1,9 +1,8 @@
 """LangSmith tracing setup — opt-in, env-driven, never required to run.
 
-§3 adopts LangSmith on the argument that multi-step agent loops are impractical to
-debug from logs alone and that traces double as documentation of actual system
-behaviour. Both hold. Neither is a reason to make the pipeline refuse to run without
-an account.
+LangSmith earns its place because multi-step agent loops are impractical to debug from
+logs alone and because traces double as documentation of actual system behavior. Neither
+is a reason to make the pipeline refuse to run without an account.
 
 So tracing is **switched on by the environment, not by the code**. LangSmith activates
 itself when `LANGSMITH_TRACING=true` — matched exactly, so `True`, `TRUE` and `1` count
@@ -28,8 +27,8 @@ machine can trace*; `LANGSMITH_TRACING=true` means *this run should be traced*. 
 the second into the first would start recording every local run to a hosted service the
 moment a key was dropped into place, which is the opposite of opt-in.
 
-> ⚠️ Free-tier traces expire after **14 days** (§3). Capture screenshots as you go;
-> Week 4 traces will not be viewable in Week 7.
+> ⚠️ Free-tier traces expire after **14 days**. Capture screenshots as you go; a trace
+> from a month ago will not be viewable.
 """
 
 from __future__ import annotations
@@ -41,12 +40,11 @@ import config
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# TODO(security): the third instance of the on-disk credential fallback, and it inherits
-# the question OQ-10 settled for the other two on Aug 31, 2026 — keep the fallback,
-# because the directory is gitignored and requiring an env var only makes a fresh clone
-# harder to run. Same trade as `tools/llm_client.py` and `tools/hud_fmr.py`; unlike the
-# OpenRouter key this one is not billable if leaked, so it is the weakest candidate of
-# the three for env-var-only.
+# TODO(security): the third instance of the on-disk credential fallback, and it takes the
+# same decision as the other two — keep the fallback, because the directory is gitignored
+# and requiring an env var only makes a fresh clone harder to run. Same trade as
+# `tools/llm_client.py` and `tools/hud_fmr.py`; unlike the OpenRouter key this one is not
+# billable if leaked, so it is the weakest candidate of the three for env-var-only.
 _KEY_FILE = _REPO_ROOT / "ignore" / "langsmith_key.txt"
 
 

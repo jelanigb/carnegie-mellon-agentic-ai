@@ -3,13 +3,13 @@
 OpenRouter exposes an OpenAI-compatible API, so the official `openai` SDK is used
 against a different base URL rather than pulling in a separate client library.
 
-The important function here is `call_with_schema`. Free-tier models are unreliable at
-producing strictly valid JSON, and the Extractor's clarification loop (Checkpoint 2.1,
-Loop 1) depends on being able to *observe* a malformed parse and reformulate rather
-than crashing or silently accepting garbage. `call_with_schema` closes that loop:
-it validates against a Pydantic model and, on failure, re-prompts with the
-ValidationError text so the model is told precisely what was wrong with its previous
-attempt. Every agent that needs structured output goes through it.
+The important function here is `call_with_schema`. Models are unreliable at producing
+strictly valid JSON, and the Extractor's clarification loop depends on being able to
+*observe* a malformed parse and reformulate rather than crashing or silently accepting
+garbage. `call_with_schema` closes that loop: it validates against a Pydantic model and,
+on failure, re-prompts with the `ValidationError` text so the model is told precisely what
+was wrong with its previous attempt. Every agent that needs structured output goes through
+it.
 """
 
 from __future__ import annotations
@@ -88,9 +88,9 @@ def _transport_failure(model: str, exc: APIError) -> str:
 
     `str(exc)` on an OpenRouter error is the entire JSON body, which carries the calling
     account's `user_id` alongside the useful part. That text does not stay in a log: the
-    Extractor puts it in a flag, the flag is rendered verbatim into the report (§1
-    requires flags be shown in full, not summarized), and the reports are portfolio
-    artifacts. So the account identifier would have been published.
+    Extractor puts it in a flag, every flag is rendered into the report in full rather
+    than summarized, and the reports are published artifacts. So the account identifier
+    would be published with it.
 
     Reading the provider's own `message` keeps what a reader needs — which model, which
     status, and the explanation including its remedy hint — and drops the envelope
@@ -142,15 +142,14 @@ def available_models() -> set[str]:
 
 
 def verify_models_live(*model_ids: str) -> set[str]:
-    """Fail loudly at launch if a configured model has left the catalogue (decision #8 — model per role).
+    """Fail loudly at launch if a configured model has left the catalogue.
 
-    This exists because of a specific, recorded failure: the four model IDs in
-    `config.py` were valid when written and dead six days later — the free Llama variant
-    they all pointed at became paid-only. Nothing before U3 made an LLM call, so the
-    breakage would have surfaced as an opaque error partway through an extraction, in a
-    run that had already spent a geocode and a Chroma query. Free-tier catalogues churn;
-    treating these constants as set-once is what made a routine deprecation into a
-    latent runtime failure.
+    This exists because of a specific, recorded failure: the four model IDs in `config.py`
+    were valid when written and dead six days later — the free variant they all pointed at
+    became paid-only. Without this check the breakage surfaces as an opaque error partway
+    through an extraction, in a run that has already spent a geocode and a vector-store
+    query. Free-tier catalogues churn; treating these constants as set-once is what turns a
+    routine deprecation into a latent runtime failure.
 
     Defaults to the four `config.MODEL_*` roles, deduplicated — they currently hold the
     same value, and reporting one dead model four times would be noise.
@@ -169,13 +168,13 @@ def verify_models_live(*model_ids: str) -> set[str]:
     missing = sorted(wanted - catalogue)
     if missing:
         # Suggest same-vendor models rather than "everything free". The project runs on
-        # paid variants (decision #8 — model per role), so a free-model list is the wrong remedy — and a
-        # dead model is usually replaced by its sibling, not by whatever is cheapest.
+        # paid variants, so a free-model list is the wrong remedy — and a dead model is
+        # usually replaced by its sibling, not by whatever is cheapest.
         vendors = {model.split("/")[0] for model in missing}
         alternatives = sorted(m for m in catalogue if m.split("/")[0] in vendors)
         raise LlmError(
             f"Configured model(s) absent from the OpenRouter catalogue: {missing}. "
-            f"Update config.py — see decision #8 (model per role) in docs/implementation_plan.md §7. "
+            f"Update the MODEL_* constants in config.py. "
             f"Still listed from the same vendor(s): {alternatives or 'none'}"
         )
     return wanted
@@ -266,8 +265,8 @@ class LlmClient:
         # guarantee at the transport layer. A rate limit arrives as
         # `openai.RateLimitError`, which is not an `LlmError`, so before this the free
         # tier's daily cap would propagate out of the Extractor and crash the graph
-        # instead of raising a flag. Found the honest way: by exhausting
-        # `free-models-per-day` (50 requests, account-wide) during the U3 bake-off.
+        # instead of raising a flag. Found the honest way: by exhausting a free tier's
+        # account-wide daily request cap.
         #
         # The SDK has already retried transient failures `config.LLM_MAX_RETRIES` times
         # with backoff by the time this fires, so reaching here means it did not clear.
@@ -292,10 +291,9 @@ class LlmClient:
 
         # OpenRouter's own account of which backend answered — not part of the OpenAI
         # response schema `resp` is typed against, so `.model_dump()` is what surfaces it
-        # rather than an attribute access. Previously read nowhere and discarded the
-        # instant this function returned (OQ-17): the same model id is served from
-        # several, not-numerically-identical deployments, and this is the only place
-        # that fact is ever visible. Logged for every live call — not on a cache hit,
+        # rather than an attribute access. Worth recording because the same model id is
+        # served from several, not-numerically-identical deployments, and this is the only
+        # place that fact is ever visible. Logged for every live call — not on a cache hit,
         # since a hit answers from a frozen recording and reporting "today's" provider
         # for it would be attributing someone else's call to this one.
         response_meta = resp.model_dump()

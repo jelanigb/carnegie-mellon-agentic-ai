@@ -1,7 +1,4 @@
-"""Chroma-backed comp retrieval over the Kaggle rental corpus.
-
-Design notes: docs/implementation_plan.md §2 (retrieval design decisions) and the U4
-acceptance criteria in §6.
+"""Chroma-backed comp retrieval over the rental listing corpus.
 
 Retrieval here is deliberately **hybrid**, and the split is the central design decision:
 

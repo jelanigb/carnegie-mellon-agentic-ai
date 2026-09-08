@@ -1,20 +1,19 @@
-"""Beam search over an enumerated hypothesis space (§7 decisions #12, #14).
+"""Beam search over an enumerated hypothesis space.
 
 The search half of this project's Tree-of-Thought work, kept separate from the domain
-logic that uses it. One consumer: the Scenario/Forecast agent (U6). Decision #12
-reserved a second — the Critic's cross-agent consistency checks — but that half was
-retired on evidence in U7.7: the checks that shipped (`agents/critic.py`,
-`agents/comps_retrieval.py`) are pure functions over accumulated flags, with no
-generated candidates and nothing to search over. See `history/decision_log.md` #12.
+logic that uses it. One consumer: the Scenario/Forecast agent. The Critic looked like a
+second and is not — the checks that shipped there and in `agents/comps_retrieval.py` are
+pure functions over accumulated flags, with no generated candidates and nothing to search
+over.
 
-**Candidates are enumerated, not sampled, and that is a measured choice rather than a
-simplification.** The Tree-of-Thought paper offers two ways to produce thoughts - sample
-them i.i.d. from a chain-of-thought prompt when the space is rich, or *propose* them
-when the space is constrained enough that sampling mostly returns duplicates. U6's space
-is the constrained case and small enough to write down: four framings (two rent
-treatments x two price treatments x one appreciation series), then nine band pairings
-under each. Asking a model for five hypotheses over a four-point space would make it
-invent growth rates, and every figure in this system has to trace to a measured source.
+**Candidates are enumerated, not sampled, and that is a deliberate choice rather than a
+simplification.** The Tree-of-Thought method offers two ways to produce thoughts — sample
+them i.i.d. from a chain-of-thought prompt when the space is rich, or *propose* them when
+the space is constrained enough that sampling mostly returns duplicates. The forecast's
+space is the constrained case and small enough to write down: four framings (two rent
+treatments × two price treatments), then nine band pairings under each. Asking a model for
+five hypotheses over a four-point space would make it invent growth rates, and every figure
+in this system has to trace to a measured source.
 
 Three consequences follow, all of them improvements:
 
@@ -29,10 +28,8 @@ Three consequences follow, all of them improvements:
 **Pruning is recorded, never silent.** Every candidate leaves a ledger row whether it
 survived or not, because the failure this design most needs to defend against is an
 evaluator that systematically undervalues a correct-but-unusual branch: it produces
-confident, well-formed, wrong output and looks exactly like one working properly. U2
-already produced a defect of that shape (a critical flag landing confidence at exactly
-0.60, and `0.60 < 0.60` is false), which is the precedent this guards against one layer
-up.
+confident, well-formed, wrong output and looks exactly like one working properly. A ledger
+is the only thing that makes that visible from outside.
 
 This module holds no domain knowledge. It does not know what a forecast is; it takes an
 expander, a hard-constraint check, and a scorer, and runs the beam.
@@ -91,15 +88,15 @@ class SearchResult:
     # `score_gap_by_depth`, which measures ordering *among* survivors.** This one measures
     # whether the cut itself was decidable — at depth 2 it is the rank line that governs
     # which pairings reach the report at all, so a margin inside `tie_epsilon` means the
-    # reported scenario set could as defensibly have been a different one (U8.6c).
+    # reported scenario set could as defensibly have been a different one.
     # Negative where the tie-break moved a higher-scoring candidate below the line, which
     # can only happen inside a tie group and is itself the finding.
     cut_boundary_gap_by_depth: dict[int, float] = field(default_factory=dict)
-    # Why each surviving candidate is in the report, by candidate id — the survivor's
-    # side of `prune_reason`, added at U9.7T. The ledger has always said why a candidate
-    # was *dropped* and never why one was *kept*, so a reader could see that three
-    # pairings lost and not learn whether the three shown had won on score, been kept by
-    # the tie-break, or been reserved. Domain-neutral like the rest of this module: the
+    # Why each surviving candidate is in the report, by candidate id — the survivor's side
+    # of `prune_reason`. A ledger that says why a candidate was *dropped* and never why one
+    # was *kept* lets a reader see that three pairings lost without learning whether the
+    # three shown won on score, were kept by the tie-break, or were reserved.
+    # Domain-neutral like the rest of this module: the
     # caller supplies `reserved`, and this only reports which mechanism applied.
     selection_basis_by_id: dict[str, str] = field(default_factory=dict)
     # Set when the beam emptied. Not a failure - it means no hypothesis survived contact
@@ -137,14 +134,14 @@ def beam_search(
 ) -> SearchResult:
     """Run the beam, recording every candidate's fate.
 
-    Beam search rather than BFS or DFS, per decision #12 (ToT scope). BFS over the full space costs
+    Beam search rather than BFS or DFS. BFS over the full space costs
     evaluations the budget does not justify for a three-output forecast; DFS commits to
     a framing before comparing it against the alternatives, which reintroduces exactly
     the premature commitment Tree-of-Thought is here to prevent. Beam keeps cross-branch
     comparison at every level at a cost bounded by `beam_width x` the enumeration.
 
     `beam_width` accepts a per-depth mapping, because the levels are not the same kind
-    of decision. U6 keeps **one** framing but **three** pairings: the framing is which
+    of decision. The forecast keeps **one** framing but **three** pairings: the framing is which
     treatment of the data the whole forecast rests on, and carrying three of those
     forward would produce three scenarios resting on different treatments, which are not
     commensurable and cannot share one provenance statement. All candidates at a level
@@ -154,10 +151,10 @@ def beam_search(
     `prune_threshold` is per-depth for the same reason. A threshold answers "did this
     hypothesis survive contact with the data?", which is a real question about a pairing
     and a category error about a framing: framings are enumerated from the treatments the
-    evidence actually supports, so every one of them is defensible by construction and
-    the level's job is to *select*, not to filter. U6 therefore sets depth 1 to 0.0. Left
-    uniform, an evaluator applying general skepticism scored all four Los Angeles framings
-    below 0.40 and emptied the beam on a deal with both series fully available.
+    evidence actually supports, so every one of them is defensible by construction and the
+    level's job is to *select*, not to filter. The forecast therefore sets depth 1 to 0.0.
+    Left uniform, an evaluator applying general skepticism scored all four Los Angeles
+    framings below 0.40 and emptied the beam on a deal with both series fully available.
 
     `conservatism_key` breaks ties. Scores within `tie_epsilon` are treated as equal, and
     the more conservative candidate wins - for an investment tool the cost of being wrong
@@ -166,7 +163,7 @@ def beam_search(
     the tie happened.
 
     `reserved` names a candidate the level must keep if it has one, whatever the ranking
-    says. U6 uses it for the neutral pairing, and the defect it answers is specific: base
+    says. The forecast uses it for the neutral pairing, and the defect it answers is specific: base
     rent with base price scored 0.70 on a Los Angeles run, cleared the 0.40 threshold, and
     came **fourth** against a beam of three - so the row labelled "Base" was base rent
     paired with pessimistic price, and the case the system actually expects appeared
@@ -309,7 +306,7 @@ def beam_search(
                 f"Scored {candidate.score:.2f}, outside the top {width} at this level."
             )
             if candidate.id in tie_broken_ids:
-                # **The third reason, added at U9.7T, and the one that was missing.**
+                # **The third reason, and the one easiest to omit.**
                 # This candidate was not outscored: it scored level with the last one
                 # kept, close enough that this system treats the difference as no
                 # difference, and the order between them was settled by its standing
@@ -381,15 +378,15 @@ def _rank_groups(
 ) -> list[list[Candidate]]:
     """The same ranking, still grouped by tie — which is the part the ledger needs.
 
-    **Split out at U9.7T because flattening threw away the one fact the ledger was
-    getting wrong.** A candidate cut from a tie group was recorded as
-    `Scored 0.80, outside the top 3 at this level`, which reads as *outscored* and is
-    indistinguishable from a candidate that genuinely lost on score — while what
-    actually decided it was `conservatism_key`. Measured across the committed
-    recordings, that is **51% of depth-2 levels**, so the ledger was misattributing to
-    the evaluator a decision policy made on half of all runs. `tools/tot.py`'s own
-    docstring calls pruning-that-leaves-no-trace the failure this ledger exists to
-    prevent; it was surviving one layer up.
+    **Kept grouped rather than flattened, because flattening throws away the one fact the
+    ledger most needs.** A candidate cut from a tie group otherwise reads as
+    `Scored 0.80, outside the top 3 at this level`, which says *outscored* and is
+    indistinguishable from a candidate that genuinely lost on score — while what actually
+    decided it was `conservatism_key`. Measured across the committed recordings that is
+    **51% of depth-2 levels**, so a flattened ledger misattributes to the evaluator a
+    decision policy made on half of all runs. This module's own docstring calls
+    pruning-that-leaves-no-trace the failure the ledger exists to prevent; unflattened, it
+    survives one layer up.
 
     Groups chain from their highest-scoring member, not pairwise: a group starts at the
     best unassigned candidate and takes everything within `tie_epsilon` *of that*. So

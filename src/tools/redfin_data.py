@@ -2,9 +2,9 @@
 
 Why this module exists
 ----------------------
-This is the appreciation source for the Scenario/Forecast agent
-(docs/implementation_plan.md §2). It is the *only* one: Redfin's Home Price Index covers
-single-family homes and has no multi-family series, so the Housing Market Tracker
+This is the appreciation source for the Scenario/Forecast agent, and it is the *only* one:
+Redfin's Home Price Index covers single-family homes and has no multi-family series, so
+the Housing Market Tracker
 filtered to `PROPERTY TYPE = Multi-Family (2-4 Units)` is what grounds the
 optimistic/base/pessimistic bands. Small multi-family is bought by investors pricing off
 cap rates rather than by owner-occupants, so an asset-matched trend line is an accuracy
@@ -16,17 +16,17 @@ Three transformations happen here rather than downstream, and each exists for a 
    pipeline uses Redfin only for per-deal inference lookups, never for training, so it
    never needs more than the markets the system admits subjects from. Reading 38 columns
    for 943 metros to answer a question about four is wasted memory and a wider surface
-   for a wrong-region bug. **The membership comes from `config.REDFIN_TARGET_METROS`
-   (U8.4c)** — it lived here as a trio-only constant from before New York entered the
-   demo, and downstream text reported that filter's output as "Redfin doesn't cover New
-   York", which a check of the raw extract found to be false. The load now *asserts*
-   every configured region exists in the extract, so the failure mode is loud.
+   for a wrong-region bug. **The membership comes from `config.REDFIN_TARGET_METROS`**,
+   not from a constant here — a stale filter in this module was once reported downstream
+   as "Redfin doesn't cover New York", which a check of the raw extract found to be false.
+   The load *asserts* every configured region exists in the extract, so the failure mode
+   is loud.
 
 2. **Apply a minimum-price floor before any aggregation.** See `MIN_SALE_PRICE_USD`
    below for the number and the evidence behind it.
 
-3. **Compute a trailing rolling median locally.** §2 specifies a rolling 3-month
-   frequency; the extract on disk is `Monthly` (Gap 2 in §2). Computing the window here
+3. **Compute a trailing rolling median locally.** The series wants a rolling 3-month
+   frequency and the extract on disk is monthly. Computing the window here
    rather than re-downloading keeps the smoothing width a tunable rather than a property
    of a file, and produces the same series. One caveat stated plainly: a median of three
    monthly medians is not the pooled median of three months of transactions. The pooled
@@ -84,28 +84,25 @@ _USECOLS = [
 ]
 
 # The markets the system admits subjects from, mapped to the extract's own `REGION NAME`
-# spelling. Defined in config.py (U8.4c) — see the history there; the module alias stays
-# because every consumer (the valuation benchmark, the forecast's price side, the MCP
-# server's tool descriptions) reads it under this name.
+# spelling. Defined in config.py; the module alias stays because every consumer (the
+# valuation benchmark, the forecast's price side, the MCP server's tool descriptions)
+# reads it under this name.
 TARGET_METROS: dict[str, str] = config.REDFIN_TARGET_METROS
 
-# --- Tunables. The header here used to say these "move to config.py in U1, because
-# --- config.py does not exist yet" — written before it did. Two have since moved on the
-# --- occasion that made them shared rather than on a scheduled sweep, and the rest are
-# --- named and justified below.
+# --- Tunables. Those shared with another module live in config.py; the rest are named
+# --- and justified below.
 
-# Smoothing width, in periods. §2 specifies a rolling 3-month series; the extract is
-# Monthly, so three periods is three months. Trailing (not centered) because a forecast
+# Smoothing width, in periods. The series wants a rolling 3-month window and the extract
+# is monthly, so three periods is three months. Trailing (not centered) because a forecast
 # agent may only use information available as of the period it is standing on.
 ROLLING_WINDOW_PERIODS = 3
 
 # Minimum plausible metro-level median sale price.
 #
-# Sourced from config.py rather than defined here: per the engineering standards in §8,
-# config.py is the single home for tunable parameters. This value previously lived in
-# both files with *different* numbers ($10k here, $20k there), which meant tuning the
-# documented knob would silently have changed nothing. The evidence for $10,000 is
-# recorded alongside the value in config.py.
+# Sourced from config.py rather than defined here, because config.py is the single home
+# for tunable parameters in this project. Defining it in both places is how this value
+# once ended up as $10k here and $20k there, which meant tuning the documented knob
+# silently changed nothing. The evidence for $10,000 is recorded alongside the value.
 #
 # The empirical work that chose it is summarized there:
 #   - 63 of 58,863 non-null rows (0.107%) fall below $10,000, 90.5% of them single-sale.
@@ -118,27 +115,22 @@ MIN_SALE_PRICE_USD = config.REDFIN_MIN_MEDIAN_SALE_PRICE
 # Periods per year in this extract, used for the year-over-year lag. Monthly data.
 PERIODS_PER_YEAR = growth_bands.PERIODS_PER_YEAR
 
-# The band estimator's own tunables. They described one series when this module was the
-# only one banded; #21 puts the rent side through the same function, so they now live in
-# `config.py` and are re-exported here because every existing consumer — the forecast
-# agent, `scripts/growth_correlation.py`, `scripts/fmr_history_evidence.py` — reads them
-# under these names.
+# The band estimator's own tunables. The rent side goes through the same function, so they
+# live in `config.py` and are re-exported here because every consumer — the forecast agent,
+# `scripts/growth_correlation.py`, `scripts/fmr_history_evidence.py` — reads them under
+# these names.
 SUSTAINED_STRETCH_PERIODS = config.SUSTAINED_STRETCH_PERIODS
 ANOMALOUS_PERIOD_START = growth_bands.ANOMALOUS_PERIOD_START
 ANOMALOUS_PERIOD_END = growth_bands.ANOMALOUS_PERIOD_END
 
-# What this series actually is, in the words the report should use. Mirrors
-# DealState.appreciation_source in §5.
-#
-# **This was an `AppreciationTier` enum until U6 (Aug 24, 2026), and the ladder it
-# belonged to turned out to have one rung.** `zip_multifamily` is closed on evidence -
-# the ZIP extract carries a median 2 homes sold per ZIP-period, so a year-over-year rate
-# off it is noise - and `metro_all_residential` is closed by decision: no such extract
-# exists in this project, and §2's asset-match argument says a 2-4 unit forecast should
-# not fall back onto single-family dynamics anyway. A three-member type advertising a
-# fallback the system cannot reach is a claim about the design that the build does not
-# support, so the type went and a description stayed. The closed rungs are recorded in
-# §7 where closed decisions live.
+# What this series actually is, in the words the report should use. It is a plain string
+# rather than a tier enum because **the ladder it would belong to has one rung.** A
+# ZIP-level multi-family tier is closed on evidence — the ZIP extract carries a median 2
+# homes sold per ZIP-period, so a year-over-year rate off it is noise — and an
+# all-residential metro tier is closed by decision, since no such extract exists here and
+# a 2-4 unit forecast should not fall back onto single-family dynamics anyway. A
+# three-member type advertising a fallback the system cannot reach is a claim about the
+# design that the build does not support.
 SERIES_DESCRIPTION = "Redfin metro-level Multi-Family (2-4 units) median sale price"
 
 
@@ -215,7 +207,7 @@ def load_redfin(
 
     The floor is *marked* here and *applied* in `get_appreciation_series`. Dropping
     at load would be simpler but would discard the count of what was dropped, which is
-    itself reportable evidence about a metro's data quality. The guarantee §2 asks for
+    itself reportable evidence about a metro's data quality. The guarantee that matters
     still holds: nothing is aggregated between marking and dropping.
     """
     metros = metros if metros is not None else TARGET_METROS
@@ -224,10 +216,10 @@ def load_redfin(
     raw = pd.read_csv(path, usecols=_USECOLS)
     frame = raw[raw[COL_REGION_NAME].isin(wanted)].copy()
 
-    # Loud, not silent (U8.4c). A configured region absent from the extract used to
-    # produce an empty per-metro frame that read downstream as "Redfin doesn't cover
-    # this metro" — which is how a stale filter got reported as a coverage fact for
-    # months. A missing region is a configuration or file defect and must say so.
+    # Loud, not silent. A configured region absent from the extract otherwise produces an
+    # empty per-metro frame that reads downstream as "Redfin doesn't cover this metro" —
+    # which is how a stale filter in this repository once got reported as a coverage fact
+    # for months. A missing region is a configuration or file defect and must say so.
     missing = wanted - set(frame[COL_REGION_NAME].unique())
     if missing:
         raise ValueError(
@@ -270,7 +262,7 @@ def get_appreciation_series(
 ) -> AppreciationSeries:
     """Build one metro's smoothed appreciation series.
 
-    Order of operations is load-bearing and matches §2: drop sub-floor periods, then
+    Order of operations is load-bearing: drop sub-floor periods, then
     reindex onto a complete monthly calendar, then smooth, then difference. Reindexing
     before smoothing matters because a dropped or absent period would otherwise make a
     "12-period" year-over-year comparison span something other than twelve months.
@@ -291,11 +283,11 @@ def get_appreciation_series(
         .sort_index()
     )
     # The shared forecast window, applied to the levels before anything is differenced.
-    # **A no-op on this extract and written anyway (U9.3):** every configured metro's
-    # series begins 2018-01-01, which is exactly where the window starts, so this trims
-    # nothing today. It is here because #21 puts a second series through the same band
-    # estimator and the two must be banded over the same span — and "they happen to start
-    # on the same month" is a fact about the file on disk, not a guarantee the code makes.
+    # **A no-op on this extract and written anyway:** every configured metro's series
+    # begins 2018-01-01, which is exactly where the window starts, so this trims nothing
+    # today. It is here because the rent series goes through the same band estimator and
+    # the two must be banded over the same span — and "they happen to start on the same
+    # month" is a fact about the file on disk, not a guarantee the code makes.
     # If a future extract reaches further back, the price bands stay comparable to the
     # rent bands instead of silently widening past them.
     series = series[
@@ -335,7 +327,7 @@ def compute_growth_bands(
 ) -> GrowthBands:
     """Derive optimistic / base / pessimistic year-over-year bands from a series.
 
-    The arithmetic moved to `tools/growth_bands.py` at U9.3 and is unchanged there; what
+    The arithmetic itself lives in `tools/growth_bands.py`, shared with the rent side; what
     stays here is the part that is about *this* series — pulling the year-over-year column
     off the frame, naming the metro when the filtering leaves nothing, and attaching the
     price side's own provenance to the result. `growth_bands.bands_from_yoy` returns None
@@ -446,7 +438,7 @@ def main() -> None:
     print("Flag-worthy conditions above are returned as GrowthBands fields, not raised:")
     print("  includes_anomalous_period -> Flag(kind='anomalous_period_included', 'info')")
     print("  source_description        -> Flag(kind='appreciation_source', 'info')")
-    print("Constructing those Flag objects is the Scenario/Forecast agent's job (§2, §5).")
+    print("Constructing those Flag objects is the Scenario/Forecast agent's job.")
 
 
 if __name__ == "__main__":

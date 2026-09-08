@@ -1,8 +1,8 @@
-"""Loading and cleaning for the Kaggle rental corpus.
+"""Loading and cleaning for the rental listing corpus.
 
-Every consumer of this dataset — the comp index (U4), the rent regression (U5), and the
-metro verification script — needs the same cleaning applied identically. Centralizing it
-here means a data-quality decision is made once and cannot drift between consumers.
+Every consumer of this dataset — the comp index, the rent regression, and the metro
+verification script — needs the same cleaning applied identically. Centralizing it here
+means a data-quality decision is made once and cannot drift between consumers.
 
 Data-quality issues found in the raw extract and handled here:
 

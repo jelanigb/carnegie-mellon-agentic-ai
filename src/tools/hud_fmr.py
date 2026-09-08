@@ -1,8 +1,11 @@
 """Lightweight client for the HUD Fair Market Rents (FMR) API.
 
+Rate-limited, cached to disk, and tolerant of the API's two response shapes: an ordinary
+county returns one metro-wide record, while a Small Area FMR county returns a list of
+ZIP-keyed entries plus one metro-level entry.
+
 Docs: https://www.huduser.gov/portal/dataset/fmr-api.html
-Design notes: docs/implementation_plan.md §2 (HUD FMR API: Implementation Notes)
-and §9 (this client's build plan).
+Design notes: docs/design/hud_fmr_client.md
 """
 
 from __future__ import annotations
@@ -29,9 +32,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 # because it would break a working auth path.
 _TOKEN_FILE = _REPO_ROOT / "ignore" / "fmr_key.txt"
 
-# Resolved in U2: writes are now atomic (write-to-temp then rename), and the residual
-# concurrency limitation is documented on _DiskCache rather than left as a TODO.
-# Concurrent callers must still pass distinct cache_path values.
+# Writes are atomic (write-to-temp then rename). The residual concurrency limitation is
+# documented on _DiskCache: concurrent callers must pass distinct cache_path values.
 _CACHE_FILE = _REPO_ROOT / "data" / "raw" / "hud_fmr_cache.json"
 
 # HUD's cap is 60 requests/minute; 1 call/second stays comfortably under it.
@@ -54,8 +56,8 @@ def bedroom_field(bedrooms: int) -> tuple[str, bool]:
     disclose it (`FlagKind.FMR_BEDROOM_CAP_EXCEEDED`), which is why the cap is returned
     alongside the field rather than applied silently.
 
-    Public as of U5. The rent regression normalizes thousands of rows against FMR and
-    needs the mapping without paying for a client call per row, but the capping rule
+    Public because the rent regression normalizes thousands of rows against FMR and
+    needs the mapping without paying for a client call per row, and the capping rule
     must not be reimplemented at the call site — two copies would drift, and a training
     set capped differently from the inference path is a silent model defect.
     """
@@ -98,20 +100,19 @@ def _load_token() -> str:
 class _DiskCache:
     """Whole-file JSON cache with atomic writes.
 
-    Resolved in U2 (the TODO above): `set()` still serializes the entire dictionary,
-    but it now writes to a temporary file in the same directory and `os.replace`s it
-    over the target. On POSIX that rename is atomic, so a reader — or a crash — can no
-    longer catch the cache half-written, which was the failure that could destroy an
-    hour of accumulated HUD pulls rather than merely lose the newest entry.
+    `set()` serializes the entire dictionary, writes it to a temporary file in the same
+    directory, and `os.replace`s it over the target. On POSIX that rename is atomic, so a
+    reader — or a crash — cannot catch the cache half-written, which is the failure that
+    would destroy an hour of accumulated HUD pulls rather than merely lose the newest
+    entry.
 
     **The concurrency limitation is accepted and documented, not fixed.** Two processes
     interleaving `set()` calls still lose one another's writes: each holds the whole
     dictionary in memory from load time and its rename replaces the other's file
     wholesale. A lock file would close that, and it is not worth the complexity here —
-    the loss is a cache miss, which costs one HTTP call against a 60/minute budget, and
-    the only observed case (two agents pulling in parallel during U1) is already handled
-    by passing distinct `cache_path` values. Callers running concurrently should keep
-    doing that.
+    the loss is a cache miss, which costs one HTTP call against a 60/minute budget, and the
+    only observed case — two processes pulling in parallel — is handled by passing distinct
+    `cache_path` values. Callers running concurrently should keep doing that.
     """
 
     def __init__(self, path: Path):
@@ -197,8 +198,8 @@ class HudFmrClient:
         `zip_code` defaults to None, so the result is metro-level by default: for an
         ordinary county there's only one metro-wide record anyway, and for a Small
         Area FMR (SAFMR) county the code falls back to the "MSA level" entry unless
-        a specific zip_code is passed and matches. This matches the Kaggle/Redfin
-        data, which are both metro-level (see docs/implementation_plan.md §2, §9).
+        a specific zip_code is passed and matches. That matches the listing and sale-price
+        extracts, which are both metro-level.
         """
         params = {"year": year} if year is not None else None
         payload = self._get(f"fmr/data/{entityid}", params=params)

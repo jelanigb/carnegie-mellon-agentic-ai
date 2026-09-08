@@ -1,22 +1,16 @@
 """On-disk cache for model responses — a latency and reproducibility mechanism.
 
-Why this exists, and why the reason changed
---------------------------------------------
-This was first proposed as a quota workaround: the OpenRouter free tier allows 50 model
-requests per day account-wide, and U3's bake-off exhausted it. Moving to paid inference
-removed that pressure, and the cache is worth building anyway for two reasons that
-outlast it:
+Why this exists
+----------------
+Two reasons, and cost avoidance is the least interesting of them:
 
-1. **Latency.** A live call measured 9.9-23s per listing during the U3 bake-off. A hit
-   here is a local JSON read — milliseconds. Re-running an evidence script against
-   unchanged prompts stops being a coffee break.
+1. **Latency.** A live call measures 9.9-23s per listing. A hit here is a local JSON read —
+   milliseconds. Re-running an evidence script against unchanged prompts stops being a
+   coffee break.
 2. **Reproducibility.** An evaluation whose inputs are re-sampled from a stochastic
    endpoint on every run cannot show that a change in results came from a change in the
-   system. Replaying recorded responses makes the eval harness a measurement of *this
-   repo* rather than of the provider's mood that afternoon. That matters directly for
-   U8, whose output is the evaluation section of the report.
-
-Cost avoidance still happens; it is now the least interesting of the three.
+   system. Replaying recorded responses makes the evaluation harness a measurement of
+   *this repository* rather than of the provider's mood that afternoon.
 
 Three modes, and the third is the point
 -----------------------------------------
@@ -35,17 +29,17 @@ attempt in `call_with_schema` sends a different prompt (the previous failure's
 `ValidationError` is appended), so each attempt has its own key and its own recording. A
 recorded sequence where the model failed validation twice and succeeded on the third
 attempt replays as exactly that — three entries, two rejections, one success. Caching the
-validated object instead would have erased the loop this project's Checkpoint 2.1 design
-is built around.
+validated object instead would erase the retry loop, which is one of the behaviors an
+evaluation of this system most needs to see.
 
 What is not cached
 -------------------
 Nothing decides here whether a response *should* be reused — the key covers every input
 that changes the output (model, system prompt, user prompt, temperature), so a hit is a
 hit on identical inputs by construction. Temperature is included even though it is 0.0
-almost everywhere, because the one place it will not be is U6's Tree-of-Thought
-branching, and a cache that silently served a temperature-0 response to a temperature-0.8
-request would make those branches identical without saying so.
+almost everywhere, because a cache that silently served a temperature-0 response to a
+temperature-0.8 request would make two deliberately different calls identical without
+saying so.
 
 Storage
 --------
@@ -182,12 +176,11 @@ class ResponseCache:
     ) -> None:
         """Record a response. No-op in `off`; in `replay` nothing new is ever recorded.
 
-        `provider`/`system_fingerprint` are OpenRouter's own account of which backend
-        actually answered — previously read off the live response and immediately
-        discarded (OQ-17: the same model ID is served from multiple, not-numerically-
-        identical deployments, and this is the only place that fact is ever visible).
-        Recorded for auditability, same reasoning as `prompt`/`system` below; nothing in
-        this module reads them back for lookup or replay behavior.
+        `provider`/`system_fingerprint` are the router's own account of which backend
+        actually answered. The same model ID is served from multiple, not-numerically-
+        identical deployments, and this is the only place that fact is ever visible — which
+        is why it is recorded rather than discarded. Auditability only; nothing in this
+        module reads them back for lookup or replay behavior.
         """
         if self._mode != CacheMode.READ_WRITE:
             return

@@ -5,18 +5,16 @@ path it covers.** A model outage, a geocoder outage and a stale market index are
 conditions this system is built to disclose rather than absorb, and none of them can be
 produced on demand: the services are up, and the committed rent panel is current.
 
-**Why this is its own module (U9.7a).** The injection logic lived inside
-`eval/runner._case_environment`, keyed off an `EvalCase`. U9.7's demo surface needs the
-same three faults against a `DemoDeal`, and `main.py` needs them to *record* the
-combinations that surface replays. Reimplementing them for the second caller is the
-defect `tools/hud_fmr.bedroom_field` already names in its own docstring — a rule applied
-at a second call site becomes "a training set capped differently from the inference
-path", silent in both directions. A fault that behaved differently in the demo than in
-the evaluation would invalidate both at once, and neither would say so.
+**Why this is its own module.** Three consumers need the same three faults: the
+evaluation harness against an `EvalCase`, the demo surface against a `DemoDeal`, and
+`main.py` to *record* the combinations that surface replays. A fault that behaved
+differently in the demo than in the evaluation would invalidate both at once, and neither
+would say so.
 
-So the enum and the mechanism live together here, in `tools/`, below both consumers.
+So the enum and the mechanism live together here, in `tools/`, below every consumer.
 `eval/cases.py` imports `Fault` from this module; nothing in `tools/` imports from
-`eval/`, which is the layering that made the move worth doing rather than merely tidy.
+`eval/`, which is the layering that makes this the right home rather than merely a tidy
+one.
 
 **Declared, never hidden — and that is the whole design.** The injection appears in the
 case definition or the CLI flag, in the results table, and in the text of the flag it
@@ -46,23 +44,23 @@ from tools.llm_client import LlmClient, LlmError
 class Fault(StrEnum):
     """An external failure a run asks the system to simulate. **Declared, never hidden.**
 
-    Added U8.2, for one kind the batch could not otherwise reach at all.
+    `GEOCODER_OUTAGE` exists because one flag kind cannot otherwise be reached at all.
     `FlagKind.REWORK_LIMIT_REACHED` needs an objection the Critic marks `retryable`, and
     exactly one objection is ever marked so: the I3 branch in
     `agents/critic._interaction_objections`, gated on `GEOCODER_SERVICE_UNAVAILABLE`. That
     flag is raised only when the Census *request itself fails*
     (`tools/geocoding.geocode`) — not when it runs and finds no match, which is the
-    distinction U7.1b built precisely so the rework cycle could be spent on an outage and
-    not on an address that will never resolve.
+    distinction that lets the rework cycle be spent on an outage and not on an address that
+    will never resolve.
 
-    Neither tier can produce that. A golden fixture supplies coordinates, so U8.1b's
+    Neither evaluation tier can produce that. A golden fixture supplies coordinates, so the
     geography path takes the county-only branch and never calls the geocoder; a replay case
-    calls it and it succeeds, because `LLM_CACHE_MODE=replay` covers *model* calls and the
+    calls it and it succeeds, because the response cache covers *model* calls and the
     Census lookup is an ordinary HTTP request. So the outage can be injected or it can go
-    unexercised, and leaving the system's only bounded-retry path untested through the unit
-    that tunes `MAX_REWORKS` is the worse of the two.
+    unexercised, and leaving the system's only bounded-retry path untested is the worse of
+    the two.
 
-    **`LLM_UNAVAILABLE`, added U8.3, for the same class of reason.**
+    **`LLM_UNAVAILABLE` exists for the same class of reason.**
     `FlagKind.EXTRACTION_UNAVAILABLE` is raised when `agents.extractor._extract_terms`
     never receives a response at all — `tools.llm_client.LlmClient.complete` raises
     `LlmError` before there is anything to validate, let alone record. A recording is a
@@ -83,8 +81,8 @@ class Fault(StrEnum):
     `FORECAST_UNAVAILABLE`, so the run shows a real, gracefully-degraded multi-flag outage
     rather than a run that dies partway through.
 
-    **One property `LLM_UNAVAILABLE` has that the other two do not, measured at U9.7a and
-    load-bearing for the demo surface:** it patches `LlmClient.complete`, which is where
+    **One property `LLM_UNAVAILABLE` has that the other two do not, and it is load-bearing
+    for the demo surface:** it patches `LlmClient.complete`, which is where
     the response cache is consulted, so the patch sits *above* the cache and no lookup
     ever happens. It therefore behaves identically under `replay` and live, and needs no
     recording of its own. The other two change state that reaches the forecast prompt, so
@@ -94,16 +92,16 @@ class Fault(StrEnum):
 
     GEOCODER_OUTAGE = "geocoder_outage"
     LLM_UNAVAILABLE = "llm_unavailable"
-    # **`STALE_RENT_INDEX`, added U11.3, for the same reason as the two above: no listing
-    # can reach this path.** `RENT_ANCHOR_INDEX_STALE` fires when the market-rent index
+    # **`STALE_RENT_INDEX`, for the same reason as the two above: no listing can reach this
+    # path.** `RENT_ANCHOR_INDEX_STALE` fires when the market-rent index
     # the estimate is anchored to has not been observed for
     # `config.RENT_ANCHOR_MAX_STALENESS_MONTHS`, which is a property of the *data file* on
     # the machine, not of any property. Today's panel is one month old, so no fixture and
     # no recording can raise it — and a kind nothing can raise corrupts the coverage
-    # census, which is the rule `state.FlagKind` already set when it retired
-    # `LLM_RENT_FALLBACK_USED`. Patched at `zori.latest_month`, one layer above the file,
+    # census. Patched at `zori.latest_month`, one layer above the file,
     # so the pipeline's own staleness arithmetic does the deciding rather than a directly
-    # forced flag.
+    # forced flag. A kind nothing can raise corrupts the coverage census, which is why
+    # the fault exists rather than the kind being retired.
     STALE_RENT_INDEX = "stale_rent_index"
 
 
@@ -119,11 +117,11 @@ def _marker(declared_by: str) -> str:
     **Reader-facing, and deliberately so.** This string reaches a `Flag.detail` and is
     rendered verbatim in the report (`agents/extractor.py`'s `EXTRACTION_UNAVAILABLE`
     embeds the exception text), so a person reading a degraded report can tell a
-    demonstration from an incident. §8 forbids internal vocabulary in exactly this
-    position, which is why it no longer says "eval fault injection, case" — the demo
-    surface runs these against a listing, not a case, and there is no evaluation involved.
+    demonstration from an incident. Reader-facing text carries no internal vocabulary, which
+    is why this does not say "eval fault injection, case" — the demo surface runs these
+    against a listing, not a case, and there is no evaluation involved.
 
-    **It reaches no model prompt, which was checked rather than assumed** (U9.7a).
+    **It reaches no model prompt, which was checked rather than assumed.**
     `scenario_forecast._context_block` quotes flag *kinds* only, and
     `summarizer._lede_prompt` quotes severity *counts* only — no disclosure text reaches
     either. Verified empirically by re-deriving the full batch after this wording changed:
@@ -153,12 +151,11 @@ def injected(
     first; it matters more for a long-lived Streamlit process, where "everything after it"
     is the rest of the session rather than the rest of the batch.
 
-    `geocoder_fallback_override` is meaningful only alongside `GEOCODER_OUTAGE` and is
-    OQ-16's answer: it forces the centroid fallback to land at a chosen point instead of
-    the real corpus-wide city average, because that average never both diverges from the
-    rent estimate and stays clear of a third warn or a critical (U8.2's grid search). Only
-    *where* the fallback lands is forced — the mechanism deciding whether the fallback is
-    worth retrying is untouched.
+    `geocoder_fallback_override` is meaningful only alongside `GEOCODER_OUTAGE`: it forces
+    the centroid fallback to land at a chosen point instead of the real corpus-wide city
+    average, because a grid search found that average never both diverges from the rent
+    estimate and stays clear of a third warn or a critical. Only *where* the fallback lands
+    is forced — the mechanism deciding whether the fallback is worth retrying is untouched.
     """
     previous_geocode_census = geocoding.geocode_census
     previous_city_centroid = geocoding.city_centroid

@@ -1,11 +1,11 @@
-"""Index-normalized rent regression (U5, §2's rent-anchoring design; re-anchored at U11.3).
+"""Index-normalized rent regression — the model behind every rent figure this system emits.
 
-**The problem this module exists to solve is vintage, not accuracy.** The Kaggle rental
-corpus is a scrape spanning Dec 2018 - Dec 2019. A regression fit on its rent column
-predicts 2019 dollars, and a 2019 dollar figure presented in a 2026 report is wrong
-while looking entirely reasonable — no error bar, no missing value, nothing a reader
-could catch. §8 states the invariant that follows: never let an unanchored Kaggle dollar
-figure reach the Summarizer.
+**The problem this module exists to solve is vintage, not accuracy.** The rental corpus is
+a scrape spanning Dec 2018 - Dec 2019. A regression fit on its rent column predicts 2019
+dollars, and a 2019 dollar figure presented in a 2026 report is wrong while looking
+entirely reasonable — no error bar, no missing value, nothing a reader could catch. Hence
+the invariant this project holds throughout: never let an unanchored corpus dollar figure
+reach the Summarizer.
 
 **The fix is to model a ratio instead of a level.** For every training row, rent is
 divided by an anchor for that row's own place, unit size and *month*. What the model
@@ -15,13 +15,13 @@ dollar level does. At prediction time the predicted ratio is multiplied by the s
 anchor read at **today's** month, producing a current-dollar figure anchored to a public
 reference the report can cite.
 
-**The anchor is a hybrid since U11.3 (#19), and which half supplies what matters.**
-Zillow's ZORI series gives the rent *level* at the row's own ZIP and listing month,
-falling back to the county median where a ZIP's series has not started; HUD's Fair Market
-Rent schedule gives only the *bedroom step* — the ratio between unit sizes, with the
-schedule's own level divided out (see `bedroom_shape`). The predecessor divided by the
-county FMR level itself and multiplied by today's FMR; `fmr_baseline` keeps that retired
-anchor in one place for the evidence scripts that still compare against it.
+**The anchor is a hybrid, and which half supplies what matters.** Zillow's rent index gives
+the rent *level* at the row's own ZIP and listing month, falling back to the county median
+if a ZIP's series has not started; HUD's Fair Market Rent schedule gives only the
+*bedroom step* — the ratio between unit sizes, with the schedule's own level divided out
+(see `bedroom_shape`). The simpler alternative, dividing by the county FMR level itself and
+multiplying by today's FMR, is kept in `fmr_baseline` for the evidence scripts that compare
+the two.
 
 Three consequences worth stating, because each is a limitation rather than a feature:
 
@@ -33,24 +33,22 @@ Three consequences worth stating, because each is a limitation rather than a fea
    has no level, so this path produces nothing and raises `RENT_ANCHOR_UNAVAILABLE`
    rather than falling back to a raw comp mean. A raw comp mean is precisely the
    unanchored 2019 figure the design forbids.
-3. **The stability assumption is load-bearing, and the anchor change is what it turns
-   on.** The design holds that a unit's rent *relative to its reference series* is stable
-   over the ~7 years between the corpus and today. U8.0 tested that for the FMR anchor
-   against ZORI and **found it false** — the schedule rose +51.9% while market rents rose
-   +33.5%, so the anchor drifted ~18 points from the market it priced and the raw product
-   read high. U8.4b corrected that per-ZCTA at prediction time; U11.3 removed the cause
-   instead, since both ends of the ratio now read the same market series at their own
-   months and the schedule-versus-market gap divides out where it arises. The assumption
-   the current anchor rests on is narrower but not proven: `scripts/anchor_stability.py`
-   falsifies it over the corpus's own 13-month window and it survives at +3.6%, which is
-   a floor it clears rather than a demonstration over seven years. **OQ-19 stays open for
-   exactly that gap**, and closing it needs a current-vintage rent sample this project
-   does not have.
+3. **The stability assumption is load-bearing and is not proven.** The design holds that a
+   unit's rent *relative to its reference series* is stable over the ~7 years between the
+   corpus and today. This is exactly where the federal schedule fails as an anchor: it rose
+   +51.9% over that span while market rents rose +33.5%, so an FMR-anchored ratio drifts
+   ~18 points from the market it prices and the product reads high. The market-index anchor
+   removes that cause rather than correcting for it, since both ends of the ratio read the
+   same series at their own months and any schedule-versus-market gap divides out where it
+   arises. What is left is narrower and still unproven: `scripts/anchor_stability.py` tries
+   to falsify the assumption over the corpus's own 13-month window and it survives at
+   +3.6%, which is a floor it clears rather than a demonstration over seven years. Closing
+   that gap needs a current-vintage rent sample this project does not have.
 
 Feature choice is deliberately narrow and excludes any market identifier — see
 `config.RENT_MODEL_FEATURES` for why a metro dummy would defeat the ratio design. The
-estimator's *form* is `config.RENT_MODEL_ESTIMATOR`, gradient boosting since U11.1, and
-that constant carries the cross-validated evidence for the choice.
+estimator's *form* is `config.RENT_MODEL_ESTIMATOR`, and that constant carries the
+cross-validated evidence for the choice.
 """
 
 from __future__ import annotations
@@ -86,10 +84,10 @@ class TrainingReport:
     fiscal_years: list[int] = field(default_factory=list)
     # Anchor tier, split. The mixed basis is a real limitation of the target and has to
     # be visible in the report that justifies the model, not only in the code: a row
-    # anchored to its own ZIP's ZORI series and one anchored to its county's median are
+    # anchored to its own ZIP's index series and one anchored to its county's median are
     # ratios to different denominators. Kept rather than restricting training to
-    # ZIP-covered rows, because a ZIP's series begins only when Zillow has enough
-    # listings there and excluding the rest would discard 27% of the corpus (U11.3).
+    # ZIP-covered rows, because a ZIP's series begins only when the index has enough
+    # listings there and excluding the rest would discard 27% of the corpus.
     rows_anchored_at_zip: int = 0
     rows_anchored_at_county: int = 0
     distinct_zctas: int = 0
@@ -98,13 +96,13 @@ class TrainingReport:
     baseline_mae_ratio: float = 0.0
     baseline_mae_dollars: float = 0.0
     r2: float = 0.0
-    # How the scores above were obtained. 0 means the single-split protocol this model
-    # used before U11.1; anything else is the number of cross-validation folds, in which
-    # case `rows_scored` equals `rows_trained` because every row is held out exactly once.
+    # How the scores above were obtained. 0 means a single train/test split; anything else
+    # is the number of cross-validation folds, in which case `rows_scored` equals
+    # `rows_trained` because every row is held out exactly once.
     cv_folds: int = 0
     # In-fold training error, in dollars, averaged across folds. Reported beside the
-    # held-out figure because the *gap* between them is the overfitting guard §6 cut-list
-    # item 1a's deferral was justified by, and a held-out score alone cannot show it.
+    # held-out figure because the *gap* between them is the only overfitting guard this
+    # model has, and a held-out score alone cannot show it.
     train_mae_dollars: float = 0.0
     # Only one of these is populated, depending on what the estimator exposes: a linear
     # model has `coef_`, an ensemble has `feature_importances_`, and neither has both.
@@ -113,8 +111,8 @@ class TrainingReport:
     coefficients: dict = field(default_factory=dict)
     feature_importances: dict = field(default_factory=dict)
     # The input-domain bounds this frame supports, measured here and carried on the
-    # artifact for the reason `mae_dollars_by_metro` is (U8.4 Q2(c)): it is a *measured
-    # property of the fit*, not a tunable, so putting it in `config.py` would let it drift
+    # artifact for the reason `mae_dollars_by_metro` is: it is a *measured property of the
+    # fit*, not a tunable, so putting it in `config.py` would let it drift
     # from the model it describes. The percentiles that place it are the tunable, and they
     # are in `config.RENT_MODEL_DOMAIN_PERCENTILES`.
     feature_ranges: dict = field(default_factory=dict)
@@ -122,8 +120,8 @@ class TrainingReport:
     # Per-metro breakdown of the same holdout residuals above, keyed by the labels in
     # `config.INDEXED_MARKETS` (already documented there as "the inference trio plus New
     # York"). {"New York": {"mae_dollars": 1065.xx, "n": 41}, ...}. A groupby over
-    # residuals already computed, not a second fit — see `_mae_dollars_by_metro` (U8.4,
-    # OQ-3). A metro absent here had zero holdout rows.
+    # residuals already computed, not a second fit — see `_mae_dollars_by_metro`. A metro
+    # absent here had zero holdout rows.
     mae_dollars_by_metro: dict = field(default_factory=dict)
 
     def summary(self) -> str:
@@ -190,8 +188,8 @@ def _fmr_table(
     """Fetch the FMR rent schedule for each (county entityid, fiscal year) pair.
 
     One call per *pair*, not per row. `get_fmr` returns every bedroom field at once, so
-    thousands of rows resolve against a handful of responses — U5's shortlist needs 15
-    counties across 2 fiscal years. `tools/hud_fmr.py` caches to disk on top of that, so
+    thousands of rows resolve against a handful of responses — the training shortlist needs
+    15 counties across 2 fiscal years. `tools/hud_fmr.py` caches to disk on top of that, so
     a re-run costs no calls at all.
 
     A pair that fails is recorded as missing rather than raised: one county's absent
@@ -238,8 +236,8 @@ def _zip_anchor_tables(
     a fiscal year has no published ZIP schedule but the current year does, each ZIP's
     FMR is reconstructed as `(current ZIP ÷ current county) × that year's county FMR`.
     The dollar level therefore always comes from the row's own year — the vintage
-    discipline §2 exists to protect is untouched — and only the *within-county shape* is
-    imported from today.
+    discipline this whole module exists to protect is untouched — and only the
+    *within-county shape* is imported from today.
 
     **That assumption is tested rather than asserted, on the two counties where both
     years are published.** Correlation between FY2019 and FY2026 ZIP-to-county ratios is
@@ -312,14 +310,14 @@ def _zip_anchor_tables(
 def fmr_baseline(
     frame, client: Optional[hud_fmr.HudFmrClient] = None
 ) -> tuple["np.ndarray", "np.ndarray"]:
-    """The **old** FMR anchor, per row: `(rents, was_zip_resolution)`.
+    """The pure-FMR anchor, per row: `(rents, was_zip_resolution)`.
 
-    **This is the retired production path, kept deliberately and only for the evidence
-    scripts.** Until U11.3 the training target was `rent ÷ this`, and three committed
-    scripts — `anchor_probe.py`, `zori_evidence.py`, `metro_shortlist_ablation.py` — score
-    the current anchor *against* it. They used to read it off `build_training_frame`'s
-    `fmr` column, which no longer exists, so each of them broke the moment the anchor
-    moved and each would otherwise have grown its own copy of this reconstruction.
+    **Not the production path — this exists only for the evidence scripts.** It is the
+    simpler anchor the shipped one replaced (training target `rent ÷ this`), and three
+    committed scripts — `anchor_probe.py`, `zori_evidence.py`,
+    `metro_shortlist_ablation.py` — score the current anchor *against* it. Kept here rather
+    than left to `build_training_frame`, which no longer produces an `fmr` column, so the
+    three scripts share one reconstruction instead of growing three.
 
     **One copy rather than three, and it lives here rather than in `scripts/` because the
     ZIP back-cast it depends on (`_zip_anchor_tables`) is already here** and is now
@@ -440,14 +438,14 @@ def bedroom_shape(
     it is ~1.0 for a typical unit and carries only the schedule's *relative* structure
     across unit sizes.
 
-    **This is the one thing FMR still supplies after U11.3, and the reason the anchor is a
-    hybrid rather than pure ZORI.** Zillow publishes a single smoothed series per ZIP
-    across all unit types — no bedroom dimension exists in it at all — so an anchor built
-    from ZORI alone would price a studio and a four-bedroom against the same reference and
-    leave `RENT_MODEL_FEATURES`' `bedrooms` column to absorb the difference. Dividing the
-    level out is what lets the two sources compose: ZORI decides *how expensive this
-    place is*, FMR decides only *how the schedule steps between unit sizes*, and the
-    schedule's own drift against the market (U8.0) cancels out of a within-year ratio.
+    **This is the one thing the federal schedule supplies, and the reason the anchor is a
+    hybrid rather than the market index alone.** The index publishes a single smoothed
+    series per ZIP across all unit types — no bedroom dimension exists in it at all — so an
+    anchor built from it alone would price a studio and a four-bedroom against the same
+    reference and leave `RENT_MODEL_FEATURES`' `bedrooms` column to absorb the difference.
+    Dividing the level out is what lets the two sources compose: the index decides *how
+    expensive this place is*, the schedule decides only *how it steps between unit sizes*,
+    and the schedule's own drift against the market cancels out of a within-year ratio.
 
     `hud_fmr.bedroom_field` caps at four bedrooms and reports it, so a five-bedroom
     subject is priced on the four-bedroom step and the caller discloses that — which is
@@ -645,17 +643,16 @@ def subject_is_out_of_domain(
 ) -> Optional[str]:
     """Why this subject is outside what the model trained on, or `None` if it is inside.
 
-    **The competence check, and it is deliberately separate from the estimator.** Until
-    U11.1 this question was answered as a side effect: the shipped LinearRegression
-    extrapolated a negative `bedrooms` coefficient into an implausible *ratio*, which the
-    Valuation agent's output-side band caught. A tree-based estimator cannot produce an
-    implausible ratio — its prediction is an average of training targets already bounded
-    to that band — so it clamps to its nearest leaf and returns a confident number for a
-    property it has no basis to price. Measured Aug 30, 2026: a 2bd / 100,000 sqft subject
-    prices at 62.21 under the old form (refused) and at 2.20 under this one (reported).
-    Swapping the form without this check would therefore have retired a disclosure
-    silently, which is the failure §8's Transparent Degradation principle exists to
-    prevent.
+    **The competence check, and it is deliberately separate from the estimator.** Answering
+    this question as a side effect of the *output* — an implausible predicted ratio — works
+    only for an estimator that can extrapolate. A linear model does: it pushes a negative
+    `bedrooms` coefficient out to an absurd ratio that the Valuation agent's output-side
+    band then catches. A tree-based estimator cannot, since its prediction is an average of
+    training targets already inside that band, so it clamps to its nearest leaf and returns
+    a confident number for a property it has no basis to price. Measured: a 2bd / 100,000
+    sqft subject prices at 62.21 under the linear form (refused) and at 2.20 under the
+    shipped one (reported). Without this check the model form silently decides whether a
+    disclosure exists.
 
     Asked of the *inputs* rather than the output, so the answer does not depend on which
     estimator is fitted, and returned as a reader-facing clause rather than a boolean so
@@ -701,17 +698,17 @@ def _mae_dollars_by_metro(
     y_test: np.ndarray,
     fmr_test: np.ndarray,
 ) -> dict:
-    """Break the out-of-fold residuals already computed down by metro (U8.4, OQ-3).
+    """Break the out-of-fold residuals already computed down by metro.
 
     A groupby over an existing result, not a second fit: `predicted`, `y_test` and
     `fmr_test` are the same arrays `train()` already scored, in the same order as
-    `holdout_index` — which under the cross-validated protocol (#18) is every row, each
-    scored once by a fold that never saw it, rather than the 20% slice the parameter name
-    is left over from.
+    `holdout_index` — which under the cross-validated protocol is every row, each scored
+    once by a fold that never saw it, rather than the 20% slice the parameter name is left
+    over from.
 
-    Grouped by `config.INDEXED_MARKETS`, whose own docstring already names it "the
-    inference trio plus New York" — exactly the comparison OQ-3 needs: the model's error
-    where it is actually used, against the market it is weakest in. Matched the way
+    Grouped by `config.INDEXED_MARKETS`, whose own docstring names it "the inference trio
+    plus New York" — which is the comparison worth having: the model's error where it is
+    actually used, against the market it is weakest in. Matched the way
     `scripts/metro_shortlist_ablation.py` established as correct — a boolean mask against
     `df`'s own index — rather than round-tripped through `kaggle_data.filter_markets`,
     whose `ignore_index=True` re-indexing silently breaks that join (see that script's
@@ -772,17 +769,16 @@ def train(
 ) -> tuple[object, TrainingReport]:
     """Fit the ratio model under k-fold cross-validation, then refit it on everything.
 
-    Reports against a mean-ratio baseline as well as in absolute terms. An MAE alone
-    cannot say whether the features carry signal — per §8, a check whose result was
-    structurally guaranteed proves nothing, and "predict the average ratio for every
-    row" is the null hypothesis this model has to beat to justify existing at all.
+    Reports against a mean-ratio baseline as well as in absolute terms. An MAE alone cannot
+    say whether the features carry signal — a check whose result was structurally
+    guaranteed proves nothing, and "predict the average ratio for every row" is the null
+    hypothesis this model has to beat to justify existing at all.
 
-    **Cross-validated since U11.1**, which is the condition OQ-4 attached to reopening
-    model form at all, and the reason the per-metro breakdown is worth reading: the
-    previous single 20% split scored New York on a slice thin enough to move with the
-    seed. It also reports the in-fold training error beside the held-out one, because the
-    *gap* is the overfitting guard that justified deferring model form in the first place
-    and a held-out score alone cannot show it.
+    **Cross-validated rather than split once**, which is what makes the per-metro breakdown
+    worth reading: a single 20% split scores New York on a slice thin enough to move with
+    the seed. It also reports the in-fold training error beside the held-out one, because
+    the *gap* between them is the only overfitting guard here and a held-out score alone
+    cannot show it.
     """
     from sklearn.metrics import mean_absolute_error, r2_score
     from sklearn.model_selection import KFold
@@ -803,8 +799,8 @@ def train(
 
     # Out-of-fold predictions: every row scored exactly once, by a model fit without it.
     # That is what lets the per-metro breakdown below be read at all — under the previous
-    # single 20% split New York's holdout slice was thin enough that the figure moved with
-    # the seed, which is the weakness OQ-4 named when it asked for proper validation.
+    # single 20% split New York's holdout slice would be thin enough that the figure moves
+    # with the seed.
     out_of_fold = np.full(len(df), np.nan)
     baseline_out_of_fold = np.full(len(df), np.nan)
     in_fold_mae: list[float] = []
@@ -869,7 +865,7 @@ def save(model: object, report: TrainingReport) -> None:
     **The report travels with the model on purpose.** Without it the holdout MAE lives
     only in the training script's stdout, which means the report can print an estimate
     with no error band beside it — a point estimate reading as more precise than the
-    thing that produced it, which is the presentation §1 objects to. It also means the
+    thing that produced it. It also means the
     quoted error is necessarily the one *this* artifact scored: a retrain that moved the
     MAE moves the number in the report, rather than leaving a stale figure in a docstring
     somewhere describing a model that is no longer on disk.
@@ -957,18 +953,16 @@ def anchor_comp_rents(
     2018-19 scrape) and the comp's location (a comp inside the search radius can sit in a
     different ZIP, and a different county, with a different rent level).
 
-    **Since U11.3 the vintage comes out where it arises rather than being corrected
-    afterwards.** The anchor is a monthly market series, so a 2019 comp is divided by the
-    2019 market and the subject is multiplied by today's; the schedule-vs-market drift
-    U8.0 measured never enters, and `tools/rent_drift.py`'s symmetric correction was
-    retired with it.
+    **The vintage comes out where it arises rather than being corrected afterwards.** The
+    anchor is a monthly market series, so a 2019 comp is divided by the 2019 market and the
+    subject is multiplied by today's; no schedule-versus-market drift ever enters, so
+    nothing downstream needs a symmetric correction to remove it.
 
-    **Why not simply average the comps' rents.** That figure is an unanchored 2019
-    dollar amount, and §8 forbids one reaching the Summarizer. Comparing a 2026 model
-    output against it would not be a cross-check at all — it would reproduce the exact
-    vintage error §2's whole design exists to prevent, while looking like a validation.
-    This project has already made that mistake once, against the Chicago demo's rents,
-    and caught it only by measuring.
+    **Why not simply average the comps' rents.** That figure is an unanchored 2019 dollar
+    amount, which must never reach the Summarizer. Comparing a 2026 model output against it
+    would not be a cross-check at all — it would reproduce the exact vintage error this
+    module exists to prevent, while looking like a validation. This project made that
+    mistake once, against the Chicago demo's rents, and caught it only by measuring.
 
     A comp is dropped when it carries no coordinate, no listing date, an unresolvable
     county, an unresolvable anchor, or a ratio outside `config.RENT_MODEL_MIN/MAX_RATIO` — the

@@ -1,4 +1,4 @@
-"""ZIP-level sale-price benchmarks from county-assessor open data (U8.8, OQ-7, #11).
+"""ZIP-level sale-price benchmarks from county-assessor open data.
 
 **Read side only.** `scripts/build_sale_benchmarks.py` builds the committed table and
 carries the reasoning about sources, filters and why Los Angeles is absent; this module
@@ -10,8 +10,8 @@ renders differently depending on whether a municipal portal is up.
 **What a lookup returns is a market reference, not a valuation.** The median describes
 2-4 unit sales in the subject's ZIP over `config.SALE_BENCHMARK_WINDOW_START` onward,
 with no adjustment for the subject's own size, unit count or condition — the same
-caveat the metro figure carried, narrowed from a metro to a ZIP. Decision #15 leaves
-`value_estimate` permanently `None` and this does not change that.
+caveat the metro figure carries, narrowed from a metro to a ZIP. `DealState.value_estimate`
+stays permanently `None`, and this does not change that.
 
 **Coverage is partial and the caller must handle a miss as an ordinary outcome**, not as
 an error: two of the project's four indexed markets have a local tier (New York,
@@ -86,7 +86,7 @@ def lookup(zip_code: Optional[str]) -> Optional[ZipBenchmark]:
     **`config.SALE_BENCHMARK_MIN_SALES` is applied here rather than at build time**, so
     the threshold can move without rebuilding the table from three municipal APIs — and
     so the artifact records what the data says while the judgment about how much data is
-    enough stays in `config.py`, where §8 puts tunables.
+    enough stays in `config.py`, where this project puts tunables.
     """
     table = _load(str(config.SALE_BENCHMARK_PATH))
     if table is None or not zip_code:

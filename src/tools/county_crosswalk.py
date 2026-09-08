@@ -1,12 +1,11 @@
 """Resolves `DealTerms.county_fips` from a subject property's coordinates.
 
-Replaced Aug 15, 2026 — from a hand-maintained table to a spatial join
-------------------------------------------------------------------------
-This module originally hand-maintained a `(cityname, state) -> county FIPS` table for a
-29-city shortlist, each entry verified against a live HUD `listCounties` response (see
-git history / docs/history/changelog.md for that version). Once `tools/geocoding.py` existed to
-put a subject property at a real coordinate (decision #10 — geocoding source), that table became strictly
-dominated by a geometric point-in-polygon join against the same coordinate:
+A geometric point-in-polygon join, not a lookup table
+------------------------------------------------------
+The obvious alternative is a hand-maintained `(cityname, state) -> county FIPS` table for
+a shortlist of cities, each entry verified against a live HUD `listCounties` response.
+Given that `tools/geocoding.py` puts the subject at a real coordinate, that table is
+strictly dominated by a spatial join against the same coordinate:
 
 - It needs no per-city curation and covers every US county, not a hand-picked shortlist —
   it resolved Miami-Dade County correctly for a Miami-area point the old table had no
@@ -183,18 +182,18 @@ def county_fips_for_points(
 ) -> "list[Optional[str]]":
     """Batch form of `county_fips_from_point`, for callers resolving thousands of rows.
 
-    Added in U5, where the rent regression must resolve a county for every training row
-    so its rent can be normalized against that row's own local FMR.
+    The caller that needs it is the rent regression, which must resolve a county for every
+    training row so its rent can be normalized against that row's own local reference.
 
-    **Measured, because the obvious reasoning about why was wrong.** The expected
-    justification was that `counties.contains(point)` scans ~3,200 polygons per call
-    with no spatial index, making the per-point path quadratic-ish in aggregate. That
-    mechanism does not hold: shapely 2.0 vectorizes `contains`, so a single call is
-    already fast, and at n=120 the per-point loop *beat* this function 0.05s to 0.72s —
-    `sjoin` has fixed setup cost that small inputs never amortize. The batch form earns
-    its place only at U5's actual scale, where the fixed cost is paid once: **5,717 rows
-    resolve in 0.03s here against 2.51s per-point, a 90x difference, with zero
-    disagreement between the two paths across all 5,717.**
+    **Measured, because the obvious reasoning about why is wrong.** The expected
+    justification is that `counties.contains(point)` scans ~3,200 polygons per call with
+    no spatial index, making the per-point path quadratic-ish in aggregate. That mechanism
+    does not hold: shapely 2.0 vectorizes `contains`, so a single call is already fast, and
+    at n=120 the per-point loop *beats* this function 0.05s to 0.72s — `sjoin` has a fixed
+    setup cost that small inputs never amortize. This form earns its place only at training
+    scale, where that cost is paid once: **5,717 rows resolve in 0.03s here against 2.51s
+    per-point, a 90x difference, with zero disagreement between the two paths across all
+    5,717.**
 
     So: use this above a few hundred points, and `county_fips_from_point` below that.
     The crossover is real and in the low hundreds, not a rounding detail.

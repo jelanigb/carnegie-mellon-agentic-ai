@@ -2,20 +2,20 @@
 
 Why this exists
 ---------------
-U3 introduced a deliberate asymmetry: `llm_client._transport_failure` strips a provider
-error down to its useful message before it becomes a flag, because flags are rendered
-verbatim into reports and the raw body carries the calling account's `user_id`. That is
-right for the report and wrong for debugging — the discarded detail (status metadata,
-rate-limit headers, provider name, remedy hints) is exactly what a person diagnosing a
-failure wants.
+There is a deliberate asymmetry upstream: `llm_client._transport_failure` strips a
+provider error down to its useful message before it becomes a flag, because flags are
+rendered verbatim into reports and the raw body carries the calling account's `user_id`.
+That is right for the report and wrong for debugging — the discarded detail (status
+metadata, rate-limit headers, provider name, remedy hints) is exactly what a person
+diagnosing a failure wants.
 
 So the two audiences get different text from the same failure, on purpose:
 
 - **The report** gets the sanitized summary. It is a published artifact.
 - **stdout** gets everything, unabridged, through this module.
 
-Nothing here decides *whether* to degrade — that stays with the agent, per §8. This only
-makes sure that a caught exception is never the last anyone hears of it, which is the one
+Nothing here decides *whether* to degrade — that stays with the agent. This only makes
+sure that a caught exception is never the last anyone hears of it, which is the one
 failure mode a `try/except` introduces for free.
 
 Two properties worth stating
@@ -33,13 +33,10 @@ matches how the rest of this project reports (`print`, not `logging`). The cost 
 captures diagnostics into the report file. Switching to stderr is the one-line change
 below if that becomes the annoying half of the trade — the call sites do not change.
 
-**The account identifier is the one thing this channel does not print** — resolved
-Sept 2, 2026 (U9.M), closing the `security`-scoped deferral that stood here. The full
-text used to include the `user_id` that `_transport_failure` strips, which is right for
-a terminal someone is watching and wrong for one being recorded: the Week 7 deliverable
-includes a terminal capture, and a raw 429 arriving during it would put the account id
-on screen. (Stated without the deferral marker on purpose, so `grep -rn "TODO(" src/`
-stops counting a closed item — the inventory in §8 is only worth what that grep is.)
+**The account identifier is the one thing this channel does not print.** Passing through
+the `user_id` that `_transport_failure` strips would be right for a terminal someone is
+watching and wrong for one being recorded: a raw 429 arriving during a screen capture
+would put the account id into the recording.
 
 **Redaction was taken over the alternative — an env-gated verbosity switch defaulting to
 quiet during recording — because the alternative's failure mode is unrecoverable.** A
