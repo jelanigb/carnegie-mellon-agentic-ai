@@ -1,8 +1,14 @@
 # Spike — what OQ-22's re-purposed forecast would actually produce
 
-> **Status: a spike, not a build.** Nothing here is wired into the pipeline. It exists so the
-> deferred design in [OQ-22](../open_questions.md) can be *read* before the freeze decides
-> whether to build it. Run it with `scripts/spike_starting_point.py`.
+> **Status: a spike, not a build — and the freeze decided not to build it.** Nothing here is
+> wired into the pipeline. It existed so the deferred design could be *read* before the
+> Sept 4, 2026 code freeze, and it was read: the re-purposing is carried forward as the first
+> entry under *Next steps* in [`limitations.md`](limitations.md), not as work in flight. Run
+> the spike with `scripts/spike_starting_point.py`.
+>
+> **OQ-22 itself closed Sept 2, 2026** on the third of the three conditions it named for
+> itself; the record is in [`evaluator.md`](evaluator.md). References to `OQ-22` below are to
+> that closed entry — kept because the design it described is what this document measures.
 >
 > **Every number below is checked in.** The model calls and per-tier results live in
 > [`src/eval/data/exploratory/`](../../src/eval/data/exploratory/README.md), off any replay

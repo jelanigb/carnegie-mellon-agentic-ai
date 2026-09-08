@@ -60,7 +60,8 @@ the system currently *is*, `history/` is *how it got that way*.
 | `design/recommendation.md` | What the system is willing to say about a *deal* rather than about its own numbers: the two axes, the four verdicts, the 44,358-sale percentile evidence under their thresholds, and the model-proposes/rule-decides cross-check | Touching `critic.recommend` or `cross_check`, or any threshold on the asking price |
 | `sample_reports/` | Three full reports the pipeline produced, committed as-is — a clean run, an escalated one, and one where the *deal* rather than the software is the problem | Seeing real output without running anything, or checking what a change does to the report |
 | `demo.md` | The eight demo listings in plain language — what each exists to show, and what in the output demonstrates it | Preparing a demo or a recording, adding a demo deal, or explaining why a given listing is in the set |
-| `presentation.md` | Checkpoint 7.1's deliverables: the slide outline timed to 9:30, the narration script, the demo beat sheet, the report's section-by-section source map, and the elevator pitch. The capture commands stay in [`tasks/task_list_u9.md`](tasks/task_list_u9.md) §U9.9 | Preparing or recording the presentation, or writing the final report |
+| `running_the_demo.md` | How to launch the Streamlit surface, with and without LangSmith tracing; what the two `--server.*` flags do, and how to confirm tracing actually took | Running or recording the demo, or debugging a trace that never appears |
+| `design/limitations.md` | The eight gaps large enough that a reader unaware of them would draw a wrong conclusion, each with its measurement and what closing it would take, plus the ordered next steps | Answering "what can't this do", writing the report or a presentation, or before claiming a capability |
 | `history/decision_log.md` | All 22 numbered decisions with their full reasoning, grouped by system area | Revisiting a decision, or checking a premise before relying on it again |
 | `history/changelog.md` | Chronological code changes, by date and unit | Closing a unit; tracing when something landed |
 | `diagrams/` | Graph topology generated from the compiled graph (`.mmd`, `.png`) | Reviewing or describing the topology |
@@ -193,7 +194,7 @@ building them — including the ones that changed the design — are in
 | **U8** ✅ | Eval harness, stated as what it produced rather than as what it was sized as. **28 rows across three tiers** — 21 with a verdict *declared before the first run*, 7 live demo baselines — with **30 of 30 flag kinds raised, none uncovered and none unreachable**, and verdict agreement 18/21 with every mismatch triaged. Plus: a published parameter sweep closing #6, six straddle fixtures measuring brittleness at the per-flag lines, per-metro rent-error disclosure, pass-scoped flags, and a sub-metro price benchmark that arrived from the cut list. **Absorbed U10** — the demo deals are rows in the same batch, so the end-to-end evidence is a harness output rather than a separate pass. **The figures above are U8's at its close and the batch has grown since**: U9.6 added two demo deals, so `eval/results/results.md` now reports **30 rows, 23 predicted, agreement 20/23, and 30 of 30 flag kinds raised**. Stated here because the final report quotes these numbers and this table is where it will read them | **6.1** + report + video | [Orchestration](history/decision_log.md#orchestration--control-flow), [Eval & demo](history/decision_log.md#evaluation--demo) |
 | **U11** ✅ | Rent model, re-opened on measurement rather than on plan. Model form cross-validated and moved to **gradient boosting** (#18); the rent anchor re-based on a **ZORI/FMR hybrid** — ZORI for the level at the subject's own ZIP, HUD for the bedroom step (#19), which spent §6 cut-list item 6 and retired U8.4b's drift correction structurally. Per metro: New York $981 → $855, Chicago $454 → $343, overall flat — the headline hides the result, which is why per-metro reporting is now standard | — | [Rent & valuation](history/decision_log.md#rent--valuation) |
 | **U9** ✅ | **Planned as "Summarizer polish + a Streamlit app" and rewritten after the architect ran the pipeline and read two reports** — none of what the unit became was visible from the code. **Two axes separated and never merged**: `needs_human_review` is a statement about the software, `recommendation` about the property. **A second reasoning locus** — the model proposes a verdict from the same state, the deterministic rule decides, and disagreement is disclosed rather than resolved. Rent growth re-sourced to ZORI (**#21**) after its pairing premise was re-measured and found false. Personas and an escalation *routing* rule. The **Streamlit surface** (#3; §6 cut-list item 4 **spent**), a sixth demo deal so the set shows a clean run twice, and the live tier pinned so **all 30 eval rows and three sample reports replay from a clone**. **U9.9's capture is outstanding at close** — see the note below | report + video | [Eval & demo](history/decision_log.md#evaluation--demo), [Models & infra](history/decision_log.md#models--infrastructure), [Forecasting](history/decision_log.md#forecasting--reasoning) |
-| — | **Code frozen Sept 4, 2026.** Final report + 8–10 min video, due Sept 7 | **7.1** | — |
+| — | **Code frozen Sept 4, 2026.** Final report + 8–10 min video **delivered Sept 7, 2026**; U9.9's trace and surface capture landed the same day, closing OQ-13. Post-freeze work is documentation only — see the changelog's Sept 8 rows | **7.1** | — |
 
 ### Notes on the sequence
 
@@ -219,15 +220,16 @@ in the evaluation, not a separate performance.** The absorbed scope, so it is no
 U8 is planned: per-metro runs across all three metros, LangSmith traces captured, demo
 screenshots, and the graph diagram generated from the compiled graph.
 
-**U9 closed Sept 2, 2026 with U9.9 — the capture — outstanding, and it is the unit's one
-gap.** Live runs, LangSmith traces, screenshots off the shipped surface. It is not deferred
-work in the ordinary sense: every prerequisite is discharged and verified, and a runbook with
-the exact commands is in [`tasks/task_list_u9.md`](tasks/task_list_u9.md) §U9.9. What it needs
-is a live account and a screen. **Noted here rather than only in the task file for the same
-reason M4 added U8.9's drop to the U8 row** — this table is read every session, and a ✅ with
-an outstanding subsection under it is exactly the kind of thing that stops being visible.
-[OQ-13](open_questions.md) is the entry that carries it, and it is the only open question U9
-was expected to close and did not.
+**U9 closed Sept 2, 2026 with U9.9 — the capture — outstanding, and it was the unit's one
+gap. Discharged Sept 7, 2026.** Live runs, LangSmith traces and screenshots off the shipped
+surface were captured against the frozen build; the screenshots live in `docs/images/` and
+are used by the README's *Streamlit* and *Observability* sections. It was never deferred work
+in the ordinary sense — every prerequisite was discharged and verified, and the runbook is in
+[`tasks/task_list_u9.md`](tasks/task_list_u9.md) §U9.9. What it needed was a live account and
+a screen. **It was noted here rather than only in the task file for the same reason M4 added
+U8.9's drop to the U8 row** — this table is read every session, and a ✅ with an outstanding
+subsection under it is exactly the kind of thing that stops being visible. OQ-13 carried it
+and closed with it, so nothing in `open_questions.md` is left over from U9.
 
 ### Cut list, in order
 

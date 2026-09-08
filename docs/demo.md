@@ -604,6 +604,9 @@ what remains is named honestly rather than left as an aspiration.
 cd src && .venv/bin/streamlit run app.py
 ```
 
+Launch options — the two `--server.*` flags, and running with LangSmith tracing on — are in
+[`running_the_demo.md`](running_the_demo.md). This section is about what the surface *does*.
+
 Decision #3 and §6's cut-list item 4, **spent rather than shed.** A listing goes in, the
 report with every disclosure comes out. Three things it does that `main.py` does not.
 
@@ -644,16 +647,20 @@ The only place the surface reads state rather than text is the four-figure statu
 and every figure there is one the report also prints. Two renderings of the same evidence
 drift the first time either is edited, and the report is the artifact under review.
 
-**Still to build:**
+**Nothing on this list is outstanding any more — updated Sept 8, 2026.** Both remaining
+items landed after the Sept 4 code freeze:
 
-- **Final report and video.** Due Sept 7, 2026, after the Sept 4 code freeze. Expected to
-  draw its evidence largely from the harness output — the demo deals' reports, the eval
-  batch's results table, and the graph diagram generated from the compiled graph — rather
-  than being written separately from scratch.
-- **LangSmith traces.** Each demo deal run with tracing enabled (`LANGSMITH_TRACING=true`)
-  produces a trace of the full seven-agent pipeline, showing the actual agent-to-agent
-  flow rather than only its final output. Free-tier traces expire after 14 days, so they
-  are captured close to the write-up rather than long before (OQ-13).
+- **Final report and video** — delivered Sept 7, 2026. The evidence is drawn from the
+  harness output as expected, rather than written separately: the demo deals' reports, the
+  eval batch's results table, and the graph diagram generated from the compiled graph.
+- **LangSmith traces** — captured Sept 7, 2026, closing **OQ-13**, which had stayed open
+  since U9 because the capture needed a live account and a screen rather than any code. A
+  traced run produces the full Planner → … → Summarizer tree with each node timed and its
+  state attached, which is what shows the agent-to-agent flow rather than only the final
+  output. One is reproduced in the README's *Observability* section; free-tier traces expire
+  after 14 days, so the screenshot is the durable artifact and the trace is not.
+  Launch instructions, and how to confirm tracing actually took, are in
+  [`running_the_demo.md`](running_the_demo.md).
 
 **One limitation worth stating here rather than only in the report.** The short written
 summary at the top of each report is model-generated. The figures it quotes are computed

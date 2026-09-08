@@ -239,10 +239,13 @@ carnegie_mellon_agentic_repo/
 │   ├── implementation_plan.md     # plan of record: §6 sequence, §7 decisions register
 │   ├── open_questions.md          # every unresolved question, by system area
 │   ├── demo.md                    # the demo guide: what each deal shows
-│   ├── design/                    # what the system IS — architecture, state, data, evaluator, personas
+│   ├── running_the_demo.md        # launching the Streamlit surface, with and without tracing
+│   ├── design/                    # what the system IS — architecture, state, data, evaluator,
+│   │                              #   personas, limitations
 │   ├── history/                   # how it got that way — changelog, decision_log
 │   ├── sample_reports/            # three committed reports, replayed byte-identically from a clone
-│   └── diagrams/                  # generated from the compiled graph, not drawn
+│   ├── diagrams/                  # generated from the compiled graph, not drawn
+│   └── images/                    # demo-surface and tracing screenshots used by the docs
 └── src/                           # project root for all application code
     ├── requirements.txt
     ├── .venv/                     # gitignored — dedicated virtualenv
