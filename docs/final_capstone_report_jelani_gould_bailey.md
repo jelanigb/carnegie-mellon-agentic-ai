@@ -118,8 +118,8 @@ The project is written in Python 3.13 using a single virtualenv.
 
 | Measure | Value |
 | :---- | :---- |
-| Lines of Python (excl. docstrings & code comments) | 15,312 across 85 files |
-| Commits · active span · tracked files (incl. LLM recordings)  | 183 · 30 days · 544 |
+| Lines of Python (excl. docstrings & code comments) | 15,300 across 85 files |
+| Commits · active span · tracked files (incl. LLM recordings)  | 186 · 31 days · 543 |
 | Evaluation cases · tests | 30 · 107 |
 | Project cost | $50 (out of $100 total budget). |
 

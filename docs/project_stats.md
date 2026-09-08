@@ -2,21 +2,22 @@
 
 **Last updated on 2026-09-07 — final, at project submission.**
 
-Assembled for the final report. Every figure below is derived from the repository at
-commit `a3c2179` (branch `main`, 2026-09-06) and each row states how it was produced, so
-the numbers can be re-derived rather than trusted. Where a number also appears in
-[`design/data_sources.md`](design/data_sources.md) and the two disagree, the value here
-is the one computed from code and is the one to trust.
+Assembled for the final report. Every figure below is derived from the repository on
+branch `main` at 2026-09-07 and each row states how it was produced, so the numbers can be
+re-derived rather than trusted. Where a number also appears in
+[`design/data_sources.md`](design/data_sources.md) and the two disagree, the value here is
+the one computed from code and is the one to trust.
 
-Everything is measured against the **committed** tree, not the working tree, so a fresh
-clone reproduces it. (At the time of measurement the working tree carried three
-uncommitted edits — 13 comment lines in `agents/critic.py`, a geocode-cache append, and
-one document — none of which are counted below.)
+**§1 and §2 were recomputed after the documentation-density pass** that rewrote every
+docstring and comment in `src/` (excluding `scripts/`) for a first-time reader rather than
+for a returning implementer. That pass is almost entirely deletion, so **the line counts
+here are 469 lines lower than the 2026-09-06 revision's, and the fall is the point**:
+within the shipped pipeline roughly 267 docstring lines and 176 comment lines came out,
+against 12 lines of code.
 
-**Figures corrected since the 2026-09-03 revision** are marked ⚠ and explained where they
-appear. Three of them are corrections to the *method*, not growth in the project, so the
-new number is lower than the old one; the final report should quote this file, not the
-previous one.
+**Figures corrected against earlier revisions** are marked ⚠ and explained where they
+appear. Several are corrections to the *method* rather than growth in the project, so the
+new number is lower than the old one; the final report should quote this file.
 
 ---
 
@@ -29,14 +30,14 @@ statement) → code.
 
 | Measure | Lines | What it is |
 | --- | --- | --- |
-| **Total (excluding blanks)** | **25,950** | code + docstrings + comment-only lines |
-| **Code + docstrings** | **21,946** | the above minus 4,004 comment-only lines |
-| **Code only** | **15,312** | the above minus 6,634 docstring lines |
+| **Total (excluding blanks)** | **25,481** | code + docstrings + comment-only lines |
+| **Code + docstrings** | **21,655** | the above minus 3,826 comment-only lines |
+| **Code only** | **15,300** | the above minus 6,355 docstring lines |
 
-So **roughly 2 of every 5 non-blank lines in the codebase are prose** — 15.4% comment,
-25.6% docstring, 59.0% code — a direct consequence of the standard that "docstrings carry
-the reasoning." (For reference, the files also contain 4,348 blank lines; raw physical
-line count is 30,298.)
+So **2 of every 5 non-blank lines in the codebase are prose** — 15.0% comment, 24.9%
+docstring, 60.0% code. That is after the documentation-density pass; before it the split
+was 15.4% / 25.6% / 59.0%. (For reference, the files also contain 4,326 blank lines; raw
+physical line count is 29,807.)
 
 ⚠ The previous revision described this ratio as "of every 3 non-blank lines, roughly 1 is
 a comment and 1 is docstring" — that overstated it. The underlying counts were right; the
@@ -46,29 +47,35 @@ sentence summarizing them was not.
 
 | Area | Files | Total (excl. blanks) | Code + docstrings | Code only |
 | --- | --- | --- | --- | --- |
-| `src/scripts/` — evidence & index-build scripts | 32 | 6,890 | 6,435 | 4,829 |
-| `src/agents/` — the 7 pipeline agents | 9 | 5,409 | 4,606 | 3,217 |
-| `src/tools/` — data clients, model, crosswalks, infra | 22 | 5,001 | 4,504 | 2,726 |
-| `src/` root — `graph`, `state`, `nodes`, `config`, `main`, `app`, `demo_deals`, `mcp_server` | 8 | 4,090 | 2,324 | 1,496 |
-| `src/tests/` | 8 | 2,535 | 2,316 | 1,572 |
-| `src/eval/` — harness + cases + fixtures | 5 | 1,730 | 1,481 | 1,207 |
+| `src/scripts/` — evidence & index-build scripts | 32 | 6,890 | 6,432 | 4,829 |
+| `src/agents/` — the 7 pipeline agents | 9 | 5,181 | 4,456 | 3,217 |
+| `src/tools/` — data clients, model, crosswalks, infra | 22 | 4,932 | 4,448 | 2,726 |
+| `src/` root — `graph`, `state`, `nodes`, `config`, `main`, `app`, `demo_deals`, `mcp_server` | 8 | 3,964 | 2,273 | 1,495 |
+| `src/tests/` | 8 | 2,521 | 2,307 | 1,572 |
+| `src/eval/` — harness + cases + fixtures | 5 | 1,698 | 1,459 | 1,196 |
 | `docs/diagrams/` — `agent_logic_flow_gen.py` | 1 | 295 | 280 | 265 |
-| **Total** | **85** | **25,950** | **21,946** | **15,312** |
+| **Total** | **85** | **25,481** | **21,655** | **15,300** |
 
-**The shipped pipeline** — agents + tools + eval + `src/` root, excluding one-off
-scripts, tests and the diagram generator — is **44 files: 16,230 total / 12,915 code +
-docstrings / 8,646 code only**.
+**`src/scripts/` is the only area the documentation pass did not touch**, by design: those
+are one-off evidence scripts whose headers *are* their reasoning, and several are the only
+record of how a published number was produced. Its total and code-only figures are
+unchanged from the previous revision.
 
-`src/` root is the densest commentary in the project: 1,766 comment-only lines against
-1,496 of code, because `config.py` carries the reasoning for every tunable parameter
+**The shipped pipeline** — agents + tools + eval + `src/` root, excluding one-off scripts,
+tests and the diagram generator — is **44 files: 15,775 total / 12,636 code + docstrings /
+8,634 code only**.
+
+`src/` root is the densest commentary in the project: 1,691 comment-only lines against
+1,495 of code, because `config.py` carries the reasoning for every tunable parameter
 beside it.
 
 *Method:* every line in every tracked `.py` file classified in Python (`str.strip()` →
 empty = blank, leading `#` = comment-only, else code); docstring lines identified with
 the `tokenize` module — a `STRING` token at bracket depth 0 that opens a logical line —
-with blank lines inside a docstring counted as blank, not docstring. Verified against the
-2026-09-03 revision: this method reproduces that revision's per-area figures exactly on
-the files that have not changed since.
+with blank lines inside a docstring counted as blank, not docstring. On `src/scripts/`,
+the one area no revision has edited, this reproduces the previous revision's total and
+code-only figures exactly and differs by 3 lines in the comment-versus-docstring split,
+which is a classifier detail rather than a change in the files.
 
 ---
 
@@ -76,21 +83,21 @@ the files that have not changed since.
 
 | Scope | Files |
 | --- | --- |
-| **Excluding generated LLM recordings** | **132** |
-| All Git-tracked files | 544 |
+| **Excluding generated LLM recordings** | **131** |
+| All Git-tracked files | 543 |
 
 `data/` and `ignore/` are gitignored, so they contribute almost nothing to either count.
-Of the 544 tracked files, **412 are generated LLM interaction recordings**
+Of the 543 tracked files, **412 are generated LLM interaction recordings**
 (`src/eval/data/llm_recordings/` 384, `src/eval/data/exploratory/` 28) used to replay the
-eval harness offline; the 132 figure is everything else.
+eval harness offline; the 131 figure is everything else.
 
-### By extension (all 544)
+### By extension (all 543)
 
 | Ext | Count | | Ext | Count |
 | --- | --- | --- | --- | --- |
 | `.json` | 412 | | `.png` / `.mmd` / `.gitkeep` | 2 each |
 | `.py` | 85 | | `.txt` / `.toml` / `.log` / `.joblib` / `.gitignore` / (none) | 1 each |
-| `.md` | 35 | | | |
+| `.md` | 34 | | | |
 
 Only 3 of the 412 `.json` files are hand-maintained data tables rather than recordings:
 `tools/data/zip_sale_benchmarks.json`, `tools/data/fmr_cohort_panel.json`, and
@@ -101,33 +108,34 @@ Only 3 of the 412 `.json` files are hand-maintained data tables rather than reco
 | Dir | Files |
 | --- | --- |
 | `src/` | 505 |
-| `docs/` | 34 |
+| `docs/` | 33 |
 | repo root (`README.md`, `LICENSE`, `.gitignore`) | 3 |
 | `data/` (`README.md`, `processed/rent_model.joblib`) | 2 |
 
-⚠ **One of the 34 `docs/` files should not be tracked.**
-`docs/private/checkpoints/final/capstone_demo_text.md` entered the repository in commit
-`cc09afe` and is on `origin/main`. `docs/private/` *is* listed in `.gitignore`, but
-`.gitignore` has no effect on a file that has already been added, so the rule did not
-catch it. Every other `docs/private/` file is correctly absent. See the note at the end of
-this document.
+✅ **The one tracked `docs/private/` file the 2026-09-06 revision flagged is gone.**
+`docs/private/checkpoints/final/capstone_demo_text.md` was tracked despite `docs/private/`
+being listed in `.gitignore` — `.gitignore` has no effect on a file already added — and it
+has since been untracked. `git ls-files docs/private/` now returns nothing. Note that
+untracking removes it from the tip of `main` but not from history; it remains retrievable
+from earlier commits on the remote.
 
 ### Documentation volume
 
 | Measure | Value |
 | --- | --- |
-| Tracked `.md` files (excluding the private one above) | 34 |
-| Lines of Markdown | 16,381 |
-| Words of Markdown | 208,497 |
-| — of which under `docs/` (29 files) | 15,667 lines / 200,706 words |
+| Tracked `.md` files | 34 |
+| Lines of Markdown | 16,470 |
+| Words of Markdown | 209,289 |
+| — of which under `docs/` (28 files) | 15,707 lines / 201,132 words |
 
-**Doc-to-code ratio: 208,497 words of prose against 15,312 lines of code** — roughly 13.6
-words of documentation per line of code, before counting the 10,638 comment and docstring
-lines inside the code itself. The project is documentation-heavy by design.
+**Doc-to-code ratio: 209,289 words of prose against 15,300 lines of code** — roughly 13.7
+words of documentation per line of code, before counting the 10,181 comment and docstring
+lines inside the code itself. The project is documentation-heavy by design, and the
+documentation-density pass moved prose *out* of the code without moving it out of the
+repository: what a reader needs to reconstruct the build is in `docs/history/`.
 
 *Method:* `git ls-files`, grouped by extension and first path segment; `wc -lw` over the
-tracked `.md` set. The Markdown volume is the only figure here measured against the
-working tree rather than `a3c2179`, because it counts this revision of this file.
+tracked `.md` set. The Markdown volume counts this revision of this file.
 
 ---
 
@@ -135,22 +143,22 @@ working tree rather than `a3c2179`, because it counts this revision of this file
 
 | Measure | Value |
 | --- | --- |
-| **Total commits** | **183** |
-| Authored by Jelani Gould-Bailey | 183 (182 as `jelanigb` + 1 as `Jelani Gould-Bailey` — same person, two configured names) |
+| **Total commits** | **186** |
+| Authored by Jelani Gould-Bailey | 186 (185 as `jelanigb` + 1 as `Jelani Gould-Bailey` — same person, two configured names) |
 | First commit | 2026-08-08 |
-| Latest commit | 2026-09-06 |
-| Active span | 30 days |
-| Days with at least one commit | 21 |
+| Latest commit | 2026-09-07 |
+| Active span | 31 days |
+| Days with at least one commit | 22 |
 | Busiest days | Sep 2 (32), Aug 30 (32), Sep 1 (20), Aug 29 (14), Aug 31 (14) |
 | Median commits on an active day | 4 |
 
-Commits are heavily clustered: the five busiest days carry 112 of 183 commits (61%),
+Commits are heavily clustered: the five busiest days carry 112 of 186 commits (60%),
 which is what a "small, self-contained change sets" working model looks like when review
 happens in sittings rather than continuously.
 
 *Method:* `git rev-list --count HEAD`, `git shortlog -sn HEAD`, `git log --date=short`.
-Note that `git shortlog -sn --all` reports 190 because it includes commits reachable only
-from other refs; 183 is the count on `main`.
+Note that `git shortlog -sn --all` reports 193 because it includes commits reachable only
+from other refs; 186 is the count on `main`.
 
 ---
 
@@ -162,7 +170,7 @@ from other refs; 183 is the count on `main`.
 | — Golden-tier (complete `DealTerms` supplied, Extractor skipped) | 15 |
 | — Replay-tier (Extractor runs against recorded LLM responses) | 6 |
 | — Live-tier (real model call) | 9 |
-| Scoring cases (`PREDICTED` verdicts, count toward U8.6 agreement) | 23 |
+| Scoring cases (`PREDICTED` verdicts, count toward the agreement figure) | 23 |
 | Regression-check cases (`BASELINE` verdicts) | 7 |
 | Engineered cases (`ENGINEERED_CASES`) | 21 |
 | Distinct golden fixtures behind the golden-tier cases | 14 (LA 3, Chicago 5, Cleveland 3, New York 3) |
@@ -176,15 +184,15 @@ across all 30 cases; the 21 engineered cases name 16 of them. The seventeenth,
 
 The 8 demo deals: `los-angeles`, `los-angeles-current`, `chicago`, `staten-island`,
 `no-geography`, `overpriced`, `chicago-uptown`, `coord-conflict`. The harness also runs a
-9th live case, `chicago--no-retrieval` (the U4 ablation), giving the 9 live-tier cases
+9th live case, `chicago--no-retrieval` (the retrieval ablation), giving the 9 live-tier cases
 above.
 
-### What the final batch produced (`eval/results/results.md`, run 2026-09-06)
+### What the final batch produced (`eval/results/results.md`, run 2026-09-07)
 
 | Measure | Value |
 | --- | --- |
 | **Verdict agreement** (predicted cases) | **20 / 23** |
-| Regression against the published U7.8 baselines | 6 / 7 |
+| Regression against the published baselines | 6 / 7 |
 | **Flag coverage** | **30 of 30 flag kinds raised** — 0 uncovered, 0 unreachable |
 | **Replay determinism** — cases that run with zero live model calls | **21 of 30 (70%)** (golden 15 + replay 6) |
 | Rows where the model's independent verdict differed from the rule's, and the report disclosed the disagreement (⚖) | 11 of 30 |
@@ -385,7 +393,7 @@ member count, `grep` on `implementation_plan.md` / `changelog.md`, `pytest --col
   paid-API spend is not recorded anywhere in the repo and has to come from the OpenRouter
   dashboard. Worth stating in the report alongside the 70% replay-determinism figure,
   which is the mechanism that kept it low: a demo or an eval batch re-run costs no quota.
-- **Decision churn.** 22 decisions across 30 days, several re-opened — #16's rent half
+- **Decision churn.** 22 decisions across 31 days, several re-opened — #16's rent half
   superseded by #21, #6 / #20 / #22 each held on measurement rather than on argument. A
   "decisions revisited" count would speak directly to the "correcting past mistakes is
   worth the time-investment" working principle, but it needs a reading of
@@ -393,22 +401,15 @@ member count, `grep` on `implementation_plan.md` / `changelog.md`, `pytest --col
 
 ---
 
-## ⚠ One thing to fix before the repository is read publicly
+## ✅ Resolved: the tracked `docs/private/` file
 
-`docs/private/checkpoints/final/capstone_demo_text.md` is **tracked and pushed to
-`origin/main`**, despite `docs/private/` being listed in `.gitignore` — `.gitignore` does
-not apply to a file that has already been added. It entered in commit `cc09afe`. Every
-other file under `docs/private/` is correctly untracked.
+An earlier revision of this file flagged
+`docs/private/checkpoints/final/capstone_demo_text.md` as tracked and pushed to
+`origin/main`, despite `docs/private/` being listed in `.gitignore` — `.gitignore` does not
+apply to a file that has already been added. It has since been untracked, and
+`git ls-files docs/private/` returns nothing.
 
-To untrack it while keeping the local copy:
-
-```
-git rm --cached docs/private/checkpoints/final/capstone_demo_text.md
-git commit -m "Untrack a checkpoint document that belongs under docs/private/"
-git push
-```
-
-Note that this removes it from the tip of `main` but **not** from history — commits
-`cc09afe` onward still contain it, and it remains retrievable from the GitHub remote.
-Whether that matters depends on what the file contains; if it needs to be gone entirely,
-history has to be rewritten and force-pushed.
+**It is still in history.** Untracking removes a file from the tip of `main`, not from the
+commits that contain it, so it remains retrievable from the remote. If it needs to be gone
+entirely, history has to be rewritten and force-pushed — a decision about what the file
+contains rather than about repository hygiene.
