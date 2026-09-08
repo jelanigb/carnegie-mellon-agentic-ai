@@ -1,79 +1,79 @@
 # Multi-Family Deal Evaluator
 
-A capstone project for Carnegie Mellon's Agentic AI executive-education program: an
-agentic pipeline that evaluates small multi-family (2–4 unit) residential listings as
-investment candidates, and discloses — rather than hides — every place its own evidence
-runs thin.
+# Project Overview
 
-**This README is written for reviewing vs. running yourself.** The graded artifact is
-whether the project holds up to inspection, so the sections below lead with where the
-evidence already lives (sample reports, evaluation results, the graph diagram).
+This repository is for the **Multi-Family Deal Evaluator**, a capstone project for Carnegie Mellon's Agentic AI [Executive Education Program](https://execonline.cs.cmu.edu/agentic-ai-program). The Multi-Family Deal Evaluator is a seven-agent system that evaluates small multi-family (2-4 unit) properties for real estate investors. Given a listing, it automates extraction of deal terms, comp retrieval, rent estimation, scenario forecasting, and authors a final report.
 
-## What it is
+Please note, because this is an academic project, the primary goal of this repository is for showcasing the design and implementation vs. deploying to production at scale. In order to fully run the code in this repository you will need to obtain some of the dependencies yourself as they are not checked in (e.g. some data, API Keys). Full instructions are in [**How To Run This Project**](#how-to-run-this-project) below.
 
-![The compiled graph: start to planner, then extractor, comps_retrieval, valuation_rent, scenario_forecast, critic — which branches to human_review, back to planner, or straight to summarizer](docs/diagrams/deal_evaluator_graph_lr.png)
+# System Overview
 
-*Generated from the compiled graph by `scripts/export_graph_diagram.py`, not drawn — dotted
-edges are conditional. The same script asserts the three properties the topology is committed
-to: exactly one loop-closing edge (`critic → planner`), exactly two branching nodes, and every
-declared node reachable.*
+A seven-agent pipeline orchestrated via a [LangGraph](https://github.com/langchain-ai/langgraph) state graph, with an explicit human-in-the-loop pause node.
 
-A seven-agent pipeline, orchestrated as a [LangGraph](https://github.com/langchain-ai/langgraph)
-graph with an explicit human-in-the-loop pause:
+<a href="docs/diagrams/deal_evaluator_graph_lr.png"><img src="docs/diagrams/deal_evaluator_graph_lr.png" alt="The compiled agent graph, left to right: planner, extractor, comps retrieval, valuation, forecast, critic, human review, summarizer" width="900"></a>
 
-1. **Planner** — inspects the deal, decides which downstream steps run, routes between
-   agents, governs retries and escalation.
-2. **Extractor** — parses an unstructured listing into structured deal terms, resolves
-   the address to coordinates, raises clarifying questions on anything it can't resolve.
-3. **Comps/Retrieval** — a RAG comp finder over a rental-listings corpus (ChromaDB +
-   sentence-transformers), adaptively relaxing search radius and match criteria when
-   matches are sparse, and flagging when it does.
-4. **Valuation/Rent** — a gradient-boosted rent regression model, anchored to a
-   ZIP-level market rent index, cross-checked against the retrieved comps.
-5. **Scenario/Forecast** — a Tree-of-Thought search over rent-growth and
-   price-appreciation scenarios, scored by an LLM and pruned to a beam of survivors.
-6. **Critic/Reviewer** — checks consistency across upstream outputs, aggregates every
-   disclosure into a confidence score, and routes low-confidence or contradictory deals
-   to a human-review pause rather than reporting them as settled.
-7. **Summarizer** — renders the final report, required to surface every upstream
-   disclosure rather than only the headline numbers.
+*Generated from the compiled graph, not drawn. Dotted edges are conditional.*
 
-**The unifying design principle is Transparent Degradation:** whenever an agent proceeds
-on incomplete, relaxed, or stale evidence, it attaches a named, typed flag to its output
-rather than absorbing the gap silently. Flags propagate through the Critic to the
-Summarizer, so a report always says *when and how* the system deviated from the ideal
-path. This is enforced structurally, not just as a style rule — flag kinds are drawn from
-a closed enum (`state.FlagKind`), and a dedicated test suite
-(`tests/test_flag_propagation.py`) asserts that a flag raised anywhere survives every
-downstream node and appears in the report.
+## Agents
 
-A deal that the Critic can't stand behind pauses at a genuine LangGraph `interrupt()`
-rather than degrading its own confidence claim — see `agents/human_review.py` and
-`docs/design/personas.md` for who that pause is for and which desk it routes to.
+1. **Planner** — inspects the deal, decides which downstream steps run, routes between agents, governs retries and escalation.
+2. **Extractor** — parses an unstructured listing into structured deal terms, resolves the address to coordinates, raises clarifying questions on anything it can't resolve.
+3. **Comps/Retrieval** — a RAG comp finder over a rental-listings corpus (ChromaDB + sentence-transformers), adaptively relaxing search radius and match criteria when matches are sparse, and flagging when it does.
+4. **Valuation/Rent** — a gradient-boosted rent regression model, anchored to a ZIP-level market rent index, cross-checked against the retrieved comps.
+5. **Scenario/Forecast** — a Tree-of-Thought search over rent-growth and price-appreciation scenarios, scored by an LLM and pruned to a beam of survivors.
+6. **Critic/Reviewer** — checks consistency across upstream outputs, aggregates every disclosure into a confidence score, and routes low-confidence or contradictory deals to a human-review pause rather than reporting them as settled.
+7. **Summarizer** — renders the final report, required to surface every upstream disclosure rather than only the headline numbers.
 
-## Repository layout
+## Coordination, state and memory
 
-Two directories down, with the entries a reader is most likely to want first. `data/` and
-`ignore/` are gitignored — a downloaded corpus and API keys respectively — and neither is
-needed to read anything here.
+Fixed data dependencies dictate ordering; there is no parallelism or fan out. The Planner sets state pre-flight rather than supervising dynamically.
+
+Memory is a typed Pydantic state object backed by SQLite checkpointing. Agents communicate exclusively through partial state updates with append-only disclosure logging for auditability; no agent directly invokes another. This ensures separation-of-concerns and clear auditability.
+
+Human intervention is triggered by a LangGraph `interrupt()` call that pauses the graph and surfaces the reason why.
+
+## Reasoning, retrieval and tools
+
+The system is a hybrid system which combines deterministic logic with LLMs. Full runs execute **seven model calls across four agents**. Core decision-making (scoring, routing, buy/pass recommendations) relies on deterministic functions over accumulated state (vs. model calls).
+
+- **Tree-of-Thought (Forecast)** runs beam search over an enumerated space: four framings of which years feed each series, then nine rent-band/price-band pairings. The model ranks and prunes; it never produces a growth rate. Every candidate and its prune reason reaches a ledger printed in the final report.
+- **Adaptive RAG (Retrieval)** is a reason/act/observe loop. A shortfall is treated as an observation: concede one criterion, name it, then re-query.
+- **Tools** come from a read-only MCP server, whose `list_tools()` builds the Forecast evaluator's menu (so the tool surface has one definition rather than two that can drift).
+- **Logging** is LangSmith tracing across every node; **evaluation** invokes this same compiled graph.
+
+## Core architectural principles
+
+**Transparent Degradation, enforced structurally:** An agent proceeding on incomplete or relaxed evidence attaches a named, severity-graded flag defined in an enum, making coverage of the failure modes countable. An append-only reducer makes disclosure loss impossible. Flags propagate through the Critic to the Summarizer, so a report always says *when and how* the system deviated from the ideal path.
+
+**Independent Decision Axes:** Confidence scoring (evidence quality) and deal quality (investment merit) are computed separately; a deal can require human review due to evidence flags while still remaining viable.
+
+**Rule-Gated AI:** every model call sits upstream of a rule or beside one, never as the last word.
+
+**Ground Assumptions in Data.** Every load-bearing assumption was tested against real data, and several failed, leading to iterative design revisions.
+
+# Repository layout
 
 ```
 .
-├── README.md                  you are here
-├── LICENSE                    MIT
+├── README.md                       you are here
+├── LICENSE                         MIT
+├── data/README.md                  the gitignored datasets: source, license, size, and
+│                                   the command that consumes each one
 ├── docs/
 │   ├── implementation_plan.md      the plan of record; §7 is the decision register
 │   ├── open_questions.md           every unresolved question, by system area
 │   ├── project_stats.md            size and cost of the build, each figure with its recipe
 │   ├── final_capstone_report_…md   the written submission
-│   ├── demo.md                     the demo script
-│   ├── design/                     what the system IS — architecture, data sources,
-│   │                               state schema, engineering standards, personas,
+│   ├── demo.md                     the eight demo listings and what each one exists to show
+│   ├── running_the_demo.md         how to launch the Streamlit surface, with and without tracing
+│   ├── design/                     what the system IS — architecture, data sources, state
+│   │                               schema, engineering standards, personas, limitations,
 │   │                               the recommendation rule, the forecast evaluator
 │   ├── history/                    how it got that way — decision_log.md, changelog.md
 │   ├── tasks/                      per-unit task lists, and the conventions for them
 │   ├── sample_reports/             three reports the pipeline produced, committed as-is
-│   └── diagrams/                   graph topology, generated from the compiled graph
+│   ├── diagrams/                   graph topology, generated from the compiled graph
+│   └── images/                     demo-surface and tracing screenshots used by these docs
 └── src/
     ├── main.py                     entrypoint — run the pipeline on one listing
     ├── app.py                      Streamlit demo surface
@@ -100,43 +100,63 @@ needed to read anything here.
                                     number quoted in the docs re-derives from one of these
 ```
 
-## Where the evidence already lives
+<a id="where-the-evidence-already-lives"></a>
 
-- **`docs/sample_reports/`** — three full reports the pipeline produced, committed as-is.
-  Read these before running anything: they are the fastest way to see what the system
-  actually outputs, disclosures included. **The three are chosen so the two questions the
-  report answers vary independently** — whether the system can stand behind its own
-  numbers, and whether the property is worth buying:
+# Project outputs
 
-  | | System check | Recommendation | What it shows |
-  | --- | --- | --- | --- |
-  | `los-angeles.md` | reported, confidence 1.00 | Proceed | the clean path, 8 comparables, nothing degraded |
-  | `staten-island.md` | **escalated**, 0.00 | Proceed | no comparable listings exist within reach, and the deal is still cheap — 9.2× gross rent against its ZIP's 11.0× |
-  | `overpriced.md` | reported, 1.00 | **Proceed with caution** | the mirror: the system is confident and the *deal* is the problem, asking 55% over its ZIP's recorded sales |
+## Sample Reports
 
-  **If you read one, read `staten-island.md`** — it is escalated to human review *and*
-  recommends proceeding, which is the clearest demonstration that the two questions are
-  separate. **If you read two, add `overpriced.md`**, which carries a disagreement between
-  the rule that decides and an independent model reading of the same evidence, disclosed
-  rather than resolved.
-- **Every figure in this repository re-derives from a fresh clone.** All 30 evaluation
-  rows and all three sample reports replay from committed model recordings, so nothing
-  quoted here rests on a call you cannot reproduce. Reaching a live model takes an
-  explicit flag.
-- **`src/eval/results/results.md` and `sensitivity.md`** — the evaluation harness's
-  output: a batch of 30 real and engineered cases run through the compiled graph, a
-  flag-coverage census, and a sweep over the confidence-scoring weights. This is what a
-  correctness or calibration claim in this project is actually measured against, and the
-  inputs it runs on (`src/eval/data/`, `src/eval/cases.py`) are committed alongside it.
-- **`docs/diagrams/`** — the graph topology shown above, generated directly from the
-  compiled graph rather than drawn by hand (`scripts/export_graph_diagram.py`), so it can't
-  drift from the code. Two orientations from one source: `_lr` for documents and slides,
-  the top-down pair for anywhere tall.
-- **`docs/implementation_plan.md`** — the plan of record: what was built, in what order,
-  every architectural decision with its reasoning (§7), and a document map to everything
-  else in `docs/`.
+- **`docs/sample_reports/`** — three full reports the pipeline produced, committed as-is. Read these before running anything: they are the fastest way to see what the system actually outputs, disclosures included. **The three are chosen so the two questions the report answers vary independently** — whether the system can stand behind its own numbers, and whether the property is worth buying:
 
-## Running it
+|  | System check | Recommendation | What it shows |
+| :---- | :---- | :---- | :---- |
+| [`staten-island.md`](docs/sample_reports/staten-island.md) | **escalated**, 0.00 | Proceed | no comparable listings exist within reach, and the deal is still cheap — 9.2× gross rent against its ZIP's 11.0× |
+| [`los-angeles.md`](docs/sample_reports/los-angeles.md) | reported, confidence 1.00 | Proceed | the clean path, 8 comparables, nothing degraded |
+| [`overpriced.md`](docs/sample_reports/overpriced.md) | reported, 1.00 | **Proceed with caution** | the mirror: the system is confident and the *deal* is the problem, asking 55% over its ZIP's recorded sales |
+
+  **If you only read one, read `staten-island.md`** — it is escalated to human review *and* recommends proceeding, which is the clearest demonstration that the two questions are separate.
+
+## Evals
+
+- **Every figure in this repository re-derives from a fresh clone.** All 30 evaluation rows and all three sample reports replay from committed model recordings, so nothing quoted here rests on a call you cannot reproduce. Reaching a live model takes an explicit flag.
+
+- **`src/eval/results/results.md` and `sensitivity.md`** — the evaluation harness's output: a batch of real and engineered cases run through the compiled graph, a flag-coverage census, and a sweep over the confidence-scoring weights. This is what a correctness or calibration claim in this project is actually measured against, and the inputs it runs on (`src/eval/data/`, `src/eval/cases.py`) are committed alongside it.
+
+## System Documentation And Project Specs
+
+- **Architecture & Design:** See `docs/design/` and `docs/diagrams/`
+- **Demo deals walkthrough:** See [`docs/demo.md`](docs/demo.md)
+- **Running the demo surface:** See [`docs/running_the_demo.md`](docs/running_the_demo.md)
+- **Limitations & next steps:** See [`docs/design/limitations.md`](docs/design/limitations.md)
+- **Project Changelog**: See `docs/history/changelog.md`
+- **Project Stats:** See `docs/project_stats.md` (point-in-time snapshot)
+
+# LLM Usage in the Project
+
+I acted as the system architect and chief data scientist, guiding system design and key implementation decisions. Anthropic's Claude Code executed most of the coding under rigorous review, feedback, and approval. I also used Anthropic Claude Opus 5 and Google Gemini Flash 3.6 for research assistance during the project. Although I am strong in Python, this arrangement allowed for greater scalable execution vs. me writing all code firsthand (especially given the 7-week project window).
+
+<a id="running-it"></a>
+
+# How To Run This Project
+
+## Dependencies
+
+**Python 3.13 and a virtualenv at `src/.venv`.** Everything runs from `src/`, and `src/requirements.txt` installs the stack: LangGraph and LangChain for orchestration, ChromaDB and `sentence-transformers` for retrieval, scikit-learn for the rent model, Streamlit for the demo surface, and the OpenRouter and LangSmith clients.
+
+**Two API keys**, both read from the environment: `OPENROUTER_API_KEY` (LLM access) and `HUD_FMR_TOKEN` (HUD's Fair Market Rent API — a free account). `LANGSMITH_API_KEY` is optional and only used when tracing is switched on.
+
+**Three datasets have to be fetched by hand**, because they are either large or third-party data better cited than vendored: the rental corpus ([Apartment for Rent Classified](https://archive.ics.uci.edu/dataset/555/apartment+for+rent+classified), UCI ML Repository, CC BY 4.0 — 97 MB), Zillow's ZORI rent index, and a Redfin sale-price export. **Nothing else is a download:** the Census boundary layers fetch themselves on first use, HUD FMR caches from the API, and the 51 MB ChromaDB comp index is *built* from the corpus by `scripts/build_comps_index.py` rather than shipped. The trained rent model (`data/processed/rent_model.joblib`, ~140 KB) is committed, so scoring a listing works out of the box.
+
+[**`data/README.md`**](data/README.md) is the guide to closing that gap — every dataset, its source, its license, its size, and the command that consumes it.
+
+**The evaluation harness is the exception to all of the above.** Its inputs — golden fixtures, recorded model responses, a geocode cache — are committed in full, so a fresh clone reproduces every published figure with no downloads, no keys and no network calls:
+
+```bash
+cd src
+.venv/bin/python -m eval.runner --tier golden
+```
+
+## Running the Project Command Line
 
 ```bash
 cd src
@@ -145,12 +165,6 @@ cd src
 # Two API keys, read from the environment:
 export OPENROUTER_API_KEY=...    # LLM access, via OpenRouter
 export HUD_FMR_TOKEN=...         # HUD Fair Market Rent API (free account)
-
-# Optional: LangSmith tracing. Off unless the switch is set, so a run without it
-# is a normal run rather than a degraded one, and every run prints which it was.
-# The switch is matched exactly — LANGSMITH_TRACING=true, not True or 1.
-export LANGSMITH_TRACING=true
-export LANGSMITH_API_KEY=...
 
 .venv/bin/python main.py --deal los-angeles         # dense market, clean run
 .venv/bin/python main.py --deal staten-island       # thin market, escalates to review
@@ -169,131 +183,55 @@ export LANGSMITH_API_KEY=...
 .venv/bin/python -m eval.runner --tier golden       # the eval batch, no live calls
 ```
 
-> **If you enable tracing, prompt and completion text leaves your machine.** With
-> `LANGSMITH_TRACING` set, every *live* model call is recorded to LangSmith's hosted
-> service as a span — the full prompt, the full response, the resolved model id and
-> token counts — nested under the agent that made it. This repository's own runs use
-> synthetic and public listings over template-built prompts, so the exposure is low;
-> point it at your own key and your own listings and that text is transmitted to
-> LangSmith and retained there (free-tier traces are deleted after 14 days). Replayed
-> runs make no model call and so send no prompt text. Leave `LANGSMITH_TRACING` unset
-> to keep every call on your machine.
-
-### The demo surface
+**`main.py` calls the model live by default.** To reproduce a committed sample report exactly, pin the run to the committed recordings — this is what makes the reports in `docs/sample_reports/` byte-reproducible from a clone:
 
 ```bash
-.venv/bin/streamlit run app.py                      # from src/
+LLM_CACHE_MODE=replay LLM_CACHE_DIR=eval/data/llm_recordings \
+  .venv/bin/python main.py --deal los-angeles
 ```
 
-A local Streamlit app over the same pipeline: pick a listing, watch it run, read the
-report. Three things it does that the command line does not.
+## Running the Project in Streamlit
 
-- **It replays by default and says so.** Every demo listing, the retrieval ablation and
-  all three simulated failures are served from committed recordings — instant, identical
-  every time, no model call. A pasted listing has no recording, so it runs live; the app
-  states that before it runs and asks you to confirm.
-- **It pauses for review, genuinely.** A deal the system will not sign off on stops at
-  the human-review step, names which desk it is waiting on and why, and waits for a
-  person to write a note and release it. The note travels into the report verbatim. The
-  command line auto-resumes with a canned note so one command yields one report; this is
-  the honest version.
-- **It can simulate failures that cannot be produced on demand** — an unreachable model,
-  an address-lookup outage, a stale market index. Each names itself in the report it
-  produces, so a demonstration cannot be mistaken for a real incident.
+```bash
+cd src
+.venv/bin/streamlit run app.py --server.address localhost --server.headless true
+```
 
-**A fresh clone cannot run this beyond the two commands above using recorded data**, and
-**[`data/README.md`](data/README.md) is the guide to closing that gap** — every dataset,
-its source, its license, its size, and the command that consumes it.
+Then open <http://localhost:8501>. The two `--server.*` flags are optional — they are also committed to `src/.streamlit/config.toml`, so a bare `streamlit run app.py` picks them up. [**`docs/running_the_demo.md`**](docs/running_the_demo.md) explains what they do, and how to launch with LangSmith tracing switched on.
 
-The short version. The trained rent model (`data/processed/rent_model.joblib`, ~140 KB) is
-committed, so scoring a listing works out of the box. **Three files have to be fetched by
-hand**: the rental corpus ([Apartment for Rent Classified](https://archive.ics.uci.edu/dataset/555/apartment+for+rent+classified),
-UCI ML Repository, CC BY 4.0 — linked rather than vendored because it expands to 97 MB),
-Zillow's ZORI rent index, and a Redfin sale-price export. **Nothing else is a download:**
-the Census boundary layers fetch themselves on first use, HUD FMR caches from the API, and
-the 51 MB ChromaDB comp index is *built* from the corpus by
-`scripts/build_comps_index.py` rather than shipped — a derived binary artifact is coupled
-to the `chromadb` version that wrote it, so rebuilding is both smaller and safer than
-committing. The rent model's training data is likewise derived from the corpus rather than
-stored separately; `scripts/train_rent_model.py` reproduces it.
+The demo is a local Streamlit app over the same compiled pipeline `main.py` runs. Pick a demo listing or paste your own, press **Run**, and the seven agents report their progress as they finish; the Summarizer's report renders below, section by section, and downloads as Markdown or as a printable page.
 
-`src/eval/` is the exception to both: its inputs (golden fixtures, recorded LLM
-responses, a geocode cache) are committed in full, so `eval.runner --tier golden` or
-`--tier replay` reproduces the evaluation results above with no external calls and no
-missing data — that reproducibility is the point of the tier split
-(`src/eval/README.md`).
+<p>
+  <a href="docs/images/streamlit_demo_01.png"><img src="docs/images/streamlit_demo_01.png" alt="The demo surface at rest, with the demo-listing picker open in the sidebar" width="420"></a>
+  <a href="docs/images/streamlit_demo_02.png"><img src="docs/images/streamlit_demo_02.png" alt="A demo listing selected, showing the listing text and a green Replayed badge" width="420"></a>
+</p>
+<p>
+  <a href="docs/images/streamlit_demo_03.png"><img src="docs/images/streamlit_demo_03.png" alt="A pasted listing running live, with each agent ticking off as it completes" width="420"></a>
+  <a href="docs/images/streamlit_demo_04.png"><img src="docs/images/streamlit_demo_04.png" alt="The pause screen: the deal escalated to human review, naming the desk it waits on and the disclosures that caused it" width="420"></a>
+</p>
 
-## Documentation map
+Benefits of the app (vs. command line):
 
-`docs/implementation_plan.md` carries the authoritative one (with read-order guidance);
-the short version:
+- **It replays by default and says so.** Every demo listing, the retrieval ablation and all three simulated failures are served from committed recordings — instant, identical every time, no model call. A pasted listing has no recording, so it runs live; the app states that before it runs and asks you to confirm.
+- **It pauses for review, genuinely.** A deal the system will not sign off on stops at the human-review step, names which desk it is waiting on and why, and waits for a person to write a note and release it. The note travels into the report verbatim. The command line auto-resumes with a canned note so one command yields one report; this is the honest version.
+- **It can simulate failures that cannot be produced on demand** — an unreachable model, an address-lookup outage, a stale market index. Each names itself in the report it produces, so a demonstration cannot be mistaken for a real incident.
 
-- **`docs/implementation_plan.md`** — plan of record, architecture rationale, the
-  decisions register (§7).
-- **`docs/design/`** — what the system currently *is*: architecture, state schema, data
-  sources and strategy, the evaluator, the personas this system is built for.
-- **`docs/history/`** — how it got that way: a full decision log and a chronological
-  changelog.
-- **`docs/open_questions.md`** — everything currently unresolved, and what would close
-  it.
+# Observability
 
-## Stated limitations
+**Every node in the graph is traced to [LangSmith](https://smith.langchain.com), and tracing is opt-in.** With `LANGSMITH_TRACING=true` set at launch, a run produces the full Planner → Extractor → Retrieval → Valuation → Forecast → Critic → Summarizer tree, each node timed, with its input and output state attached — so the agent-to-agent flow is inspectable rather than only its final output. Every run prints whether tracing was on, so a silently uncaptured run is not a failure mode.
 
-This is a seven-week capstone build, not a production system, and several gaps are
-disclosed deliberately rather than hidden:
+<a href="docs/images/langsmith_deal_extraction.png"><img src="docs/images/langsmith_deal_extraction.png" alt="A LangSmith trace of one run: the seven nodes in the left-hand tree with their durations, and the Extractor's structured output expanded on the right" width="720"></a>
 
-- **The forecast's pairing search rests on a weaker relationship than it was designed
-  for.** Reading the sample reports partway through the build surfaced a real defect —
-  rent growth and price growth were built by different methods over different windows,
-  which showed up as implausible pairings. That has been fixed: rent growth is now taken
-  from the same market index the rent estimate is anchored to, and both series are banded
-  by one estimator over one span. What the fix exposed is the deeper limitation: the
-  measured rent/price correlation explains under a tenth of the variance and changes sign
-  by market, so the step that pairs a rent band with a price band has no directional rule
-  behind it. It is disclosed as thin rather than presented as settled reasoning; see
-  `docs/design/evaluator.md` for the measurement.
-- **The report's written summary is model-generated, and its prose is not verified.** The
-  figures it quotes are taken from the computed result and are checked; the sentences
-  around them are not. It is additive by construction — it renders the recommendation the
-  rule reached and cannot change it, and every disclosure it summarizes is printed in full
-  directly beneath it — so a reader is never dependent on it. During development it twice
-  described rental comparables as recorded sales before the prompt was restructured to
-  stop handing it evidence it did not need, and prompt-fitting was stopped there
-  deliberately rather than tuned against a single sample.
-- **Live model calls are not perfectly deterministic, even at `temperature=0`.**
-  OpenRouter can route "the same model" to different backend deployments per request,
-  and scores can swing meaningfully between otherwise-identical calls. This mainly
-  affects the forecast's scenario-scoring step; a committed recording (the eval harness's
-  `golden`/`replay` tiers) is exact regardless, since it never calls a model live.
-- **The rent model has never seen a market outside its training set, and transfer costs
-  about 13%.** Leave-one-metro-out validation (`scripts/lomo_validation.py`) holds each of
-  the nine training metros out entirely and scores it with a model fit on the other eight:
-  **$512/mo pooled against the $452 the cross-validated figure reports**, and the model beats
-  a predict-the-average baseline in **all nine** held-out markets. The figure the reports
-  publish is the cross-validated one, and that is correct for this system — every market it
-  indexes is in the training set — but it says nothing about a new market, and the LOMO
-  number is the upper bound for one. It is an upper bound rather than an estimate because a
-  fold that removes a large market also trains on far less data; Los Angeles is 42% of the
-  corpus.
+*One run of the `los-angeles` deal. The Extractor's output is expanded — the typed deal terms it parsed out of the listing text, including the coordinates it resolved.*
 
-  **The same run explains the report's most visible disclosure.** New York carries the
-  largest per-market error — $855/mo, which the report flags on every New York deal — and
-  the *smallest* transfer cost: removing New York from training entirely moves that figure
-  only to $875, **2%**, against Los Angeles's 19%. So the elevated New York error is not a
-  coverage gap that more New York listings would close. It is within-ZIP rent dispersion
-  that three location-blind features cannot recover, and it is disclosed as a permanent
-  property of this feature set rather than as work outstanding.
-- **Test coverage is deliberately scoped, not exhaustive.** Two suites are load-bearing —
-  flag propagation and the evaluation harness — and broad unit coverage was a deliberate
-  cut, not an oversight; see `docs/implementation_plan.md` §8.
-- **No cap-rate or NOI-based investment scoring.** This project has no operating-expense
-  data (taxes, insurance, vacancy, maintenance), so it does not estimate net operating
-  income and will not invent one. What it computes is the asking price against a market
-  benchmark and a **gross rent multiplier** — the one investor ratio this project's data
-  supports — built on the modelled rent rather than the listing's claimed rent, so it is
-  available on a listing that states none. The report says what it is refusing and why,
-  rather than approximating a cap rate from operating costs it does not have.
+Replayed runs still trace: the graph executes node by node either way, and only the model spans reflect cache hits rather than live latency. Setup, the exact spelling the switch requires, and where the traces appear are all in [**`docs/running_the_demo.md`**](docs/running_the_demo.md).
 
-## License
+**Note: if you enable tracing, prompt and completion text leaves your machine.** With `LANGSMITH_TRACING` set, every *live* model call is recorded to LangSmith's hosted service as a span — the full prompt, the full response, the resolved model id and token counts — nested under the agent that made it. This repository's own runs use synthetic and public listings over template-built prompts, so the exposure is low; point it at your own key and your own listings and that text is transmitted to LangSmith and retained there (free-tier traces are deleted after 14 days). Replayed runs make no model call and so send no prompt text. Leave `LANGSMITH_TRACING` unset to keep every call on your machine.
+
+# Limitations & Next Steps
+
+This is a seven-week capstone build, not a production system, and several gaps are disclosed deliberately rather than hidden — the rent model's cost to transfer to an unseen market, a comp corpus that is six years old, the weak relationship underneath the forecast's band pairing, and the operating-expense data the project does not have. Each one, and what closing it would take, is in [**`docs/design/limitations.md`**](docs/design/limitations.md).
+
+# License
 
 MIT — see `LICENSE`.
