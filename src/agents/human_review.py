@@ -1,11 +1,7 @@
 """Human-review escalation — the graph's `interrupt()` node.
 
-Not a specialist agent, which is why §4's tree did not originally list it: it makes no
-estimate and reaches no conclusion. It is the point where the system stops and says the
-machine should not be the last word on this deal. §3 names `interrupt()` as one of the
-two strongest reasons LangGraph was adopted, and Checkpoint 6.1 is about exactly this
-capability, so it is wired into the skeleton from the first graph rather than added
-later against a system that never had a pause in it.
+Not a specialist agent: it makes no estimate and reaches no conclusion. It is the point
+where the system stops and says the machine should not be the last word on this deal.
 
 **How the pause works.** `interrupt()` raises out of the node, LangGraph persists the
 run to the checkpointer, and `invoke` returns with an `__interrupt__` payload instead of
@@ -20,7 +16,7 @@ state object: the confidence score, every flag at warn or critical, and any unan
 clarifying questions. A reviewer needs the grounds for the decision they are being
 asked to make. Dumping full state would bury those under fields they cannot act on.
 
-**Which desk it's waiting on (U9.2).** Not every escalation calls for the same reader.
+**Which desk it's waiting on.** Not every escalation calls for the same reader.
 A geocoder outage and a sparse comp set both lower confidence the same way, but the
 first means the system couldn't do its job and the second means it did its job and
 found something a person should weigh — see `docs/design/personas.md` for the full

@@ -1,14 +1,13 @@
-"""Extractor agent — Loop 1 from Checkpoint 2.1, built for real in U3.
+"""Extractor agent — raw listing text to schema-validated deal terms.
 
-This replaces the U2 stub's regex parse with a schema-validated LLM call. The regex is
-**deleted rather than kept as a fallback**, and that is a decision rather than an
-omission: a second parser that only runs when the first one fails is a second parser
-nobody reviews, and it would quietly become the primary path the moment a free-tier
-model went down. The system now either extracts with the model or discloses that it
-could not — which is the same discipline `tools/geocoding.py` applies when it declines
-to invent a coordinate. The offline path the old regex incidentally provided belongs to
-the test suite, and `tests/test_flag_propagation.py` gets it by stubbing this module's
-two outbound calls rather than by keeping a parser in production for its benefit.
+**There is no regex fallback, deliberately.** A second parser that only runs when the
+first one fails is a second parser nobody reviews, and it would quietly become the
+primary path the moment a free-tier model went down. The system either extracts with the
+model or discloses that it could not — the same discipline `tools/geocoding.py` applies
+when it declines to invent a coordinate. The offline path a regex would incidentally
+provide belongs to the test suite, and `tests/test_flag_propagation.py` gets it by
+stubbing this module's two outbound calls rather than by keeping a parser in production
+for its benefit.
 
 Reason/Act/Observe/Decide:
 
@@ -31,16 +30,14 @@ Reason/Act/Observe/Decide:
 **Two outbound calls, and both are the test suite's seams.** `_extract_terms` wraps the
 model call and `geocode` is imported by name, so `tests/test_flag_propagation.py`
 monkeypatches those two names to run this node hermetically. The real versions are
-exercised by `scripts/extraction_evidence.py` against live services, per §8's split
-between hermetic tests and live verification scripts.
+exercised by `scripts/extraction_evidence.py` against live services — hermetic tests and
+live verification scripts are kept apart throughout this repository.
 
 **On assumptions.** The model is asked to fill a field it inferred *and* to name the
 inference in `assumptions`, rather than to choose between reporting and inferring. A
 term of art like "2-flat" genuinely does mean two units, and refusing to read it would
 throw away information the listing really carries; recording that it was read rather
-than stated is what keeps the downstream estimate qualifiable. This is the mechanism
-Checkpoint 2.1 describes as "proceed with a flagged assumption when it is not
-[material and unrecoverable]".
+than stated is what keeps the downstream estimate qualifiable.
 """
 
 from __future__ import annotations
@@ -95,6 +92,12 @@ if _UNKNOWN_ASSUMABLE:
     )
 
 
+# **The docstrings on the two models below are frozen. Do not edit them.**
+#
+# Pydantic copies a class docstring into its JSON schema as `description`, and
+# `tools/llm_client.call_with_schema` puts that schema into the system prompt. The
+# response cache is keyed on the prompt, so any edit here invalidates every committed
+# recording of an extraction. `state.Recommendation` is frozen for the same reason.
 class FieldAssumption(BaseModel):
     """One value the model inferred rather than read, with the basis for the inference.
 
@@ -188,9 +191,8 @@ def _extract_terms(listing_text: str) -> tuple[ListingExtraction, int]:
 
     Returns the validated extraction and the number of attempts it consumed. The retry
     loop itself lives in `llm_client.call_with_schema`, which re-prompts with the
-    Pydantic `ValidationError` text so the model is told precisely what was wrong —
-    Checkpoint 2.1's "malformed tool output is itself an observation" applied to
-    parsing.
+    Pydantic `ValidationError` text so the model is told precisely what was wrong.
+    Malformed output is an observation to act on, not an exception to swallow.
     """
     client = LlmClient()
     return client.call_with_schema(
@@ -209,32 +211,26 @@ def _extract_terms(listing_text: str) -> tuple[ListingExtraction, int]:
 def _supplied_coordinates(state: DealState) -> Optional[tuple[float, float]]:
     """Coordinates an external caller put in state before the pipeline ever ran, if any.
 
-    The U2 stub merged *every* pre-existing field over its own parse, as an affordance
-    for callers supplying coordinates the pipeline had no way to derive. That merge is
-    gone — a real extractor's output should not depend on what happened to be in state
-    beforehand — but coordinates remain readable here for one narrow purpose: checking
-    them against the address, not deferring to them.
+    An extractor's output should not depend on what happened to be in state beforehand,
+    so nothing is merged over the parse. Coordinates are read here for one narrow
+    purpose: checking them against the address, not deferring to them.
 
-    **Meaningful only on the deal's first pass (U8.5/OQ-16).** Found while building a
-    fault-injection case to close `FlagKind.REWORK_LIMIT_REACHED`: on a rework,
-    `state.deal_terms.latitude/longitude` already holds whatever the *previous* pass
-    resolved to, and this function cannot tell that apart from a caller's own input — a
-    prior pass's centroid fallback was being read back as if a caller had chosen it,
-    disclosed as "used as given" with no way to verify it, rather than as the system's
-    own fallback. That silently swapped `GEOCODER_SERVICE_UNAVAILABLE` for
-    `GEOCODING_UNAVAILABLE` on the second pass, which both stopped
-    `_geocode_is_worth_retrying` from planning a third attempt and added a new unique
-    flag to the confidence tally — short-circuiting a retry a persistent outage should
-    still have been worth spending.
+    **Meaningful only on the deal's first pass**, and the restriction is load-bearing.
+    On a rework, `state.deal_terms.latitude/longitude` already holds whatever the
+    *previous* pass resolved to, and this function cannot tell that apart from a caller's
+    own input. Unrestricted, a prior pass's centroid fallback reads back as if a caller
+    had chosen it — disclosed as "used as given" rather than as the system's own fallback,
+    which swaps `GEOCODER_SERVICE_UNAVAILABLE` for `GEOCODING_UNAVAILABLE` on the second
+    pass, stops `_geocode_is_worth_retrying` planning a third attempt, and adds a spurious
+    flag to the confidence tally.
 
     Safe to restrict this way **given the system's one retry path today**: a rework only
-    ever happens because of I3's `GEOCODER_SERVICE_UNAVAILABLE` objection, the only
-    retryable one that exists, and that flag is only ever raised when no caller supplied
-    coordinates in the first place — the caller-supplied branch in `_resolve_geography`
-    takes priority and raises a different, non-retryable flag instead. So a deal can only
-    ever reach a second pass when pass one's coordinates were pipeline-derived, never
-    caller-supplied. Re-check this reasoning if a second retryable objection is ever
-    added — it would no longer hold by construction.
+    ever happens on a `GEOCODER_SERVICE_UNAVAILABLE` objection, the only retryable one
+    that exists, and that flag is only raised when no caller supplied coordinates in the
+    first place — the caller-supplied branch in `_resolve_geography` takes priority and
+    raises a different, non-retryable flag instead. So a deal can only reach a second pass
+    when pass one's coordinates were pipeline-derived. Re-check this reasoning if a second
+    retryable objection is ever added; it would no longer hold by construction.
     """
     if state.planner_invocations != 1:
         return None
@@ -403,7 +399,7 @@ def _extraction_failed(
 
 def extractor_agent(state: DealState) -> dict:
     """Node function: returns a partial state update, never the whole state."""
-    # **Geography-only path (U8.1b).** The Planner routes here when the terms are already
+    # **Geography-only path.** The Planner routes here when the terms are already
     # complete but nothing has geocoded them — a caller supplying structured terms, or a
     # golden eval fixture. Parsing is not what that deal needs, and running the model over
     # a listing whose fields are already known would spend a call to re-derive them,

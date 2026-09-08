@@ -1,27 +1,24 @@
-"""Valuation & Rent agent — U5. Produces the deal's rent estimate, or says why it can't.
+"""Valuation & Rent agent — produces the deal's rent estimate, or says why it can't.
 
-**The number this agent emits is a modelled ratio times a dated government reference,
-and the design turns on that being true rather than convenient.** §2's rent-anchoring
-argument in one line: the Kaggle corpus is a Dec 2018 - Dec 2019 scrape, so a regression
-fit on its rent column predicts 2019 dollars, and a 2019 dollar figure printed in a 2026
-report is wrong while looking entirely ordinary — no error bar, no missing value,
-nothing a reader could catch. `tools/model/rent_model.py` therefore learns
-rent ÷ local-FMR-at-the-time, and this agent multiplies that ratio by *today's* FMR for
-the subject's own county.
+**The number this agent emits is a modelled ratio times a current market reference, and
+the design turns on that being true rather than convenient.** The listing corpus is a
+Dec 2018 - Dec 2019 scrape, so a regression fit on its rent column predicts 2019 dollars,
+and a 2019 dollar figure printed in a 2026 report is wrong while looking entirely
+ordinary — no error bar, no missing value, nothing a reader could catch.
+`tools/model/rent_model.py` therefore learns rent ÷ the local rent level at the time, and
+this agent multiplies that ratio by the subject's own current local rent level.
 
 **The obvious shortcut is the one thing this file must never do.** Averaging the
-retrieved comps' rents would produce a plausible figure in one line, and §8 forbids it:
-never let an unanchored Kaggle dollar figure reach the Summarizer. The U2 stub refused
-that shortcut and emitted nothing at all rather than take it; the real implementation
-keeps that discipline and adds an anchor instead of relaxing it. Every path below that
-cannot anchor produces *no rent figure*, never a fallback one.
+retrieved comps' rents would produce a plausible figure in one line, and it is forbidden
+throughout this project: an unanchored 2019 dollar figure must never reach the
+Summarizer. Every path below that cannot anchor produces *no rent figure*, never a
+fallback one.
 
 **What is deliberately not built here.**
 
-- **The LLM fallback path** — §6's cut list item 3,
-  descoped Aug 21, 2026 in advance rather than abandoned mid-build. `RentEstimateSource`
-  still carries `LLM_FALLBACK` as a member, so the seam is typed and unused rather than
-  absent. See `TODO(cut-list)` below for what taking it would cost.
+- **An LLM fallback estimator**, descoped in advance rather than abandoned mid-build.
+  `RentEstimateSource` still carries `LLM_FALLBACK` as a member, so the seam is typed and
+  unused rather than absent. See `TODO(cut-list)` below for what taking it would cost.
 - **A property-level value estimate.** `DealState.value_estimate` stays `None` on every
   run of this build, and that is a decision with evidence behind it rather than an
   unfinished section. The only sale-price source in this project is Redfin's extract,
@@ -44,8 +41,9 @@ Reason/Act/Observe/Decide:
   bed/bath/sqft, a resolvable county, and an FMR schedule for it — and each failure is
   disclosed by name rather than collapsed into "unavailable."
 - **Act.** Predict the rent-to-anchor ratio from the subject's features, then anchor it
-  against the subject's own current anchor — ZORI at its ZIP times the HUD bedroom step
-  for `deal_terms.county_fips` (#19).
+  against the subject's own current reference — Zillow's rent index at its ZIP, stepped
+  to the subject's bedroom count by the federal rent schedule's own ratio between unit
+  sizes.
 - **Observe.** Re-express every retrieved comp's rent in the subject's current dollars
   and compare the estimate against their median. This is the step that makes the agent
   a loop rather than a call: the comps were retrieved by a different agent for a
@@ -85,17 +83,16 @@ from tools.model import rent_model
 
 AGENT = "valuation_rent"
 
-# TODO(cut-list): the LLM fallback estimator (§6 cut list, item 3) is descoped, not
-# designed away. It would sit here, after the ratio path has failed to anchor: prompt a
-# model for a rent figure with the comp set as context, write it with
-# `RentEstimateSource.LLM_FALLBACK`, and raise a flag kind that would have to be re-added
-# to `FlagKind` — it was removed Aug 28, 2026 once U8.1's coverage census showed it was the
-# one member nothing in the build could raise (see `state.FlagKind`). What
-# it costs is not the call — `tools/llm_client.call_with_schema` already does the hard
-# part — but the evaluation: an unanchored LLM figure is exactly the failure mode §2
-# exists to prevent, so shipping one needs the ungrounded-vs-grounded comparison
-# `scripts/retrieval_ablation_llm.py` did for comps, repeated for rents. That is a unit
-# of work, not a loose end, which is why it was cut in advance rather than half-built.
+# TODO(cut-list): the LLM fallback estimator is descoped, not designed away. It would sit
+# here, after the ratio path has failed to anchor: prompt a model for a rent figure with
+# the comp set as context, write it with `RentEstimateSource.LLM_FALLBACK`, and raise a
+# flag kind that would have to be re-added to `FlagKind` (it was removed once the
+# evaluation harness's coverage census showed it was the one member nothing in the build
+# could raise). What it costs is not the call — `tools/llm_client.call_with_schema`
+# already does the hard part — but the evaluation: an unanchored LLM rent figure is
+# exactly the failure mode this agent's anchoring exists to prevent, so shipping one
+# needs the ungrounded-vs-grounded comparison `scripts/retrieval_ablation_llm.py` did for
+# comps, repeated for rents. That is a unit of work, not a loose end.
 
 
 @lru_cache(maxsize=None)
@@ -103,8 +100,8 @@ def _metro_benchmark(metro: str) -> Optional[tuple[float, int, float]]:
     """Redfin's smoothed median sale price for 2-4 unit properties in one metro.
 
     Returns `(median, periods_averaged, homes_sold_per_period)`, or `None` when the
-    extract does not reach this metro — New York is the standing case (§2), which is
-    why the Staten Island demo deal exists.
+    extract does not reach this metro — New York is the standing case, which is why the
+    Staten Island demo deal exists.
 
     **Smoothed over `config.REDFIN_ROLLING_WINDOW_PERIODS` rather than read off the
     latest period, on measurement.** Across the last 12 periods the month-over-month
@@ -157,12 +154,10 @@ def _resolve_market_label(terms: DealTerms) -> Optional[str]:
     (`kaggle_data.city_matches`, the rule that folds "Cleveland Heights" into Cleveland
     while keeping "Queensbury" out of Queens), with `patterns[0]` as the label.
 
-    Until U8.4c the benchmark had its own weaker matcher — the city against the metro
-    *label* alone, no state check — which no borough name ever matched, so a Brooklyn
-    subject read as outside the New York market. That was one half of the "Redfin
-    doesn't cover New York" misdiagnosis (the other was the trio-only region filter,
-    fixed in `config.REDFIN_TARGET_METROS`). Two notions of "is this city in that
-    market" is one of the ways a system quietly starts disagreeing with itself.
+    One resolver rather than two, because two notions of "is this city in that market" is
+    one of the ways a system quietly starts disagreeing with itself. The weaker version —
+    matching a city against a metro *label* with no state check — matches no borough name,
+    so a Brooklyn subject reads as outside the New York market.
     """
     if not terms.city or not terms.state:
         return None
@@ -180,9 +175,8 @@ def _resolve_subject_zip(terms: DealTerms) -> Optional[str]:
     """This agent's spelling of the shared rule — see `zcta_crosswalk.resolve_subject_zip`.
 
     Kept as a named function rather than inlined at its two call sites, because both read
-    better naming what they want than repeating the unpacking, and because the indirection
-    is where the rule's move is recorded. Moved out of this module at U9.6, when a third
-    caller appeared outside the graph entirely.
+    better naming what they want than repeating the unpacking. The rule itself lives in
+    `zcta_crosswalk` because a third caller needs it from outside the graph.
     """
     return zcta_crosswalk.resolve_subject_zip(
         terms.zip_code, terms.latitude, terms.longitude
@@ -197,60 +191,42 @@ def _attach_benchmark(detail: ValuationDetail, terms: DealTerms) -> None:
     in a metro the price series covers, and a reader comparing the asking price to the
     market should not lose that because the rent path stopped earlier.
 
-    **Two tiers since U8.8 (OQ-7, #11), preferring the local one.** County-assessor sale
-    records give a median for the subject's own ZIP; Redfin gives one for the whole
-    metro. The ZIP figure is the headline wherever it exists, the metro figure is kept
-    beside it, and `benchmark_tier` states which is which — the price-side counterpart to
-    the ZIP-resolution anchoring the rent side already had, and the thing that makes
-    check B (asking price against the benchmark) a local comparison rather than a
-    metro-wide one.
+    **Two tiers, preferring the local one.** County-assessor sale records give a median for
+    the subject's own ZIP; the metro sale-price extract gives one for the whole metro. The
+    ZIP figure is the headline wherever it exists, the metro figure is kept beside it, and
+    `benchmark_tier` states which is which — the price-side counterpart to the
+    ZIP-resolution anchoring the rent side already has.
 
     **The metro tier is resolved first and unconditionally**, even when the ZIP tier wins.
     It costs nothing (the extract is already cached) and it is what the local figure is
-    shown against; resolving it only on the fallback path would mean the contrast that
-    exposes #11's calibration is available exactly where it is least interesting.
+    shown against.
 
     **Raises no flag, and the reason is what the benchmark does rather than what a flag
     would cost.** The obvious objection is symmetry: `RENT_ANCHOR_COUNTY_LEVEL` is a WARN
-    for exactly this situation one field over — an anchor resolved at a coarser grain
-    than the ideal — so why is a metro-grain benchmark not one too? Because the two
-    figures have different jobs. **A coarse rent anchor propagates**: the estimate is
-    `ratio x anchor`, the forecast projects from that estimate, and the comp cross-check
-    compares against it, so its imprecision reaches every downstream number — which is
-    precisely U8.6d's argument for keeping market-scoped doubt inside the confidence
-    score. **The benchmark propagates nowhere.** Nothing computes from
-    `benchmark_median_sale_price`, and no objection reads it either — check B
-    ships as a Summarizer disclosure (U7 Q4). It is printed beside the asking price and
-    read by a human. Charging confidence for the width of a figure that enters no
-    calculation would say this deal's *numbers* are shakier when none of them moved.
+    for exactly this situation one field over — a figure resolved at a coarser grain than
+    the ideal — so why is a metro-grain benchmark not one too? Because the two figures have
+    different jobs. **A coarse rent anchor propagates**: the estimate is `ratio x anchor`,
+    the forecast projects from that estimate, and the comp cross-check compares against it,
+    so its imprecision reaches every downstream number. **The benchmark propagates
+    nowhere.** Nothing computes from `benchmark_median_sale_price` and no objection reads
+    it; it is printed beside the asking price and read by a human. Charging confidence for
+    the width of a figure that enters no calculation would say this deal's *numbers* are
+    shakier when none of them moved.
 
-    **Check B was measured and settled as decision #22 (check B) on Sept 2, 2026**, and until then
-    this docstring recorded it as never separately measured — U8.7 settled its sibling,
-    check A, as #20, and the phrase "checks A and B" carried B along without evidence of
-    its own. `scripts/asking_price_gap.py` supplied that evidence over 22 fixtures and B
-    **stays a disclosure**, for a reason stronger than A's: there is no column a threshold
-    could sit on, because the fixtures do not share a calibration basis. #11 set the
-    original demo prices from the *metro* median while U9.4/U9.6 calibrated the two newest
-    against the *ZIP* benchmark, so the raw gap recovers `overpriced`'s declared +55%
-    exactly while reporting an ordinary Uptown duplex as 39% cheap.
+    **The asking-price-against-benchmark comparison stays a disclosure rather than becoming
+    a Critic objection**, and it was measured before being left there. There is no column a
+    threshold could sit on, because the demo fixtures do not share a calibration basis:
+    some prices were set from the *metro* median and later ones from the *ZIP* benchmark,
+    so the raw gap recovers the deliberately-overpriced deal's declared +55% exactly while
+    reporting an ordinary Uptown duplex as 39% cheap. On three fixtures the comparison
+    cannot fail by construction — they take their price *from* the metro median and are
+    scored *against* it, so the gap is structurally +0% — and a check that cannot fail is
+    not a check. `scripts/asking_price_gap.py` is the evidence.
 
-    **And on three fixtures the check cannot fail by construction** — `los-angeles`,
-    `coord-conflict` and `los-angeles-current` take their price *from* the metro median and
-    are scored *against* the metro median, so the gap is structurally +0%. Per §8, a check
-    that cannot fail is not a check, and those are the markets with no ZIP tier: Los
-    Angeles and Cleveland, half the inference set.
-
-    **So the condition that would have expired the no-flag argument above did not occur.**
-    It was: if check B is ever promoted to a Critic objection, the benchmark becomes an
-    input to a check, its grain starts deciding an outcome, and it earns a flag on the same
-    reasoning the rent anchor has one. B is not promoted, so the argument stands. Naming
-    the condition anyway, because it is the thing a future reader has to check before
-    reusing this reasoning.
-
-    **A cost that is real but is not the argument:** a new `FlagKind` raised here would
-    join `scenario_forecast._context_block`'s upstream-flag list, change every forecast
-    prompt and invalidate the recorded eval batch. That is a reason to take the decision
-    deliberately and batch its re-record, not a reason to answer it this way.
+    That leaves the no-flag argument standing, but it has an expiry condition worth naming:
+    if the comparison is ever promoted to a Critic objection, the benchmark becomes an input
+    to a check, its grain starts deciding an outcome, and it earns a flag on the same
+    reasoning the rent anchor has one.
     """
     if not terms.city:
         detail.benchmark_unavailable_reason = (
@@ -260,10 +236,10 @@ def _attach_benchmark(detail: ValuationDetail, terms: DealTerms) -> None:
 
     metro = _resolve_market_label(terms)
     if metro is None or metro not in redfin_data.TARGET_METROS:
-        # "This build's series" rather than "Redfin's extract": the second claims a
-        # coverage fact about the source that this code never checks, and shipping that
-        # claim unchecked is how a stale trio-only filter got reported as a Redfin
-        # limitation for months (U8.4c).
+        # "This build's series" rather than "the source doesn't cover it": the second
+        # claims a coverage fact about the upstream data that this code never checks. A
+        # stale filter in this repository once got reported as a limitation of the source
+        # for months on exactly that confusion.
         detail.benchmark_unavailable_reason = (
             f"This build's metro sale-price series does not reach {terms.city}. It is "
             f"scoped to the {', '.join(sorted(redfin_data.TARGET_METROS))} markets."
@@ -323,35 +299,33 @@ def _attach_metro_error(
 ) -> list:
     """Resolve the subject to one of the four markets `mae_dollars_by_metro` covers, and
     flag when that market's historical error runs materially worse than the model's
-    headline figure (U8.4, OQ-3).
+    headline figure.
 
-    Matched by `_resolve_market_label` — since U8.4c literally the same function
-    `_attach_benchmark` uses, over the same `config.INDEXED_MARKETS` grouping
+    Matched by `_resolve_market_label` — literally the same function `_attach_benchmark`
+    uses, over the same `config.INDEXED_MARKETS` grouping
     `tools.model.rent_model._mae_dollars_by_metro` used to produce these figures, so the
     three cannot drift apart.
 
     Sets `detail.subject_metro*` whenever the market resolves, independent of whether the
-    ratio crosses the flag's threshold: per Q2(a), the report prints this market's error
-    on every run, not only a flagged one, so a reader in a good market can see what good
-    looks like. A subject outside these four markets gets `None` — a fact about this
-    breakdown's coverage, not a degradation to disclose.
+    ratio crosses the flag's threshold: the report prints this market's error on every run,
+    not only a flagged one, so a reader in a good market can see what good looks like. A
+    subject outside these four markets gets `None` — a fact about this breakdown's
+    coverage, not a degradation to disclose.
 
-    **The message's central claim stopped being an argument and became a measurement on
-    Sept 2, 2026.** It tells the reader this is "not a sign the model has never seen a
-    market like it — those listings are part of what the model trained on; they are just
-    harder to price accurately than most." Until leave-one-metro-out ran
-    (`scripts/lomo_validation.py`) that was an inference from construction: New York is in
-    `config.TRAINING_METROS`, therefore the model has seen it. LOMO tests the stronger
-    form by deleting New York from training entirely, and **the error moves from $855 to
-    $875 — a 2% transfer cost, the smallest of any market measured**, against Los Angeles's
-    19%. So New York carries the largest absolute error and the smallest dependence on
-    having been trained on, which is the sentence above stated as evidence.
+    **The message's central claim is a measurement, not an argument.** It tells the reader
+    this is "not a sign the model has never seen a market like it — those listings are part
+    of what the model trained on; they are just harder to price accurately than most."
+    Leave-one-metro-out validation (`scripts/lomo_validation.py`) tests that by deleting
+    New York from training entirely, and **the error moves from $855 to $875 — a 2%
+    transfer cost, the smallest of any market measured**, against Los Angeles's 19%. So New
+    York carries the largest absolute error and the smallest dependence on having been
+    trained on.
 
     **Do not soften that sentence into "more data would help."** It would not: the market
     with the worst error is the one least sensitive to how much of it the model saw, and
     the cause is within-ZIP rent dispersion that three location-blind features cannot
-    recover (§2). This is a permanent property of pricing New York with this feature set,
-    not a coverage gap awaiting a bigger corpus.
+    recover. This is a permanent property of pricing New York with this feature set, not a
+    coverage gap awaiting a bigger corpus.
     """
     by_metro = (bundle.get("report") or {}).get("mae_dollars_by_metro") or {}
     label = _resolve_market_label(terms)
@@ -425,24 +399,16 @@ def _cross_check(
     for the accurate reason: the disagreement is real and the comps are the better-informed
     of the two inputs about location.
 
-    **U11.3 narrowed that blind spot without closing it, and the distinction matters to
-    how this paragraph should be read.** Until then the anchor was county-grain wherever
-    HUD published no Small Area schedule — all of Los Angeles, all of New York — so
-    "nothing in the pipeline can represent variation below the county" was literally true
-    there. The hybrid anchor reads the market index at the subject's own ZIP, so sub-county
-    variation now does reach the estimate in every market the index covers. What is left is
-    variation below the ZIP, plus the county-tier rows the index does not cover. Expect this
-    check to fire less often and to mean something narrower when it does.
+    **The blind spot is narrower than it sounds.** The anchor reads the market index at
+    the subject's own ZIP, so sub-county variation does reach the estimate in every market
+    the index covers. What is left is variation below the ZIP, plus the county-tier rows
+    the index does not cover.
 
-        `scripts/valuation_evidence.py --diagnose-divergence`.
+    Reproduce with `scripts/valuation_evidence.py --diagnose-divergence`.
 
-    **No drift correction on either side since U11.3, and that is the anchor change
-    paying off here.** Until then both the estimate and the comp-implied figures were a
-    vintage ratio times *today's* FMR, so both carried the schedule-vs-market drift U8.0
-    measured and `tools/rent_drift.py` scaled both symmetrically to cancel it out of
-    `divergence_pct`. The anchor is now a market series read at each row's own month, so
-    the vintage divides out where it arises and there is no residual level error left for
-    a correction to remove.
+    **No drift correction is applied to either side, and none is needed.** The anchor is a
+    market series read at each row's own month, so the corpus's vintage divides out where
+    it arises rather than leaving a level error for a correction to remove.
     """
     anchoring = rent_model.anchor_comp_rents(state.comps, subject_anchor)
     detail.comps_available = anchoring.comps_available
@@ -550,13 +516,11 @@ def valuation_rent_agent(state: DealState) -> dict:
         )
         return {"valuation_detail": detail, "flags": flags}
 
-    # No county, no FMR, no anchor, no estimate — see the module docstring on why there
-    # is no fallback here. Severity is CRITICAL rather than the WARN §2 originally
-    # specified, and the change is deliberate: that severity was written when the design
-    # still had a coarser state/national fallback behind it, so the flag meant "this
-    # figure is less precise." With the fallback removed there is no figure at all, and
-    # a warn-level flag on a missing headline number would understate it to the Critic's
-    # confidence scoring as much as to a reader.
+    # No county, no reference rent, no anchor, no estimate — see the module docstring on
+    # why there is no fallback here. CRITICAL rather than WARN, deliberately: a warn-level
+    # severity would be right if the figure were merely less precise, but there is no
+    # figure at all, and understating that misleads the Critic's confidence scoring as much
+    # as it misleads a reader.
     if terms.county_fips is None:
         flags.append(
             state.flag(
@@ -588,8 +552,9 @@ def valuation_rent_agent(state: DealState) -> dict:
     # ZIP-anchored, and only those get ZIP resolution here.
     subject_zip = _resolve_subject_zip(terms)
 
-    # **The anchor is ZORI for the level and FMR only for the bedroom step (U11.3).** The
-    # subject is read at the market index's newest observation rather than at a fiscal
+    # **The anchor takes its level from the market rent index and uses the federal rent
+    # schedule only for the step between bedroom counts.** The subject is read at the
+    # market index's newest observation rather than at a fiscal
     # year, because ZORI is a monthly market series and the estimate is meant to be in
     # today's dollars; the FMR half is read at the current fiscal year and its level
     # divides out, so the schedule's own drift against the market never reaches the
@@ -647,17 +612,13 @@ def valuation_rent_agent(state: DealState) -> dict:
     detail.anchor_zip = subject_zip if anchor_tier == "zip" else None
 
     if anchor_tier == "county":
-        # **The consequence is identical; the cause is not, and the message says which
-        # (U8.2b's rule, applied to the new anchor).** One flag kind rather than two: a
-        # reader's response is the same either way — treat the figure as describing the
-        # county, not the address.
-        #
-        # Under the FMR anchor this meant "HUD publishes no ZIP-level schedule here".
-        # Under the market-index anchor it means the ZIP's own series has not begun, or
+        # **The consequence is identical whatever the cause, so there is one flag kind
+        # rather than two, and the message says which cause applied.** A reader's response
+        # is the same either way — treat the figure as describing the county, not the
+        # address. Here the cause is that the ZIP's own index series has not begun, or
         # covers this month with a gap, so the county's median across its covered ZIPs
-        # stood in. That is a different cause with the same consequence, and it is far
-        # more common at the corpus's vintage than at today's — which is why 1,528 of the
-        # model's own training rows carry it too (U11.3).
+        # stood in. That is far more common at the corpus's vintage than at today's, which
+        # is why 1,528 of the model's own training rows carry it too.
         behind = rent_model.county_zip_count(tables, terms.county_fips, month)
         thin = (
             f" That median rests on only {behind} ZIP codes, so it carries little more "
@@ -714,20 +675,18 @@ def valuation_rent_agent(state: DealState) -> dict:
             )
         )
 
-    # **Competence before prediction (U11.1).** Asked of the inputs, and asked first,
-    # because the answer must not depend on which estimator is fitted. Until U11.1 this
-    # was answered downstream by the output-side band below: the LinearRegression that
-    # shipped then extrapolated an implausible *ratio* for a subject unlike anything it
-    # trained on, and the band caught it. A tree-based estimator cannot do that — its
-    # prediction is an average of training targets already inside that band — so it
-    # returns a confident number instead, and the disclosure would have disappeared as a
-    # side effect of a model swap rather than by any decision. See
-    # `rent_model.subject_is_out_of_domain` for the measurement.
+    # **Competence before prediction.** Asked of the inputs, and asked first, because the
+    # answer must not depend on which estimator is fitted. Answered downstream instead, by
+    # the output-side plausibility band below, it depends entirely on the estimator: a
+    # linear model extrapolates an implausible *ratio* for a subject unlike anything it
+    # trained on and the band catches it, while a tree-based model cannot extrapolate at
+    # all — its prediction is an average of training targets already inside that band — so
+    # it returns a confident number and the disclosure disappears as a side effect of a
+    # model swap rather than by any decision. See `rent_model.subject_is_out_of_domain`.
     #
-    # Same `FlagKind` as the band below, with the cause branching, on this file's own rule
-    # (U8.2b): a reader's response is identical — there is no rent figure and none should
-    # be inferred — while the sentence explaining why has to be true of the deal in front
-    # of them.
+    # Same `FlagKind` as the band below, with the cause branching: a reader's response is
+    # identical — there is no rent figure and none should be inferred — while the sentence
+    # explaining why has to be true of the deal in front of them.
     out_of_domain = rent_model.subject_is_out_of_domain(
         bundle, terms.bedrooms, terms.bathrooms, terms.square_footage
     )
@@ -756,8 +715,8 @@ def valuation_rent_agent(state: DealState) -> dict:
     # where that decision is paid off: the same bounds the training set applied to drop
     # data defects are applied to the model's own output.
     #
-    # **Kept as a second line of defense after U11.1 moved the competence check upstream,
-    # not made redundant by it.** The two ask different questions: the domain check above
+    # **Kept as a second line of defense, not made redundant by the competence check
+    # above.** The two ask different questions: the domain check above
     # asks whether the *subject* resembles the training data, this asks whether the
     # *model* produced something coherent. Under the current gradient-boosting form this
     # branch is unreachable by construction — every prediction is an average of training
@@ -790,11 +749,8 @@ def valuation_rent_agent(state: DealState) -> dict:
     # reader can mistake a modelled ratio times a reference figure for an observed
     # market rent.
     #
-    # **Rewritten at U11.3 with the anchor.** Its previous form named HUD Fair Market
-    # Rent as the reference and closed by saying the rent-to-FMR stability assumption had
-    # been measured and found to have drifted. Both halves stopped being true: the level
-    # now comes from a market index read at the same month on both ends, so there is no
-    # schedule-versus-market gap left to disclose.
+    # The level comes from a market index read at the same month on both ends, so there is
+    # no schedule-versus-market drift left for this message to disclose.
     flags.append(
         state.flag(
             AGENT,

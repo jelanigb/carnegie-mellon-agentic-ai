@@ -1,72 +1,63 @@
-"""Scenario/Forecast agent — U6. Projects rent and price forward, or says why it can't.
+"""Scenario/Forecast agent — projects rent and price forward, or says why it can't.
 
-**Two quantities, two sources, and mixing them was the original design.** §1 specified
-Tree-of-Thought branching over rent-growth and appreciation paths *"informed by
-metro-level housing trend data"* — that is, taking rent growth off Redfin's sale-price
-series. Decision #16 split them, on a measured negative correlation between the two.
+**Two quantities, two sources, and keeping them apart is the central design choice.** The
+tempting shortcut is to read rent growth off the sale-price series, since one series is
+cheaper to maintain than two. It is not supportable: the relationship between the two is
+weak and unstable, pooled r = −0.317 against the federal rent schedule, −0.197 once its
+two nationwide administrative increases come out, and **+0.222 against market rent**, with
+r² never above 0.10 in any pass (`scripts/growth_correlation.py`). Price growth comes from
+the Redfin metro multi-family series; rent growth comes from Zillow's rent index through
+`tools/rent_growth.py`, which is the same series the rent estimate itself is anchored to,
+with the federal schedule kept there as the fallback where the index has no county deep
+enough to band. `docs/design/evaluator.md` works through the consequences.
 
-**Decision #21 kept the split and replaced the reason, along with the rent series.** The
-correlation was re-derived at U9.3 (`scripts/growth_correlation.py`) and is a property of
-the *rent series* rather than of the market: pooled r = −0.317 measured against the HUD
-schedule, −0.197 once HUD's two national step-up years come out, and **+0.222 against
-market rent**, with r² never above 0.10 in any pass. Since #19 this system's published
-rent estimate is anchored to market rent, so #16's own argument — project forward the
-same anchor the estimate was built on — now selects Zillow's ZORI index. Redfin for price,
-ZORI for rent through `tools/rent_growth.py`, and the HUD schedule kept there as the
-fallback where ZORI has no county deep enough to band. The four defects this closes are
-worked through in `docs/design/evaluator.md`.
+**What this agent projects from, and why it isn't a value estimate.**
+`DealState.value_estimate` is null throughout this build — the sale-price extract is
+pre-aggregated to one median per metro-period, so it carries no property-level signal, and
+this repository's demo asking prices were themselves calibrated to that median, which
+would produce reports where the "estimate" matched the asking price to within $140. The
+projection base is the **asking price**: an observed fact about this property rather than
+an estimate of it. The claim the report makes is therefore *"pay this today, and here is
+what the metro's measured trend implies"* — which needs no value estimate to be
+meaningful, and does not pretend to be one.
 
-**What this agent projects from, and why it isn't a value estimate.** Decision #15
-leaves `DealState.value_estimate` null — Redfin's extract is pre-aggregated to one
-median per metro-period, so it carries no property-level signal, and this repo's demo
-asking prices were themselves calibrated to that median, which would have produced
-reports where the "estimate" matched the asking price to within $140. §7 left U6 to pick
-a projection base, and the choice is the **asking price**: an observed fact about this
-property rather than an estimate of it. The claim the report makes is therefore
-*"pay this today, and here is what the metro's measured trend implies"* — which needs no
-value estimate to be meaningful, and does not pretend to be one.
-
-**The search is over an enumerated space, so no figure here is invented.** Four
-framings — two rent treatments × two price treatments, and since #21 both are the same
-question (exclude the 2020–2022 window, or keep it) asked of two series — then nine band
-pairings under each. `tools/tot.py` explains why enumeration rather than sampling, and what follows
-from it: nothing sampled, a data-determined branching factor, and a pipeline that stays
+**The search is over an enumerated space, so no figure here is invented.** Four framings —
+two rent treatments × two price treatments, both asking the same question (exclude the
+2020–2022 window, or keep it) of two series — then nine band pairings under each.
+`tools/tot.py` explains why enumeration rather than sampling, and what follows from it:
+nothing sampled, a data-determined branching factor, and a pipeline that stays
 deterministic end to end.
 
-**The pairing level is where the reasoning was designed to happen, and #21 hollowed out
-its criterion — stated here rather than in a commit message, because a reader comparing
-this docstring to the code should not have to discover it.** Three rent bands and three
-price bands give nine combinations. The level existed to avoid the naive diagonal, on the
-grounds that rent and price growth move opposite each other; that measurement did not
-survive re-derivation, so there is now **no directional prior at all** and the nine
-candidates are scored on flags, band widths and sample sizes. That is honest and it is
-thin. The redesign — stop asking which pairing is most likely, which needs a joint
-distribution this data cannot supply, and ask which projections *this deal's evidence*
-supports showing — is sketched in `docs/design/evaluator.md` as future work. **OQ-22
-closed Sept 2, 2026 without it being built**: the level ships as it is, and what changed is
-that U9.7T made its thinness visible in the report rather than only in this docstring — each
-row is named for the bands it combines, each says whether the evaluator or the conservatism
-tie-break selected it, and any band reaching no row is named.
+**The pairing level is thin, and saying so is more useful than dressing it up.** Three
+rent bands and three price bands give nine combinations. The level exists to avoid the
+naive diagonal, and the original grounds for that — rent and price growth move opposite
+each other — did not survive measurement, so there is **no directional prior at all** and
+the nine candidates are scored on flags, band widths and sample sizes. The redesign — stop
+asking which pairing is most likely, which needs a joint distribution this data cannot
+supply, and ask which projections *this deal's evidence* supports showing — is sketched in
+`docs/design/evaluator.md` as future work. What ships instead makes the thinness visible in
+the report: each row is named for the bands it combines, each says whether the evaluator or
+the conservatism tie-break selected it, and any band reaching no row is named.
 
 **Two search levels, then deterministic reconciliation** — stated plainly because
 `config.TOT_MAX_DEPTH` is 3 and it would be easy to imply three levels of search. Depth
 1 scores framings, depth 2 scores pairings, and the third step assigns the
 optimistic/base/pessimistic labels by projected outcome and checks that the survivors
 are actually distinct. That last step is arithmetic, not search, and inventing a scored
-level to fill the number would be the kind of decoration §8 exists to prevent.
+level to fill the number would be decoration.
 
 **Evidence pulls go through the MCP server's own registry, in-process.** The evaluator
 builds its tool menu from `mcp_server.server.list_tools()` — the same names, schemas and
 descriptions any external MCP host sees — and dispatches to the same functions, without
-the JSON-RPC hop. Decision #13's honest accounting applies: the protocol buys portability
-and a second consumer, not capability, and paying a subprocess, an async rewrite and a
-tracing gap to make an in-process call look remote would be buying the appearance of
-integration. The server remains the definition site and stays runnable for any host.
+the JSON-RPC hop. The protocol buys portability and a second consumer, not capability, and
+paying a subprocess, an async rewrite and a tracing gap to make an in-process call look
+remote would be buying the appearance of integration. The server remains the definition
+site and stays runnable for any host.
 
 Reason/Act/Observe/Decide:
 
 - **Reason.** Establish what this deal can actually support: a rent estimate to project,
-  an asking price to project, an FMR history deep enough to band, and a Redfin metro.
+  an asking price to project, a rent index deep enough to band, and a covered metro.
   Each can fail independently, and each failure is named rather than collapsed.
 - **Act.** Enumerate the framings, then the pairings under the survivors, scoring each
   level with the evaluator and pruning against a recorded threshold.
@@ -181,12 +172,11 @@ def _framings(
     A side with only one usable treatment contributes one option rather than two, which
     is why this enumerates from what was actually computed instead of from a constant.
 
-    **The two axes ask the same question of both series since decision #21 (forecast rent source)**, where they
-    used to ask different ones — screen HUD's national step-ups out of rent, or exclude
-    the 2020-2022 rate window from price. That was two questions in one fork, and a
-    reader had to hold both to read a framing id. Now `f-01` means "keep 2020-2022 in the
-    rent bands, hold it out of the price bands", and the diagonal framings are the ones
-    that treat the same window the same way on both sides.
+    **Both axes ask the same question of their own series** — keep the 2020-2022 rate
+    window, or hold it out — so `f-01` means "keep 2020-2022 in the rent bands, hold it out
+    of the price bands", and the diagonal framings are the ones that treat the window the
+    same way on both sides. Two axes asking *different* questions would make a framing id
+    unreadable without holding both in mind.
     """
     candidates: list[tot.Candidate] = []
     for exclude_rent, rent in sorted(rent_bands.items()):
@@ -333,25 +323,20 @@ def _selection_prompt(candidates: list[tot.Candidate], context: str, menu: str) 
 # which are defensible by construction, so the task is to rank them relative to each
 # other. Depth 2 judges whether a specific pairing holds up, where a low score is a real
 # verdict.
-# Depth 1's symmetry clause landed at U9.5, in the recording pass that re-records both
-# offline tiers — deferred to there from U9.3 because a prompt change invalidates every
-# forecast recording, so landing it here cost one re-recording instead of two.
+# Depth 1's instruction forbids one specific argument by name — that a framing is better
+# for treating both series alike — because both forks ask the same question of two
+# different series, which puts a cheap generic argument within easy reach. A Los Angeles
+# run took it, scoring f-00 at 0.95 for "uses the same 2020-2022 window for both rent and
+# price".
 #
-# What it fixes: since #21 both forks ask the same question — does the 2020-2022 rate
-# regime belong in the record — of two different series, which put a cheap generic
-# argument within reach that did not exist when the two axes described different events.
-# The Los Angeles run took it, scoring f-00 at 0.95 for "uses the same 2020-2022 window
-# for both rent and price".
-#
-# **The level was never degenerate, and the measurement is why this was a clause rather
-# than a redesign**: on `staten-island` the off-diagonal f-01 won at 0.96 against the
-# diagonal f-11's 0.15, on a real asymmetry — Richmond's ZORI series begins 2020-08,
-# *inside* the excluded window, so holding it out amputates the front of the history and
-# leaves 43 observations from 2023-01, where Los Angeles keeps its 2019 block and loses a
-# middle segment. Three of the four framings have been chosen across five demo deals.
-# That asymmetry is now named in the instruction as the shape of a real reason, so the
-# clause points at the argument that was already working rather than only forbidding the
-# one that was not.
+# **The level is not degenerate, which is why this is a clause rather than a redesign.**
+# On the Staten Island deal the off-diagonal f-01 won at 0.96 against the diagonal f-11's
+# 0.15, on a real asymmetry: Richmond County's rent index begins 2020-08, *inside* the
+# excluded window, so holding it out amputates the front of the history and leaves 43
+# observations from 2023-01, where Los Angeles keeps its 2019 block and loses a middle
+# segment. Three of the four framings have been chosen across the demo deals. That
+# asymmetry is named in the instruction as the shape of a real reason, so the clause points
+# at the argument that works rather than only forbidding the one that does not.
 _DEPTH_INSTRUCTIONS = {
     1: (
         "These are alternative TREATMENTS of the same underlying data, and every one of "
@@ -420,11 +405,10 @@ def _heuristic_scores(
 ) -> list[tuple[float, str]]:
     """Deterministic fallback when the model is unreachable.
 
-    **Scored on band width rather than on direction since #21.** This function used to
-    reward pairings that put rent and price at opposite extremes, on a measured negative
-    correlation; that correlation did not survive re-derivation (see `_context_block`),
-    so the rule it implemented has no evidence behind it and rewarding its opposite would
-    have none either. What is left is the one thing a scorer with no model can defend:
+    **Scored on band width rather than on direction.** Rewarding pairings that put rent and
+    price at opposite extremes would need a negative correlation between the two, and there
+    is none to lean on (see `_context_block`); rewarding the opposite would have no more
+    evidence behind it. What is left is the one thing a scorer with no model can defend:
     prefer the pairing that claims least. The neutral pairing scores highest, a single
     extreme costs less than two, and both-extremes scores lowest — an ordering that
     follows from how much of the band range a hypothesis is asserting, not from any claim
@@ -528,20 +512,19 @@ def _make_scorer(context: str, detail: ForecastDetail) -> tot.Scorer:
 def _is_neutral_pairing(candidate: tot.Candidate) -> bool:
     """The base-rent / base-price pairing, which the report must always be able to show.
 
-    **The question a reader asks first is "what do you actually expect?", and until #21
-    the report frequently had no row that answered it.** Base/base is not privileged
-    because it is more likely - the labels come from projected outcome, so it may well
-    render as the optimistic row - but because it is the only pairing that asserts nothing
-    beyond the two central estimates, and a three-row outlook that cannot include it is
-    describing a range with no middle.
+    **The question a reader asks first is "what do you actually expect?", and a report
+    without this row cannot answer it.** Base/base is not privileged because it is more
+    likely - the labels come from projected outcome, so it may well render as the
+    optimistic row - but because it is the only pairing that asserts nothing beyond the two
+    central estimates, and a three-row outlook that cannot include it is describing a range
+    with no middle.
 
-    The evaluator's instructions were corrected in the same unit to stop marking the
-    neutral case down for *being* neutral, and on a live Los Angeles run that alone lifted
-    it from 0.70 to 0.94. **Both changes are kept, because they answer different
-    failures**: the instruction fixes the evaluator's reading of its task, and this fixes
-    a beam that is a pure top-*k* being asked a question about coverage. A prompt that
-    scores well today is not a guarantee, and OQ-17 measures how far this model's scores
-    move between identical calls.
+    The evaluator's instructions separately tell it to stop marking the neutral case down
+    for *being* neutral, and on a live Los Angeles run that alone lifted it from 0.70 to
+    0.94. **Both mechanisms are kept, because they answer different failures**: the
+    instruction fixes the evaluator's reading of its task, and this fixes a beam that is a
+    pure top-*k* being asked a question about coverage. A prompt that scores well today is
+    not a guarantee, and this model's scores measurably move between identical calls.
 
     A one-sided deal has no neutral *pairing* - `_pairings` gives the absent side a single
     `None` slot - so this reads both bands rather than assuming two exist.
@@ -686,17 +669,15 @@ def _to_scenarios(
 ) -> list[Scenario]:
     """Project each survivor, name it for its content, order the set by outcome.
 
-    **Naming and ordering were one thing until U9.7T and are now two.** The name used to
-    be the row's *rank* among survivors — pessimistic, base, optimistic — assigned from
-    the ordering below. That made the same three words mean two different things in one
-    row: the label named the combined outcome while the parenthetical beside each figure
-    named the band one series drew from, so the row labelled "Optimistic" routinely
-    carried the base rent band and the report explained the collision in a paragraph.
-    Explaining a confusing thing clearly does not stop it being confusing (U9.3 reached
-    the same conclusion for `_band_tables` and fixed only that half).
+    **Naming and ordering are two separate things here, and collapsing them is the
+    mistake to avoid.** Naming a row for its *rank* among survivors — pessimistic, base,
+    optimistic — makes the same three words mean two different things in one row: the label
+    names the combined outcome while the parenthetical beside each figure names the band
+    one series drew from, so a row labelled "Optimistic" routinely carries the base rent
+    band. Explaining a confusing thing clearly does not stop it being confusing.
 
-    So the name now comes from `_row_name`, a deterministic lookup on the two bands, and
-    says what the row *is*. Nothing about the search changed, and neither did the sort.
+    So the name comes from `_row_name`, a deterministic lookup on the two bands, and says
+    what the row *is*. The sort below is a separate concern.
 
     **Ordering is still by the sum of the two growth multiples, and that is a stated
     convention rather than a return model.** Ranking on rent alone produced exactly the
@@ -705,9 +686,9 @@ def _to_scenarios(
     $390K, because the two shared a rent band and the price column was never consulted.
     Weighting the two sides equally is a choice; a real total-return model would weight
     them by holding period, leverage and exit assumption, none of which this system has.
-    Worst-to-best was **kept deliberately at U9.7T** rather than moved to neutral-first:
-    the ordering still carries information, and the reader's habit is worth more than the
-    one thing it costs, which is that the central case can land in the last row.
+    Worst-to-best is **kept deliberately** rather than reordered neutral-first: the
+    ordering carries information, and the reader's habit is worth more than the one thing
+    it costs, which is that the central case can land in the last row.
     """
     projected: list[tuple[float, Scenario]] = []
     for candidate in survivors:
@@ -762,8 +743,8 @@ def _outcome_rank(
 
 # What each band means in a row's name. The verbs are chosen against the band headings
 # `summarizer._band_tables` already prints — "Weakest sustained stretch / Long-run average
-# / Strongest sustained stretch" — so a reader meets one vocabulary for the two tables
-# rather than one per table, which is the collision U9.7T exists to close.
+# / Strongest sustained stretch" — so a reader meets one vocabulary across both tables
+# rather than one per table.
 _RENT_PHRASE = {"pessimistic": "rents stall", "base": "rents hold", "optimistic": "rents climb"}
 _PRICE_PHRASE = {"pessimistic": "prices fall", "base": "prices hold", "optimistic": "prices climb"}
 
@@ -783,15 +764,15 @@ def _row_name(rent_band: Optional[str], price_band: Optional[str]) -> str:
     1. *Neutral case* when nothing departs from its long-run average. Stated as a
        property of the bands rather than as a position in the table, so it stays true on
        a one-sided deal and stays true wherever the sort happens to put it — which
-       matters, because U9.7T kept the worst-to-best ordering, and the neutral case can
+       matters, because the table is ordered worst-to-best and the neutral case can
        therefore land last.
 
-       **"Neutral", not "Central", since Sept 2, 2026.** *Central case* invites the
-       question "central to what?" — it reads as a claim about a distribution this
-       forecast never estimated, since the bands are observed twelve-month stretches
-       rather than quantiles of a fitted model. It also disagreed with the vocabulary one
-       column over: the reserved-slot mechanism has always called this row *the neutral
-       case*, in `tot.beam_search` and in the report. One word, used once.
+       **"Neutral", not "Central".** *Central case* invites the question "central to
+       what?" — it reads as a claim about a distribution this forecast never estimated,
+       since the bands are observed twelve-month stretches rather than quantiles of a
+       fitted model. It would also disagree with the vocabulary one column over: the
+       reserved-slot mechanism calls this row *the neutral case*, in `tot.beam_search` and
+       in the report. One word, used once.
     2. When exactly one side departs, **the departing side is named first**: the row's
        subject is the thing that moved, and the side that held is context for it.
     3. When both depart, rent leads, for no better reason than that a fixed order is
@@ -1006,14 +987,12 @@ def _context_block(state: DealState, detail: ForecastDetail, horizon: int) -> st
 def _availability_note(detail: ForecastDetail) -> str:
     """Tell the evaluator which sides exist, so it does not penalise an absence.
 
-    **Added after a Staten Island run returned no forecast at all.** Redfin's extract
-    does not reach that metro, so every candidate carried a rent band and no price band;
-    the evaluator, told only that rent and price growth are negatively correlated — a
-    claim #21 has since retired — scored each of them below the prune threshold and the
-    beam emptied. The deal had a perfectly
-    good rent forecast and the report said nothing — which is the degradation failure
-    this project exists to prevent, produced by a prompt that described a two-sided
-    problem to a one-sided deal.
+    **This exists because a Staten Island run returned no forecast at all.** The sale-price
+    extract does not reach that metro, so every candidate carried a rent band and no price
+    band; an evaluator told only about the two-sided problem scored each of them below the
+    prune threshold and the beam emptied. The deal had a perfectly good rent forecast and
+    the report said nothing — the degradation failure this project exists to prevent,
+    produced by a prompt that described a two-sided problem to a one-sided deal.
     """
     if detail.rent_growth_unavailable_reason and not detail.price_growth_unavailable_reason:
         return (
@@ -1123,9 +1102,8 @@ def _disclosure_flags(
             )
         )
 
-    # Two near-ties are possible and they mean different things, so they are reported
-    # separately rather than collapsed into one score gap — and since U8.6c they carry
-    # different severities, because the two ties have different stakes:
+    # Three near-ties are possible, they mean different things, and they carry different
+    # severities because the stakes differ:
     #
     # - A *framing* tie (depth 1) is WARN. `TOT_FRAMING_BEAM_WIDTH` is 1, so the losing
     #   framing — a whole reading of the data — is discarded on the conservatism
@@ -1135,36 +1113,30 @@ def _disclosure_flags(
     #   survive into the reported scenario set; labels are assigned by projected outcome
     #   (never by score rank) and band provenance comes from the framing every pairing
     #   shares — so nothing a reader sees hinges on which pairing nominally led. Charging
-    #   0.15 of confidence for a distinction that does not survive to the report was
-    #   pricing the hypothesis space's symmetry as deal doubt: mirror pairings
-    #   (rent-up/price-down against rent-down/price-up) are genuinely equally defensible,
-    #   and the evaluator scoring them identically is the scoring working, not a
-    #   degradation. **That argument was made under the negative correlation #21 retired
-    #   and survives its retirement intact** — indeed more cleanly, since with no
-    #   directional prior at all there is nothing left that could have separated the two.
+    #   confidence for a distinction that does not survive to the report would price the
+    #   hypothesis space's own symmetry as doubt about the deal: mirror pairings
+    #   (rent-up/price-down against rent-down/price-up) are equally defensible, and the
+    #   evaluator scoring them identically is the scoring working rather than a
+    #   degradation. With no directional prior at all, there is nothing that could have
+    #   separated them.
+    # - A *cut-boundary* tie at depth 2 is INFO. The pairing tie above compares #1 against
+    #   #2, which is inert because both survive. The line between #3 and #4 is where the
+    #   beam width bites, so it decides which pairings are reported at all — the one rank
+    #   comparison at this depth that does reach the reader. INFO rather than WARN for two
+    #   reasons: the discarded pairing is already published in the branch ledger with its
+    #   own score and the reason it was dropped, so this names a margin the reader can
+    #   already see rather than revealing a hidden loss; and the gap is measured with an
+    #   instrument whose single-draw noise exceeds `TOT_TIE_EPSILON` by an order of
+    #   magnitude. **That is a judgment, not a fact** — the framing tie is WARN on the
+    #   reasoning that a discarded candidate is a real loss, and that reasoning transfers
+    #   here in weakened form.
     #
-    # - A *cut-boundary* tie at depth 2 is INFO, and it is the one U8.6c added because
-    #   nothing measured it. The pairing tie above compares #1 against #2, which the
-    #   demotion argument shows is inert: both survive. The line between #3 and #4 is
-    #   where the beam width bites, so it decides which pairings are reported at all —
-    #   the one rank comparison at this depth that does reach the reader. It is INFO
-    #   rather than WARN for two reasons: the discarded pairing is already published in
-    #   the branch ledger with its own score and the reason it was dropped, so this
-    #   disclosure names a margin the reader can already see rather than revealing a
-    #   hidden loss; and the gap is measured with the same instrument whose single-draw
-    #   noise (OQ-17) exceeds `TOT_TIE_EPSILON` by an order of magnitude, which is
-    #   exactly the argument that demoted the pairing tie. **Recorded as a judgment
-    #   rather than a fact** — the framing tie is WARN on the reasoning that a discarded
-    #   candidate is a real loss, and that reasoning transfers here in weakened form. It
-    #   is a one-word change if the architect prices it differently.
-    #
-    # All three messages state the one-sample caveat OQ-17 measured: a live scoring call is
-    # not perfectly deterministic even at temperature 0 (OpenRouter routes across
-    # non-identical backend deployments, and even one pinned deployment's scores swing
-    # call to call — see docs/design/architecture.md §3), so a near-tie can be a property
-    # of this one draw rather than a stable judgment. The structural response — scoring
-    # k times and disclosing disagreement — remains OQ-17's open question, not this
-    # flag's job.
+    # All three messages state the one-sample caveat: a live scoring call is not perfectly
+    # deterministic even at temperature 0 — the router spreads requests across
+    # non-identical backend deployments, and even one pinned deployment's scores swing call
+    # to call — so a near-tie can be a property of this one draw rather than a stable
+    # judgment. The structural response, scoring k times and disclosing disagreement, is
+    # future work rather than this flag's job.
     framing_gap = result.score_gap_by_depth.get(1)
     if framing_gap is not None and framing_gap < config.TOT_TIE_EPSILON:
         flags.append(
@@ -1217,15 +1189,15 @@ def _disclosure_flags(
         # margin at or below zero means the tie-break, not the evaluator, chose which
         # pairing was reported.
         #
-        # **The positive branch states the bound and not the figure, since U9.7T**, and
-        # the reason is arithmetic rather than editorial: the evaluator returns scores at
-        # two decimal places, so a gap of exactly one epsilon arrives as
-        # 0.04999999999999993 and rendered at three places printed *"separated by 0.050,
-        # inside the 0.05 threshold"* — a sentence contradicting itself about the number
-        # beside it. The comparison above is untouched; only what is said about it moves.
-        # (Whether `within 0.05` should be inclusive is a real question and a separate
-        # one: it would widen `tot._rank`'s tie groups and move 11 recorded depth-2
-        # levels, so it needs a re-record. Deferred by the architect, Sept 2.)
+        # **The positive branch states the bound and not the figure**, for an arithmetic
+        # reason rather than an editorial one: the evaluator returns scores at two decimal
+        # places, so a gap of exactly one epsilon arrives as 0.04999999999999993 and
+        # rendering it at three places prints *"separated by 0.050, inside the 0.05
+        # threshold"* — a sentence contradicting itself about the number beside it. The
+        # comparison itself is untouched; only what is said about it. (Whether `within
+        # 0.05` should be inclusive is a real and separate question: it would widen
+        # `tot._rank`'s tie groups and move 11 recorded depth-2 levels, so it needs a
+        # re-record.)
         if cut_gap > 0:
             margin = (
                 f"were separated by less than {config.TOT_TIE_EPSILON}, which this "

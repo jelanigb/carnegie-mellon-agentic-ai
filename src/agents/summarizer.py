@@ -1,14 +1,8 @@
-"""Summarizer agent — produces the investor-facing report. Real in U2; polished in U9.
+"""Summarizer agent — produces the investor-facing report.
 
-Built for real in the walking skeleton rather than stubbed, and §6 gives the reason
-directly: the previous plan built the Summarizer last, which would have left the
-component producing the system's actual output as the least-exercised and most
-schedule-exposed piece in the build. Inverting that is the point of a walking skeleton.
-U9 polishes wording and layout; the structure and the disclosure rules are settled here.
-
-**The disclosure rules are the design, not the formatting.** §1 requires this agent to
-"surface all upstream flags prominently, not just bottom-line numbers," so three
-properties of the rendering are load-bearing rather than stylistic:
+**The disclosure rules are the design, not the formatting.** This agent must surface every
+upstream flag prominently rather than only the bottom-line numbers, so three properties of
+the rendering are load-bearing rather than stylistic:
 
 1. **Flags appear before the numbers.** A caveat printed underneath a figure is a
    caveat most readers never reach. Critical and warn flags are rendered above the
@@ -116,7 +110,7 @@ def _join(items: list[str]) -> str:
     return f"{', '.join(items[:-1])} and {items[-1]}"
 
 
-# The two halves of the disclosure list, and what each one asks of a reader (U8.6d). The
+# The two halves of the disclosure list, and what each one asks of a reader. The
 # split is by *subject*, not by severity — severity still orders within each half — because
 # "the listing never stated a price" and "no rent index covers this county" call for
 # different responses even at identical weight. One is a gap someone can close; the other
@@ -138,11 +132,11 @@ _SCOPE_GUIDANCE = {
 
 
 def _confidence_arithmetic(breakdown: Optional[ConfidenceBreakdown]) -> list[str]:
-    """Show what the deduction was made of, not just what it totalled (U8.6d).
+    """Show what the deduction was made of, not just what it totalled.
 
-    A reader could always see the flags and the score; what was missing was the sum
-    connecting them, so "confidence 0.55" arrived as a verdict rather than as a result.
-    One line, immediately under the score, splitting the deduction the same way the
+    A reader can see the flags and the score; without the sum connecting them, "confidence
+    0.55" arrives as a verdict rather than as a result. One line, immediately under the
+    score, splitting the deduction the same way the
     disclosure list below is split — so the two halves of the report agree about what this
     deal's doubt is made of.
 
@@ -161,14 +155,14 @@ def _confidence_arithmetic(breakdown: Optional[ConfidenceBreakdown]) -> list[str
 
 
 def _verdict_lines(state: DealState) -> list[str]:
-    """The two axes, as two lines that never merge. **The largest readability change in U9.**
+    """The two axes, as two lines that never merge.
 
-    The report has always stated axis 1 — whether the system can stand behind its own
-    numbers — and readers have always taken it for axis 2, whether the property is worth
-    buying. `staten-island` is where that misreading is most costly: it escalates because
-    no comparables were found, while asking **17% below its ZIP median**, so a reader who
-    saw "🚩 Escalated to human review" and concluded the deal was bad had it exactly
-    backwards.
+    Axis 1 is whether the system can stand behind its own numbers; axis 2 is whether the
+    property is worth buying. A report that states only the first invites readers to take
+    it for the second. `staten-island` is where that misreading is most costly: it
+    escalates because no comparables were found, while asking **17% below its ZIP
+    median**, so a reader who sees "🚩 Escalated to human review" and concludes the deal is
+    bad has it exactly backwards.
 
     Rendered as one quote block with two labelled lines rather than as two separate
     banners, because adjacency is what teaches the distinction — a reader sees the same
@@ -177,19 +171,18 @@ def _verdict_lines(state: DealState) -> list[str]:
     reproducible statement is the first thing on the page and the prose supports it rather
     than the other way round.
 
-    **"System check" was replaced Sept 2, 2026, because it named the instrument rather
-    than the consequence.** A reader meeting *"System check — escalated to human review"*
-    has to work out what a system check is and what escalating one implies for them; the
-    line now says who has to do what before this report goes anywhere — *"Flagged by
-    system — needs human review before sharing with investors"*. That is also exactly
-    what the escalation means operationally, under either routing rule in
-    `design/personas.md`: a deal-substance flag waits on the agent (persona b) before it
-    reaches the investor (persona c), and an infrastructure flag waits on IT (persona a),
-    and in neither case should the report be forwarded first. The cleared branch is
-    worded to match, so the two read as one question answered two ways rather than as two
-    unrelated banners.
+    **The escalation line names the consequence, not the instrument.** A reader meeting
+    *"System check — escalated to human review"* has to work out what a system check is and
+    what escalating one implies for them. The line says who has to do what before this
+    report goes anywhere — *"Flagged by system — needs human review before sharing with
+    investors"* — which is also exactly what the escalation means operationally under
+    either routing rule in `docs/design/personas.md`: a deal-substance flag waits on the
+    reviewing agent before it reaches the investor, an infrastructure flag waits on IT, and
+    in neither case should the report be forwarded first. The cleared branch is worded to
+    match, so the two read as one question answered two ways rather than as two unrelated
+    banners.
 
-    Reader-facing throughout (§8): no flag names, no thresholds, no field names.
+    Reader-facing throughout: no flag names, no thresholds, no field names.
     """
     lines: list[str] = []
     rec = state.recommendation
@@ -271,11 +264,10 @@ _LEDE_SYSTEM = (
 def _lede_prompt(state: DealState) -> str:
     """The report's own conclusions, in the rounded figures the report prints.
 
-    **Rounded reader-facing numbers only, never a raw float.** OQ-18 records a replay row
-    that missed its recordings for reasons never established, and a full-precision float
-    in a prompt is a cache key that moves whenever an upstream computation shifts in its
-    last decimal place. Everything here is a rounded percentage, a whole dollar figure or
-    a short string, so this adds no second instance of that fragility.
+    **Rounded reader-facing numbers only, never a raw float.** A full-precision float in a
+    prompt is a cache key that moves whenever an upstream computation shifts in its last
+    decimal place, which silently costs a recorded response. Everything here is a rounded
+    percentage, a whole dollar figure or a short string.
 
     Everything quoted is already printed somewhere below, which is what makes the
     constraint in `_LEDE_SYSTEM` checkable: the summary is additive, and a reader who
@@ -331,7 +323,7 @@ def _lede_prompt(state: DealState) -> str:
         # carry the shape of the disclosures, and every one of them is rendered in full
         # immediately below the summary — so nothing is hidden by leaving the prose to
         # what it was asked for. Prompt wording was tried twice first; this is the fix
-        # that does not depend on a draw (OQ-17).
+        # that does not depend on a single model draw.
 
     parts.append(f"Comparable rentals found: {len(state.comps)}.")
     parts.append("")
@@ -348,17 +340,18 @@ def _lede_section(state: DealState) -> list[str]:
     """A short written summary above the report. **Additive, and it decides nothing.**
 
     **It renders the verdict the rule computed; it does not reach one.** The recommendation
-    is a pure function in `agents/critic.recommend` for the reason OQ-17 measured — this
-    model scores an identical prompt 0.05 on one call and 0.95 on the next — and a summary
+    is a pure function in `agents/critic.recommend` for a measured reason — this model
+    scores an identical prompt 0.05 on one call and 0.95 on the next — and a summary
     that could restate the verdict differently would put that variance back into the one
     line a reader takes away. The prompt is handed the conclusion and asked to relay it.
 
     Sits *below* the verdict lines rather than above them, so the reproducible statement
     is the first thing on the page and the prose supports it.
 
-    **On failure it renders a sentence, not a flag.** A 31st `FlagKind` would break U8's
-    30-of-30 coverage census unless some declared fault could reach it, and more
-    fundamentally every other flag in this system *propagates* — it is raised in one node
+    **On failure it renders a sentence, not a flag.** A new `FlagKind` would break the
+    evaluation harness's full coverage census unless some declared fault could reach it,
+    and more fundamentally every other flag in this system *propagates* — it is raised in
+    one node
     and consumed downstream. A flag raised in the terminal node has no consumer but the
     report already printing it, so the flag mechanism would be doing nothing the sentence
     does not already do.
@@ -405,12 +398,11 @@ def _verdict_reasons_block(state: DealState) -> list[str]:
 def _flag_section(flags: list[Flag]) -> list[str]:
     """Every flag, grouped by what it is *about*, then by severity within that.
 
-    **Grouped by subject rather than only by severity as of U8.6d.** The previous ordering
-    was severity alone, which put a warning about the county's rent index next to a warning
-    about this building's comp set and left a reader to work out that only one of them
-    describes the deal in front of them. It never dropped anything — rule 2 of the module
-    docstring stands, every flag is rendered in full — but it made the list harder to act
-    on the longer it got.
+    **Grouped by subject rather than only by severity.** Severity alone puts a warning
+    about the county's rent index next to a warning about this building's comp set and
+    leaves a reader to work out that only one of them describes the deal in front of them.
+    Nothing is dropped either way — rule 2 of the module docstring stands, every flag is
+    rendered in full — but the ungrouped list gets harder to act on the longer it gets.
 
     Property-scoped disclosures print first, deliberately: they are the ones a reader might
     do something about, and the report's job is to put what matters where it is read.
@@ -498,11 +490,10 @@ def _inline_html(text: str) -> str:
 def _disclosure_entry(flag: Flag, severity: Severity) -> list[str]:
     """One disclosure, collapsed or open according to whether a reader may skip it.
 
-    **Progressive detail, and the split is by severity rather than by length** (U9.4). The
-    architect's finding was that a reader seeing many of these reports meets the same
-    boilerplate every time and the substance is buried in it — on the Los Angeles deal all
-    three disclosures are info-severity mechanism notes, and they are identical on every
-    run in that market.
+    **Progressive detail, and the split is by severity rather than by length.** A reader
+    seeing many of these reports meets the same boilerplate every time and the substance
+    gets buried in it — on the Los Angeles deal all three disclosures are info-severity
+    mechanism notes, and they are identical on every run in that market.
 
     Info-severity entries collapse to their opening clause; **critical and warn stay
     open**. That keeps both of the module docstring's load-bearing rules intact rather
@@ -565,8 +556,8 @@ def _comps_section(comps: list[Comp], radius_miles: float, iterations: int) -> l
         )
     lines.append("")
 
-    # Source concentration. §5 records that the corpus is 91% RentDigs.com, so a comp
-    # count overstates independence whenever one aggregator supplies most of the set.
+    # Source concentration. The corpus is 91% one aggregator, so a comp count overstates
+    # independence whenever that feed supplies most of the set.
     # Disclosed here rather than left for a reader to notice by scanning the column.
     sources = Counter(c.listing_source or "unknown" for c in comps)
     top_source, top_count = sources.most_common(1)[0]
@@ -648,13 +639,13 @@ def _benchmark_section(state: DealState, detail) -> list[str]:
     findings table it would read as a value estimate; printed here, next to the asking
     price it is meant to be read against, it reads as what it is.
 
-    **Two tiers since U8.8, and the section says which one it is reading**, because the
-    reader's response differs: a neighborhood median is a comparison they can act on,
-    and a metro-wide one describes a 2-unit duplex and a 4-unit building forty miles
-    apart identically. When the local figure exists the metro figure is printed beneath
-    it as contrast rather than dropped — the gap between them is information, and on this
-    project's own demo listings it is the visible consequence of #11 having set their
-    asking prices *from* the metro median.
+    **Two tiers, and the section says which one it is reading**, because the reader's
+    response differs: a neighborhood median is a comparison they can act on, and a
+    metro-wide one describes a 2-unit duplex and a 4-unit building forty miles apart
+    identically. When the local figure exists the metro figure is printed beneath it as
+    contrast rather than dropped — the gap between them is information, and on this
+    project's own demo listings it is the visible consequence of their asking prices
+    having been set *from* the metro median.
     """
     lines = ["### Market benchmark", ""]
 
@@ -735,22 +726,14 @@ def _rent_basis_section(state: DealState, detail) -> list[str]:
     check whenever it fails would show its working only on the runs where the working
     looked good, which is the opposite of what disclosure is for.
 
-    **Two false claims corrected here Aug 30, 2026 (U11.5 item 1), and they are the only
-    ones on that list a reader could see.** This paragraph said "A linear regression" —
-    the estimator has been gradient boosting since #18 — and "on a held-out slice", which
-    described the single 20% split #18 replaced with k-fold cross-validation plus a
-    full-data refit. The second is the subtler error: under the new protocol every row is
-    scored exactly once by a fold that never saw it, so the figure is stronger evidence
-    than "a held-out slice" implies, and the per-metro n is the market's full row count
-    rather than a fifth of it. Both are stated in plain words rather than named, on this
-    file's rule that reader-facing text carries no vocabulary the reader cannot resolve.
-
-    **Their identifiers were renamed at U8.10 (U11.5 item 2), a pass behind this one.**
-    `ValuationDetail.model_mae_dollars` and `TrainingReport.mae_dollars` had carried
-    FMR-and-holdout names describing an anchor #19 retired and a protocol #18 replaced.
-    The second is serialized into the persisted bundle and read back by string key, so it
-    took a retrain rather than an edit; the architect took the retrain over a both-keys
-    read, since the shim would have protected an artifact that is not in the repository.
+    **Two claims here are easy to get wrong and are worth checking against the model
+    actually on disk.** The estimator is gradient boosting, not a linear regression; and
+    the error figure comes from k-fold cross-validation plus a full-data refit, not a single
+    held-out slice. The second is the subtler one: under this protocol every row is scored
+    exactly once by a fold that never saw it, so the figure is stronger evidence than "a
+    held-out slice" would imply, and the per-metro n is the market's full row count rather
+    than a fifth of it. Both are stated in plain words rather than named, on this file's
+    rule that reader-facing text carries no vocabulary the reader cannot resolve.
     """
     if detail is None or state.rent_estimate is None:
         return []
@@ -774,7 +757,7 @@ def _rent_basis_section(state: DealState, detail) -> list[str]:
         lines.append("")
 
         # Rendered whenever the subject's market resolves to one of the four this
-        # breakdown covers, whether or not the gap crossed the flag's threshold (Q2(a)):
+        # breakdown covers, whether or not the gap crossed the flag's threshold:
         # a reader in a market that is not elevated should still see what "not elevated"
         # looks like next to the one that is.
         if (detail.subject_metro and detail.subject_metro_mae_dollars is not None
@@ -844,27 +827,17 @@ def _stated_rent_section(state: DealState, detail) -> list[str]:
     shows its working only on the runs where the working looked good.
 
     **No flag, no objection, no effect on confidence or routing** — this is a disclosure,
-    not a check (Q4). The reason was measured rather than cautious: the gap was ~-29% on
-    all three demo listings and it was *structural*. `rent_estimate` was anchored to FMR,
-    a 40th-percentile administrative rent, while the corpus the model learned from rented
-    at roughly 1.40x that anchor — so the model predicted market-typical rent while #11
-    calibrated these listings to the anchor itself. Raising an objection from that would
-    have charged the deal for a property of the fixtures.
+    not a check, and whether it should be promoted to one is genuinely open. Measured
+    across the 13 fixtures carrying independently-set rents the gap is **mean -11.4%,
+    median -9.7%, range -39.4% to +66.6%** — dispersed and sign-varying, which is a
+    property of each deal rather than an artifact of how the estimate is anchored. That
+    much says a check is possible; what argues against building one is that every fixture a
+    threshold would fire on already carries a flag naming a more specific cause. See
+    `agents/critic._consistency_objections`.
 
-    **That premise expired at U11.3 and the measurement was re-run rather than assumed.**
-    The anchor is a market rent index now, not a 40th-percentile benchmark, so the
-    structural offset is gone. Across the 13 fixtures carrying independently-set rents:
-    **mean -11.4%, median -9.7%, range -39.4% to +66.6%** — dispersed and sign-varying,
-    which is a property of each deal rather than of the anchor. The reason this stayed a
-    disclosure has therefore been removed, and **whether to promote it to a Critic
-    objection is an open decision rather than a settled one** (U8.7, OQ-1). It ships as a
-    disclosure until that is taken, which is the same behavior for a different and now
-    honestly-stated reason.
-
-    The demo deals cannot be used to answer it: their `rent_basis` is `hud_fmr:2`, so #11
-    set their stated rents *from* the old anchor. Any gap they show measures the
-    FMR-versus-market spread, not the deal — which is a live finding about the demo set,
-    not about this check.
+    The demo deals cannot be used to answer it: their stated rents were themselves set from
+    an earlier version of the rent anchor, so any gap they show measures that anchor's
+    spread against the market rather than the deal.
 
     Reason/Act/Observe/Decide is the Summarizer's, not this helper's: it renders, and
     decides only how much to say.
@@ -941,22 +914,14 @@ def _stated_rent_section(state: DealState, detail) -> list[str]:
             f"as one figure with a margin around it."
         )
 
-    # **This caveat was direction-dependent for a reason that stopped being true on
-    # Aug 30, 2026 (U11.3), and the correction is a narrowing rather than a rewrite.**
-    #
-    # It used to say a negative gap was *expected*: the estimate was anchored to a
-    # 40th-percentile federal affordability benchmark while the corpus behind the model
-    # rented well above it, so every estimate leaned high by a structural offset and
-    # stated rents below it said nothing. Measured then, the gap was ~-29% on all three
-    # demo listings — a constant, which is what a structural offset looks like.
-    #
-    # The anchor is a market rent index now, so that offset is gone. Re-measured across
-    # the 13 fixtures that carry independently-set rents: **mean -11.4%, median -9.7%,
-    # range -39.4% to +66.6%.** Dispersed and sign-varying, which is what a property of
-    # the *deal* looks like. So a negative gap is no longer "expected" in the sense of
-    # being predicted by the anchor — but it is still the common direction, and the two
-    # remaining reasons for it are real and worth stating. The text below says the
-    # narrower, true thing.
+    # **A negative gap is common but not *expected***, and the distinction is the whole
+    # point of this caveat's wording. "Expected" would be right if the anchor produced a
+    # structural offset — it does not: measured across the 13 fixtures that carry
+    # independently-set rents the gap is **mean -11.4%, median -9.7%, range -39.4% to
+    # +66.6%**, dispersed and sign-varying, which is what a property of the *deal* looks
+    # like rather than of the mechanism. It is still the common direction, and the two
+    # reasons for that are real and worth stating. The text below says the narrower, true
+    # thing.
     if gap < 0:
         lines.extend([
             "",
@@ -1003,8 +968,8 @@ def _findings_section(state: DealState) -> list[str]:
         value = f"{_money(state.rent_estimate)}/mo per unit"
         if detail and detail.model_mae_dollars is not None:
             value += f" ± {_money(detail.model_mae_dollars)} overall"
-            # Rendered whenever the subject's market resolves, elevated or not — Q2(a):
-            # the point is a reader in a good market can see what good looks like too.
+            # Rendered whenever the subject's market resolves, elevated or not: a reader
+            # in a good market should see what good looks like too.
             if (detail.subject_metro and detail.subject_metro_mae_dollars is not None):
                 value += (
                     f", ± {_money(detail.subject_metro_mae_dollars)} in "
@@ -1012,13 +977,11 @@ def _findings_section(state: DealState) -> list[str]:
                 )
         basis = str(state.rent_estimate_source or "unspecified")
         if state.rent_estimate_ratio_to_anchor is not None and state.rent_anchor_used is not None:
-            # **Names the market index, not Fair Market Rent (U11.3).** Until then the
-            # anchor was a HUD schedule and this line said so; it is now a Zillow rent
-            # index read at a month, stepped to the subject's bedroom count by the
-            # schedule's own ratio between unit sizes. The old sentence survived the
-            # anchor change for one commit and was false for that whole time, which is
-            # the defect class U8.2b and U8.4c both fixed — a disclosure describing a
-            # mechanism the system has stopped using.
+            # **Names the market index, not the federal rent schedule.** The anchor is a
+            # Zillow rent index read at a month, stepped to the subject's bedroom count by
+            # the schedule's own ratio between unit sizes — the schedule supplies the step,
+            # not the level. A disclosure describing a mechanism the system has stopped
+            # using is one of the easiest defects to ship and one of the hardest to notice.
             #
             # Name the spatial resolution, not just the figure. Rents span roughly 2x
             # within a single county, so the same dollar amount means something very
@@ -1154,20 +1117,18 @@ def _scenario_section(state: DealState) -> list[str]:
     if base_price is not None:
         basis_parts.append(f"the **asking price** {_money(base_price)}")
     if basis_parts:
-        # **The rent side compounds an estimate, and that estimate has an error band
-        # (maintenance item M8, Sept 2, 2026).** Every scenario row starts from
-        # `projection_base_rent` — which is `state.rent_estimate` — and compounds it as
-        # though it were exact. On `staten-island` the figure carries a metro holdout
-        # error of +/-$855, 32% of the estimate, against a five-year band spread of 43%:
-        # the three rows differ from each other by *less* than the error bar on the
-        # number all three start from, and the section did not say so.
+        # **The rent side compounds an estimate, and that estimate has an error band.**
+        # Every scenario row starts from `projection_base_rent` — which is
+        # `state.rent_estimate` — and compounds it as though it were exact. On
+        # `staten-island` the figure carries a market-level error of ±$855, 32% of the
+        # estimate, against a five-year band spread of 43%: the three rows differ from each
+        # other by *less* than the error bar on the number all three start from, and a
+        # section that does not say so is overstating what the spread means.
         #
-        # **Language, not calculation.** Nothing about which scenarios are selected or
-        # what they project changes. Raised by the U9 spike on OQ-22's starting-point
-        # treatment (`design/forecast_starting_point_spike.md`), which proposed
-        # *projecting* from the band; that mechanism was not adopted — the evaluator
-        # held its choice on only 5 of 8 repeat runs — and stating the band is the half
-        # that survives that finding, standing whichever way OQ-22 was decided.
+        # **Language, not calculation.** Nothing about which scenarios are selected or what
+        # they project changes here. *Projecting* from the error band rather than stating
+        # it was explored and not adopted — the evaluator held its choice on only 5 of 8
+        # repeat runs (`docs/design/forecast_starting_point_spike.md`).
         lines.append(
             f"Projected from {' and '.join(basis_parts)}. The price side compounds the "
             f"asking price rather than an estimated value — this system does not produce "
@@ -1220,12 +1181,12 @@ def _scenario_section(state: DealState) -> list[str]:
     lines.append("")
     lines.extend(_band_coverage_note(state.scenarios, detail))
 
-    # **The score moved into the table at U9.7T and this carries the rationale alone.**
-    # It sat here because the branch ledger renders every discarded hypothesis as
-    # `id (score) — summary`, and a survivor read the same way was the matching statement
-    # (U8.6c). What that missed is that a score alone does not say how the row got in —
-    # the tie-break decides half the pairing levels — so the number now sits beside the
-    # mechanism in the "Why this row is shown" column, where the two are read together.
+    # This carries the rationale alone; the score sits in the table. The tempting
+    # arrangement is to print both here, matching the branch ledger's `id (score) —
+    # summary` form for discarded hypotheses. What that misses is that a score alone does
+    # not say how a row got in — the tie-break decides half the pairing levels — so the
+    # number belongs beside the mechanism in the "Why this row is shown" column, where the
+    # two are read together.
     scored = any(s.evaluator_score is not None for s in state.scenarios)
     for scenario in state.scenarios:
         if scenario.rationale:
@@ -1417,10 +1378,10 @@ def _pct_or_dash(value: Optional[float]) -> str:
 
 
 # The short form of `_band_tables`' column headings, for use inside a table cell. One
-# vocabulary across both forecast tables is the whole of U9.7T's first finding: the
-# report used to print plain words for the bands in one table and the internal names
-# `pessimistic` / `base` / `optimistic` for the same bands in the next, where those three
-# words *also* named the combined outcome in the row label beside them.
+# vocabulary across both forecast tables, deliberately: printing plain words for the bands
+# in one table and the internal names `pessimistic` / `base` / `optimistic` in the next
+# makes those three words mean two things at once, since they also name the combined
+# outcome in the row label beside them.
 _BAND_WORDS = {
     "pessimistic": "weakest stretch",
     "base": "long-run average",
@@ -1672,7 +1633,7 @@ def summarizer_agent(state: DealState) -> dict:
 
     lines.extend(_build_status_section(state.stub_nodes))
 
-    # **The two axes open the report** (U9.4). Above the status strip and above the
+    # **The two axes open the report.** Above the status strip and above the
     # model's summary, so the first thing a reader meets is the reproducible verdict
     # rather than a number they cannot place or prose that varies between runs.
     lines.extend(_verdict_lines(state))

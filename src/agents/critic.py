@@ -1,32 +1,19 @@
-"""Critic/Reviewer agent — **complete as of U7**.
+"""Critic/Reviewer agent — confidence, escalation, and the buy/don't-buy verdict.
 
-Built in two passes, because its two halves had different dependencies:
+Three separable jobs over the same accumulated state:
 
-- **U2: flag aggregation into a confidence score, and the human-review escalation
-  decision.** These depend only on `state.flags` and on weights that live in
-  `config.FLAG_SEVERITY_PENALTY`. Building them first is what made the `human_review`
-  interrupt reachable at runtime rather than only in a test.
-- **U7: cross-agent consistency checking**, the part that sets `critic_rejected` and
-  drives the rework cycle. In U2 it could not be written in any honest form, because the
-  checks worth making needed Valuation and Scenario output and neither agent produced
-  any. A consistency check with only one populated input is a check that always passes,
-  which §2's own argument rules out — a signal that cannot fire conveys nothing. U5
-  populates `rent_estimate` and `ValuationDetail`; U6 populates `scenarios` and
-  `ForecastDetail`.
+- **Flag aggregation into a confidence score, and the human-review escalation
+  decision.** Depends only on `state.flags` and on weights in
+  `config.FLAG_SEVERITY_PENALTY`.
+- **Cross-agent consistency checking**, the part that sets `critic_rejected` and drives
+  the rework cycle. This is the one judgment no other agent can make — **whether a
+  *combination* of disclosures changes what the result means** — because this is the only
+  node that sees every agent's flags at once. `confidence_from_flags` is a sum, and a sum
+  can only say *more doubt*.
+- **The recommendation**, which answers a different question from the confidence score
+  and is kept rigorously apart from it. See `recommend()`.
 
-**What U7 checks is not the list U2 anticipated**, and the reason is worth carrying at
-the top of this file: of the four checks named in U2's `TODO(U7)`, one was already built
-in the agent that owns its inputs, one was made dead by decision #15 (no value estimate), and two could not
-fail by construction. See `_consistency_objections()` for the full accounting. What
-replaced them is the one judgment no other agent can make — **whether a *combination* of
-disclosures changes what the result means** — because this is the only node that sees
-every agent's flags at once. `confidence_from_flags` is a sum, and a sum can only say
-*more doubt*.
-
-`_consistency_objections()` stays the single seam this agent calls and the tests
-substitute, as it was when it returned an empty list in U2. That is what kept the rework
-branch present, reachable, and provably bounded in `tests/test_flag_propagation.py`
-before there was anything to object to.
+`_consistency_objections()` is the single seam this agent calls and the tests substitute.
 
 Reason/Act/Observe/Decide:
 
@@ -38,8 +25,8 @@ Reason/Act/Observe/Decide:
   and note whether the rework budget still has room.
 - **Decide.** Proceed to the report, send the deal back for one more pass, or escalate
   to a human. The decision is written to state; the routing that acts on it lives in
-  `agents/planner.route_after_critic`, never here (§3 — agents communicate only through
-  shared state; routing is an edge's job, not a specialist's).
+  `agents/planner.route_after_critic`, never here — agents communicate only through
+  shared state, and routing is an edge's job rather than a specialist's.
 """
 
 from __future__ import annotations
@@ -75,12 +62,12 @@ AGENT = "critic"
 _DERIVED_KINDS = frozenset({
     FlagKind.LOW_CONFIDENCE_ESTIMATE,
     FlagKind.REWORK_LIMIT_REACHED,
-    # Added U7.4, and it belongs here for both of the reasons above at once. An
-    # objection is a conclusion *about* other flags, so counting it charges the same
-    # observation twice — the divergence and the relaxation behind it have already been
-    # paid for. And a rework lap re-raises it, so it would compound on a cycle whose
-    # whole purpose is to improve the deal. Objections escalate through the critical
-    # rule instead, which is a decision rather than an arithmetic contribution.
+    # Belongs here for both of the reasons above at once. An objection is a conclusion
+    # *about* other flags, so counting it charges the same observation twice — the
+    # divergence and the relaxation behind it have already been paid for. And a rework lap
+    # re-raises it, so it would compound on a cycle whose whole purpose is to improve the
+    # deal. Objections escalate through the critical rule instead, which is a decision
+    # rather than an arithmetic contribution.
     FlagKind.CRITIC_INCONSISTENCY,
 })
 
@@ -94,71 +81,43 @@ def confidence_from_flags(state: DealState) -> float:
     rather than a weakness, and charging them would make the score fall on runs where
     nothing went wrong.
 
-    The weights were PROVISIONAL until U8 and are now **held on measurement** (#6): an
-    80-point sweep over threshold and warn weight decides the 21-case batch identically at
-    63 of 160 grid points, and no case gives evidence the shipped numbers are wrong. They
-    live in `config` for the reason they always did (§8), and the claim is robustness
-    rather than optimality — a batch that cannot separate two settings has no evidence
-    either way. The shape of the function is the U2 commitment; the numbers are held.
+    **The weights are held on measurement, and the claim is robustness rather than
+    optimality.** An 80-point sweep over the threshold and the warn weight decides the
+    21-case evaluation batch identically at 63 of 160 grid points, and no case gives
+    evidence the shipped numbers are wrong — a batch that cannot separate two settings has
+    no evidence either way. They live in `config` because every tunable parameter does.
 
-    **Identical observations are counted once (U7.4).** `state.flags` is append-only
-    across rework laps, deliberately, so the raw run history stays inspectable — the same
-    reason the Summarizer de-duplicates `stub_nodes` at render time rather than in the
-    reducer. But a rework re-runs every upstream agent, and each re-raises the flags it
-    raised before, so a summed score would fall on every lap without anything about the
-    deal having changed. A deal does not get worse because the pipeline looked at it
-    twice.
+    **Identical observations are counted once.** `state.flags` is append-only across
+    rework laps, deliberately, so the raw run history stays inspectable. But a rework
+    re-runs every upstream agent, and each re-raises the flags it raised before, so a
+    summed score would fall on every lap without anything about the deal having changed. A
+    deal does not get worse because the pipeline looked at it twice.
 
     Measured before this was added: a deal carrying two warn flags scored 0.70, then 0.40
     on the first rework lap and 0.10 on the second. It escalated on collapsed confidence
     before `MAX_REWORKS` was ever reached, which made `REWORK_LIMIT_REACHED` unreachable
     and left the cycle bounded by an arithmetic accident rather than by the explicit
-    counter §3 requires. That the two happened to agree is exactly what makes this the
-    kind of defect worth finding deliberately.
+    counter. That the two happened to agree is exactly what makes this the kind of defect
+    worth finding deliberately.
 
     De-duplication is on `(source_agent, kind, detail)`. Not on `kind` alone: one
     retrieval pass can legitimately raise `RELAXED_MATCH_CRITERIA` twice for two
     different relaxations, and those are two real observations that should both be
     charged. Identical text from the same agent is the same observation reported again.
     """
-    # **ANSWERED at U8, Aug 30-31, 2026 — both halves. Kept rather than deleted, because
-    # the correction below is the record of a claim that was wrong twice.**
-    #
-    # *The demo-set skew was an artifact, and stopped mattering for a second reason.* The
-    # eval batch was the instrument this note asked for — 21 predicted cases sited across
-    # four markets rather than one county reused. It did not have to adjudicate the skew:
-    # #19's hybrid anchor resolves at ZIP tier in every indexed market, so
-    # `rent_anchor_county_level` became rare, and it now co-occurs with the elevated
-    # market-error flag on **0 of 21 cases**. The causal-pair double-charge that skew
-    # implied dissolved rather than being re-priced (OQ-1's close).
-    #
-    # *The critical-flag rule is now isolated by real deals, not only by an ablation.*
-    # This note recorded that no demo *deal* separated the rule from the score — every one
-    # carrying a critical already sat below threshold — and that only
-    # `--deal chicago --no-retrieval` reached the boundary. The batch owes that no longer:
-    # **five golden rows escalate on a critical while the score alone would have reported**
-    # (`eval/results/results.md`, the rows marked †), each reaching the boundary through a
-    # property of the listing. The sweep confirms it from the other side —
-    # `eval/results/sensitivity.md` finds the critical weight behaviorally inert across its
-    # entire range **including 0.00**, which is the rule's independence measured rather
-    # than argued.
-    #
-    # Superseded, Aug 27, 2026 — this previously claimed a "two-warn floor"
-    # from a three-deal sample. `scripts/confidence_evidence.py` (U7.6) measured all six
-    # demo deals and it does not generalize: **no warn-severity flag is common to every
-    # deal.** `rent_anchor_county_level` fires on `los-angeles`, `overpriced` and
-    # `coord-conflict` — not because every deal pays it, but because those three are the
-    # deals sited in the one demo county with no HUD Small Area FMR. `chicago`'s county
-    # has one, so it never raises that flag at all; the earlier note claiming it did was
-    # wrong. `forecast_branches_near_tied` fires on `los-angeles` and `chicago` only, a
-    # genuine ToT near-tie rather than a constant. `chicago` reaches 0.55 and escalates
-    # on three deal-specific warns (search-radius relaxation, comps outside the match
-    # band, and the near-tie) — not on any pair every deal shares.
+    # **No warn-severity flag is common to every deal**, so there is no constant floor
+    # this score starts from — measured across the demo set by
+    # `scripts/confidence_evidence.py`. `rent_anchor_county_level` fires on the three deals
+    # sited in the one demo county whose rent index has no ZIP-level coverage;
+    # `forecast_branches_near_tied` fires on two, a genuine near-tie in the forecast search
+    # rather than a constant. The Chicago deal reaches 0.55 and escalates on three
+    # deal-specific warns — a search-radius relaxation, comps outside the match band, and
+    # the near-tie — not on any pair every deal shares.
     return confidence_breakdown(state).score
 
 
 def confidence_breakdown(state: DealState) -> ConfidenceBreakdown:
-    """The same sum, itemized (U8.6d).
+    """The same sum, itemized.
 
     `confidence_from_flags` above is the contract every caller had before this existed and
     still the one the routing decision uses; this returns the *same arithmetic* with its
@@ -204,70 +163,54 @@ def confidence_breakdown(state: DealState) -> ConfidenceBreakdown:
 
 
 def _consistency_objections(state: DealState) -> list[Objection]:
-    """Cross-agent contradictions found in this run. **Populated in U7.**
+    """Cross-agent contradictions found in this run.
 
-    The four checks §1 originally named were reviewed against the built system while
-    planning U7, and **the list did not survive contact with it** (Q5,
-    `docs/tasks/task_list_u7.md`). Recorded here rather than silently replaced, because a
-    TODO that names work the build has since made impossible is worse than no TODO:
+    **Several checks that look like they belong here deliberately do not**, and the
+    accounting is worth having in one place, because each omission is a design rule rather
+    than an oversight:
 
-    1. *Rent estimate against the comp set's distribution* — **already built, and not
-       here.** `agents/valuation_rent.py` raises `RENT_DIVERGES_FROM_COMPS` as its own
-       Observe step, using `ValuationDetail.comp_implied_rent_p25/median/p75`. The
-       Critic **consumes that flag** rather than recomputing it. Two agents deriving one
-       fact independently is two agents that can disagree about it.
-    2. *Value estimate against the listing price* — **dead.** Decision #15 made
-       `DealState.value_estimate` permanently `None`; nothing in this build writes it.
-       This TODO predates that decision.
-    3. *Scenario bands against the base they branch from* — **retired on evidence
-       (Q5).** `agents/scenario_forecast.py` assigns `projection_base_price`/`_rent`
-       directly from `deal_terms.price`/`rent_estimate`, and the Planner always re-runs
-       Scenario whenever Extractor re-runs, so the check would compare a field to the
-       variable it was assigned from. Cannot fail by construction.
-    4. *Comp-source concentration* — **retired on evidence (Q5).** Already built, and
-       not here either: `agents/summarizer.py` renders it as a disclosure at a 0.75
-       threshold. Promoting it to an objection fires on both dense demo deals, including
-       the clean `los-angeles` baseline — it would flag the system's own healthy case.
+    1. *Rent estimate against the comp set's distribution* — **built in the agent that
+       owns its inputs.** `agents/valuation_rent.py` raises `RENT_DIVERGES_FROM_COMPS` as
+       its own Observe step. The Critic **consumes that flag** rather than recomputing it.
+       Two agents deriving one fact independently is two agents that can disagree about it.
+    2. *Value estimate against the listing price* — **dead.** `DealState.value_estimate` is
+       permanently `None`; nothing in this build writes it, for the reasons
+       `agents/valuation_rent.py` gives.
+    3. *Scenario bands against the base they branch from* — **cannot fail by
+       construction.** `agents/scenario_forecast.py` assigns
+       `projection_base_price`/`_rent` directly from `deal_terms.price`/`rent_estimate`,
+       so the check would compare a field to the variable it was assigned from.
+    4. *Comp-source concentration* — **built, and not here either.**
+       `agents/summarizer.py` renders it as a disclosure. Promoting it to an objection
+       fires on both dense demo deals, including the clean baseline — it would flag the
+       system's own healthy case.
+    5. *Comp attribute drift* — **built in `agents/comps_retrieval.py`**, which already
+       holds both the subject terms and the returned comps. I1 below keys on the flag it
+       raises, `COMPS_OUTSIDE_MATCH_CRITERIA`, rather than on `RELAXED_MATCH_CRITERIA` — a
+       relaxation only *permits* dissimilar comps, and the measured drift is what makes
+       the objection real.
 
-    **What replaced 3 and 4**, per Q5: the Critic is the one node that sees every
-    agent's flags at once, and judging whether a *combination* of disclosures changes
-    what the result means is work only it can do. `_interaction_objections()` below
-    builds three such checks (I1–I3, U7.2). The fourth surviving check from §1's
-    original four — comp attribute drift — is built in `agents/comps_retrieval.py`
-    instead (U7.3, raised as `FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA`): that agent already
-    holds both the subject terms and the returned comps, so putting the check here would
-    repeat the mistake check 1 above already avoids. I1 keys on that flag directly rather
-    than on `RELAXED_MATCH_CRITERIA` — a relaxation only *permits* dissimilar comps, and
-    the measured drift is what makes the objection real.
+    What is left is the family only this node can build: `_interaction_objections()`,
+    three checks over the combination of upstream disclosures.
 
-    Two further comparisons — the listing's *stated* rents against `rent_estimate`, and
-    its asking price against `ValuationDetail.benchmark_median_sale_price` — are
-    deliberately **not** objections. They ship as Summarizer disclosures instead (U7.5).
+    **Two further comparisons ship as Summarizer disclosures rather than objections** —
+    the listing's *stated* rents against `rent_estimate`, and its asking price against
+    `ValuationDetail.benchmark_median_sale_price` — and both were measured before being
+    left there.
 
-    **The reason U7.5 gave has expired and been replaced, so read this paragraph as
-    current rather than as history.** It used to be that the rent comparison reported
-    ~-29% on every demo deal — FMR is a 40th-percentile rent, the model predicted ~1.40x
-    FMR, so the gap measured a percentile mismatch rather than the deal — and a check
-    cannot be built on a constant offset. U11.3's market-index anchor removed that offset,
-    and the re-measurement (U8.7, `scripts/stated_rent_gap.py`) found a dispersed,
-    sign-varying distribution: 13 fixtures, mean -11.4%, range -39.4% to +66.6%. On that
-    evidence the comparison *is* about the deal.
+    The rent comparison is genuinely about the deal: across 13 fixtures
+    (`scripts/stated_rent_gap.py`) it is dispersed and sign-varying, mean -11.4%, range
+    -39.4% to +66.6%. It stays a disclosure because every fixture a threshold in the 20-35%
+    region would fire on already carries a flag naming a more specific cause — comps
+    matched outside the band, the bedroom cap, a market whose holdout error is elevated. An
+    objection raised from the gap would restate those in vaguer words and attribute them to
+    the listing's stated rent.
 
-    It stays a disclosure anyway, for a second reason the same measurement supplied: every
-    fixture a threshold in the 20-35% region would fire on already carries a flag naming a
-    more specific cause — comps matched outside the band, the bedroom cap, a market whose
-    holdout error is elevated. An objection raised from the gap would restate those in
-    vaguer words and attribute them to the listing's stated rent. See U8.7 for the open
-    decision and what evidence would reopen it.
-
-    **That reasoning covers the rent comparison only, and the price comparison was settled
-    separately as #22 (Sept 2, 2026, `scripts/asking_price_gap.py`).** It had been carried
-    along by the phrase "checks A and B" with no measurement of its own — tracked as OQ-20
-    until then. It stays a disclosure for a stronger reason than A's: **the fixtures do not
-    share a calibration basis, so no column exists to threshold.** #11 set the original
-    demo prices from the *metro* median while U9.4/U9.6 calibrated the newest two against
-    the *ZIP* benchmark, so the raw gap recovers `overpriced`'s declared +55% exactly while
-    reporting an ordinary Uptown duplex as 39% cheap.
+    The price comparison stays a disclosure for a stronger reason
+    (`scripts/asking_price_gap.py`): **the fixtures do not share a calibration basis, so no
+    column exists to threshold.** Some demo prices were set from the *metro* median and the
+    newest from the *ZIP* benchmark, so the raw gap recovers the deliberately-overpriced
+    deal's declared +55% exactly while reporting an ordinary Uptown duplex as 39% cheap.
 
     This stays the single seam the Critic calls and the tests substitute, even though
     every surviving check it delegates to is one family, `_interaction_objections()`.
@@ -276,7 +219,7 @@ def _consistency_objections(state: DealState) -> list[Objection]:
 
 
 # ---------------------------------------------------------------------------
-# Interaction checks (U7)
+# Interaction checks
 # ---------------------------------------------------------------------------
 #
 # Every other agent checks what it has the data to check and flags its own step. The
@@ -296,8 +239,7 @@ def _consistency_objections(state: DealState) -> list[Objection]:
 # number of INFO flags, which cost nothing by design.
 #
 # Each is a pure function of accumulated state. No LLM call, no network, no corpus, no
-# model — which is why they are hermetically testable in a way the checks U7 originally
-# planned were not.
+# model — which is why they are hermetically testable.
 
 
 class Objection(NamedTuple):
@@ -316,16 +258,15 @@ class Objection(NamedTuple):
 
 
 def _kinds(state: DealState) -> frozenset[FlagKind]:
-    """Flag kinds this pass should judge the deal on (U8.5/OQ-15, which closed the
-    deferred-work marker `_interaction_objections` carried).
+    """Flag kinds this pass should judge the deal on.
 
     `DealState.flags` is append-only across rework laps so the raw run history stays
-    inspectable, and until this landed, every reader of it — this function included —
-    treated that whole history as if it described the current pass. Measured: a rework
-    that *succeeds* — the geocoder answers, coordinates resolve to a parcel, the
-    divergence clears, neither agent raises anything new — still tripped I3 from pass
-    one's flags, because nothing on a `Flag` said which pass raised it. Every `Flag` now
-    carries `planner_invocations`, and this function is the one place that reads it.
+    inspectable, and a reader that treats the whole history as describing the current pass
+    gets the current pass wrong. Measured: a rework that *succeeds* — the geocoder answers,
+    coordinates resolve to a parcel, the divergence clears, neither agent raises anything
+    new — still trips I3 off pass one's flags unless something on a `Flag` says which pass
+    raised it. Every `Flag` carries `planner_invocations`, and this function is the one
+    place that reads it.
 
     Two rules, and the second is the one the fix is actually about:
 
@@ -335,7 +276,7 @@ def _kinds(state: DealState) -> frozenset[FlagKind]:
     - **An agent skipped this pass is judged on its last examination, never treated as
       cleared.** `state.plan` records which agents ran; absence from it means "not
       re-examined," not "found nothing." In this build only the Extractor is ever
-      conditionally skipped (decision #9 — Planner topology) — every other node in `_PIPELINE` runs on
+      conditionally skipped — every other node in the pipeline runs on
       every pass — but the rule is written against `state.plan` membership rather than
       naming the Extractor specifically, so it does not silently stop applying if a
       second step becomes optional later.
@@ -344,8 +285,7 @@ def _kinds(state: DealState) -> frozenset[FlagKind]:
     case in `test_critic_interactions.py` does this deliberately, to exercise this
     function as a pure function over an accumulated flag set with no pass concept at
     all. There is no pass information to filter on in that shape, so every accumulated
-    flag counts, which is this function's pre-U8.5 behaviour and is what keeps those
-    tests exercising exactly what they were written to exercise.
+    flag counts.
     """
     if not state.plan:
         return frozenset(f.kind for f in state.flags)
@@ -391,44 +331,35 @@ def _interaction_objections(state: DealState) -> list[Objection]:
     """Contradictions that exist only in the *combination* of upstream disclosures.
 
     Reached through `_consistency_objections()`, which is the seam the graph calls and
-    the tests substitute. These landed one change set ahead of that wiring on purpose, so
-    they could be reviewed as arithmetic over flag sets before the routing consequences
-    of raising a CRITICAL from inside the Critic were taken on.
+    the tests substitute.
 
     Ordered strongest first. Each returns at most one objection, and they are allowed to
     co-occur: a deal that trips two of these has two independent reasons its rent
     cross-check is not saying what it appears to say.
 
-    **Reads only the current pass (U8.5/OQ-15) — see `_kinds` for the mechanism.** This
-    used to read the accumulated flag list as if it described the current pass, so a
-    rework that succeeded could still trip an objection off a flag from a lap that no
-    longer applied. `_kinds` now resolves that per source agent, judging an agent that
-    ran this pass on this pass alone and an agent skipped this pass on its last
-    examination — never as cleared.
+    **Reads only the current pass — see `_kinds` for the mechanism**, which judges an
+    agent that ran this pass on this pass alone and an agent skipped this pass on its last
+    examination, never as cleared.
 
-    **What each check requires changed on Aug 30, 2026 (U8.6, the architect's call).**
-    Until then one line at the top of this function returned early unless
-    `RENT_DIVERGES_FROM_COMPS` had been raised, so every objection here — and therefore
-    the only critical the Critic produces, and the only thing that can start a rework —
-    existed only where the estimate and the comp median already disagreed. The argument
-    for that gate was that these checks reinterpret a *disagreement*, and that there is
-    nothing to reinterpret when the two figures agree.
-
-    That argument survives for one of the three checks and not for the other two,
+    **Only one of the three requires the rent estimate and the comp median to have
+    actually disagreed**, and the asymmetry is deliberate. The tempting simplification is
+    a single early return unless `RENT_DIVERGES_FROM_COMPS` was raised, on the reasoning
+    that these checks reinterpret a *disagreement* and there is nothing to reinterpret
+    when the two figures agree. That reasoning holds for one check and not the other two,
     because they are not making the same kind of claim:
 
     - **I1 and I3 say the comp set is the wrong set for this subject** — matched on
       attributes the model prices on, or drawn around a location that is not the
       property's. That holds however the numbers came out, and agreement between two
       mis-specified quantities is not evidence about either. **Ungated.**
-    - **I2 says the comp median is imprecise** — a point sample over one coordinate that
-      decision #15 (no value estimate) measured carrying 150 listings spanning $760-$6,995. Imprecision
-      degrades a *disagreement*; on its own it is what `COMPS_SPATIALLY_CONCENTRATED`
-      already discloses at WARN. Ungating it would make a market's data density a
-      critical objection on every listing in Cleveland and Brooklyn — a large behavioral
-      change, and the wrong instrument for it. **Keeps the gate.**
+    - **I2 says the comp median is imprecise** — a point sample over one coordinate, and a
+      single coordinate in this corpus was measured carrying 150 listings spanning
+      $760-$6,995. Imprecision degrades a *disagreement*; on its own it is what
+      `COMPS_SPATIALLY_CONCENTRATED` already discloses at WARN. Ungating it would make a
+      market's data density a critical objection on every listing in Cleveland and
+      Brooklyn — a large behavioral change, and the wrong instrument for it. **Gated.**
 
-    **What replaces the gate for I1 and I3 is `_cross_check_ran`, not nothing.** These
+    **What stands in for the gate on I1 and I3 is `_cross_check_ran`, not nothing.** These
     objections describe how to read the comp cross-check, so one has to have happened:
     below `config.RENT_COMP_CROSSCHECK_MIN_COMPS` surviving comps
     `valuation_rent._cross_check` returns before computing a median, and an objection
@@ -449,23 +380,22 @@ def _interaction_objections(state: DealState) -> list[Objection]:
 
     # I1 — the comp set came back unlike the subject on an attribute the model prices on.
     #
-    # **Keys on the measured consequence, not on the concession** (repointed U7.3). This
-    # read `RELAXED_MATCH_CRITERIA` until the drift was actually measured, and that flag
-    # records only that the retrieval loop dropped a filter. Dropping one *permits*
-    # dissimilar comps without producing them: a set that relaxed and came back similar
-    # anyway is not degraded, and objecting to it would treat a concession as a result.
-    # `COMPS_OUTSIDE_MATCH_CRITERIA` is raised by the retrieval agent only when comps
-    # actually fell outside the bedroom or size band originally searched.
+    # **Keys on the measured consequence, not on the concession.** `RELAXED_MATCH_CRITERIA`
+    # is the tempting flag to read and it records only that the retrieval loop dropped a
+    # filter. Dropping one *permits* dissimilar comps without producing them: a set that
+    # relaxed and came back similar anyway is not degraded, and objecting to it would treat
+    # a concession as a result. `COMPS_OUTSIDE_MATCH_CRITERIA` is raised by the retrieval
+    # agent only when comps actually fell outside the bedroom or size band searched for.
     #
     # Why it matters that the attribute is one the model prices on:
     # `config.RENT_MODEL_FEATURES` is ("bedrooms", "bathrooms", "square_feet"), so the
     # comp median then describes a different population than the model predicted for, so
     # the comparison is uninformative in both directions — a gap is the expected
     # consequence of the widening rather than evidence about the estimate, and a match is
-    # two differently-specified quantities landing near each other. **Ungated Aug 30,
-    # 2026 (U8.6)**: that second half is why, and it is the half the divergence gate used
-    # to suppress. `la-three-bedroom-comp-drift` is the worked example — 6 of 8 comps out
-    # of band, and the numbers agreed.
+    # two differently-specified quantities landing near each other. That second half is
+    # why this check is not gated on divergence. The `la-three-bedroom-comp-drift`
+    # evaluation case is the worked example — 6 of 8 comps out of band, and the numbers
+    # agreed.
     if cross_checked and FlagKind.COMPS_OUTSIDE_MATCH_CRITERIA in kinds:
         objections.append(
             Objection(
@@ -482,12 +412,12 @@ def _interaction_objections(state: DealState) -> list[Objection]:
 
     # I2 — the comp median is a point sample.
     #
-    # Decision #15 measured Chicago's busiest coordinate carrying 150 listings whose
-    # rents span $760-$6,995, CV 48.7% against 49.7% for the whole metro. A median over
+    # Chicago's busiest coordinate carries 150 listings whose rents span $760-$6,995, a
+    # coefficient of variation of 48.7% against 49.7% for the whole metro. A median over
     # comps clustered like that carries almost no locational information, so diverging
     # from it is weak evidence in either direction.
     #
-    # **The one check that keeps the divergence gate (U8.6).** This says the median is
+    # **The one check gated on divergence.** This says the median is
     # imprecise, not that it describes the wrong thing, and imprecision is a reason to
     # discount a disagreement rather than a finding on its own. Every Cleveland and every
     # Brooklyn comp set in this corpus is single-coordinate, so ungating would turn a
@@ -505,28 +435,20 @@ def _interaction_objections(state: DealState) -> list[Objection]:
             )
         )
 
-    # I3 — the comps moved, and since U11.3 the estimate moves with them.
+    # I3 — the comps moved, and the estimate moves with them.
     #
-    # **This check's premise inverted on Aug 30, 2026 and the correction changes what it
-    # is allowed to claim.** It used to reason: the rent model is location-blind below the
-    # county (§2), its features carry no market identifier and its anchor is county-level
-    # FMR, so the subject's coordinates do not affect the estimate at all — only which
-    # comps are retrieved. A centroid fallback therefore moved the comp set while leaving
-    # the estimate untouched, which made the divergence *more* readable as a fact about
-    # the comps than about the estimate.
+    # **What this objection is allowed to claim is narrower than it looks.** The anchor
+    # reads the market index at the subject's own ZIP, so a centroid fallback moves the
+    # anchor as well as the comp set — to a different ZIP's rent level, hence to a
+    # different estimate. Both sides of the comparison shift and neither can be held fixed
+    # as the reference, so this cannot say the estimate is unaffected. What it can say is
+    # that neither side describes the address on the listing. It stays WARN rather than
+    # CRITICAL because the comparison is degraded, not void.
     #
-    # The hybrid anchor reads the market index at the subject's own ZIP, so a centroid
-    # fallback now moves the anchor too — to a different ZIP's rent level, hence to a
-    # different estimate. Both sides of the comparison shift, and neither can be held
-    # fixed as the reference. So the objection can no longer say the estimate is
-    # unaffected; what it can still say is that neither side describes the address on the
-    # listing. That is a weaker claim and a more honest one, and it stays WARN rather than
-    # CRITICAL for the same reason it always did — the comparison is degraded, not void.
-    #
-    # **Ungated Aug 30, 2026 (U8.6).** "Neither side describes this address" is true of
-    # the comparison whether or not the two sides agree, and this is the only retryable
-    # objection in the system, so leaving it behind the divergence gate also left the
-    # bounded-rework cycle reachable only on deals that happened to diverge.
+    # **Not gated on divergence.** "Neither side describes this address" is true of the
+    # comparison whether or not the two sides agree, and this is the only retryable
+    # objection in the system, so gating it would leave the bounded-rework cycle reachable
+    # only on deals that happened to diverge.
     geocode_fallbacks = {
         FlagKind.COORDINATES_FROM_CITY_CENTROID,
         FlagKind.GEOCODER_SERVICE_UNAVAILABLE,
@@ -535,7 +457,7 @@ def _interaction_objections(state: DealState) -> list[Objection]:
         # Only the service-outage cause is worth a rework: re-running the Extractor
         # re-attempts the Census call, and the same listing may resolve to a parcel on a
         # later run. An address with no street number will not, however often it is
-        # retried. U7.1b split the flag kinds so this branch reads the cause instead of
+        # retried. The flag kinds are split so this branch reads the cause rather than
         # parsing the message.
         retryable = FlagKind.GEOCODER_SERVICE_UNAVAILABLE in kinds
         objections.append(
@@ -631,18 +553,18 @@ def recommend(state: DealState) -> RecommendationDetail:
     read the evidence exactly backwards. Feeding confidence or the escalation decision in
     here would re-merge the two lines the report now separates.
 
-    **Deterministic, and the reason is measured rather than stylistic.** OQ-17 found this
-    model scoring an identical prompt 0.05 on one call and 0.95 on the next, same
-    deployment, `temperature=0`. A recommendation behind that would make the same deal
-    *proceed* on Tuesday and *do not proceed* on Wednesday with nothing able to explain
-    why, and it would create a second axis `eval/runner.py` cannot score. The model's own
-    reading is attached by `cross_check()` below as an annotation that can never move the
-    verdict.
+    **Deterministic, and the reason is measured rather than stylistic.** The model behind
+    this pipeline was observed scoring an identical prompt 0.05 on one call and 0.95 on the
+    next — same deployment, `temperature=0`. A recommendation resting on that would make
+    the same deal *proceed* on Tuesday and *do not proceed* on Wednesday with nothing able
+    to explain why, and it would create a second axis `eval/runner.py` cannot score. The
+    model's own reading is attached by `cross_check()` below as an annotation that can
+    never move the verdict.
 
     **The thresholds are percentiles of real transactions**, measured by
     `scripts/sale_premium_distribution.py` over 44,358 sales — see
-    `docs/design/recommendation.md`. Before that measurement this repository held one
-    median per ZIP and no dispersion, so any threshold would have been read off nothing.
+    `docs/design/recommendation.md`. Without that measurement this repository would hold
+    one median per ZIP and no dispersion, and any threshold would be read off nothing.
 
     **Reject requires two independent failures**, and that is the design rather than
     timidity about the vocabulary. `_benchmark_section` prints, in bold, that the
@@ -704,7 +626,7 @@ def recommend(state: DealState) -> RecommendationDetail:
     # lower. It reports **Proceed** on axis 2 and **escalated** on axis 1, and the
     # distance between those two lines is the point.
     # TODO(eval): no fixture reaches this branch — `DO_NOT_PROCEED` is exercised only in
-    # `tests/test_report_verdict.py`, on hand-built state. Measured Sept 6, 2026 across
+    # `tests/test_report_verdict.py`, on hand-built state. Measured across
     # all eight demo deals: `overpriced` is the nearest, past the reject premium at +55%
     # and held at caution solely because its rents corroborate. The branch is also close
     # to unreachable on a *clean* run, because both ordinary routes to
@@ -715,7 +637,7 @@ def recommend(state: DealState) -> RecommendationDetail:
     # `config.RENT_COMP_CROSSCHECK_MIN_COMPS` surviving normalization, where `_cross_check`
     # returns `[]` and the shortfall is rendered as prose rather than raised as a flag.
     # Closing this wants a golden fixture engineered on that route. **Deferred on timeline,
-    # not on merit** — judged an edge case against the Sept 7 deadline.
+    # not on merit.**
     if over_reject and corroborated is False:
         verdict = Recommendation.DO_NOT_PROCEED
     elif over_caution:
@@ -747,14 +669,14 @@ def recommend(state: DealState) -> RecommendationDetail:
     # disagree — and it needs no threshold constant, because the precision of the format
     # string *is* the threshold.
     #
-    # This fires on `los-angeles` and it is not a coincidence: under #11 the demo asking
-    # prices were derived *from* the metro median, and Los Angeles has no ZIP tier
-    # (California assessors publish assessed value, not sale price), so the deal is
-    # compared against the very figure it was calibrated from. The wording is fixed here;
-    # the circularity underneath it was measured at #22 and is a property of the fixtures
-    # rather than of this code — three of them are scored against the median their price
-    # was set from, so the comparison is inert by construction on exactly the markets with
-    # no ZIP tier. That is why check B stays a disclosure and never became an objection.
+    # This fires on `los-angeles` and it is not a coincidence: the demo asking prices were
+    # derived *from* the metro median, and Los Angeles has no ZIP tier (California
+    # assessors publish assessed value, not sale price), so the deal is compared against
+    # the very figure it was calibrated from. The wording is fixed here; the circularity
+    # underneath it is a property of the fixtures rather than of this code — three of them
+    # are scored against the median their price was set from, so the comparison is inert by
+    # construction on exactly the markets with no ZIP tier. That is why the asking-price
+    # comparison stays a disclosure and never became an objection.
     elif round(premium * 100) == 0:
         reasons.append(
             f"The asking price is in line with the typical sale price for this area, "
@@ -805,11 +727,10 @@ _CROSS_CHECK_SYSTEM = (
 def _cross_check_prompt(state: DealState, detail: RecommendationDetail) -> str:
     """The same evidence the rule read, in the rule's own rounded figures.
 
-    **Rounded reader-facing numbers, not raw floats** — the same constraint the lede
-    carries. OQ-18 records a replay row missing its recordings for reasons never
-    established, and a full-precision float in a prompt is a cache key that changes when
-    an upstream computation moves in its last decimal place. Everything here is either a
-    rounded percentage or a short string.
+    **Rounded reader-facing numbers, not raw floats** — the same constraint the report's
+    lede carries. A full-precision float in a prompt is a cache key that changes whenever
+    an upstream computation moves in its last decimal place, which silently invalidates a
+    recorded response. Everything here is either a rounded percentage or a short string.
 
     Deliberately does **not** include the confidence score, the flag list, or whether the
     deal escalated. Those are axis 1. A second opinion that reads them would be answering
@@ -856,15 +777,13 @@ def _cross_check_prompt(state: DealState, detail: RecommendationDetail) -> str:
 def cross_check(state: DealState, detail: RecommendationDetail) -> RecommendationDetail:
     """Ask a model for its own verdict on the same evidence. **It can never change one.**
 
-    **This is the system's second reasoning locus, added as a result of OQ-22**. 
-
     **The rule always decides.** The model's verdict is stored beside the rule's, and the
     report shows the rule's; on a disagreement it adds a line saying an independent
     review of the same evidence reached a different conclusion, and that the disagreement
-    is disclosed rather than resolved. That asymmetry is what makes this safe under
-    OQ-17, where this model scores an identical prompt 0.05 on one call and 0.95 on the
-    next: a design where the model *decided* would make the same deal proceed on Tuesday
-    and not on Wednesday, and `eval/runner.py` could score neither outcome.
+    is disclosed rather than resolved. That asymmetry is what makes this safe given the
+    scoring instability `recommend()` describes: a design where the model *decided* would
+    make the same deal proceed on Tuesday and not on Wednesday, and `eval/runner.py` could
+    score neither outcome.
 
     **The disagreement is the product.** A deal where both readings agree is more
     trustworthy than one where they split, and the reader learns which they are holding.
@@ -911,7 +830,7 @@ def _review_guidance(breakdown: ConfidenceBreakdown) -> str:
     that market, and a reviewer who reads it expecting a task has had their attention
     spent for nothing.
 
-    Written as plain prose with no flag names or thresholds in it (§8): the audience is an
+    Written as plain prose with no flag names or thresholds in it: the audience is an
     investor or a demo viewer, and `rent_anchor_county_level` means nothing to them. The
     dominant disclosure's own text is quoted instead, because it was already written for
     this reader.
@@ -948,7 +867,7 @@ def critic_agent(state: DealState) -> dict:
 
     # Each objection carries its own severity — an interaction that voids the rent
     # cross-check is not the same weight as one that merely degrades it, and flattening
-    # them to WARN would discard the distinction U7.2 exists to draw.
+    # them to WARN would discard the distinction the interaction checks exist to draw.
     flags = [
         state.flag(AGENT, FlagKind.CRITIC_INCONSISTENCY, objection.message, objection.severity)
         for objection in objections
@@ -960,29 +879,23 @@ def critic_agent(state: DealState) -> dict:
     # Severity.CRITICAL is defined in the report as "the estimate should not be relied
     # on without addressing this". A deal carrying one that still reaches a report as a
     # normal result contradicts what the system says about its own flag. That is not
-    # hypothetical arithmetic — the U2 demo produced it. One critical flag costs 0.40,
-    # landing confidence at exactly 0.60, and `0.60 < 0.60` is false, so the
-    # zero-comps Chicago and no-coordinates runs both reported without escalating. The
-    # threshold is a judgment about *accumulated* uncertainty and is the right tool for
-    # a pile of warnings; it is the wrong tool for a single disqualifying observation.
+    # hypothetical arithmetic — an early build produced it. One critical flag costs 0.40,
+    # landing confidence at exactly 0.60, and `0.60 < 0.60` is false, so a zero-comps run
+    # and a no-coordinates run both reported without escalating. The threshold is a
+    # judgment about *accumulated* uncertainty and is the right tool for a pile of
+    # warnings; it is the wrong tool for a single disqualifying observation.
     #
-    # **Confirmed at U8 and the rule stays separate (#6, Aug 30, 2026).** This block used
-    # to end by asking that the rule be re-checked once the weights were tuned, on the
-    # reasoning that a re-pricing could make one critical flag fall clearly below the
-    # threshold, at which point the two conditions would coincide and this one could fold
-    # back into the score. The sweep answers it from the opposite direction and more
-    # strongly: the **critical weight is behaviorally inert across its entire range,
-    # including 0.00** (`eval/results/sensitivity.md`). Every deal carrying a critical
-    # escalates on this rule whatever the weight says, so the two conditions never
-    # coincide — the guarantee is independent of the weights as a measured fact rather
-    # than as a design intention. Five golden rows in `eval/results/results.md` carry †,
-    # meaning they escalated here while the score alone would have reported.
+    # **The rule's independence from the weights is measured, not intended.** The
+    # sensitivity sweep finds the **critical weight behaviorally inert across its entire
+    # range, including 0.00** (`eval/results/sensitivity.md`), so every deal carrying a
+    # critical escalates on this rule whatever the weight says and the two conditions never
+    # coincide. Five rows in `eval/results/results.md` carry †, meaning they escalated here
+    # while the score alone would have reported.
     low_confidence = confidence < config.HUMAN_REVIEW_CONFIDENCE_THRESHOLD
     # Over the flags this pass *raises* as well as the ones it inherited. Reading only
-    # `state.flags` was a latent defect until U7.4: nothing the Critic raised could
-    # trigger the Critic's own escalation, so a CRITICAL objection would have set no
-    # route and reported as a normal result — the same class of miss as the U2 boundary
-    # case this rule was written for.
+    # `state.flags` is the latent defect here: nothing the Critic raised could then trigger
+    # the Critic's own escalation, so a CRITICAL objection would set no route and report as
+    # a normal result — the same class of miss as the boundary case above.
     has_critical = any(
         f.severity == Severity.CRITICAL for f in (*state.flags, *flags)
     )
@@ -1034,13 +947,3 @@ def critic_agent(state: DealState) -> dict:
         "needs_human_review": low_confidence or has_critical or budget_exhausted,
         "flags": flags,
     }
-    # **`stub_nodes` no longer carries this agent, and it should have stopped at U7.**
-    # U2 built half of this file and declared the half it had not built, which was the
-    # honest thing to do at the time. U7 built the other half — this module's own first
-    # line has said "complete as of U7" since then — but the declaration was never
-    # removed, so every report published since has opened with a banner telling its
-    # reader that the Critic "ran as a stub or partial implementation and did not produce
-    # its full output". That is exactly the shape of claim §1 built `stub_nodes` to
-    # prevent, pointed the wrong way: a true statement about the build that outlived the
-    # build. Found at U8.6d while reading a rendered report rather than the code, which is
-    # the only place this defect was visible.

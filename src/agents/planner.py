@@ -1,16 +1,10 @@
 """Planner agent — pre-flight planning, plus every routing decision in the graph.
 
-Design notes: docs/implementation_plan.md §7 decision #9 (topology) and §3 rationale
-item 4 ("conditional edges are the Planner").
-
-**This agent is built, not stubbed.** Every other specialist in U2 is a placeholder
-awaiting its own unit, but the Planner has no later unit assigned in §6 — and it needs
-none. Decision #9 settled that the pipeline order is fixed by data dependency
+**Nothing here is an LLM call.** The pipeline order is fixed by data dependency
 (Valuation consumes `state.comps`, Scenario consumes the valuation outputs), so the
 Planner never chooses an ordering. Its real degrees of freedom are which optional steps
 to skip, rework routing, and escalation, and all three are deterministic functions of
-state. There is nothing here for an LLM to decide, which is also why U2 can land while
-decision #8 (model IDs) is still open.
+state.
 
 Reason/Act/Observe/Decide:
 
@@ -19,10 +13,10 @@ Reason/Act/Observe/Decide:
   which steps this run actually needs.
 - **Act.** Write the execution plan into `state.plan` as an ordered list of node names.
   The plan is *data*, not control flow: a router later reads it rather than re-deriving
-  the same decision, per §3's rule that routing must be state-encoded.
-- **Observe.** Count the invocation. Decision #9 asserts the Planner runs at most
-  `1 + rework_count` times per deal; recording the count makes that assertable in a
-  test rather than only visible in a LangSmith trace.
+  the same decision. Routing is state-encoded throughout this graph.
+- **Observe.** Count the invocation. The Planner runs at most `1 + rework_count` times
+  per deal; recording the count makes that assertable in a test rather than only visible
+  in a trace.
 - **Decide.** Hand off to the first node in the plan. On re-entry the same reasoning
   runs again against the Critic's updated state, so a rework pass can legally take a
   different route than the first pass did.
@@ -34,15 +28,11 @@ this). Everything downstream is a hard data dependency and skipping it would pro
 estimate with nothing under it. `plan` is a list rather than a boolean because adding a
 second optional step should mean adding a router, not rewriting the representation.
 
-**A rework pass is not automatically a comps-only pass** (corrected U7.4b). This
-docstring previously said a rework "only needs comps re-run", and U7.4 built a rework
-path on the opposite assumption — that re-entry re-attempts a geocode that failed on a
-transient outage. Both could not be true, and the code agreed with the docstring:
-`REQUIRED_DEAL_FIELDS` holds no coordinate, so a deal whose address, price and unit count
-were extracted on pass one skipped extraction on every later pass and re-attempted
-nothing. The rework burned its budget and escalated with the same objection it started
-with. Extraction is now re-planned when the accumulated flags say the geocoder was
-unreachable rather than the address unresolvable — see `_geocode_is_worth_retrying`.
+**A rework pass is not automatically a comps-only pass.** Extraction is re-planned when
+the accumulated flags say the geocoder was *unreachable* rather than the address
+unresolvable — see `_geocode_is_worth_retrying`. Without that distinction a rework
+re-runs everything except the one step that could change the answer, burns its budget,
+and escalates with the objection it started with.
 """
 
 from __future__ import annotations
@@ -54,7 +44,7 @@ from state import DealState, DealTerms, FlagKind
 AGENT = "planner"
 
 # The fixed spine of the pipeline, in data-dependency order. Not a decision the Planner
-# makes — decision #9 (Planner topology) — so it is stated once here rather than reassembled per run.
+# makes, so it is stated once here rather than reassembled per run.
 _PIPELINE: tuple[str, ...] = (
     nodes.COMPS_RETRIEVAL,
     nodes.VALUATION_RENT,
@@ -68,8 +58,8 @@ def deal_terms_are_complete(terms: DealTerms) -> bool:
 
     Kept as a named function here, delegating to `DealTerms.is_complete()`, because the
     routing decision it expresses is the Planner's and reads better at the call site as a
-    sentence about the deal. The predicate itself moved to `state.DealTerms` in U8.1b,
-    once the Extractor needed it too — see that method for why.
+    sentence about the deal. The predicate itself lives on `state.DealTerms` because the
+    Extractor needs it too.
     """
     return terms.is_complete()
 
@@ -78,21 +68,18 @@ def _geocode_is_worth_retrying(state: DealState) -> bool:
     """True when a previous pass fell back to a city centroid because the Census
     geocoder could not be reached.
 
-    The distinction this reads was built in U7.1b precisely so a routing decision could
-    be made on it: `GEOCODER_SERVICE_UNAVAILABLE` means the call failed and the address
-    was never tested, while `COORDINATES_FROM_CITY_CENTROID` means it was tested and had
-    nothing to resolve to. Only the first is worth another pass — an address with no
-    street number resolves no better on the fifth attempt than on the first.
+    Two flags describe two different failures, and only one is worth retrying:
+    `GEOCODER_SERVICE_UNAVAILABLE` means the call failed and the address was never
+    tested, while `COORDINATES_FROM_CITY_CENTROID` means it was tested and had nothing to
+    resolve to. An address with no street number resolves no better on the fifth attempt
+    than on the first.
 
-    **Reads only the pass that just completed (U8.5/OQ-15).** This used to read the
-    *accumulated* flags, so it stayed true on later laps even after a retry succeeded —
-    extraction was then re-planned once more for a geocode that had already resolved.
-    Called from `planner_agent` before that pass's re-entry increments
-    `planner_invocations`, so `state.planner_invocations` here still names the pass that
-    just finished; filtering to it is what makes a resolved geocode stop re-triggering
-    extraction. The same staleness had a sharper consequence in
-    `critic._interaction_objections`, where it put a sentence in the report that was no
-    longer true — see `critic._kinds`, fixed by the same flag stamp.
+    **Reads only the pass that just completed**, not the accumulated flags. Read
+    cumulatively this stays true on later laps even after a retry succeeded, and
+    extraction gets re-planned for a geocode that has already resolved. Called from
+    `planner_agent` before re-entry increments `planner_invocations`, so
+    `state.planner_invocations` here still names the pass that just finished; filtering to
+    it is what makes a resolved geocode stop re-triggering extraction.
     """
     return any(
         f.kind is FlagKind.GEOCODER_SERVICE_UNAVAILABLE
@@ -114,28 +101,24 @@ def planner_agent(state: DealState) -> dict:
     #   3. They are, and the geography behind them is incomplete — no coordinates, or
     #      coordinates with no county resolved. Both leave the FMR anchor unreachable.
     #
-    # **Reason 3 was a real gap, found by the eval harness and fixed Aug 28, 2026
-    # (U8.1b).** `config.REQUIRED_DEAL_FIELDS` does not include coordinates, and
-    # reasonably so — a listing that reaches the Extractor has them derived from its
-    # address as an ordinary step (#10). But a caller supplying complete structured terms
-    # skipped this node entirely, so nothing ever derived them, and the deal arrived at
-    # comp retrieval with nowhere to search. The run then degraded on *geography* while
-    # looking like an ordinary result, which is precisely the silent failure Transparent
-    # Degradation exists to refuse.
+    # **Reason 3 is easy to miss.** `config.REQUIRED_DEAL_FIELDS` does not include
+    # coordinates, and reasonably so — a listing that reaches the Extractor has them
+    # derived from its address as an ordinary step. But a caller supplying complete
+    # structured terms would skip this node entirely, so nothing would derive them, and
+    # the deal would arrive at comp retrieval with nowhere to search. The run then
+    # degrades on *geography* while looking like an ordinary result, which is the silent
+    # failure Transparent Degradation exists to refuse. The Extractor makes no model call
+    # on this path; see `extractor_agent`.
     #
-    # Latent rather than active until now — `main.py` always supplies raw text — which is
-    # why it survived to U8. The Extractor makes no model call on this path; see
-    # `extractor_agent`.
     # **First pass only**, and the qualifier is load-bearing. Without it this reads
     # "geography is incomplete", which stays true forever for an address that was tried
     # and could not be resolved — so every rework lap would re-plan extraction for a
-    # geocode that already failed on its merits. That is precisely the distinction U7.1b
-    # drew and `_geocode_is_worth_retrying` exists to police: a *service outage* is worth
-    # another attempt, an address with nothing to resolve to is not. This clause is about
-    # geography never having been *attempted*; later laps are that function's business.
+    # geocode that already failed on its merits. A *service outage* is worth another
+    # attempt, an address with nothing to resolve to is not; this clause is about
+    # geography never having been *attempted*, and later laps are
+    # `_geocode_is_worth_retrying`'s business.
     #
-    # Caught by `test_an_unresolvable_address_does_not_re_plan_extraction`, which is the
-    # test that exists for exactly this mistake.
+    # Caught by `test_an_unresolvable_address_does_not_re_plan_extraction`.
     needs_geocode = (
         state.planner_invocations == 0 and state.deal_terms.geography_is_incomplete()
     )
@@ -152,7 +135,7 @@ def planner_agent(state: DealState) -> dict:
     # rejection. The two are not equivalent: a rejection that escalates straight to a
     # human is not a rework, and counting it as one would silently shorten the budget.
     # Incrementing at the point of re-entry counts what the name says it counts, and
-    # keeps decision #9's invariant exact — `planner_invocations == 1 + rework_count`.
+    # keeps the invariant exact — `planner_invocations == 1 + rework_count`.
     is_reentry = state.planner_invocations > 0
 
     return {
@@ -163,8 +146,8 @@ def planner_agent(state: DealState) -> dict:
 
 
 # --------------------------------------------------------------------------
-# Routers — the conditional edges. No specialist calls another specialist (§3);
-# these functions are the only place a next-node decision is made.
+# Routers — the conditional edges. No specialist calls another specialist; these
+# functions are the only place a next-node decision is made.
 # --------------------------------------------------------------------------
 
 
@@ -193,7 +176,7 @@ def route_after_critic(state: DealState) -> str:
     one full pipeline later.
 
     The rework cycle is bounded by `config.MAX_REWORKS` against `state.rework_count`,
-    never by LangGraph's `recursion_limit` (§3). Exhausting the budget routes to human
+    never by LangGraph's `recursion_limit`. Exhausting the budget routes to human
     review — a graceful escalation — rather than raising an opaque framework exception.
     """
     if state.needs_human_review:

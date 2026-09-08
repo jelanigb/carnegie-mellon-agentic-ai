@@ -1,15 +1,10 @@
 """Comps/Retrieval agent — adaptive relaxation loop.
 
-Implements Loop 2 from Checkpoint 2.1:
-
-    "You are an experienced real-estate agent who has been given listing details for a
-    property for sale. Retrieve comparable listings from the datastore within {X} miles
-    of the subject property. Stop when you have at least {Y} listings meeting the match
-    criteria. If you cannot find enough, broaden the search area incrementally. Do not
-    exceed {Z} iterations."
-
-X, Y, Z live in config.py as INITIAL_SEARCH_RADIUS_MILES, MIN_QUALIFYING_COMPS, and
-MAX_RETRIEVAL_ITERATIONS.
+Retrieves comparable listings from the vector store within a radius of the subject
+property, stopping once enough of them meet the match criteria and broadening the search
+incrementally when they do not, up to a hard iteration cap. The radius, the threshold and
+the cap live in `config.py` as `INITIAL_SEARCH_RADIUS_MILES`, `MIN_QUALIFYING_COMPS` and
+`MAX_RETRIEVAL_ITERATIONS`.
 
 Reason/Act/Observe/Decide:
 
@@ -28,32 +23,25 @@ Reason/Act/Observe/Decide:
 Relaxation concedes the square-footage band first, then widens the search radius, then
 loosens bedroom-count tolerance.
 
-**That order is inherited from U4, and the rationale it was written with does not
-survive measurement — corrected Sept 2, 2026 (maintenance item M6).** It read "ordered by
-how much accuracy each concession costs", calling square footage the weakest signal and
-bedroom count the strongest. The shipped rent model measures the opposite:
-`square_feet` 0.502, `bedrooms` 0.300, `bathrooms` 0.198 — floor area is the strongest
-feature at 1.7x bedrooms, and it is the first thing this ladder gives up. **The cause is
-sequencing, not a bad judgment**: the ladder was written in U4 and the rent model did not
-exist until U5, so "weakest signal" was an assumption made before there was anything to
-ask, and nothing revisited it when the answer arrived.
+**That order rests on an assumption the evidence does not support, and it is stated here
+rather than quietly fixed.** The ladder was written to concede "the weakest signal" first,
+meaning square footage. The shipped rent model measures the opposite: `square_feet` 0.502,
+`bedrooms` 0.300, `bathrooms` 0.198 — floor area is the strongest feature at 1.7x
+bedrooms, and it is the first thing this ladder gives up. The ladder predates the model,
+so "weakest signal" was a guess made before there was anything to ask.
 
 **Two cautions against over-reading that, which are why the order is not simply
 reversed.** Feature importance in the rent *model* is not the same quantity as comp
-*comparability* — comps feed a cross-check, not the model — and importances are
-unreliable under correlated features, which floor area and bedroom count certainly are.
-There is also a second argument pointing the same way that has **not** been checked: a
-bedroom mismatch has a correction available through #19's FMR bedroom step, while a
-square-footage mismatch has none, which would mean the ladder concedes the uncorrectable
-attribute first. Reproduce the importances by loading `config.RENT_MODEL_PATH` and
-reading `bundle["model"].feature_importances_` against `config.RENT_MODEL_FEATURES`.
+*comparability* — comps feed a cross-check, not the model — and importances are unreliable
+under correlated features, which floor area and bedroom count certainly are. Reproduce the
+importances by loading `config.RENT_MODEL_PATH` and reading
+`bundle["model"].feature_importances_` against `config.RENT_MODEL_FEATURES`.
 
-**Not reordered here, deliberately.** Changing the ladder changes which comps every deal
-retrieves, which moves comp counts, the drift flag, confidence and verdicts across all 30
-eval rows — a re-derivation of the published table, against a finding that is real but
-whose fix is not established. What is corrected is the *claim*, so the next reader is not
-misled by a rationale the evidence contradicts. U4's ablation harness is the instrument
-that would settle it.
+**Not reordered, deliberately.** Changing the ladder changes which comps every deal
+retrieves, which moves comp counts, the drift flag, confidence and verdicts across every
+row of the published evaluation table — a re-derivation, against a finding that is real
+but whose fix is not established. What is corrected is the *claim*, so the next reader is
+not misled by a rationale the evidence contradicts.
 
 A single prompt has no way to inspect the result of its own retrieval and adjust; this
 loop is why that matters.
@@ -72,14 +60,11 @@ def _distinct_locations(comps: "list") -> int:
     """Count the distinct places a comp set actually represents.
 
     Counted on the comps' own coordinates, which is what makes this an actual location
-    count rather than an approximation of one.
-
-    It was briefly keyed on rounded distance instead, when `Comp` carried no coordinate.
-    That proxy was wrong in a specific way worth recording: two buildings equidistant
-    from the subject in opposite directions counted as one place, so it *understated*
-    variety, and it moved whenever `config.COMP_DISTANCE_DECIMALS` changed — a
-    disclosure threshold silently coupled to a display setting. Both problems are gone
-    now that `Comp.latitude`/`longitude` exist.
+    count rather than an approximation of one. Rounded *distance* is the tempting proxy
+    and it is wrong twice over: two buildings equidistant from the subject in opposite
+    directions count as one place, understating variety, and the count then moves whenever
+    the display precision changes — a disclosure threshold coupled to a formatting
+    setting.
 
     A comp without coordinates is not counted as a place. Every comp from
     `vector_store.query_comps` has them (the corpus requires them at load), so this
@@ -124,10 +109,10 @@ def comps_retrieval_agent(state: DealState) -> dict:
     """Node function: returns a partial state update, never the whole state."""
     subject = state.deal_terms
 
-    # Ablation path (U4 acceptance criteria, §6). With retrieval disabled the pipeline
-    # runs on identical inputs without grounding, producing the before/after comparison
-    # Checkpoint 3.1 asks for. The flag makes the ungrounded run self-identifying, so a
-    # report produced this way can never be mistaken for a grounded one.
+    # Ablation path. With retrieval disabled the pipeline runs on identical inputs
+    # without grounding, producing a before/after comparison of what retrieval buys. The
+    # flag makes the ungrounded run self-identifying, so a report produced this way can
+    # never be mistaken for a grounded one.
     if not config.RETRIEVAL_ENABLED:
         return {
             "comps": [],
@@ -185,34 +170,27 @@ def comps_retrieval_agent(state: DealState) -> dict:
         # Relax exactly one criterion per pass, in the order the module docstring
         # states — and see it for why that order's original rationale was retired.
         #
-        # TODO(retrieval): reorder this ladder on a measurement of comp comparability,
-        # or record that the order is right for a reason other than the one it was
-        # written with. **What is missing.** The order is inherited from U4 and the
-        # rationale it was written with does not survive: it called floor area the
-        # weakest signal, and the shipped rent model measures `square_feet` at 0.502
-        # against `bedrooms` at 0.300 — so this ladder concedes the strongest measured
-        # attribute first and the weakest last. M6 corrected the *claim* (module
-        # docstring, with the two cautions against over-reading it); the *order* is
-        # still the one the retired claim chose.
+        # TODO(retrieval): reorder this ladder on a measurement of comp comparability, or
+        # record that the order is right for a reason other than the one it was written
+        # with. **What is missing.** The rationale the order was written with does not
+        # survive: it called floor area the weakest signal, and the shipped rent model
+        # measures `square_feet` at 0.502 against `bedrooms` at 0.300 — so this ladder
+        # concedes the strongest measured attribute first and the weakest last.
         #
-        # **Why deferred (Sept 2, 2026, maintenance item M6).** Reordering changes which
-        # comps every deal retrieves, and comp counts feed the drift flag, confidence and
-        # the verdict — so it re-derives the published results table across all 30 eval
-        # rows, inside a freeze week, against a finding that is real but whose fix is not
-        # established.
+        # **Why deferred.** Reordering changes which comps every deal retrieves, and comp
+        # counts feed the drift flag, confidence and the verdict — so it re-derives the
+        # published results table across every evaluation row, inside a code freeze,
+        # against a finding whose fix is not established.
         #
         # **What it would take.** Score the six orderings of these three concessions on
         # comp-set quality measured against held-out corpus rows, whose actual rents are
-        # known — U4's ablation harness is the instrument and it needs no model call.
-        # Then check the second argument, which points the same way and is **unverified**:
-        # a bedroom mismatch has a correction available through #19's FMR bedroom step
-        # while a floor-area mismatch has none, which would mean this ladder concedes the
-        # uncorrectable attribute first. Note also that the order lives here as control
-        # flow rather than in `config.py`; if it is ever measured, it should move there
-        # under §8's single-home rule, because at that point it is a tuned parameter.
-        #
-        # Whether the choice should be a per-deal judgment rather than any fixed order is
-        # a larger and separate question — OQ-24, which this measurement gates.
+        # known — the retrieval ablation harness is the instrument and it needs no model
+        # call. Then check a second argument that points the same way and is
+        # **unverified**: a bedroom mismatch has a correction available through the FMR
+        # bedroom step while a floor-area mismatch has none, which would mean this ladder
+        # concedes the uncorrectable attribute first. Note also that the order lives here
+        # as control flow rather than in `config.py`; once measured it belongs there,
+        # because at that point it is a tuned parameter.
         if sqft_tolerance is not None:
             sqft_tolerance = None
             flags.append(
