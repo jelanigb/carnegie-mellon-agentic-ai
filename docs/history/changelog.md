@@ -9,7 +9,7 @@ which names every decision and links to its full reasoning in
 project and when to read it.
 
 **Chronological record of code changes.**
-Author: Jelani Gould-Bailey · Last updated: Aug 30, 2026
+Author: Jelani Gould-Bailey · Last updated: Sept 8, 2026
 
 ## Why this file exists
 
@@ -53,6 +53,12 @@ rows. The unit of a row is the change, not the file.
   uses.
 
 ---
+
+## Sept 8, 2026 — the README pass, and the last outstanding capture closes
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 8, 2026 | — | **`demo_how_to.md` → `docs/running_the_demo.md`, cleaned up for a public reader.** Renamed rather than `demo.md`, which the submitted final report links to and which therefore could not move; renaming the other half of the collision disambiguates the pair either way. A dangling `§3` cross-reference fixed, the key-file path generalized, and cross-links added to the README and `demo.md` | 7.1 |
 
 ## Sept 7, 2026 — the reasoning-loop scaffold gains stated exceptions
 
