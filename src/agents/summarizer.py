@@ -14,18 +14,23 @@ the rendering are load-bearing rather than stylistic:
    unbuilt or the input was missing. Silently dropping it would let a report about a
    deal with no valuation look like a report about a deal that needed none.
 
-Reason/Act/Observe/Decide:
+Reason/Act/Decide — **three stages, not the usual four:**
 
 - **Reason.** Determine what this run actually established and what it did not — which
   estimates exist, which flags qualify them, and whether a human reviewed the deal.
 - **Act.** Render the report in disclosure-first order: escalation status, then flags by
   severity, then findings, then the comp evidence they rest on.
-- **Observe.** Nothing here re-derives an upstream figure. The Summarizer reports; if it
-  computed, two components could disagree about the same number and the report would be
-  the one lying.
 - **Decide.** Mark the run complete — unless a human reviewed it, in which case that
   status stands, since "reviewed" and "cleared automatically" are different outcomes and
   the record should not conflate them.
+
+**There is no Observe stage, and refusing to have one is the whole point of this agent.**
+Observing here would mean measuring something about the run — and everything worth
+measuring has already been measured by the agent that owns it. If the Summarizer computed,
+two components could disagree about the same number, and the report would be the one
+lying. So it reads state and renders; it re-derives nothing, and the one figure it does
+produce (the severity mix in a heading) is a count of flags rather than a restatement of
+an estimate.
 """
 
 from __future__ import annotations

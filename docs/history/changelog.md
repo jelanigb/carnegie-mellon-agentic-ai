@@ -54,6 +54,19 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 7, 2026 — the reasoning-loop scaffold gains stated exceptions
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 7, 2026 | U9 | **The Planner's docstring named a Decide stage the node does not have.** Found while building the slide deck, against `docs/diagrams/agent_logic_flow.md`'s Planner panel, which has drawn three stages all along. `agents/planner.py` — the bullet claimed the agent "hands off to the first node in the plan"; `planner_agent` returns a partial state update and stops, and the jump is `route_after_planner`, a conditional edge on the other side of the node boundary. Rewritten as three stages with the absence explained: **the plan is the decision**, so Act and Decide would name one step. The rework-re-reasoning sentence moved to Reason, where it belongs | 7.1 |
+| Sept 7, 2026 | U9 | **The Summarizer had the inverse mismatch, and the panel was the wrong half.** Its panel drew Observe → Act; its docstring listed all four stages. The code sets `status`, so Decide is real, and the panel's "Observe" box was a near-verbatim copy of the docstring's *Reason* bullet. Panel corrected to Reason → Act → Decide; `agents/summarizer.py` rewritten as three stages, with its non-observation Observe bullet turned into the reason there is no Observe stage — observing would mean re-deriving a figure another agent already produced | 7.1 |
+| Sept 7, 2026 | U9 | **Comps Retrieval and Scenario Forecast each carry a fifth stage their docstrings did not name** — Disclose and Reconcile respectively, both drawn in the panels since the diagrams were written. Named in `agents/comps_retrieval.py` and `agents/scenario_forecast.py`, so all seven agents' docstrings and all seven panels now list the same stages in the same order | 7.1 |
+| Sept 7, 2026 | U9 | **`design/engineering_standards.md`: the four-stage loop becomes the default rather than a universal.** A docstring listing four stages for an agent with three is a small lie a reader believes until they read the code, so a departure is now stated with its reason — the reason is usually a real property of the design. The rule also pins panel and docstring to each other: a mismatch means one of the two describes an agent that does not exist | 7.1 |
+| Sept 7, 2026 | U9 | **A stale claim about how forecast rows are named, found in the same pass.** `agents/scenario_forecast.py` and the Scenario Forecast panel both said reconciliation "assigns the optimistic/base/pessimistic labels by projected outcome" — untrue since row names became a deterministic lookup on the two bands a row combines (`_row_name`), which that function's own docstring calls out as explicitly *not* a rank. Both corrected: the sort is by outcome, the name is a lookup, and the two are separate | 7.1 |
+| Sept 7, 2026 | U9 | **`docs/diagrams/agent_logic_flow.md` regenerated**, and its header no longer claims every panel uses the same four stages — false for four of the seven. It now names each departure and why. The Planner's single vague bullet replaced with three that say what the panel cannot draw | 7.1 |
+
+---
+
 ## Sept 7, 2026 — U9.12, the documentation-density pass
 
 | Date added | Unit | Work done | Related checkpoint |

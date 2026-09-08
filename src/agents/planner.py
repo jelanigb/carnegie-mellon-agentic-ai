@@ -6,20 +6,35 @@ Planner never chooses an ordering. Its real degrees of freedom are which optiona
 to skip, rework routing, and escalation, and all three are deterministic functions of
 state.
 
-Reason/Act/Observe/Decide:
+Reason/Act/Observe — **three stages, not the usual four:**
 
 - **Reason.** Inspect what is already known about the deal — are the required deal
   terms present, and is this a first pass or a re-entry from the Critic? — to determine
-  which steps this run actually needs.
+  which steps this run actually needs. On a rework the same inspection runs again against
+  the Critic's updated state, so a second pass can legitimately plan a different route
+  than the first one did.
 - **Act.** Write the execution plan into `state.plan` as an ordered list of node names.
   The plan is *data*, not control flow: a router later reads it rather than re-deriving
   the same decision. Routing is state-encoded throughout this graph.
 - **Observe.** Count the invocation. The Planner runs at most `1 + rework_count` times
   per deal; recording the count makes that assertable in a test rather than only visible
   in a trace.
-- **Decide.** Hand off to the first node in the plan. On re-entry the same reasoning
-  runs again against the Critic's updated state, so a rework pass can legally take a
-  different route than the first pass did.
+
+**There is no Decide stage, and its absence is the design rather than a gap.** In the
+other specialists Decide is a step of its own — the Critic weighs a finished score against
+a threshold and picks report, rework or escalate; the Valuation agent settles which
+approximations the estimate it just produced has to carry. Here there is nothing left to
+settle after Act, because **the plan is the decision**: writing it and choosing it are one
+step, and a fourth stage would name that step twice. What remains — actually going to the
+next node — is not this function's to do. `planner_agent` returns a partial state update
+and stops; the jump is made by `route_after_planner`, a conditional edge at the foot of
+this module.
+
+Both live in this file, which is why the module is described as holding every routing
+decision in the graph, but they sit on opposite sides of the node boundary and the
+separation is the point: a route is a fact recorded on `state` before it is a jump anyone
+takes. `docs/diagrams/agent_logic_flow.md`'s Planner panel draws the node the same way,
+ending at EXIT rather than at a decision.
 
 **Exactly one step is currently optional**, and that is a property of this pipeline
 rather than a limitation of the mechanism. Extraction is skippable because a caller can

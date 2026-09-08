@@ -40,11 +40,14 @@ the report: each row is named for the bands it combines, each says whether the e
 the conservatism tie-break selected it, and any band reaching no row is named.
 
 **Two search levels, then deterministic reconciliation** — stated plainly because
-`config.TOT_MAX_DEPTH` is 3 and it would be easy to imply three levels of search. Depth
-1 scores framings, depth 2 scores pairings, and the third step assigns the
-optimistic/base/pessimistic labels by projected outcome and checks that the survivors
-are actually distinct. That last step is arithmetic, not search, and inventing a scored
-level to fill the number would be decoration.
+`config.TOT_MAX_DEPTH` is 3 and it would be easy to imply three levels of search. Depth 1
+scores framings, depth 2 scores pairings, and the third step orders the survivors by
+projected outcome, names each one from the two bands it combines (`_row_name`), and checks
+that they are actually distinct. **Ordering and naming are separate** — the sort is by
+outcome, the name is a lookup on the bands — and `_row_name` explains why collapsing them
+into a single optimistic/base/pessimistic rank makes a row contradict itself. That last
+step is arithmetic, not search, and inventing a scored level to fill the number would be
+decoration.
 
 **Evidence pulls go through the MCP server's own registry, in-process.** The evaluator
 builds its tool menu from `mcp_server.server.list_tools()` — the same names, schemas and
@@ -54,13 +57,16 @@ paying a subprocess, an async rewrite and a tracing gap to make an in-process ca
 remote would be buying the appearance of integration. The server remains the definition
 site and stays runnable for any host.
 
-Reason/Act/Observe/Decide:
+Reason/Act/Observe/Decide, plus a fifth stage between the search and the check on it:
 
 - **Reason.** Establish what this deal can actually support: a rent estimate to project,
   an asking price to project, a rent index deep enough to band, and a covered metro.
   Each can fail independently, and each failure is named rather than collapsed.
 - **Act.** Enumerate the framings, then the pairings under the survivors, scoring each
   level with the evaluator and pruning against a recorded threshold.
+- **Reconcile.** Order the survivors by projected outcome and name each row for the two
+  bands it combines. Arithmetic rather than search, and the reason the depth counter
+  reads 3 while only two levels are scored — see below.
 - **Observe.** Check the surviving set against itself — do three branches imply three
   materially different outcomes, or has the search returned one answer three times? A
   near-tie at the top means the selection was arbitrary, and that is reported.

@@ -4,9 +4,21 @@ One panel per specialist agent, showing what happens *inside* the node rather th
 nodes connect. Graph-level topology lives in `deal_evaluator_graph.png`; this file is the
 other half of that picture.
 
-Every panel uses the same four-stage scaffold — **Reason, Act, Observe, Decide** — that the
-agents' own docstrings are written to. Double-ruled boxes are the graph boundary —
-where control enters the agent and where it leaves.
+The scaffold is the four-stage **Reason, Act, Observe, Decide** loop the agents' own
+docstrings are written to. Three panels follow it exactly; four depart from it, and each
+departure is a property of the agent rather than a gap in the drawing:
+
+- **Planner** has no Decide — writing the plan *is* the decision, and the jump to the next
+  node is made by an outgoing edge rather than by the node.
+- **Summarizer** has no Observe — observing would mean re-deriving a figure another agent
+  already produced, which is the one thing this agent must never do.
+- **Comps Retrieval** adds Disclose, because grading the set it settled on is a separate
+  judgment from deciding to stop searching.
+- **Scenario Forecast** adds Reconcile, because turning surviving hypotheses into ordered,
+  named rows is arithmetic sitting between the search and the check on it.
+
+Double-ruled boxes are the graph boundary — where control enters the agent and where it
+leaves.
 
 Seven specialists: Planner, Extractor, Comps Retrieval, Valuation & Rent, Scenario
 Forecast, Critic, Summarizer. `human_review` is a graph node but not a specialist — it
@@ -52,8 +64,12 @@ Source: `src/agents/planner.py` · plan of record §3, decision #9
       ╚════════════════════════════════════════════════════════════════╝
 ```
 
-- Logic for extractor calls is dependent on caller + available data; multiple callers
-  have access to Planner.
+- The plan is data, not control flow: this node writes it and stops, and the outgoing
+  edge reads it. Nothing here invokes another agent.
+- Whether the Extractor is needed depends on the caller as much as on the deal — a caller
+  supplying structured terms may need geocoding only, or nothing at all.
+- Re-entry re-reasons against the Critic's updated state, so a rework pass can plan a
+  different route than the first pass did.
 
 ---
 
@@ -239,7 +255,7 @@ Source: `src/agents/scenario_forecast.py` · plan of record §4, decisions #16 a
                                        ▼
       ┌────────────────────────────────────────────────────────────────┐
       │  RECONCILE                                                     │
-      │  label optimistic / base / pessimistic                         │
+      │  order by outcome; name each row from its two bands            │
       └────────────────────────────────────────────────────────────────┘
                                        │
                                        ▼
@@ -263,7 +279,8 @@ Source: `src/agents/scenario_forecast.py` · plan of record §4, decisions #16 a
 
 - The search space is enumerated rather than sampled, so the run stays deterministic
   end to end.
-- Only the first two levels are a search; the labels are assigned by arithmetic.
+- Only the first two levels are a search. Reconciliation is arithmetic: rows are sorted
+  by combined outcome and named for the bands they combine, never ranked.
 - A near-tie at the top means the selection was arbitrary, and the report says so.
 - Rent and price project from separate series, ZORI and Redfin, and are never mixed.
 
@@ -331,7 +348,7 @@ Source: `src/agents/summarizer.py` · plan of record §1, §6
                                        │
                                        ▼
       ┌────────────────────────────────────────────────────────────────┐
-      │  OBSERVE                                                       │
+      │  REASON                                                        │
       │  take stock of what the run established and what it did not    │
       └────────────────────────────────────────────────────────────────┘
                                        │
@@ -339,6 +356,12 @@ Source: `src/agents/summarizer.py` · plan of record §1, §6
       ┌────────────────────────────────────────────────────────────────┐
       │  ACT                                                           │
       │  render escalation, findings, comp evidence (disclosure-first) │
+      └────────────────────────────────────────────────────────────────┘
+                                       │
+                                       ▼
+      ┌────────────────────────────────────────────────────────────────┐
+      │  DECIDE                                                        │
+      │  close the run; a reviewed deal keeps its reviewed status      │
       └────────────────────────────────────────────────────────────────┘
                                        │
                                        ▼

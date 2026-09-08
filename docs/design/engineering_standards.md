@@ -31,10 +31,25 @@ in a focused session or across a fragmented week.
 
 ### Documentation
 
-- **Every agent function carries a docstring stating its Reason/Act/Observe/Decide
-  loop**, matching the structure specified in the Checkpoint 2.1 design. The reasoning
-  loop is a design commitment, and keeping it stated at the point of implementation is
-  what keeps the code and the design document from diverging.
+- **Every agent function carries a docstring stating its reasoning loop**, and the default
+  shape is the four-stage Reason/Act/Observe/Decide loop the Checkpoint 2.1 design
+  specifies. The loop is a design commitment, and keeping it stated at the point of
+  implementation is what keeps the code and the design document from diverging.
+
+  **An agent may depart from the four stages, and a departure is stated rather than
+  silently taken.** The scaffold is a claim about how an agent works, so a docstring that
+  lists four stages for an agent with three is a small lie that a reader will believe
+  until they read the code. Where an agent adds, drops or renames a stage, its docstring
+  says which and gives the reason in a sentence — the reason is usually a real property of
+  the design worth knowing. Four of the seven specialists depart today: the Planner has no
+  Decide (writing the plan *is* the decision), the Summarizer has no Observe (observing
+  would mean re-deriving another agent's figure), and Comps Retrieval and Scenario Forecast
+  each add a fifth stage the other agents have no use for.
+
+  [`../diagrams/agent_logic_flow.md`](../diagrams/agent_logic_flow.md) draws one panel per
+  agent and is the place the departures are visible side by side, so **the panel and the
+  docstring have to agree** — a mismatch between them means one of the two is describing an
+  agent that does not exist.
 
 - **Docstrings carry the reasoning a reader needs; they stopped carrying the build's
   history at the code freeze** (revised Sept 7, 2026 — this reverses the earlier form of

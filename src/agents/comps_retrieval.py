@@ -6,7 +6,7 @@ incrementally when they do not, up to a hard iteration cap. The radius, the thre
 the cap live in `config.py` as `INITIAL_SEARCH_RADIUS_MILES`, `MIN_QUALIFYING_COMPS` and
 `MAX_RETRIEVAL_ITERATIONS`.
 
-Reason/Act/Observe/Decide:
+Reason/Act/Observe/Decide, plus a fifth stage the other agents have no use for:
 
 - **Reason.** Translate the subject property's characteristics — bedroom count, square
   footage, coordinates — into retrieval criteria at the current strictness level.
@@ -19,6 +19,10 @@ Reason/Act/Observe/Decide:
   not, relax exactly one criterion, record a flag naming what was relaxed, and repeat.
   On reaching the iteration cap, exit with a sparse-comps flag and whatever was found
   rather than returning a silently weak result presented as a strong one.
+- **Disclose.** Grade the set the loop settled on: too few, too clustered, or too unlike
+  the subject. Separate from Decide because stopping the search and judging what the
+  search produced are different questions — a set that stopped on the first pass can
+  still be eight listings at one coordinate, and that is what a reader needs told.
 
 Relaxation concedes the square-footage band first, then widens the search radius, then
 loosens bedroom-count tolerance.
