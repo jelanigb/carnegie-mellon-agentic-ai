@@ -29,7 +29,7 @@ and its date, so a chronological or by-unit lookup still works via search.
 - [Forecasting & reasoning](#forecasting--reasoning) — #12, #13, #14, #16, #17
 - [Orchestration & control flow](#orchestration--control-flow) — #1, #6, #9, U2's findings, and U7's Critic record
 - [Models & infrastructure](#models--infrastructure) — #8, #13, and the free-tier accounting
-- [Evaluation & demo](#evaluation--demo) — #3, U9.4's recommendation and its cross-check, and U8's standing
+- [Evaluation & demo](#evaluation--demo) — #3, U9.4's recommendation and its cross-check, U8's standing, and U9.12's reversal of the docstring standard
 - [Appendix — build inventory](#appendix--build-inventory-as-of-u6)
 
 ---
@@ -1882,6 +1882,56 @@ scenario grounded in real market data rather than a constructed listing. Synthet
 cases prove the mechanism fires; the New York case proves it fires when reality — not
 the author — supplies the gap. Both forms of evidence are worth having, and the
 distinction between them is worth drawing explicitly in the report.
+
+### U9.12 · Sept 7, 2026 — the docstring standard is reversed, and what the reversal cost
+
+**The standard being reversed.** `design/engineering_standards.md` required docstrings to
+carry the reasoning at the density of a design document, and to cite precisely — `§2`,
+`#15`, `U7.4`, the open question a passage closed. That was right while the repository was
+a working surface whose next reader was a collaborator with no memory of the previous
+session: the citations were how a change set found its own reasoning again.
+
+**Why it changed.** The graders confirmed Sept 5 that they will read the code. For a frozen
+artifact read once by a stranger, a citation the reader cannot resolve costs more than it
+pays — it looks like evidence while supplying none — and instructions to a future
+implementer describe a future that does not exist. The rule is now: *would a competent
+stranger reading this file for the first time be helped by this passage?* Reasoning that
+explains the code stays; a limitation, an unverified assumption or a measured finding that
+contradicts the code stays; decision history goes to this file; plan/decision/unit
+citations and implementer instructions go. `src/scripts/` is out of scope, because those
+headers *are* their reasoning and several are the only record of how a published number was
+produced.
+
+**Measured cost: 469 lines out of 25,950, of which 12 are code.** Within the shipped
+pipeline roughly 267 docstring lines and 176 comment lines came out. Nothing was lost that
+was not already here — the migration this subsection existed to perform turned out to be
+almost empty, because `decision_log.md` and `changelog.md` already held the history the
+docstrings were duplicating.
+
+**The one thing that was genuinely new is a hazard nobody had written down**, and it is
+recorded here because it constrains every future edit to those files:
+
+> **A Pydantic model's docstring reaches the model's prompt.** `LlmClient.call_with_schema`
+> puts `schema.model_json_schema()` into the system prompt; Pydantic copies a class
+> docstring into that schema as `description`; the response cache is keyed on a SHA-256 over
+> model, system, prompt and temperature. So editing the docstring of **any model or enum
+> reachable from a `call_with_schema` schema** invalidates every committed recording of that
+> call. The affected declarations are `agents/extractor.ListingExtraction`,
+> `agents/extractor.FieldAssumption`, and — through `agents/critic.cross_check`'s nested
+> `_CrossCheck` — **`state.Recommendation`**, which is three files away from the call site
+> and has no other reason to look load-bearing.
+>
+> Found the loud way: rewriting `Recommendation`'s docstring turned all 30 evaluation rows
+> into `CacheMiss` on the next batch run. The docstring was restored verbatim and each of
+> the three declarations now carries a "frozen — do not edit" comment above it. This sits
+> alongside the already-known hazard that the *first line* of each `@server.tool` docstring
+> in `mcp_server.py` reaches the forecast evaluator's tool menu.
+
+**What the batch confirms.** After the sweep, all 30 rows of `eval/results/results.md` are
+identical to the pre-sweep run — every comp count, confidence score, disclosure tally,
+outcome and recommendation. The four lines that did change are the table's own legend and
+summary prose, which are reader-facing output and were rewritten under the
+no-internal-vocabulary rule.
 
 
 ---

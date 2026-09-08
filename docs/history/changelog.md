@@ -54,6 +54,23 @@ rows. The unit of a row is the change, not the file.
 
 ---
 
+## Sept 7, 2026 — U9.12, the documentation-density pass
+
+| Date added | Unit | Work done | Related checkpoint |
+| --- | --- | --- | --- |
+| Sept 7, 2026 | U9 | **`mcp_server.py` first, alone.** Module header trimmed to what a reader needs to use the server. The **first line of each of the four `@server.tool` docstrings is unchanged**, because `agents/scenario_forecast._evidence_surface` builds the forecast evaluator's tool menu from exactly those lines and the response cache is keyed on the prompt they land in; each site now carries a one-line comment saying so, since the constraint is invisible from the file | 7.1 |
+| Sept 7, 2026 | U9 | **`agents/` (8 files) rewritten for a first-time reader.** Plan-section, decision, unit and open-question citations removed; decision history dropped where `decision_log.md` already carries it; reasoning that explains the code kept and restated without its citation. Every stated limitation, unverified assumption and measured-finding-that-contradicts-the-code survives — those are the passages most worth a stranger's time | 7.1 |
+| Sept 7, 2026 | U9 | **`design/engineering_standards.md` §8: the docstring standard reversed, and stated as a reversal.** The "docstrings carry the reasoning, cite precisely" rule was right for a working repository with an amnesiac collaborator and wrong for a frozen artifact read once by a stranger. New rule, the five dispositions it implies, and the `scripts/` exemption written out; the no-internal-vocabulary rule now applies to docstrings and comments as well as to reader-facing output | 7.1 |
+| Sept 7, 2026 | U9 | **`tools/` and `tools/model/` (21 files).** Same pass. Two module headers were describing mechanisms the system no longer uses — `tools/zori.py` opened by saying every rent figure is a ratio to HUD FMR, which the market-index anchor retired — and were rewritten to describe what the module *is* | 7.1 |
+| Sept 7, 2026 | U9 | **The roots: `graph.py`, `state.py`, `config.py`, `main.py`, `app.py`, `demo_deals.py`, `nodes.py`.** `config.py`'s parameter rationale is kept in full — it is the reasoning a reader most needs — and only its citations go. Two truncated comment fragments left by earlier edits repaired in `state.py` and `tools/logging_setup.py` | 7.1 |
+| Sept 7, 2026 | U9 | **`eval/` (3 files) and `tests/` (6 files).** `eval/runner.py`'s module docstring is the harness's `argparse` description, so it was rewritten rather than trimmed; `eval/cases.py`'s per-case `note` fields are documentation only and were cleared of unit numbers the same way | 7.1 |
+| Sept 7, 2026 | U9 | **A second prompt-surface hazard found, and three declarations frozen.** `LlmClient.call_with_schema` puts `schema.model_json_schema()` into the system prompt, and Pydantic copies a class docstring into that schema — so the docstrings of `extractor.ListingExtraction`, `extractor.FieldAssumption` and **`state.Recommendation`** (reached through `critic.cross_check`'s nested `_CrossCheck`) are prompt text. Rewriting `Recommendation`'s docstring turned all 30 evaluation rows into `CacheMiss`; it was restored verbatim and all three sites now carry a "frozen — do not edit" comment. Reasoning in `decision_log.md` | 7.1 |
+| Sept 7, 2026 | U9 | **`README.md`: a repository-layout tree.** Two levels of `src/` and `docs/`, one line of gloss per entry, generated from the filesystem and placed above "Where the evidence already lives" | 7.1 |
+| Sept 7, 2026 | maintenance | **`docs/project_stats.md` recomputed, and the report's stats table refreshed from it.** §1 and §2 re-measured after the docstring pass — 25,481 total non-blank lines against 25,950, of which 12 lines are code; §3 re-measured at 186 commits over 31 days. The 2026-09-06 revision's ⚠ about a tracked `docs/private/` file is now resolved and recorded as such | 7.1 |
+| Sept 7, 2026 | maintenance | **`eval/results/results.md` regenerated.** All 30 data rows byte-identical to the pre-sweep run; the four lines that changed are the table's own legend and summary prose, which are reader-facing output and were cleared of unit and open-question numbers under the same rule | 7.1 |
+
+---
+
 ## Sept 6, 2026 — a download button's label named an action it doesn't take
 
 | Date added | Unit | Work done | Related checkpoint |

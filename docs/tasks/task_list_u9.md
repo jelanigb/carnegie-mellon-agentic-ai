@@ -1176,7 +1176,50 @@ unanchored number at the centre of the recommendation. No flag, no threshold and
 capital and hold period, and setting one here would invent a criterion and attribute it to
 the data.
 
-### U9.12 ⬜ — Docstrings and comments, rewritten for a human grader *(planned Sept 5, 2026; runs before U9.9)*
+### U9.12 ✅ — Docstrings and comments, rewritten for a human grader *(done Sept 7, 2026)*
+
+> **Close-out, Sept 7, 2026.** Landed as one pass rather than the eight commits planned
+> below, at the architect's direction. Every subsection a–i was taken; nothing was cut.
+>
+> **It ran *after* U9.9, not before it.** The planned ordering existed so the screenshots
+> and any code shown on camera would be of the code that ships. Checkpoint 7.1 was
+> submitted first, so the captured material shows the pre-sweep code. What the sweep
+> changed is prose inside `src/`, so nothing a capture displays — the report, the
+> Streamlit surface, the graph diagram, the traces — is affected; the exposure is limited
+> to any frame showing a source file.
+>
+> **The check held.** 107 tests pass, and all 30 rows of `eval/results/results.md` are
+> byte-identical to the pre-sweep run. The four lines that changed are the results table's
+> own legend and summary prose, which are reader-facing output and were rewritten under the
+> same no-internal-vocabulary rule the sweep applies — a deliberate deviation from
+> "byte-identical `results.md`", limited to prose that names no figure.
+>
+> **The hazard list below was incomplete, and the omission was found the loud way.** A
+> Pydantic model's docstring reaches the model's prompt through
+> `call_with_schema` → `model_json_schema()` → the system prompt, so
+> `state.Recommendation` — three files from the call site, reached only through
+> `critic.cross_check`'s nested `_CrossCheck` — was prompt text. Rewriting it turned all 30
+> rows into `CacheMiss`. Restored verbatim; `Recommendation`, `ListingExtraction` and
+> `FieldAssumption` now each carry a "frozen — do not edit" comment, and the finding is in
+> `history/decision_log.md` under *U9.12*.
+>
+> **One thing deliberately left alone: `eval/README.md`.** The scope table below names three
+> `.py` files under `eval/` and not that document. It is a repository document rather than
+> code, and repository documents legitimately carry citations — that is what `docs/` is for
+> — so it keeps its unit numbers. Worth a second opinion, since a grader opening `eval/`
+> meets it before the code.
+>
+> **What the sweep cost, measured:** 469 lines out of 25,950 non-blank, of which **12 are
+> code**. Within the shipped pipeline, roughly 267 docstring lines and 176 comment lines.
+> `docs/project_stats.md` is recomputed against the post-sweep tree.
+>
+> **Two truncated comment fragments were repaired rather than trimmed**, both left by
+> earlier find-and-replace passes and both live in the committed tree before this:
+> `state.py` carried a half-sentence about a retired drift correction that ran straight into
+> the next comment, and `tools/logging_setup.py` and `mcp_server.py` both said
+> *"decision #1 (LangGraph)3's"* where they meant the MCP reference server.
+>
+> The plan as written follows.
 
 **The architect's call, Sept 5:** the graders confirmed that day that they will read the code.
 The code is written for the next Claude — decision history in module headers, `§` and `#`
@@ -1316,7 +1359,12 @@ faster than a diff of changed logic. **If the day runs short, the cut order is: 
 stop.** U9.12a and U9.12b are where a grader actually looks, and U9.12g is a direct answer to
 "is the repository organized and understandable to someone outside this program."
 
-### U9.9 ⬜ — Capture: live runs, traces, diagram, screenshots *(absorbed U8.9)*
+### U9.9 ✅ — Capture: live runs, traces, diagram, screenshots *(done Sept 6, 2026)*
+
+> **Close-out, Sept 6, 2026.** Live end-to-end runs, LangSmith traces, the regenerated
+> graph diagram and the Streamlit screenshots were captured and Checkpoint 7.1 was
+> submitted. Ran **before** U9.12 rather than after it, reversing the planned order — see
+> U9.12's close-out for what that means for the captured material.
 
 Dropped from U8 on Aug 30 with no successor. Runs last: LangSmith free-tier traces expire
 after **14 days** (OQ-13, no key present as of Aug 24), and screenshots must show the
@@ -1609,8 +1657,8 @@ the file from its `# Deal Evaluation` heading onward, which is how the three in
 | ✅ | **U9.7T** scenario table: content-named rows, an honest ledger | Done Sept 2, 2026 — three commits; 30 eval rows byte-identical, no re-record |
 | | *✂️ cut line* | |
 | ✅ | **U9.8** gross rent multiplier | Done Sept 2, 2026 — one commit; LA 15.3×, Staten Island 9.2× against its ZIP's 11.0×; 30 rows byte-identical, no re-record |
-| ⬜ | **U9.12** docstrings and comments for a human grader | Planned Sept 5, 2026 — eight commits, plus U9.12i to regenerate the stale project stats; runs **before** U9.9 so the capture shows the code that ships |
-| ⬜ | **U9.9** capture: runs, traces, diagram, screenshots | Never sheds |
+| ✅ | **U9.9** capture: runs, traces, diagram, screenshots | Done Sept 6, 2026 — live runs, traces, the regenerated diagram, screenshots; Checkpoint 7.1 submitted |
+| ✅ | **U9.12** docstrings and comments for a human grader | Done Sept 7, 2026 — a–i in one pass. 469 lines out, 12 of them code; all 30 eval rows byte-identical. **Ran after U9.9 rather than before it**, so the capture shows the pre-sweep code — see the close-out note below |
 | ✅ | **U9.10** OQ-5 / OQ-10 / OQ-14 written up | Done Sept 2, 2026 — OQ-10 and OQ-14 close at U9.11; OQ-5 stays open on an unmet condition, with U9.7T's 51% measurement added |
 | ✅ | **U9.M** maintenance | Done Sept 2, 2026 — three commits; the recording blockers first (they gate U9.9), then M2 and M4–M7, then M8 |
 | ✅ | **U9.11** close-out | Done Sept 2, 2026 — four commits: the untagged ladder deferral, the open questions, the `#1–#22` range, and the register + map. M8 landed first under U9.M. **U9.9 remains, and OQ-13 with it** |
