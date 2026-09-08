@@ -35,6 +35,44 @@ in a focused session or across a fragmented week.
   loop**, matching the structure specified in the Checkpoint 2.1 design. The reasoning
   loop is a design commitment, and keeping it stated at the point of implementation is
   what keeps the code and the design document from diverging.
+
+- **Docstrings carry the reasoning a reader needs; they stopped carrying the build's
+  history at the code freeze** (revised Sept 7, 2026 — this reverses the earlier form of
+  the rule, and the reversal is stated rather than quietly applied).
+
+  The original rule asked modules and agents to open with a substantial docstring
+  explaining *why* the design is what it is, and to cite precisely: `§2`, `#15`, `U7.4`,
+  the open question a passage closed. That was right while the repository was a working
+  surface and the next reader was a collaborator with no memory of the last session — the
+  citations were how a change set found its own reasoning again.
+
+  It is wrong for a frozen artifact read once by a stranger. **The test for every passage
+  is now: would a competent stranger reading this file for the first time be helped by
+  it?** On that test:
+
+  1. **Reasoning that explains the code stays.** Why the comp index never chunks, why the
+     rent target is a ratio rather than a dollar figure, why the checkpointer needs a
+     fresh thread id, why one check is gated and its neighbor is not. Restated without the
+     citation where it carried one.
+  2. **A limitation, an unverified assumption, or a measured finding that contradicts the
+     code stays**, and stays stated plainly. These are the passages most worth a reader's
+     time and the easiest to lose in a deletion pass.
+  3. **Decision history moves to
+     [`../history/decision_log.md`](../history/decision_log.md)** — "this changed from X
+     to Y at U7.5", "the previous form of this docstring said…". Almost all of it was
+     already there.
+  4. **Plan, decision, unit and open-question citations are deleted.** A reader with the
+     file open does not need a section number to understand a function, and cannot
+     resolve one anyway.
+  5. **Instructions to a future implementer are deleted** outright.
+
+  **`docs/history/` is where the build's history lives**, and it is complete: the decision
+  log holds every decision with its full reasoning, the changelog holds every change set.
+  Nothing was lost in the move; it was relocated to the file whose job it is.
+
+  **Scope of the sweep: everything except `scripts/`.** Those are one-off evidence
+  scripts, and their headers *are* their reasoning — several are the only record of how a
+  published number was produced.
 - **Decisions are surfaced, not guessed.** Anything that belongs in the §7 decisions log
   gets raised for a decision rather than resolved by assumption. Such decisions are
   inexpensive to make deliberately and expensive to unwind once code depends on them.
@@ -47,9 +85,10 @@ in a focused session or across a fragmented week.
   evidence while supplying none.
 
   **This applies to anything that reaches the report:** flag messages, objection text,
-  Summarizer prose. It explicitly does **not** apply to docstrings and comments, which
-  evolve alongside the implementation and are read by someone with the repository open.
-  Those should keep citing precisely — that is where the traceability lives.
+  Summarizer prose. Until the code freeze it explicitly did *not* apply to docstrings and
+  comments, on the reasoning that those are read by someone with the repository open. **As
+  of Sept 7, 2026 it applies to them too** — see the docstring rule above for why the
+  audience changed and what moved where.
 
   The distinction is the audience, not the formality. Where a flag needs to explain the
   reasoning behind a threshold, it states the reasoning: not *"config.RENT_MODEL_FEATURES
