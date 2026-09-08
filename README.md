@@ -51,6 +51,55 @@ A deal that the Critic can't stand behind pauses at a genuine LangGraph `interru
 rather than degrading its own confidence claim — see `agents/human_review.py` and
 `docs/design/personas.md` for who that pause is for and which desk it routes to.
 
+## Repository layout
+
+Two directories down, with the entries a reader is most likely to want first. `data/` and
+`ignore/` are gitignored — a downloaded corpus and API keys respectively — and neither is
+needed to read anything here.
+
+```
+.
+├── README.md                  you are here
+├── LICENSE                    MIT
+├── docs/
+│   ├── implementation_plan.md      the plan of record; §7 is the decision register
+│   ├── open_questions.md           every unresolved question, by system area
+│   ├── project_stats.md            size and cost of the build, each figure with its recipe
+│   ├── final_capstone_report_…md   the written submission
+│   ├── demo.md                     the demo script
+│   ├── design/                     what the system IS — architecture, data sources,
+│   │                               state schema, engineering standards, personas,
+│   │                               the recommendation rule, the forecast evaluator
+│   ├── history/                    how it got that way — decision_log.md, changelog.md
+│   ├── tasks/                      per-unit task lists, and the conventions for them
+│   ├── sample_reports/             three reports the pipeline produced, committed as-is
+│   └── diagrams/                   graph topology, generated from the compiled graph
+└── src/
+    ├── main.py                     entrypoint — run the pipeline on one listing
+    ├── app.py                      Streamlit demo surface
+    ├── graph.py                    StateGraph assembly: nodes, edges, routing, compile
+    ├── state.py                    the one typed state object, and the flag vocabulary
+    ├── config.py                   every tunable parameter, with how each was set
+    ├── nodes.py                    node-name constants
+    ├── demo_deals.py               the demo listings and their calibration provenance
+    ├── mcp_server.py               read-only MCP surface over the reference data
+    ├── agents/                     planner, extractor, comps_retrieval, valuation_rent,
+    │                               scenario_forecast, critic, human_review, summarizer
+    ├── tools/                      data access and shared machinery — HUD FMR client,
+    │   │                           geocoding, crosswalks, vector store, rent/price
+    │   │                           series, beam search, LLM client and response cache
+    │   ├── model/rent_model.py     the rent regression and its anchoring
+    │   └── data/                   committed reference tables (FMR panel, ZIP sale medians)
+    ├── eval/                       the evaluation harness
+    │   ├── cases.py                30 cases, each with a verdict declared in advance
+    │   ├── runner.py               batch runner; writes the results table and the census
+    │   ├── data/                   golden fixtures, model recordings, geocode cache
+    │   └── results/                results.md and sensitivity.md
+    ├── tests/                      pytest; test_flag_propagation.py is the load-bearing one
+    └── scripts/                    32 one-off evidence and build scripts — every measured
+                                    number quoted in the docs re-derives from one of these
+```
+
 ## Where the evidence already lives
 
 - **`docs/sample_reports/`** — three full reports the pipeline produced, committed as-is.
